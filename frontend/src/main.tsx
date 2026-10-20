@@ -83,7 +83,7 @@ function Home({ initialPath, onOpen, goHome }: {
   </>;
 }
 
-function StrategyActions({ strategy }: { strategy: Strategy }) {
+function StrategyCommands({ strategy }: { strategy: Strategy }) {
   const disclosure = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
@@ -94,17 +94,20 @@ function StrategyActions({ strategy }: { strategy: Strategy }) {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, []);
-  return <details className="strategy-actions" name="strategy-actions" ref={disclosure} onKeyDown={event => {
+  return <details className="strategy-commands" name="strategy-commands" ref={disclosure} onKeyDown={event => {
     if (event.key === 'Escape' && disclosure.current) {
       event.preventDefault(); event.stopPropagation(); disclosure.current.open = false;
       disclosure.current.querySelector('summary')?.focus();
     }
   }}>
-    <summary className="secondary" aria-label={`Strategy actions for ${strategy.title}`}>Actions</summary>
-    <div className="actions-panel">
-      <p className="actions-label">Strategy actions</p>
+    <summary className="secondary strategy-toggle" aria-label={`Commands for ${strategy.title}`}>
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+        <path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </summary>
+    <div className="command-panel">
       <details name={`strategy-command-${strategy.id}`}>
-        <summary className="secondary">Schedule</summary>
+        <summary className="secondary">Scheduling</summary>
         <p id={`schedule-${strategy.id}`} className="hint">Scheduling controls are not available yet.</p>
         <ul aria-describedby={`schedule-${strategy.id}`}>
           {['Promote', 'Demote', 'Pause / Resume', 'Remove'].map(label => <li key={label}>
@@ -113,16 +116,17 @@ function StrategyActions({ strategy }: { strategy: Strategy }) {
         </ul>
       </details>
       <details name={`strategy-command-${strategy.id}`}>
-        <summary className="secondary">Report artifact</summary>
+        <summary className="secondary">Artifact</summary>
         <p id={`audit-${strategy.id}`} className="hint">Audit reports are not available yet. They will record investigation steps, evidence and tests, and answers to rubric questions.</p>
         <button className="secondary" disabled aria-describedby={`audit-${strategy.id}`}>Audit</button>
         <p id={`artifacts-${strategy.id}`} className="hint">Additional artifact types are not specified yet.</p>
         <button className="secondary" disabled aria-describedby={`artifacts-${strategy.id}`}>Other artifact types</button>
       </details>
-      <div className="fork-action">
+      <details name={`strategy-command-${strategy.id}`}>
+        <summary className="secondary">Actions</summary>
         <button className="secondary" disabled aria-describedby={`fork-${strategy.id}`}>Fork</button>
         <p id={`fork-${strategy.id}`} className="hint">Forking is not available yet.</p>
-      </div>
+      </details>
     </div>
   </details>;
 }
@@ -228,8 +232,8 @@ function ProjectScreen({ path, onClose, goHome }: {
       {project.strategies.length ? <ol className="strategy-list">
         {project.strategies.map(strategy => <li className="strategy-row" key={strategy.id}>
           <div className="strategy-heading">
+            <StrategyCommands strategy={strategy}/>
             <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>{strategy.title}</h3>
-            <StrategyActions strategy={strategy}/>
           </div>
           <p className="strategy-approach">{strategy.approach}</p>
           <p className="strategy-byline">Human-authored · <time dateTime={strategy.created_at}>{dateLabel(strategy.created_at)}</time></p>

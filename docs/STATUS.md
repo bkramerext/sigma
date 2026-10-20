@@ -51,6 +51,19 @@ Verified on 2026-10-20:
   project data stayed unchanged; no JavaScript errors. Visually inspected
   `/tmp/sigma-accordion-320.png`.
 
+## Corrected strategy command hierarchy
+
+The strategy-name chevron now reveals three sibling groups: Scheduling, Artifact,
+and Actions. There is no visible top-level label. Fork appears only under Actions,
+with its disabled state and explanation preserved. Group/menu exclusivity and the
+shared outlined control styling remain in place.
+
+Verified on 2026-10-20: `./sigma test` passed. Real Chrome check
+`uv run --with playwright python /tmp/sigma-command-hierarchy.py` passed for the
+three-group hierarchy, Fork containment, one-at-a-time expansion, keyboard and
+Escape focus, and desktop/390px/320px layouts. No JavaScript errors or data
+changes; `/tmp/sigma-command-hierarchy-320.png` visually inspected.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).
