@@ -9,8 +9,7 @@ Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+ an
 Run from the repository root:
 
 ```sh
-uv sync --locked
-npm --prefix frontend ci
+uv run sigma setup
 uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8000
 ```
 
@@ -41,7 +40,7 @@ uv run sigma events projects/rh.sigma
 uv run sigma close
 ```
 
-Successful commands print one JSON object to stdout (exit 0). Project errors print
+Successful project commands print one JSON object to stdout (exit 0). Project errors print
 `{"error":"..."}` to stderr (exit 2); argparse syntax errors use its standard
 stderr usage messages (exit 2). Open/inspect/init return `{path, project}`, events
 returns `{events: [...]}`, and close returns `{"closed":true}`. Close is stateless:
@@ -59,13 +58,27 @@ The same services are exposed as `POST /api/projects/init`, `POST
 ## Verify
 
 ```sh
-uv run python scenarios/lifecycle.py
-uv run ruff check src scenarios
-uv run ruff format --check src scenarios
-uv run pyright
-npm --prefix frontend run build
-npm --prefix frontend run typecheck
+uv run sigma setup
+uv run sigma test
 ```
+
+`setup` installs the locked Python dependencies (including development tools) and
+runs `npm ci` for the frontend. Install uv and Node/npm first. On a fresh checkout,
+`uv run` bootstraps the CLI so it can perform setup. If you prefer bare commands:
+
+```sh
+source .venv/bin/activate
+sigma setup
+sigma test
+```
+
+`test` runs lifecycle scenarios and API checks, CLI smoke checks, maintenance
+failure checks, Ruff lint/format checks, Pyright, frontend typechecking, and the
+production build. Setup and test stream progress and tool output, stop at the
+first failure, and return a nonzero exit status if a step fails. They run in the
+source checkout regardless of your current directory. `test` uses installed
+dependencies without syncing; run `setup` first. It uses temporary projects and
+does not modify the RH seed. It does not launch servers or run a browser.
 
 Scenarios call the typed services directly, then exercise the API with TestClient.
 They operate on temporary directories, with injected publication failures; they

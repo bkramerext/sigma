@@ -61,3 +61,28 @@ No SPEC-001 implementation work remains. Agent execution, rubrics, scheduler,
 advanced visualizations, database migration and cloud hosting remain deferred.
 The UI is served by the local Vite server alongside the local API; frontend `dist/`
 is a build artifact, not a bundled server deployment.
+
+## CLI setup and test commands
+
+Added `sigma setup` (locked Python/dev dependency sync and frontend `npm ci`)
+and `sigma test` (lifecycle/API scenarios, CLI smoke checks, maintenance failure
+checks, Ruff lint/format, Pyright, frontend types and build). Both stream output,
+use the source checkout as the working directory, and stop on failure with a
+nonzero status. Missing prerequisites and process launch failures have clear
+messages. README includes `uv run sigma setup` for bootstrap and activated-venv
+usage for bare `sigma setup` / `sigma test` commands.
+
+Verification on 2026-10-20:
+
+- `uv run sigma setup`: passed dependency sync and npm clean install; zero audit
+  vulnerabilities. Existing npm install-script notices remain non-failing.
+- `uv run sigma test`: passed every step, including API and real CLI process checks.
+- `/Users/admin/sigma/.venv/bin/sigma test` launched from `/tmp`: passed every step,
+  confirming callers do not need to change into the checkout first. Ruff checked
+  eight formatted Python files and Pyright reported zero errors/warnings.
+- Maintenance scenarios verify missing tools, launch errors, child exit-code
+  propagation and stopping before later checks after a failure.
+- `uv run sigma --help`: lists setup and test with descriptions.
+
+These checks use temporary projects and leave the RH seed unchanged. Browser
+interaction remains covered by the earlier browser verification, not `sigma test`.

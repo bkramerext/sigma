@@ -1,4 +1,4 @@
-"""JSON stdout on success, JSON stderr and exit status 2 on invalid requests."""
+"""JSON project commands and streamed repository setup/verification commands."""
 
 import argparse
 import json
@@ -13,10 +13,11 @@ from sigma.projects import (
     list_events,
     open_project,
 )
+from sigma.tooling import run_tooling
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SIGMA project lifecycle (JSON output)")
+    parser = argparse.ArgumentParser(description="SIGMA projects and repository maintenance")
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init")
     init.add_argument("path")
@@ -25,7 +26,11 @@ def main() -> None:
     for name in ("open", "inspect", "events"):
         commands.add_parser(name).add_argument("path")
     commands.add_parser("close")
+    commands.add_parser("setup", help="Install locked Python and frontend dependencies")
+    commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
     args = parser.parse_args()
+    if args.command in {"setup", "test"}:
+        sys.exit(run_tooling(args.command))
     try:
         if args.command == "init":
             result = asdict(initialize_project(args.path, args.title, args.problem))
