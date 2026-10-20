@@ -128,3 +128,32 @@ Verification on 2026-10-20:
 README now launches the UI with `./sigma setup` followed by `./sigma ui`. The UI
 command stays in the foreground; open the printed URL in a browser. Setup remains
 the dependency installer and UI does not install npm packages implicitly.
+
+## ASN-2: project browser copy and header
+
+Updated the hero, description, project helper, and empty-state copy to the assigned
+wording. The full SIGMA expansion now appears once, directly beneath the header
+logo; removed the partial hero eyebrow and duplicate footer. Kept the muted green
+palette, typography, whitespace, project controls, and opened-project details.
+The header stacks on narrow screens so its expansion remains readable.
+
+Verification on 2026-10-20:
+
+- `git pull --ff-only`: retrieved ASN-2 at `07e06e7`.
+- `./sigma test`: passed lifecycle/API scenarios, CLI smoke checks, maintenance/UI
+  supervision checks, Ruff lint/format, Pyright (zero errors/warnings), frontend
+  typecheck, and production build. Existing non-failing TestClient notice remains.
+- `uv run --with playwright python /tmp/sigma-asn2-browser.py`: passed in headless
+  Google Chrome against the already-running local UI/API. Verified every assigned
+  text replacement, a single full expansion inside the header positioned beneath
+  the logo, and absence of the former partial eyebrow and footer. Exercised empty,
+  opened, close/reopen, and switching to a temporary project and back. RH identity,
+  directory, format version, initialization event, and the finite-experiments
+  qualification remained visible; the RH project file was byte-identical afterward.
+- Browser checks passed at 320px and 390px widths without horizontal overflow and
+  with no JavaScript page errors. Screenshots saved to `/tmp/sigma-asn2-empty.png`,
+  `/tmp/sigma-asn2-open.png`, and `/tmp/sigma-asn2-mobile.png`; desktop empty and
+  mobile opened screenshots visually inspected.
+
+Only frontend copy/presentation and delivery documentation changed; project
+services, storage, and CLI behavior are unchanged.

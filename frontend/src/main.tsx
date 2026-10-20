@@ -33,14 +33,19 @@ function App() {
     finally { setBusy(false); }
   }
   return <main>
-    <header><a href="/" className="brand">Σ <span>SIGMA</span></a><span className="local">● Local workspace</span></header>
-    <p className="eyebrow">STRATEGY · INVESTIGATION · MEASUREMENT</p>
-    <h1>A place for the next question.</h1>
-    <p className="intro">Open a research project to inspect its objective and recorded history.</p>
+    <header>
+      <div className="brand-block">
+        <a href="/" className="brand">Σ <span>SIGMA</span></a>
+        <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>
+      </div>
+      <span className="local">● Local workspace</span>
+    </header>
+    <h1>Explore the paths to discovery.</h1>
+    <p className="intro">Investigate competing ideas, test their assumptions, and preserve what each exploration reveals.</p>
     <form onSubmit={open}>
       <label htmlFor="path">Project directory</label>
       <div className="input-row"><input id="path" value={path} onChange={e => setPath(e.target.value)} required disabled={busy}/><button disabled={busy}>{busy ? 'Working…' : view ? 'Open / switch' : 'Open project'} <span>↗</span></button></div>
-      <p className="hint">Use a local .sigma directory. The RH seed initializes on its first open.</p>
+      <p className="hint">Open a local SIGMA project directory.</p>
     </form>
     {error && <div role="alert" className="error">{error}</div>}
     {view ? <article>
@@ -48,8 +53,7 @@ function App() {
       <p className="objective">{view.project.problem}</p>
       <dl><dt>Identity</dt><dd>{view.project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{view.project.schema_version}</dd></dl>
       <section><h3>Event history <span>{view.project.events.length}</span></h3><ol>{view.project.events.map(e => <li key={e.sequence}><span className="sequence">{String(e.sequence).padStart(2, '0')}</span><div><strong>{e.kind}</strong><time dateTime={e.timestamp}>{new Date(e.timestamp).toLocaleString()}</time></div></li>)}</ol><p className="hint">Opening and inspecting a project leave its history unchanged.</p></section>
-    </article> : <div className="empty"><span>◌</span><h2>Your research starts with a project.</h2><p>Open the included Riemann Hypothesis seed above.</p></div>}
-    <footer>Strategy Investigation, Generation, Measurement &amp; Assessment</footer>
+    </article> : <div className="empty"><span>◌</span><h2>Every investigation starts somewhere.</h2><p>Begin with the included Riemann Hypothesis project.</p></div>}
   </main>;
 }
 createRoot(document.getElementById('root')!).render(<App/>);

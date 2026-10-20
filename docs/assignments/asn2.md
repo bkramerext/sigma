@@ -1,6 +1,6 @@
 # ASN-2: Refine the project browser copy and header
 
-Status: Ready for Codex
+Status: Implemented and verified; see [results](../STATUS.md)
 Context: The initial landing page and opened Riemann Hypothesis project have been reviewed visually. ASN-1 is implemented; preserve its working behavior.
 
 ## Assignment
