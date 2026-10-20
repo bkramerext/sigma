@@ -2,27 +2,20 @@
 Updated: 2026-10-20
 
 ## Active specification
-**[SPEC-001: Local project browser and lifecycle](../specs/project-lifecycle.md)**. Approved for implementation; no implementation or test results reported yet.
+[SPEC-001: Browser-first project lifecycle](../specs/project-lifecycle.md), ready for Codex implementation. No implementation or test results yet.
 
-## Committed starter project
-`projects/rh.sigma/config.json` is source-controlled, along with its README and placeholder directories. Mutable `state.db` and generated artifacts are gitignored. The starter is not yet openable until SPEC-001 is implemented.
+## Starter
+`projects/rh.sigma/` contains only a source-controlled placeholder. Codex chooses its internal data model, serialization, and initialization behavior.
 
-## First demonstrable user action
-Start the local FastAPI server and React/Vite frontend, open `projects/rh.sigma` in the browser, and inspect its metadata and event history. CLI and scenarios must use the same application services.
+## First demonstration
+Self-host the local FastAPI + React/Vite application; open `projects/rh.sigma` and inspect its metadata and events. CLI and scenarios use the same application services.
 
-## Acceptance checklist
-- [ ] Scaffold Python/uv app, FastAPI server, React/TypeScript/Vite UI, argparse CLI.
-- [ ] Shared typed project creation/open/info/events services.
-- [ ] Bootstrap source-controlled starter project state on first open; preserve identity on reopen.
-- [ ] Browser opens RH project and shows metadata/events and meaningful errors.
+## Checklist
+- [ ] Design and document minimal project representation.
+- [ ] Browser opens RH seed and shows project data/history.
 - [ ] CLI creates/opens/inspects projects.
-- [ ] Executable scenarios verify lifecycle, persistence, failure handling, and event ordering.
-- [ ] Backend/API checks and frontend build/typecheck pass.
-- [ ] Document exact setup/run commands and verification results.
-- [ ] Commit and push tested implementation.
+- [ ] Executable scenarios verify persistence, invalid inputs and safe failure.
+- [ ] Frontend build, backend checks, API/CLI smoke checks pass.
+- [ ] Record actual commands/results, commit and push.
 
-## Not active
-Strategies, rubrics, scheduling, agent runtime, SSE, and advanced visualizations.
-
-## Coordination
-Codex implements and tests the approved specification, records actual results, and commits/pushes. ChatGPT reviews the changes against the specification. No secrets or recruiting context in the public repository.
+Agent execution, rubrics, scheduler, and advanced visualizations remain deferred.
