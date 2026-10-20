@@ -99,3 +99,32 @@ Verification on 2026-10-20: `./sigma --help`, `./sigma setup`, `./sigma test`, a
 `uv run pyright sigma` all passed. The test command includes launcher lint and
 format checks (nine Python files). Missing uv produces an actionable error and
 exit status 2. Existing non-failing dependency notices are unchanged.
+
+## One-command UI launch
+
+Added `./sigma ui` (also `sigma ui` in an activated environment). It launches
+FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173 from the checkout, waits for
+both HTTP endpoints, and prints the browser URL. Ctrl+C or SIGTERM stops both
+process groups, including npm's Vite child. A server exit, launch error or startup
+timeout also cleans up both servers. Missing frontend dependencies point to
+`./sigma setup`; occupied ports fail without terminating existing listeners.
+Ports remain fixed to match the local proxy and browser-origin policy.
+
+Verification on 2026-10-20:
+
+- `./sigma test`: passed lifecycle/API and CLI checks, maintenance/UI supervision
+  scenarios, Ruff lint/format (ten files), Pyright, frontend types and build.
+- UI supervision scenarios cover missing dependencies, occupied ports, partial
+  startup failure, unexpected server exit, interrupt cleanup, and forced cleanup
+  after a graceful shutdown timeout.
+- `./sigma ui` with the earlier review servers running: correctly rejected the
+  occupied port. Those earlier servers were then stopped for the live smoke test.
+- `.venv/bin/python /tmp/sigma-ui-smoke.py`: passed live launcher startup from
+  `/tmp`, readiness output, frontend HTTP and proxied project inspection, Ctrl+C,
+  and checks that neither port retained a listener after shutdown. Repeated twice
+  consecutively to verify immediate restart. The restart check caught a transient
+  socket-state issue; port preflight now uses SO_REUSEADDR, matching server reuse.
+
+README now launches the UI with `./sigma setup` followed by `./sigma ui`. The UI
+command stays in the foreground; open the printed URL in a browser. Setup remains
+the dependency installer and UI does not install npm packages implicitly.

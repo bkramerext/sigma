@@ -10,13 +10,7 @@ Run from the repository root:
 
 ```sh
 ./sigma setup
-uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8000
-```
-
-In another terminal, from the repository root:
-
-```sh
-npm --prefix frontend run dev
+./sigma ui
 ```
 
 Visit **http://127.0.0.1:5173**, keep `projects/rh.sigma` in the directory field,
@@ -26,9 +20,11 @@ and initialization event. Close releases the view; enter another existing projec
 path and Open / switch to switch projects. Errors keep the currently open view.
 Paths refer to the API server's filesystem, relative to its working directory.
 
-The development frontend proxies `/api` to the API on port 8000. Keep both servers
-on localhost, with the frontend on port 5173. No authentication or remote hosting
-is provided. Stop each server with Ctrl+C.
+The development frontend proxies `/api` to the API on port 8000. The launcher
+starts both servers on localhost, prints the URL when ready, and
+stops both with Ctrl+C. Ports 8000 and 5173 must be free; a startup failure stops
+both servers. Run `./sigma setup` first. No authentication or remote hosting is
+provided. With an activated environment, `sigma ui` works too.
 
 ## CLI
 
