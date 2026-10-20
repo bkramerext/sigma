@@ -2,47 +2,45 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
-Local research workspace with persistent projects and human-authored strategies.
+SIGMA is installable, local-first software for organizing AI-assisted research into sustained, critical investigations of difficult problems.
 
-## Run
+Instead of committing to one promising idea, SIGMA is designed to maintain competing **strategies**, investigate their assumptions, test their claims, and preserve what was learned. Independent evaluation and bounded scheduling are intended to help direct effort without mistaking confidence for proof.
 
-Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+, and npm.
+## Inspiration
+
+SIGMA grew out of the author's multiday explorations of the **Riemann Hypothesis** with ChatGPT.
+
+There was no realistic expectation that an amateur working with ChatGPT would solve one of mathematics' great unsolved problems. But trying to understand it was hugely educational: each investigation opened up new mathematics, new questions, and new ways to think about evidence.
+
+The experience also exposed weaknesses in free-form AI research. Investigations wandered, earlier findings became hard to recover, and plausible ideas sometimes consumed substantial effort before revealing basic flaws.
+
+SIGMA asks: **Can AI-assisted exploration become a cumulative research process that learns from failure as well as success?**
+
+## How SIGMA is intended to work
+
+- **Strategies:** Competing lines of investigation, each with its own history and possible forks.
+- **Research:** Bounded attempts to develop ideas, test assumptions, and gather evidence.
+- **Evaluation:** Independent scrutiny of claims, uncertainty, and remaining proof obligations.
+- **Scheduling:** Resource-aware allocation of effort, with explicit human control.
+- **Artifacts:** Durable records of what was tried, established, refuted, or left unresolved.
+
+One envisioned artifact, **Show Me**, would turn a strategy's actual findings into an accessible, originally illustrated explanation. A failed investigation deserves the same care as a successful one. Presentation may be imaginative; evidence must not be embellished.
+
+## What works today
+
+The current foundation opens local projects, preserves project identity and history, and lets people create and revisit strategies in a browser. CLI, API, and executable scenarios share the same Python services.
+
+**Not implemented yet:** autonomous agents, evaluation, scheduling, forks, and generated research reports. The Riemann Hypothesis is the initial example project, not a claimed solution.
+
+## Getting started
+
+SIGMA runs locally on macOS/Linux with Python, uv, and Node.js.
 
 ```sh
 ./sigma setup
 ./sigma ui
 ```
 
-Open http://127.0.0.1:5173 and select `projects/rh.sigma`. The project opens on its own page. **New strategy** saves a title and approach across reloads. **Close project** returns Home. Project details/history are collapsible.
+Open http://127.0.0.1:5173.
 
-Generate strategy, scheduling, reporting, and forks are **not implemented**; the UI explains their unavailable state.
-
-The launcher serves FastAPI on port 8000 and Vite on 5173, localhost only. Ctrl+C stops both. Run setup first; both ports must be free. No authentication or remote hosting.
-
-## CLI
-
-```sh
-./sigma init /tmp/example.sigma --title 'Example' --problem 'Investigate it'
-./sigma open projects/rh.sigma
-./sigma inspect projects/rh.sigma
-./sigma events projects/rh.sigma
-./sigma new-strategy /tmp/example.sigma --title 'Idea' --approach 'Test this hypothesis'
-./sigma strategies /tmp/example.sigma
-./sigma close
-```
-
-Project commands return JSON on stdout (success, exit 0) or `{"error":"..."}` on stderr (project error, exit 2). Argparse syntax errors also exit 2. `close` is stateless. Only the RH seed initializes implicitly; other projects require `init`.
-
-API equivalents: `POST /api/projects/init`, `POST /api/projects/open`, `GET /api/projects/inspect?path=...`, `GET /api/projects/events?path=...`, `POST /api/projects/close`, `POST /api/projects/strategies`, `GET /api/projects/strategies?path=...`. Create-strategy body: `{path,title,approach}`. Titles: 1–200 characters; approaches: 1–10,000 (trimmed). Invalid project operations return HTTP 400; invalid bodies 422; creation 201.
-
-## Test
-
-```sh
-./sigma test
-```
-
-Runs scenarios, API/CLI checks, Ruff, Pyright, frontend typecheck/build. Uses temporary projects; no paid calls. Browser tests are separate. `./sigma setup` installs locked dependencies. Commands work from outside the checkout. An activated environment also supports `sigma setup`, `sigma test`, and `sigma ui`.
-
-## Data
-
-Project URLs include local filesystem paths, not shareable links. New projects use schema v2; existing v1 projects migrate on first strategy save with an exact `project.v1.json` backup. Writes use POSIX locks and atomic replacement; use a local macOS/Linux filesystem and do not edit project JSON during saves. See [DECISIONS](docs/DECISIONS.md) for limitations, [STATUS](docs/STATUS.md) for checks, and [SPEC-001](specs/project-lifecycle.md) for the original lifecycle contract.
+See **[Getting Started](docs/GETTING-STARTED.md)** for prerequisites, usage, CLI/API commands, testing, and storage cautions. See [Project](docs/PROJECT.md), [Status](docs/STATUS.md), and [Brainstorm](docs/BRAINSTORM.md) for more context.

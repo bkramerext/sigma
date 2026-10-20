@@ -59,6 +59,13 @@ Deferred until agent execution work.
 - **2026-10-20 1:30 PM** — Notify on candidate solutions; distinguish claims from independent verification.
 - **2026-10-20 1:30 PM** — Defer notification channels and detailed overrides.
 
+## Research communication artifacts
+
+- **2026-10-20 2:00 PM** — **Show Me:** Agent-produced, illustrated narrative of a strategy's actual findings, inspired by accessible mathematical journalism.
+- **2026-10-20 2:00 PM** — Explain accomplishments and failures equally well; never invent evidence, discoveries, or certainty.
+- **2026-10-20 2:00 PM** — Original illustrations clarify ideas; claims trace to research artifacts. Show Me communicates, not verifies.
+- **2026-10-20 2:00 PM** — Place Show Me under a strategy's Report artifact actions, alongside Audit.
+
 ## Documentation reconciliation
 
 Implemented storage uses versioned JSON; SQLite remains a future option. See [DECISIONS](DECISIONS.md).

@@ -7,3 +7,4 @@
 - **Continuity:** Keep decisions and revisions traceable without retelling discussions.
 - **Trust:** Separate facts from hypotheses and uncertainty. Never imply unperformed work is complete.
 - **Feedback:** Adapt behavior to corrections rather than defending earlier choices.
+- **Research storytelling:** Creative explanations and illustrations must remain faithful to evidence. Communicate failure as carefully as success.
