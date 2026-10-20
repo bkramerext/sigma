@@ -40,7 +40,7 @@ function Header({ goHome, close }: { goHome: (event: MouseEvent<HTMLAnchorElemen
   close?: { action: () => void; busy: boolean } }) {
   return <header className="site-header">
     <div className="brand-block">
-      <a href="/" className="brand" onClick={goHome}>Σ <span>SIGMA</span></a>
+      <a href="/" className="brand" onClick={goHome} aria-label="SIGMA home"><img src="/sigma-logo.svg" alt="SIGMA" /></a>
       <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>
     </div>
     {close ? <button className="text-button close-project" onClick={close.action} disabled={close.busy}>
@@ -64,10 +64,14 @@ function Home({ initialPath, onOpen, goHome }: {
     catch (error) { setError(errorMessage(error)); }
     finally { setBusy(false); }
   }
-  return <>
+  return <div className="home-shell">
+    <div className="home-atmosphere" aria-hidden="true"/>
+    <div className="home-content">
     <Header goHome={goHome}/>
+    <div className="home-hero"><p className="home-kicker">THE UNKNOWN IS AN INVITATION</p>
     <h1 ref={heading} tabIndex={-1}>Explore the paths to discovery.</h1>
     <p className="intro">Investigate competing ideas, test their assumptions, and preserve what each exploration reveals.</p>
+    </div>
     <form className="open-form" onSubmit={open}>
       <label htmlFor="path">Project directory</label>
       <div className="input-row">
@@ -82,7 +86,8 @@ function Home({ initialPath, onOpen, goHome }: {
       <h2>Every investigation starts somewhere.</h2>
       <p>Begin with the included Riemann Hypothesis project.</p>
     </div>
-  </>;
+    </div>
+  </div>;
 }
 
 function StrategyCommands({ strategy, onCommand }: {
@@ -362,7 +367,7 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
-  return <main>
+  return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} goHome={goHome} onOpen={view => {
       setLastPath(view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
