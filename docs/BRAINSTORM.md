@@ -46,6 +46,6 @@ This is a source-controlled record of design ideas, not an implementation specif
 - Public repository structure should demonstrate separation of intent, agent judgment, governance, execution, and verification through actual code and scenarios. Keep README and docs technically grounded, without recruitment-oriented claims or private background.
 - SIGMA is a research orchestration system, not a claim to be a general software factory.
 
-## Known documentation mismatch
+## Documentation reconciliation
 
-Earlier committed project-lifecycle specifications and project docs may still describe a single-file `.sigma` SQLite database and pytest-centered acceptance tests. Reconcile them with the `.sigma/` package directory, shared application interface, and scenario-driven testing **before Codex implements that slice**.
+SPEC-001 uses a `.sigma/` directory with a versioned JSON document and shared typed services. SQLite remains a potential later storage choice; executable scenarios are the current acceptance checks. See DECISIONS.md for the implemented format and tradeoffs.

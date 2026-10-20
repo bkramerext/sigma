@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local project state and browser dependencies
+**/*.sigma/*
+!projects/rh.sigma/.gitkeep
+frontend/node_modules/
+frontend/dist/

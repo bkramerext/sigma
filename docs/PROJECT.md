@@ -16,17 +16,12 @@ Iterations are bounded attempts; artifacts preserve results; append-only events 
 ## Architecture
 Web UI, CLI, and executable scenario runner are equal adapters over shared typed application commands and queries. Domain services own invariants and persistence. Agent output is evidence to evaluate, not an authority to obey.
 
-A project is a portable directory package such as:
-```text
-rh.sigma/
-  config.json
-  state.db
-  artifacts/
-  scenarios/
-```
-Configuration is human-readable and contains no secrets. SQLite stores mutable state and audit events. Generated project packages can be excluded from Git with `*.sigma/`.
+A project is a portable `.sigma/` directory containing a versioned `project.json`
+with metadata and event history. The RH seed begins with `.gitkeep` and initializes
+on its first open. See [decisions](DECISIONS.md) for atomic publication, validation,
+and storage tradeoffs. Generated project state is excluded from Git.
 
 ## Implementation
-Python and uv; argparse CLI; SQLite; later FastAPI/HTMX/SSE for the web interface and an agent runtime with explicit model credentials and budgets. Source-controlled executable scenarios are the primary acceptance tests, with deterministic fake agents for offline runs. Ruff and Pyright provide static checks.
+Python and uv; argparse CLI; FastAPI API; React/TypeScript/Vite browser. Agent runtime remains deferred. Source-controlled executable scenarios are the primary acceptance tests, with deterministic fake agents for offline runs. Ruff and Pyright provide static checks.
 
 Build and verify one specification at a time. **Current implementation target:** [SPEC-001: Project lifecycle](../specs/project-lifecycle.md). See [status](STATUS.md), [decisions](DECISIONS.md), and [brainstorm](BRAINSTORM.md). Features beyond the active spec are intentionally deferred.

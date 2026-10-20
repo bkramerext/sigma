@@ -1,0 +1,1 @@
+"""SIGMA shared application services."""

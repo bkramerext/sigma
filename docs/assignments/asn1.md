@@ -1,6 +1,6 @@
 # ASN-1: Implement SPEC-001 browser-first project lifecycle
 
-Status: Ready for Codex
+Status: Implemented and verified; see [results](../STATUS.md)
 Specification: [SPEC-001](../../specs/project-lifecycle.md)
 Working guidance: [AGENTS.md](../../AGENTS.md)
 
