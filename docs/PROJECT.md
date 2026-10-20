@@ -17,4 +17,4 @@ Python/uv, FastAPI, argparse CLI, React/TypeScript/Vite. Browser, CLI, and execu
 
 **Working now:** local project lifecycle, separate project workspace, and persistent human-authored strategies. **Not yet implemented:** agents, scheduling, evaluation, reports, or forks.
 
-See [README](../README.md) to run, [STATUS](STATUS.md) for verification, [DECISIONS](DECISIONS.md) for storage, and [BRAINSTORM](BRAINSTORM.md) for future ideas.
+See [Getting Started](GETTING-STARTED.md) to run, [STATUS](STATUS.md) for verification, [DECISIONS](DECISIONS.md) for storage, and [BRAINSTORM](BRAINSTORM.md) for future ideas.
