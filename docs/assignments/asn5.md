@@ -1,0 +1,62 @@
+# ASN-5: Implement the approved project workspace and Strategy Pool design
+
+**Status:** Ready for Codex after the human installs the two artwork files listed below.
+
+## Authority and scope
+
+Implement the **approved 2026-10-20 Strategy Pool workspace mockup** as a visual redesign of the existing `/project` page. The mockup is a visual reference, not an alternative application specification. Keep all currently implemented project/strategy workflows and API contracts intact.
+
+**Do not change the Home page.** Its original cinematic artwork and overlay have been visually accepted and locked. ASN-4.1 cinematic entrance remains on hold. Do not regenerate or redesign any approved artwork. Do not use the old `sigma-logo.svg` in the workspace header.
+
+The human will manually install:
+
+- `assets/sigma-workspace-reference.png`: the exact approved full-width Strategy Pool mockup, for visual comparison only.
+- `assets/sigma-workspace-logo.png`: transparent metallic Σ SIGMA wordmark extracted from the established SIGMA art identity.
+
+**Asset gate:** Check that both files exist and are valid PNGs before implementing. If either is missing, report the precise blocker; do not invent substitutes, reconstruct the image from CSS, or replace the approved art. Copy the logo to `frontend/public/sigma-workspace-logo.png` (or use a deterministic build step); retain canonical files under `assets/`. Never serve the screenshot itself as a UI background.
+
+## Current application: read before editing
+
+Inspect `frontend/src/main.tsx`, `frontend/src/style.css`, the FastAPI project routes, and existing tests. In particular:
+
+- `ProjectScreen` opens an actual project, displays `project.title` and `project.problem`, filters out removed strategies, and renders `StrategyCommands`, `NewStrategy`, `StrategyDialog`, and project details/history.
+- `Header` currently references `/sigma-logo.svg`. Replace this **for the project workspace only** with the supplied transparent metallic logo. The Home route does not render this header.
+- `New strategy` and `Generate strategy` are distinct: manual creation works; agent generation is disabled and explicitly unavailable.
+- Edit and remove work through existing endpoints and dialogs; history persists and removed strategies leave the active pool.
+- Strategy fields are `id`, `title`, `approach`, `author_kind`, `created_at`, and optional `removed_at`. There is **no** rendering-status field, queue, or completed analysis model. Do not create one for this task.
+- The current strategy list is richer than the mockup's fictional table: retain full strategy descriptions and accessible commands rather than truncating away important content.
+- Existing project history and details must remain accessible; they can be visually subordinate or collapsed.
+
+## Visual target
+
+Follow the approved reference's **dark near-black navy canvas, copper/gold highlights, cool electric-blue metallic branding, fine separators, compact horizontal header, and left navigation rail**. The page should feel like a coherent continuation of the Home art identity, without turning the workspace into another illustration.
+
+1. **Top header:** Use the supplied transparent metallic Σ SIGMA wordmark at a legible compact size, followed by the existing long-form product subtitle. Keep a working Home link and working Close project action. Project name may appear as a plain, truthful current-project label; do not render a nonfunctional project selector. Omit the mockup's decorative settings/theme buttons unless they correspond to existing working functionality. A subtle local-workspace indicator is fine.
+2. **Navigation rail:** Use the reference's restrained dark rail and copper active treatment. The only implemented project destination is the **Strategies / Strategy Pool** view. Make that the active item. Other mockup destinations (Renders, Analysis, References, Notes, Settings) are *not implemented*: either omit them or show them as clearly disabled future destinations. Never create misleading clickable links or routes. Keep navigation responsive and accessible.
+3. **Project title area:** Display the real `project.title` and `project.problem` with generous spacing on a quiet dark background. **No cosmic waves, illustrations, or repeated large Sigma emblem beside the title.** The logo belongs in the top header only.
+4. **Strategy Pool:** This is the main content. Use the reference's warm copper section title, subtle panel borders, strong information hierarchy, and compact but readable strategy rows. Render only actual strategies from project state. Display each real title, its complete approach, and existing author/date metadata. Keep per-strategy command disclosure, keyboard support, edit/remove actions, and disabled future commands. Do not fabricate IDs, statuses, updated dates, View actions, or example strategies to fill space.
+5. **Creation controls:** Visually promote the working **New strategy** action in the approved copper/gold treatment, retaining the real composer and validation. Retain disabled **Generate strategy** with truthful explanatory text, visually secondary. Do not add search, filter, dropdown, or status controls unless backed by real local behavior and warranted by the existing product scope; the mockup's controls are not an authorization to expand the feature set.
+6. **History and dialogs:** Restyle `Project details & history`, the strategy edit/remove dialog, and new-strategy form to match the dark palette. Ensure all text, fields, errors, focus rings, and disabled states remain legible. Do not alter event semantics or persistence.
+7. **Background discipline:** The workspace is predominantly quiet dark surfaces and restrained lines. The reference is approved for its *design language and Strategy Pool composition*, not for new cosmic artwork in the title area. Do not place the reference PNG itself behind live controls.
+
+## Behavior and constraints
+
+- Preserve `/project?path=...`, Home navigation, opening/closing projects, loading/error states, and browser back/forward.
+- Preserve all existing backend routes, request payloads, project data model, history semantics, and manual strategy create/edit/remove behavior.
+- Do not add seeded data or fabricated research, statuses, queues, activity, or timestamps.
+- Keep `Home` JSX and Home-specific CSS visually and behaviorally unchanged. Scope workspace CSS under `.workspace-page` to prevent style bleed.
+- Reuse existing components and avoid a broad rewrite. Remove or supersede conflicting old light-theme rules where necessary; avoid endless CSS override accumulation.
+- Ensure accessibility: semantic headings, labels, focus management, visible focus, contrast, dialogs, disclosure keyboard behavior, reduced-motion, and responsive layout at desktop/tablet/390px/320px.
+- No new backend dependencies or speculative APIs.
+
+## Verification and acceptance
+
+1. Verify both handoff assets exist and inspect them. Check the logo's actual alpha channel (transparent outside the mark), not just its filename.
+2. Implement the workspace styling/layout with real application data. Verify Home has not changed (visual screenshot comparison against current accepted Home, not just a source diff).
+3. Run `./sigma test` and frontend build/type checks. Report exact commands and results.
+4. Exercise a running app in a browser: open project, see real strategy pool, create a strategy, edit it, remove it, confirm history remains, close/reopen, navigate Home and back, and check empty/loading/error states. Test desktop and narrow mobile.
+5. Compare project-page screenshot to `assets/sigma-workspace-reference.png`: brand treatment, header proportions, rail, project title, palette, spacing, copper actions, strategy-pool presentation. **Expected intentional differences:** no title-area Sigma/waves; no invented statuses or dates; no fictitious navigation functionality; actual strategy descriptions and controls are preserved.
+6. Update `docs/STATUS.md` with what was actually verified, any deviations and blockers. Never claim browser verification if unavailable.
+7. Commit the implementation as a deliberate change only when checks pass; if a required visual check cannot be performed, report that limitation rather than declaring visual acceptance.
+
+**Definition of done:** The project page carries through SIGMA's approved metallic visual identity while remaining the same working strategy-pool application. The Home page remains identical. No invented UX replaces working features.
