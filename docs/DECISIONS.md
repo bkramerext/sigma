@@ -1,12 +1,10 @@
 # SIGMA architectural decisions
 Date: 2026-10-20
 
-1. **Project package:** Each project is a `.sigma/` directory with declarative `config.json`, generated SQLite `state.db`, `artifacts/`, and `scenarios/`. The source-controlled `projects/rh.sigma/` starter has no database until first open. Ignore generated state, not the whole starter directory.
-2. **Common application interface:** CLI, web UI, and executable scenario runner are peer adapters calling the same typed Python commands/queries.
-3. **UI stack:** React + TypeScript + Vite frontend, FastAPI backend; no Django or HTMX in the initial implementation. Local self-hosted browser interaction is required from the first slice.
-4. **Research vocabulary:** A strategy is an evolving investigation seeded by an idea, not a single result. Strategies form a genealogy: generation-0 roots and parent-linked forks. Iterations are bounded runs; events are the audit trail.
-5. **Rubrics:** Human-editable natural-language criteria evaluate whether strategies have promising paths. Some criteria direct bounded adversarial testing. Evidence, uncertainty, novelty, and strategic promise are distinct.
-6. **Governance:** Independent evaluators assess evidence. A deterministic scheduler enforces hard constraints and allocates effort. Human controls change priorities, constraints, and pause state without rewriting assessments.
-7. **Verification:** Source-controlled scenarios are primary acceptance tests; they invoke application services, not CLI subprocesses. API and UI smoke checks accompany every browser-visible slice.
-8. **Engineering:** Python, uv, SQLite, argparse, FastAPI, React, TypeScript, Vite, Ruff, Pyright. Build one small specification at a time.
-9. **Scope:** SPEC-001 includes the local browser, CLI, and scenarios together. Research and agent features remain deferred.
+1. **Project:** A `.sigma` directory. `projects/rh.sigma/` is a source-controlled seed. Codex designs internal files, data model, serialization, and initialization in SPEC-001.
+2. **Common application interface:** CLI, web API, and executable scenarios are peers over typed Python services.
+3. **UI stack:** React + TypeScript + Vite with FastAPI. Browser-visible interaction is required in the first increment.
+4. **Research:** Strategies are evolving investigations with parent-linked forks and generations; evaluations assess their promise using qualitative rubrics and adversarial tests.
+5. **Governance:** Independent evaluation, deterministic constrained scheduling, auditable human controls and priorities.
+6. **Verification:** Human-readable executable scenarios test common application services, with UI and CLI developed in tandem.
+7. **Scope:** SPEC-001 covers project lifecycle and local browser only. Agent execution and advanced features are deferred.
