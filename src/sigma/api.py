@@ -11,11 +11,13 @@ from sigma.projects import (
     ProjectError,
     close_project,
     create_strategy,
+    edit_strategy,
     initialize_project,
     inspect_project,
     list_events,
     list_strategies,
     open_project,
+    remove_strategy,
 )
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
@@ -83,3 +85,21 @@ def strategies_view(path: str):
 @app.post("/api/projects/strategies", status_code=201)
 def create_strategy_view(body: StrategyRequest):
     return asdict(create_strategy(body.path, body.title, body.approach))
+
+
+class RemoveStrategyRequest(OpenRequest):
+    strategy_id: str
+
+
+@app.post("/api/projects/strategies/remove")
+def remove_strategy_view(body: RemoveStrategyRequest):
+    return asdict(remove_strategy(body.path, body.strategy_id))
+
+
+class EditStrategyRequest(StrategyRequest):
+    strategy_id: str
+
+
+@app.post("/api/projects/strategies/edit")
+def edit_strategy_view(body: EditStrategyRequest):
+    return asdict(edit_strategy(body.path, body.strategy_id, body.title, body.approach))

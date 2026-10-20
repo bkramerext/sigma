@@ -64,6 +64,34 @@ three-group hierarchy, Fork containment, one-at-a-time expansion, keyboard and
 Escape focus, and desktop/390px/320px layouts. No JavaScript errors or data
 changes; `/tmp/sigma-command-hierarchy-320.png` visually inspected.
 
+## Strategy Edit and Remove
+
+Actions now contains working Edit and Remove commands alongside unavailable Fork;
+Remove is no longer in Scheduling. Edit opens a prefilled name/description dialog.
+Remove confirms the named strategy and removes it from the active pool, retaining
+its full research record and history. Cancel/Escape restores chevron focus; errors
+retain dialog text. Edit history exposes before-and-after values under View changes.
+
+The shared services, API and CLI support both operations. First edit/removal of a
+v2 project atomically publishes v3 after preserving an exact `project.v2.json`
+backup. Identity/authorship/creation time remain unchanged. Removed records remain
+in inspection; active-list queries exclude them. Unchanged edits append no event.
+
+Verified on 2026-10-20:
+
+- `./sigma test`: all lifecycle/strategy/edit-removal/API/CLI/launcher scenarios,
+  Ruff (twelve Python files), Pyright, frontend types/build passed. Scenarios cover
+  backup migration, audit chains, no-op edits, rejection of invalid/removed IDs,
+  failed writes, retry, concurrency and corrupt edit/removal histories.
+- `uv run --with playwright python /tmp/sigma-edit-remove-browser.py`: real Chrome
+  passed prefilled edit, cancellation/Escape/focus, injected failures with retained
+  text and retry, persistence after reload/reopen, history before/after values,
+  and confirmed removal returning the empty pool. 320px/390px dialogs fit without
+  horizontal overflow; no JavaScript errors. Test projects were temporary; RH was
+  byte-identical afterward.
+- Visually inspected `/tmp/sigma-edit-dialog-320.png` and
+  `/tmp/sigma-remove-dialog-320.png`. UI server restarted for the new API.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).

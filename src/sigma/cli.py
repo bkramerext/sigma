@@ -9,11 +9,13 @@ from sigma.projects import (
     ProjectError,
     close_project,
     create_strategy,
+    edit_strategy,
     initialize_project,
     inspect_project,
     list_events,
     list_strategies,
     open_project,
+    remove_strategy,
 )
 from sigma.tooling import run_tooling
 from sigma.ui import run_ui
@@ -34,6 +36,18 @@ def main() -> None:
     strategy.add_argument("path")
     strategy.add_argument("--title", required=True)
     strategy.add_argument("--approach", required=True)
+    remove = commands.add_parser(
+        "remove-strategy", help="Remove from pool, retaining research history"
+    )
+    remove.add_argument("path")
+    remove.add_argument("strategy_id")
+    edit = commands.add_parser(
+        "edit-strategy", help="Edit name/description, retaining earlier text"
+    )
+    edit.add_argument("path")
+    edit.add_argument("strategy_id")
+    edit.add_argument("--title", required=True)
+    edit.add_argument("--approach", required=True)
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
@@ -52,6 +66,10 @@ def main() -> None:
             result = asdict(inspect_project(args.path))
         elif args.command == "new-strategy":
             result = asdict(create_strategy(args.path, args.title, args.approach))
+        elif args.command == "edit-strategy":
+            result = asdict(edit_strategy(args.path, args.strategy_id, args.title, args.approach))
+        elif args.command == "remove-strategy":
+            result = asdict(remove_strategy(args.path, args.strategy_id))
         elif args.command == "strategies":
             result = {"strategies": [asdict(s) for s in list_strategies(args.path)]}
         elif args.command == "events":

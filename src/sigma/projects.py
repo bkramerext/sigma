@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import tempfile
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,11 +18,20 @@ class ProjectError(ValueError):
 
 
 @dataclass(frozen=True)
+class StrategyChange:
+    previous_title: str
+    previous_approach: str
+    title: str
+    approach: str
+
+
+@dataclass(frozen=True)
 class Event:
     sequence: int
     kind: str
     timestamp: str
     strategy_id: str | None = None
+    change: StrategyChange | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +41,7 @@ class Strategy:
     approach: str
     author_kind: Literal["human"]
     created_at: str
+    removed_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -86,12 +97,12 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2)
+        or raw["schema_version"] not in (1, 2, 3)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 or 2)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1, 2 or 3)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
-    if version == 2:
+    if version >= 2:
         fields.add("strategies")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
@@ -101,17 +112,14 @@ def _decode(raw: Any) -> Project:
     UUID(raw["id"])
     strategies: list[Strategy] = []
     seen: set[str] = set()
-    if version == 2:
+    if version >= 2:
         if not isinstance(raw["strategies"], list):
             raise ProjectError("Strategies must be a list")
         for item in raw["strategies"]:
-            if not isinstance(item, dict) or set(item) != {
-                "id",
-                "title",
-                "approach",
-                "author_kind",
-                "created_at",
-            }:
+            strategy_fields = {"id", "title", "approach", "author_kind", "created_at"}
+            if version == 3:
+                strategy_fields.add("removed_at")
+            if not isinstance(item, dict) or set(item) != strategy_fields:
                 raise ProjectError("Invalid strategy fields")
             if not isinstance(item["id"], str) or item["id"] in seen:
                 raise ProjectError("Strategy identities must be unique strings")
@@ -122,9 +130,15 @@ def _decode(raw: Any) -> Project:
             if item["author_kind"] != "human":
                 raise ProjectError("Only human-authored strategies are supported")
             _timestamp(item["created_at"])
+            if item.get("removed_at") is not None:
+                _timestamp(item["removed_at"])
             strategies.append(Strategy(**item))
-    if not isinstance(raw["events"], list) or len(raw["events"]) != len(strategies) + 1:
-        raise ProjectError("Project requires an initialization event and one event per strategy")
+    if not isinstance(raw["events"], list) or not raw["events"]:
+        raise ProjectError("Project requires an initialization event")
+    created: set[str] = set()
+    removed: set[str] = set()
+    edits: dict[str, StrategyChange] = {}
+    by_id = {strategy.id: strategy for strategy in strategies}
     events: list[Event] = []
     previous = None
     for index, item in enumerate(raw["events"], 1):
@@ -133,6 +147,8 @@ def _decode(raw: Any) -> Project:
         expected = {"sequence", "kind", "timestamp"}
         if index > 1:
             expected.add("strategy_id")
+        if item.get("kind") == "strategy.updated":
+            expected.add("change")
         if set(item) != expected:
             raise ProjectError("Invalid event fields")
         if type(item["sequence"]) is not int or item["sequence"] != index:
@@ -144,15 +160,64 @@ def _decode(raw: Any) -> Project:
         if index == 1:
             if item["kind"] != "project.initialized":
                 raise ProjectError("First event must initialize the project")
-        else:
-            strategy = strategies[index - 2]
+        elif item["kind"] == "strategy.created":
+            if len(created) >= len(strategies):
+                raise ProjectError("Unexpected strategy creation event")
+            strategy = strategies[len(created)]
             if (
-                item["kind"] != "strategy.created"
-                or item["strategy_id"] != strategy.id
+                item["strategy_id"] != strategy.id
+                or strategy.id in created
                 or item["timestamp"] != strategy.created_at
             ):
                 raise ProjectError("Strategy creation event does not match its record")
-        events.append(Event(**item))
+            created.add(strategy.id)
+        elif item["kind"] == "strategy.updated" and version == 3:
+            strategy_id = item["strategy_id"]
+            change = item["change"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in created
+                or strategy_id in removed
+                or not isinstance(change, dict)
+                or set(change) != {"previous_title", "previous_approach", "title", "approach"}
+            ):
+                raise ProjectError("Invalid strategy edit event")
+            for field, limit in (
+                ("previous_title", 200),
+                ("title", 200),
+                ("previous_approach", 10000),
+                ("approach", 10000),
+            ):
+                _text(change[field], field, limit)
+            previous_edit = edits.get(strategy_id)
+            if previous_edit and (
+                previous_edit.title != change["previous_title"]
+                or previous_edit.approach != change["previous_approach"]
+            ):
+                raise ProjectError("Strategy edit history is inconsistent")
+            edits[strategy_id] = StrategyChange(**change)
+        elif item["kind"] == "strategy.removed" and version == 3:
+            strategy_id = item["strategy_id"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in created
+                or strategy_id in removed
+                or by_id[strategy_id].removed_at != item["timestamp"]
+            ):
+                raise ProjectError("Strategy removal event does not match its record")
+            removed.add(strategy_id)
+        else:
+            raise ProjectError("Unsupported strategy event")
+        event = Event(**{key: value for key, value in item.items() if key != "change"})
+        if "change" in item:
+            event = replace(event, change=StrategyChange(**item["change"]))
+        events.append(event)
+    if created != seen or removed != {s.id for s in strategies if s.removed_at is not None}:
+        raise ProjectError("Strategy records and history do not match")
+    for strategy_id, change in edits.items():
+        strategy = by_id[strategy_id]
+        if strategy.title != change.title or strategy.approach != change.approach:
+            raise ProjectError("Latest edit does not match the strategy record")
     return Project(
         version, raw["id"], raw["title"], raw["problem"], tuple(events), tuple(strategies)
     )
@@ -160,7 +225,12 @@ def _decode(raw: Any) -> Project:
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if project.schema_version < 3:
+        for strategy in raw["strategies"]:
+            del strategy["removed_at"]
     for event in raw["events"]:
+        if event["change"] is None:
+            del event["change"]
         if event["strategy_id"] is None:
             del event["strategy_id"]
     return (json.dumps(raw, indent=2) + "\n").encode("utf-8")
@@ -264,13 +334,100 @@ def close_project() -> None:
 
 
 def list_strategies(value: str | Path) -> tuple[Strategy, ...]:
-    return inspect_project(value).project.strategies
+    """List the active pool; inspect retains removed records and their history."""
+    return tuple(s for s in inspect_project(value).project.strategies if s.removed_at is None)
 
 
 def create_strategy(value: str | Path, title: str, approach: str) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
     approach = _text(approach, "Hypothesis / approach", 10000)
+
+    def append(project: Project) -> Project:
+        timestamp = _next_timestamp(project)
+        strategy = Strategy(str(uuid4()), title, approach, "human", timestamp)
+        return replace(
+            project,
+            schema_version=max(2, project.schema_version),
+            strategies=(*project.strategies, strategy),
+            events=(
+                *project.events,
+                Event(len(project.events) + 1, "strategy.created", timestamp, strategy.id),
+            ),
+        )
+
+    return _update_project(value, append)
+
+
+def remove_strategy(value: str | Path, strategy_id: str) -> ProjectView:
+    """Remove from the active pool, retaining research and an explicit audit event."""
+
+    def remove(project: Project) -> Project:
+        strategy = next((s for s in project.strategies if s.id == strategy_id), None)
+        if strategy is None:
+            raise ProjectError("Strategy not found in this project")
+        if strategy.removed_at is not None:
+            raise ProjectError("Strategy has already been removed")
+        timestamp = _next_timestamp(project)
+        return replace(
+            project,
+            schema_version=3,
+            strategies=tuple(
+                replace(s, removed_at=timestamp) if s.id == strategy_id else s
+                for s in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(len(project.events) + 1, "strategy.removed", timestamp, strategy_id),
+            ),
+        )
+
+    return _update_project(value, remove)
+
+
+def edit_strategy(value: str | Path, strategy_id: str, title: str, approach: str) -> ProjectView:
+    """Update name/description while preserving identity and earlier text in history."""
+    title = _text(title, "Strategy name", 200)
+    approach = _text(approach, "Strategy description", 10000)
+
+    def edit(project: Project) -> Project:
+        strategy = next((s for s in project.strategies if s.id == strategy_id), None)
+        if strategy is None:
+            raise ProjectError("Strategy not found in this project")
+        if strategy.removed_at is not None:
+            raise ProjectError("Removed strategies cannot be edited")
+        if (title, approach) == (strategy.title, strategy.approach):
+            return project
+        change = StrategyChange(strategy.title, strategy.approach, title, approach)
+        return replace(
+            project,
+            schema_version=3,
+            strategies=tuple(
+                replace(s, title=title, approach=approach) if s.id == strategy_id else s
+                for s in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategy.updated",
+                    _next_timestamp(project),
+                    strategy_id,
+                    change,
+                ),
+            ),
+        )
+
+    return _update_project(value, edit)
+
+
+def _next_timestamp(project: Project) -> str:
+    return (
+        max(datetime.now(UTC), _timestamp(project.events[-1].timestamp)).astimezone(UTC).isoformat()
+    )
+
+
+def _update_project(value: str | Path, update: Callable[[Project], Project]) -> ProjectView:
     view = inspect_project(value)
     path = Path(view.path)
     temporary: Path | None = None
@@ -284,38 +441,26 @@ def create_strategy(value: str | Path, title: str, approach: str) -> ProjectView
             fcntl.flock(lock, fcntl.LOCK_EX)
             before = (path / STATE).read_bytes()
             project = inspect_project(path).project
-            timestamp = (
-                max(datetime.now(UTC), _timestamp(project.events[-1].timestamp))
-                .astimezone(UTC)
-                .isoformat()
-            )
-            strategy = Strategy(str(uuid4()), title, approach, "human", timestamp)
-            updated = replace(
-                project,
-                schema_version=2,
-                strategies=(*project.strategies, strategy),
-                events=(
-                    *project.events,
-                    Event(len(project.events) + 1, "strategy.created", timestamp, strategy.id),
-                ),
-            )
+            updated = update(project)
+            if updated == project:
+                return ProjectView(str(path), project)
             contents = _document(updated)
             _decode(json.loads(contents))  # Validate the complete next document before publication.
             temporary = _stage(path, contents)
-            if project.schema_version == 1:
-                backup = path / "project.v1.json"
+            if project.schema_version != updated.schema_version:
+                backup = path / f"project.v{project.schema_version}.json"
                 backup_temporary = _stage(path, before)
                 try:
                     os.link(backup_temporary, backup)
                 except FileExistsError:
                     if backup.is_symlink() or backup.read_bytes() != before:
-                        raise ProjectError("Legacy backup already exists with different contents")
+                        raise ProjectError("Version backup already exists with different contents")
             if (path / STATE).is_symlink() or (path / STATE).read_bytes() != before:
                 raise ProjectError("Project changed during save; reopen and retry")
             os.replace(temporary, path / STATE)
             return ProjectView(str(path), updated)
     except OSError as exc:
-        raise ProjectError(f"Cannot save strategy: {exc}") from exc
+        raise ProjectError(f"Cannot save strategy change: {exc}") from exc
     finally:
         for staged in (temporary, backup_temporary):
             if staged is not None:

@@ -8,6 +8,7 @@ type Strategy = {
   approach: string;
   author_kind: 'human';
   created_at: string;
+  removed_at?: string | null;
 };
 type ProjectView = {
   path: string;
@@ -16,7 +17,8 @@ type ProjectView = {
     title: string;
     problem: string;
     schema_version: number;
-    events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null }[];
+    events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
+      change?: { previous_title: string; previous_approach: string; title: string; approach: string } | null }[];
     strategies: Strategy[];
   };
 };
@@ -83,7 +85,9 @@ function Home({ initialPath, onOpen, goHome }: {
   </>;
 }
 
-function StrategyCommands({ strategy }: { strategy: Strategy }) {
+function StrategyCommands({ strategy, onCommand }: {
+  strategy: Strategy; onCommand: (mode: 'edit' | 'remove', strategy: Strategy) => void;
+}) {
   const disclosure = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
@@ -100,7 +104,7 @@ function StrategyCommands({ strategy }: { strategy: Strategy }) {
       disclosure.current.querySelector('summary')?.focus();
     }
   }}>
-    <summary className="secondary strategy-toggle" aria-label={`Commands for ${strategy.title}`}>
+    <summary id={`commands-${strategy.id}`} className="secondary strategy-toggle" aria-label={`Commands for ${strategy.title}`}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
         <path d="m6 3 5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
@@ -110,7 +114,7 @@ function StrategyCommands({ strategy }: { strategy: Strategy }) {
         <summary className="secondary">Scheduling</summary>
         <p id={`schedule-${strategy.id}`} className="hint">Scheduling controls are not available yet.</p>
         <ul aria-describedby={`schedule-${strategy.id}`}>
-          {['Promote', 'Demote', 'Pause / Resume', 'Remove'].map(label => <li key={label}>
+          {['Promote', 'Demote', 'Pause / Resume'].map(label => <li key={label}>
             <button className="secondary" disabled aria-describedby={`schedule-${strategy.id}`}>{label}</button>
           </li>)}
         </ul>
@@ -124,11 +128,70 @@ function StrategyCommands({ strategy }: { strategy: Strategy }) {
       </details>
       <details name={`strategy-command-${strategy.id}`}>
         <summary className="secondary">Actions</summary>
+        {(['edit', 'remove'] as const).map(mode => <button key={mode} className="secondary" onClick={() => {
+          if (disclosure.current) disclosure.current.open = false;
+          onCommand(mode, strategy);
+        }}>{mode === 'edit' ? 'Edit' : 'Remove'}</button>)}
         <button className="secondary" disabled aria-describedby={`fork-${strategy.id}`}>Fork</button>
         <p id={`fork-${strategy.id}`} className="hint">Forking is not available yet.</p>
       </details>
     </div>
   </details>;
+}
+
+function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
+  mode: 'edit' | 'remove'; strategy: Strategy; path: string;
+  onSaved: (view: ProjectView, mode: 'edit' | 'remove', strategy: Strategy) => void;
+  onCancel: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const [title, setTitle] = useState(strategy.title);
+  const [approach, setApproach] = useState(strategy.approach);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    dialog.current?.showModal();
+    if (mode === 'edit') nameInput.current?.focus();
+    else cancelButton.current?.focus();
+  }, [mode]);
+  async function save(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      const next = await post<ProjectView>(`strategies/${mode}`, {
+        path, strategy_id: strategy.id, ...(mode === 'edit' ? { title, approach } : {}),
+      });
+      onSaved(next, mode, strategy);
+    } catch (error) { setError(errorMessage(error)); }
+    finally { setBusy(false); }
+  }
+  return <dialog className="strategy-dialog" ref={dialog} aria-labelledby="strategy-dialog-title"
+    aria-describedby="strategy-dialog-description" onCancel={event => {
+      event.preventDefault(); if (!busy) onCancel();
+    }}>
+    <h2 id="strategy-dialog-title">{mode === 'edit' ? 'Edit strategy' : `Remove “${strategy.title}”?`}</h2>
+    <p id="strategy-dialog-description" className="hint">{mode === 'edit'
+      ? 'Update the name and description. Earlier text remains in project history.'
+      : 'This strategy will leave the pool. Its idea and history will be kept in the project.'}</p>
+    <form onSubmit={save}>
+      <fieldset disabled={busy}>
+        {mode === 'edit' && <>
+          <label htmlFor="edit-strategy-name">Name</label>
+          <input ref={nameInput} id="edit-strategy-name" value={title} required maxLength={200}
+            onChange={event => setTitle(event.target.value)}/>
+          <label htmlFor="edit-strategy-description">Description</label>
+          <textarea id="edit-strategy-description" value={approach} required maxLength={10000} rows={5}
+            onChange={event => setApproach(event.target.value)}/>
+        </>}
+        {error && <p role="alert" className="error">{error}</p>}
+        <div className="form-actions">
+          <button type="submit" className="secondary">{busy ? 'Saving…' : mode === 'edit' ? 'Save changes' : 'Remove strategy'}</button>
+          <button type="button" className="text-button" ref={cancelButton} onClick={onCancel}>Cancel</button>
+        </div>
+      </fieldset>
+    </form>
+  </dialog>;
 }
 
 function NewStrategy({ path, onSaved, onCancel }: {
@@ -175,6 +238,7 @@ function ProjectScreen({ path, onClose, goHome }: {
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [announcement, setAnnouncement] = useState('');
+  const [command, setCommand] = useState<{ mode: 'edit' | 'remove'; strategy: Strategy } | null>(null);
   const [focusStrategy, setFocusStrategy] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
@@ -205,6 +269,7 @@ function ProjectScreen({ path, onClose, goHome }: {
     <p>Close this project to choose another directory.</p>
   </> : <p className="intro">Opening project…</p>}</div></>;
   const project = view.project;
+  const strategies = project.strategies.filter(strategy => !strategy.removed_at);
   return <>
     {header}
     <div className="project-intro">
@@ -215,7 +280,7 @@ function ProjectScreen({ path, onClose, goHome }: {
     {error && <p role="alert" className="error">{error}</p>}
     <section className="pool" aria-labelledby="pool-heading">
       <div className="pool-heading">
-        <h2 id="pool-heading">Strategy pool</h2>
+        <h2 id="pool-heading" tabIndex={-1}>Strategy pool</h2>
         <div className="pool-buttons">
           <button className="secondary" ref={newButton} onClick={() => setEditing(true)}
             disabled={editing || closing} aria-expanded={editing} aria-controls="strategy-composer">New strategy</button>
@@ -229,10 +294,10 @@ function ProjectScreen({ path, onClose, goHome }: {
         setView(next); setEditing(false); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
       }}/>}</div>
-      {project.strategies.length ? <ol className="strategy-list">
-        {project.strategies.map(strategy => <li className="strategy-row" key={strategy.id}>
+      {strategies.length ? <ol className="strategy-list">
+        {strategies.map(strategy => <li className="strategy-row" key={strategy.id}>
           <div className="strategy-heading">
-            <StrategyCommands strategy={strategy}/>
+            <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => setCommand({ mode, strategy })}/>
             <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>{strategy.title}</h3>
           </div>
           <p className="strategy-approach">{strategy.approach}</p>
@@ -243,13 +308,31 @@ function ProjectScreen({ path, onClose, goHome }: {
         <p>Use New strategy to write a hypothesis or approach. Your ideas will be preserved here as you explore them.</p>
       </div>}
     </section>
+    {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
+      onCancel={() => {
+        const id = command.strategy.id;
+        setCommand(null);
+        requestAnimationFrame(() => document.getElementById(`commands-${id}`)?.focus());
+      }} onSaved={(next, mode, strategy) => {
+        setView(next); setCommand(null);
+        setAnnouncement(mode === 'edit' ? 'Strategy updated.' : `Removed ${strategy.title} from the pool. History retained.`);
+        requestAnimationFrame(() => document.getElementById(
+          mode === 'edit' ? `strategy-${strategy.id}` : 'pool-heading')?.focus());
+      }}/>}
     <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd></dl>
       <h3>Event history</h3>
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
-        <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time></div>
+        <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
+          {event.change && <details className="edit-history"><summary>View changes</summary>
+            <dl><dt>Name before</dt><dd>{event.change.previous_title}</dd>
+              <dt>Name after</dt><dd>{event.change.title}</dd>
+              <dt>Description before</dt><dd>{event.change.previous_approach}</dd>
+              <dt>Description after</dt><dd>{event.change.approach}</dd></dl>
+          </details>}
+        </div>
       </li>)}</ol>
       <p className="hint">Opening and inspecting a project leave its history unchanged.</p>
     </details>

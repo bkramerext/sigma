@@ -46,9 +46,21 @@ def main() -> None:
         result = cli("new-strategy", path, "--title", " ", "--approach", "Invalid")
         assert result.returncode == 2 and "error" in json.loads(result.stderr)
         assert (Path(path) / "project.json").read_bytes() == snapshot
+        result = cli(
+            "edit-strategy", path, strategy["id"], "--title", "Renamed", "--approach", "Updated"
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)["project"]["strategies"][0]["title"] == "Renamed"
+        result = cli("remove-strategy", path, strategy["id"])
+        assert result.returncode == 0, result.stderr
+        assert json.loads(cli("strategies", path).stdout) == {"strategies": []}
+        reopened = json.loads(cli("open", path).stdout)["project"]
+        assert reopened["strategies"][0]["title"] == "Renamed"
+        assert reopened["events"][-1]["kind"] == "strategy.removed"
+        assert cli("remove-strategy", path, strategy["id"]).returncode == 2
         result = cli("close")
         assert result.returncode == 0 and json.loads(result.stdout) == {"closed": True}
-    print("PASS CLI lifecycle, strategy create/list/reopen, JSON output and safe failure")
+    print("PASS CLI lifecycle, strategy create/edit/remove/list/reopen, JSON output and safe failure")
 
 
 if __name__ == "__main__":
