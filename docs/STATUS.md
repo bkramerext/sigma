@@ -2,25 +2,23 @@
 Updated: 2026-10-20
 
 ## Active specification
-**SPEC-001: [Project lifecycle](../specs/project-lifecycle.md)**. Approved for implementation, not yet implemented. This is the immediate Codex assignment. Finish and verify this before expanding to agent generation or the dashboard.
+**[SPEC-001: Project lifecycle](../specs/project-lifecycle.md)** is approved and ready for Codex implementation. No implementation or verification has yet been reported.
 
-## SPEC-001 acceptance
-- [ ] Scaffold Python/uv package and argparse console entry point.
-- [ ] Implement portable SQLite project creation/open/close and schema validation.
-- [ ] Record atomic project.created event; expose read-only info/events CLI.
-- [ ] Cover persistence, repeat reads, overwrite refusal, corruption, schema mismatch, atomic failure and ordering in offline tests.
-- [ ] Run pytest, Ruff and Pyright; document results and update this status.
-- [ ] Commit and push tested implementation.
+## Acceptance checklist
+- [ ] Scaffold Python/uv package and `sigma` argparse CLI.
+- [ ] Implement `.sigma/` package creation, validation, opening and deterministic closing.
+- [ ] Store `config.json`, `state.db`, empty `artifacts/` and `scenarios/`.
+- [ ] Record exactly one atomic `project.created` event and expose read-only info/events.
+- [ ] Implement a small source-controlled scenario runner using the common application interface.
+- [ ] Exercise persistence, read-only operations, overwrite refusal, corruption, schema mismatch, atomic failure, and event ordering.
+- [ ] Run scenarios, CLI smoke checks, Ruff and Pyright; record actual results.
+- [ ] Commit and push implementation.
 
-## Subsequent milestones (not active)
-- [ ] RH sample problem and configurable rubric.
-- [ ] Bounded real LLM strategy generation with offline fakes.
-- [ ] Ranking, scheduler, iterations and independent evaluation.
-- [ ] FastAPI/HTMX browser with live agent activity.
-- [ ] Reopen and inspect full research history.
+## Not active
+Strategy genealogy, rubric evaluation, scheduler, human controls, agent runtime, and web UI. See `docs/BRAINSTORM.md`.
 
-## Collaboration protocol
-ChatGPT and Codex coordinate through committed specs, docs and code on GitHub. No automatic synchronization of chat histories. Codex should record completed work, actual commands/test results, blockers and next task here after each meaningful increment.
+## Coordination
+Codex implements the active spec, tests, updates this file with commands/results, and commits/pushes. ChatGPT reviews against the specification. GitHub is the shared source of truth.
 
-## Open questions
-OpenAI API credentials and spending budget not confirmed. Lean and artifact generation deferred.
+## Open dependency
+Runtime agent authentication and API billing are not settled. SPEC-001 must run fully offline.
