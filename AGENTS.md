@@ -1,14 +1,9 @@
 # SIGMA coding guidance
 
-Read `docs/PROJECT.md`, `docs/DECISIONS.md`, `docs/STATUS.md`, `docs/BRAINSTORM.md`, and the active specification before implementing.
+Read `docs/PROJECT.md`, `docs/DECISIONS.md`, `docs/STATUS.md`, `docs/BRAINSTORM.md`, and the active `specs/project-lifecycle.md`.
 
-## Working agreement
-1. Implement only the active approved spec: `specs/project-lifecycle.md`.
-2. Deliver a **browser-visible vertical slice** in tandem with the CLI and executable scenarios. The user must be able to self-host the page and open `projects/rh.sigma` as the first demonstration.
-3. The React/TypeScript/Vite frontend, FastAPI backend, argparse CLI, and source-controlled scenario runner are peer adapters to the same Python application services. Do not route scenarios through CLI subprocesses.
-4. Prefer readable scenarios with offline deterministic assertions; add focused Python tests for mechanics not naturally expressed by scenarios.
-5. Do not expand scope to agents, rubrics, scheduling, or advanced visualizations.
-6. If a contract is ambiguous, propose an explicit spec amendment rather than inventing architecture.
-7. Run scenarios, CLI and API checks, frontend build/typecheck, lint, and type checks. Record **actual** commands/results in STATUS, then commit and push.
+Implement SPEC-001 as a browser-first vertical slice: React/TypeScript/Vite UI, FastAPI API, argparse CLI, and source-controlled executable scenarios, all calling common typed Python application services.
 
-Use Python, uv, SQLite, FastAPI, argparse, React, TypeScript, Vite, Ruff and Pyright. Keep dependencies minimal. No secrets, force pushes, speculative features, or API charges. The repository is public; avoid private recruiting context and borrowed marketing vocabulary.
+**Project data model, serialization, internal directory structure and initialization are your coding exercise.** The source-controlled `projects/rh.sigma/` contains only a placeholder. Choose a simple approach, explain tradeoffs, protect existing research from overwrite, and make the seed openable from the browser.
+
+Run scenarios, frontend build/typecheck, API/CLI checks, Ruff and Pyright. Record actual results in STATUS; commit and push. No speculative agent features, paid API calls, secrets, force pushes, or private recruiting context.
