@@ -1,49 +1,66 @@
 # SPEC-001: Project lifecycle
 
 Status: Approved for implementation
-Scope: First milestone, project persistence and CLI lifecycle
 Date: 2026-10-20
 
 ## Goal
-Create, open, inspect, close and reopen a SIGMA project stored in one portable SQLite-backed `.sigma` file. This is a **small vertical slice**. Do not implement LLM agents, strategy generation, scheduling or the browser UI in this spec.
+Implement the smallest offline, testable vertical slice: create, open, inspect, close, and reopen a SIGMA project. A project is a **directory** with a `.sigma` suffix, not a SQLite file. No agents, scheduler, strategies, or browser in this slice.
 
-## Terminology
-A project is a persistent research workspace. Opening a project establishes a usable application-level handle; closing releases resources. A CLI process may implicitly close on exit. A project database is not a Git repository and should not be automatically committed.
+## Project package
+```text
+research.sigma/
+  config.json
+  state.db
+  artifacts/
+  scenarios/
+```
+`config.json` contains declarative, human-readable, non-secret project metadata and configuration. `state.db` is SQLite for identity and immutable events. `artifacts/` and `scenarios/` start empty. A user can ignore generated projects with `*.sigma/`.
+
+## Shared application interface
+Implement typed application commands/queries in a reusable Python module, independent of CLI and scenario runner. Required operations:
+- `project.create(path, title, problem)` returns project information.
+- `project.info(path)` returns immutable project information.
+- `project.events(path)` returns ordered events.
+- `project.open(path)` offers an application-level context manager or handle that closes resources deterministically.
+
+Use clear typed results and domain-specific exceptions. Do not implement CLI logic in services or invoke CLI subprocesses from scenarios. This interface will also serve the future web UI.
 
 ## CLI contract
-Provide a console entry point named `sigma` using `argparse` with:
-- `sigma init --project=PATH --title=TITLE --problem=TEXT`: create a new project; reject an existing path without overwriting.
-- `sigma info --project=PATH`: open an existing project, validate schema, print stable machine-readable JSON with project id, title, problem, schema version and creation timestamp; then close.
-- `sigma events --project=PATH`: list recorded events in sequence order as JSON (empty array permitted). 
+Use argparse and a `sigma` console entry point:
+- `sigma init --project=PATH --title=TITLE --problem=TEXT`
+- `sigma info --project=PATH`
+- `sigma events --project=PATH`
+- `sigma scenario run PATH` (one YAML scenario file or a directory of them)
 
-Keep commands and options explicit; do not introduce hidden interactive prompts. `sigma generate --project=rh.sigma` is a later spec, not this one.
+Print stable JSON on stdout for the first three commands. Errors go to stderr with nonzero status. CLI commands may open and close a project within one invocation. No interactive prompts.
 
-## Data and invariants
-- A `.sigma` file is a valid SQLite database with a schema version, immutable project UUID, title, problem statement, creation timestamp in UTC and an append-only event table.
-- Exactly one project identity exists per database. Project id, creation timestamp and initial problem/title survive reopen unchanged.
-- Event sequence numbers are monotonically increasing; events include timestamp, actor, event type and JSON payload. The initial `project.created` event is recorded in the same transaction as initialization.
-- Successful mutations commit atomically. A failure must not leave a partially initialized usable project.
-- Opening a project for inspection does not mutate its logical history. `info` and `events` do not append events.
-- Reject missing files, directories, invalid SQLite content and unsupported schema versions with a nonzero exit status and understandable stderr; never silently create a project during `info` or `events`.
-- Refuse to overwrite existing project paths. No automatic migrations in this slice.
-- Project database connections close deterministically, including on errors.
-- Avoid storing secrets or absolute machine-specific paths in the database.
+## Persistence and invariants
+- A project path must end in `.sigma`; it is a directory containing the expected package structure. Reject existing paths without modifying them.
+- `config.json` stores schema version, immutable project UUID, title, problem, and UTC creation timestamp. `state.db` stores the same immutable identity and schema version for consistency validation, plus append-only events.
+- Create one `project.created` event atomically with initial DB state. Events have increasing sequence numbers, UTC timestamp, actor, type, and JSON payload.
+- Validate configuration structure, database integrity, schema compatibility, and agreement of identity metadata on open. Never silently initialize or migrate an existing path.
+- `info` and `events` do not alter logical history. Closing releases DB connections.
+- A failed initialization must not leave a partially usable `.sigma` directory: build in a temporary sibling directory and publish only when complete. Avoid overwriting an existing destination, including in failure paths.
+- No secrets or machine-specific absolute paths in committed project configuration.
 
-## Implementation boundaries
-Put domain model definitions in `models/project.py` and `models/event.py`. Persistence and project lifecycle operations should live in shared services, not directly inside CLI handlers. Keep web integration possible without building it now. Use `uv`, `pyproject.toml`, `pytest`, Ruff and Pyright as specified in project docs. Standard tests run without network access or API credentials.
+## Scenario-driven acceptance
+Implement a **minimal** source-controlled scenario runner that calls the shared application interface directly. YAML scenarios support a name, description, and ordered steps invoking `project.create`, `project.info`, `project.events`, with variable capture and assertions on selected fields. Support only the operations and assertion features required by these scenarios; no general-purpose DSL. A scenario runs inside an isolated temporary directory and reports precise assertion failures. Use deterministic expectations, avoiding fixed UUIDs and timestamps.
 
-## Acceptance tests
-1. Initializing a project creates a readable SQLite `.sigma` file with one identity and one creation event.
-2. Reopening via a new process/service instance yields the same id, title, problem, timestamp and events.
-3. Calling `info` or `events` repeatedly does not add events or change stored values.
-4. Initialization against an existing path fails without changing its bytes or contents.
-5. Missing, corrupt and incompatible-schema paths fail clearly and are not overwritten.
-6. Simulated exception during initialization leaves no valid half-created project.
-7. Event ordering is stable and monotonic.
-8. All tests are offline; CLI tests exercise actual command behavior.
+Create readable scenarios demonstrating:
+1. Create, inspect, reopen, and preserve project identity and event history.
+2. Read-only inspection does not append events.
+3. Existing destination is rejected without modification.
+4. Missing, corrupt, and unsupported-schema packages fail clearly.
+5. Failed initialization leaves no usable half-project.
+6. Event ordering is stable.
+
+If some fault-injection checks cannot be expressed cleanly in the tiny scenario format, use focused Python tests for those mechanics. The scenario runner is the primary acceptance mechanism, not pytest. All verification is offline.
+
+## Engineering boundaries
+Python with uv, pyproject.toml, argparse, SQLite, and a small YAML dependency if needed. Domain models under `models/`. Shared commands/queries under `application/`. Adapters under `interfaces/cli/` and `scenarios/` (or comparably clear package structure). Ruff and Pyright; pytest permitted for targeted low-level checks. Keep dependency count small.
 
 ## Completion
-Codex documents exact test/lint/type-check commands and results, updates docs/STATUS.md, and commits/pushes this increment. Any contract change requires an explicit spec update with rationale before code is considered complete.
+Run the source-controlled scenarios, CLI smoke checks, Ruff, and Pyright (and any focused tests). Record exact commands and outcomes in `docs/STATUS.md`. Commit and push a coherent implementation increment. Do not claim success until the commands actually pass.
 
-## Out of scope
-Strategy pool, agents, rubrics, scheduler, browser, artifacts, migration machinery, collaboration, cloud storage, authentication and full event replay.
+## Deferred
+Strategy pool, genealogy, rubric evaluation, human priority controls, agent execution, scheduler, web UI, artifact generation, migrations, and cloud features. See `docs/BRAINSTORM.md` for ideas not yet promoted to specifications.
