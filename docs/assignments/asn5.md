@@ -1,6 +1,6 @@
 # ASN-5: Implement the approved project workspace and Strategy Pool design
 
-**Status:** Ready for Codex after the human installs the two artwork files listed below.
+**Status:** Implemented and verified on 2026-10-20. See [results](../STATUS.md#asn-5-approved-strategy-pool-workspace).
 
 ## Authority and scope
 

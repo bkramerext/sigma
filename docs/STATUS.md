@@ -92,6 +92,51 @@ Verified on 2026-10-20:
 - Visually inspected `/tmp/sigma-edit-dialog-320.png` and
   `/tmp/sigma-remove-dialog-320.png`. UI server restarted for the new API.
 
+## ASN-5: approved Strategy Pool workspace
+
+Implemented the supplied workspace identity with a compact transparent metallic
+header logo, dark navigation rail, quiet navy canvas, copper/gold New strategy
+control, bordered strategy list, and matching forms/dialogs/history. All workspace
+rules are isolated in `frontend/src/workspace.css` under `.workspace-page`; older
+conflicting workspace header rules were removed. Home JSX and Home-specific CSS
+were unchanged. Backend routes, data models and persistence were unchanged.
+
+Asset gate passed: supplied reference is a valid 1705×922 RGB PNG; logo is a
+385×96 RGBA PNG with real alpha (range 0–255, transparent corners). Originals are
+retained under `assets/`; the public logo copy is byte-identical. No artwork was
+regenerated, and the reference screenshot is never served as a UI background.
+
+Actual verification on 2026-10-20:
+
+- Merged `origin/main` through `dc98916` while preserving the local artwork commit
+  and pre-existing Home asset modifications. Those Home changes remain unstaged.
+- `./sigma test`: all lifecycle/strategy/change/API/CLI/launcher scenarios, Ruff,
+  Pyright, and frontend typecheck/build passed. Corrected a pre-existing Ruff
+  formatting failure in the CLI smoke test's final print statement; no behavior
+  changed. Existing non-failing TestClient warning remains.
+- `npm --prefix frontend run build`: final workspace build/typecheck passed.
+- `uv run --with playwright python /tmp/sigma-asn5-browser.py`: real Chrome passed
+  Home/project/close/back/forward, actual RH opening, temporary strategy creation,
+  full descriptions, edit/retry/reload, removal/cancel/reopen, retained history,
+  keyboard accordion/focus, skip navigation, loading and error states, disabled
+  future controls, and reduced motion. No JavaScript errors; RH file unchanged.
+- `uv run --with playwright python /tmp/sigma-asn5-home.py before` and `after`:
+  Home screenshots were byte-identical at 1705×922, 1440×1200, 768×1024, 390×844,
+  and 320×844. Home source and the pre-existing Home asset hashes also matched.
+- Workspace screenshots at those five sizes have no page-level horizontal
+  overflow. Inspected `/tmp/sigma-asn5-workspace-1705.png`, `-768.png`, `-320.png`,
+  `/tmp/sigma-asn5-edit-mobile.png`, and `/tmp/sigma-asn5-commands-mobile.png`;
+  compared the desktop composition with `assets/sigma-workspace-reference.png`.
+  Mobile rail scrolls within its own row; the command panel stays within the
+  viewport and scrolls when necessary.
+
+Intentional differences from the concept: no title-area Sigma/waves, search or
+status filters, invented statuses/IDs/dates, View actions, settings/theme tools,
+or nonfunctional project selector. The real title/problem, full approaches,
+author/creation metadata, commands and history are preserved. Future destinations
+are disabled and marked Later. These are the assignment's prescribed deviations;
+no required interactions or visual checks remain blocked.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).

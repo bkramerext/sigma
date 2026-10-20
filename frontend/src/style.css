@@ -123,11 +123,6 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 :root { color-scheme: light; }
 .brand { display: inline-flex; width: 148px; line-height: 0; }
 .brand img { width: 100%; height: auto; display: block; }
-.workspace-page .site-header .brand { width: 125px; }
-.workspace-page .site-header { align-items: center; }
-.workspace-page .brand-block .expansion { margin-top: 0; font-size: 11px; }
-.workspace-page .brand-block { display: flex; align-items: center; gap: 20px; }
-.workspace-page .brand img { filter: drop-shadow(0 1px 2px #4c708c40); }
 .home-page { max-width: none; min-height: 100dvh; margin: 0; padding: 0; background: #030915; color: #e5f2ff; overflow: hidden; position: relative; isolation: isolate; }
 .home-shell { position: relative; min-height: 100dvh; }
 .home-atmosphere { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; background: radial-gradient(ellipse 75% 55% at 82% 4%, #13315275, transparent 70%), radial-gradient(ellipse 65% 55% at 90% 100%, #0d32576e, transparent 74%), linear-gradient(130deg, #030915, #061225 70%, #030915); }
@@ -168,8 +163,6 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
  .home-atmosphere::before { background-size: auto 85%; background-position: 53% center; opacity: .55; }
  .home-atmosphere::after { background: linear-gradient(90deg, #030915ec, #030915ba 70%, #03091566); }
  .home-page .home-empty { margin-top: 42px; }
- .workspace-page .brand-block { flex-wrap: wrap; gap: 8px; }
- .workspace-page .site-header .brand { width: 112px; }
 }
 @media (prefers-reduced-motion: reduce) {
  .home-page *, .home-page *::before, .home-page *::after { animation: none !important; transition: none !important; }

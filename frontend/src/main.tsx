@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
+import './workspace.css';
 
 type Strategy = {
   id: string;
@@ -36,17 +37,63 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function Header({ goHome, close }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean } }) {
+function Header({ goHome, close, projectTitle }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string }) {
   return <header className="site-header">
     <div className="brand-block">
-      <a href="/" className="brand" onClick={goHome} aria-label="SIGMA home"><img src="/sigma-logo.svg" alt="SIGMA" /></a>
+      <a href="/" className="brand" onClick={goHome} aria-label="SIGMA home"><img src="/sigma-workspace-logo.png" alt="SIGMA" /></a>
       <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>
     </div>
+    <div className="header-controls">
+    {projectTitle && <span className="current-project" title={projectTitle}>{projectTitle}</span>}
     {close ? <button className="text-button close-project" onClick={close.action} disabled={close.busy}>
       Close project
     </button> : <span className="local">● Local workspace</span>}
+    </div>
   </header>;
+}
+
+function WorkspaceIcon({ name }: { name: string }) {
+  const paths: Record<string, string> = {
+    Strategies: 'M3 3h6v6H3z M15 3h6v6h-6z M3 15h6v6H3z M15 15h6v6h-6z',
+    Renders: 'M5 3h10l4 4v14H5z M14 3v5h5 M8 12h8 M8 16h6',
+    Analysis: 'M4 20h17 M6 16v-5 M11 16V4 M16 16V8 M21 16v-3',
+    References: 'M12 5c-3-2-6-2-10-1v16c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v16',
+    Notes: 'M5 3h14v18H5z M8 8h8 M8 12h8 M8 16h5',
+    Settings: 'M12 3v3 M12 18v3 M3 12h3 M18 12h3 M6 6l2 2 M16 16l2 2 M6 18l2-2 M16 8l2-2 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+  };
+  return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+    strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]}/></svg>;
+}
+
+function focusWorkspace(id: string) {
+  const target = document.getElementById(id) ?? document.getElementById('workspace-content');
+  target?.focus(); target?.scrollIntoView({ block: 'start' });
+}
+
+function WorkspaceFrame({ children, goHome, close, projectTitle }: {
+  children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string;
+}) {
+  return <>
+    <a className="workspace-skip" href="#workspace-content" onClick={event => {
+      event.preventDefault(); focusWorkspace('workspace-content');
+    }}>Skip to project content</a>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle}/>
+    <div className="workspace-layout">
+      <nav className="workspace-nav" aria-label="Project navigation">
+        <a href="#pool-heading" aria-current="page" onClick={event => {
+          event.preventDefault(); focusWorkspace('pool-heading');
+        }}><WorkspaceIcon name="Strategies"/><span>Strategies</span></a>
+        {['Renders', 'Analysis', 'References', 'Notes', 'Settings'].map(name =>
+          <button key={name} disabled title="Not available yet" aria-describedby="workspace-nav-help">
+            <WorkspaceIcon name={name}/><span>{name}</span><small>Later</small>
+          </button>)}
+        <p id="workspace-nav-help">Other destinations are not available yet.</p>
+      </nav>
+      <div id="workspace-content" className="workspace-content" tabIndex={-1}>{children}</div>
+    </div>
+  </>;
 }
 
 function Home({ initialPath, onOpen, goHome }: {
@@ -262,18 +309,16 @@ function ProjectScreen({ path, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const header = <Header goHome={goHome} close={{ action: close, busy: closing }}/>;
+  const frame = { goHome, close: { action: close, busy: closing }, projectTitle: view?.project.title };
   function cancel() { setEditing(false); requestAnimationFrame(() => newButton.current?.focus()); }
-  if (!view) return <>{header}<div aria-live="polite">{error ? <>
+  if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
     <p>Close this project to choose another directory.</p>
-  </> : <p className="intro">Opening project…</p>}</div></>;
+  </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
   const project = view.project;
   const strategies = project.strategies.filter(strategy => !strategy.removed_at);
-  return <>
-    {header}
+  return <WorkspaceFrame {...frame}>
     <div className="project-intro">
-      <p className="eyebrow">PROJECT</p>
       <h1 ref={heading} tabIndex={-1}>{project.title}</h1>
       <p className="objective">{project.problem}</p>
     </div>
@@ -282,7 +327,7 @@ function ProjectScreen({ path, onClose, goHome }: {
       <div className="pool-heading">
         <h2 id="pool-heading" tabIndex={-1}>Strategy pool</h2>
         <div className="pool-buttons">
-          <button className="secondary" ref={newButton} onClick={() => setEditing(true)}
+          <button className="primary-action" ref={newButton} onClick={() => setEditing(true)}
             disabled={editing || closing} aria-expanded={editing} aria-controls="strategy-composer">New strategy</button>
           <button className="secondary" disabled aria-describedby="generation-help">Generate strategy</button>
         </div>
@@ -336,7 +381,7 @@ function ProjectScreen({ path, onClose, goHome }: {
       </li>)}</ol>
       <p className="hint">Opening and inspecting a project leave its history unchanged.</p>
     </details>
-  </>;
+  </WorkspaceFrame>;
 }
 
 function App() {

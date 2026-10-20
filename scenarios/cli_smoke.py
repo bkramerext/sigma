@@ -60,7 +60,9 @@ def main() -> None:
         assert cli("remove-strategy", path, strategy["id"]).returncode == 2
         result = cli("close")
         assert result.returncode == 0 and json.loads(result.stdout) == {"closed": True}
-    print("PASS CLI lifecycle, strategy create/edit/remove/list/reopen, JSON output and safe failure")
+    print(
+        "PASS CLI lifecycle, strategy create/edit/remove/list/reopen, JSON output and safe failure"
+    )
 
 
 if __name__ == "__main__":
