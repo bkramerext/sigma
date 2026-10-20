@@ -34,6 +34,23 @@ was needed.
   Desktop/mobile screenshots: `/tmp/sigma-asn31-desktop.png` and
   `/tmp/sigma-asn31-mobile-320.png`; mobile screenshot visually inspected.
 
+## Command group and button refinement
+
+Schedule and Report artifact now form an exclusive native accordion. Only one
+strategy Actions menu can also remain open, including when opened by keyboard.
+Command buttons and disclosure triggers share New strategy's outlined styling,
+spacing, typography, hover/pressed states and focus treatment; unavailable
+commands retain their disabled state and explanation.
+
+Verified on 2026-10-20:
+
+- `./sigma test`: all scenarios, lint/types, frontend typecheck/build passed.
+- `uv run --with playwright python /tmp/sigma-accordion-browser.py`: real Chrome
+  verified mouse/keyboard exclusivity, matching computed button styles and hover,
+  disabled commands, Escape focus restoration, and 320px/390px layouts. Temporary
+  project data stayed unchanged; no JavaScript errors. Visually inspected
+  `/tmp/sigma-accordion-320.png`.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).

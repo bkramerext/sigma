@@ -34,8 +34,10 @@ input:disabled, textarea:disabled { opacity: .7; }
 h1:focus, h3[tabindex]:focus { outline: none; }
 .hint { font-size: 12px; color: #6b776f; line-height: 1.6; }
 .error { background: #f8e5df; border: 1px solid #cf9785; padding: 16px; border-radius: 5px; margin: 18px 0; color: #843a2b; overflow-wrap: anywhere; }
-.secondary { border: 1px solid #bccabd; background: transparent; color: #365745; padding: 10px 14px; }
+.secondary { border-radius: 5px; line-height: 1.5; border: 1px solid #bccabd; background: transparent; color: #365745; padding: 10px 14px; }
 .secondary:hover:not(:disabled) { background: #e8ede2; }
+.secondary:active:not(:disabled) { background: #dfe6d8; }
+.secondary:disabled { background: transparent; border-color: #d1d8cd; color: #768078; }
 .text-button { background: transparent; color: #476255; padding: 10px 8px; font-weight: 500; }
 .text-button:hover:not(:disabled) { text-decoration: underline; }
 .text-button:disabled { background: transparent; color: #768078; }
@@ -68,15 +70,15 @@ fieldset { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
 .strategy-byline { font-size: 11px; color: #728174; margin: 0; }
 .strategy-actions { position: relative; flex-shrink: 0; font-size: 12px; }
 summary { cursor: pointer; line-height: 1.5; }
-.strategy-actions > summary { padding: 6px 8px; color: #536c5e; border: 1px solid transparent; border-radius: 4px; }
-.strategy-actions[open] > summary { border-color: #c5d0bf; }
+.strategy-actions > summary { font-size: 13px; font-weight: 600; }
+.strategy-actions[open] > summary { background: #e8ede2; }
 .actions-panel { position: absolute; z-index: 5; right: 0; top: 100%; width: min(310px, calc(100vw - 44px)); background: #fcfcf7; border: 1px solid #cbd5c7; border-radius: 5px; padding: 16px; box-shadow: 0 8px 24px #213b3510; }
 .actions-label { font-size: 11px; color: #718071; margin: 0 0 14px; }
 .actions-panel > details { border-bottom: 1px solid #e0e5d9; padding: 12px 0; }
 .actions-panel summary { font-size: 13px; font-weight: 600; }
 .actions-panel .hint { font-size: 11px; }
 .actions-panel ul { list-style: none; padding: 0; margin: 0; }
-.actions-panel button { padding: 8px 10px; margin: 3px 0; width: 100%; text-align: left; font-size: 12px; font-weight: 500; }
+.actions-panel button { margin: 3px 0; width: 100%; text-align: left; }
 .fork-action { padding-top: 10px; }
 .project-details { border-top: 1px solid #d6dbd1; margin-top: 34px; padding-top: 20px; color: #607467; font-size: 12px; }
 .project-details > summary { width: fit-content; padding: 5px 0; }

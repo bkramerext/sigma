@@ -94,33 +94,33 @@ function StrategyActions({ strategy }: { strategy: Strategy }) {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, []);
-  return <details className="strategy-actions" ref={disclosure} onKeyDown={event => {
+  return <details className="strategy-actions" name="strategy-actions" ref={disclosure} onKeyDown={event => {
     if (event.key === 'Escape' && disclosure.current) {
       event.preventDefault(); event.stopPropagation(); disclosure.current.open = false;
       disclosure.current.querySelector('summary')?.focus();
     }
   }}>
-    <summary aria-label={`Strategy actions for ${strategy.title}`}>Actions</summary>
+    <summary className="secondary" aria-label={`Strategy actions for ${strategy.title}`}>Actions</summary>
     <div className="actions-panel">
       <p className="actions-label">Strategy actions</p>
-      <details>
-        <summary>Schedule</summary>
+      <details name={`strategy-command-${strategy.id}`}>
+        <summary className="secondary">Schedule</summary>
         <p id={`schedule-${strategy.id}`} className="hint">Scheduling controls are not available yet.</p>
         <ul aria-describedby={`schedule-${strategy.id}`}>
           {['Promote', 'Demote', 'Pause / Resume', 'Remove'].map(label => <li key={label}>
-            <button disabled aria-describedby={`schedule-${strategy.id}`}>{label}</button>
+            <button className="secondary" disabled aria-describedby={`schedule-${strategy.id}`}>{label}</button>
           </li>)}
         </ul>
       </details>
-      <details>
-        <summary>Report artifact</summary>
+      <details name={`strategy-command-${strategy.id}`}>
+        <summary className="secondary">Report artifact</summary>
         <p id={`audit-${strategy.id}`} className="hint">Audit reports are not available yet. They will record investigation steps, evidence and tests, and answers to rubric questions.</p>
-        <button disabled aria-describedby={`audit-${strategy.id}`}>Audit</button>
+        <button className="secondary" disabled aria-describedby={`audit-${strategy.id}`}>Audit</button>
         <p id={`artifacts-${strategy.id}`} className="hint">Additional artifact types are not specified yet.</p>
-        <button disabled aria-describedby={`artifacts-${strategy.id}`}>Other artifact types</button>
+        <button className="secondary" disabled aria-describedby={`artifacts-${strategy.id}`}>Other artifact types</button>
       </details>
       <div className="fork-action">
-        <button disabled aria-describedby={`fork-${strategy.id}`}>Fork</button>
+        <button className="secondary" disabled aria-describedby={`fork-${strategy.id}`}>Fork</button>
         <p id={`fork-${strategy.id}`} className="hint">Forking is not available yet.</p>
       </div>
     </div>
@@ -215,7 +215,7 @@ function ProjectScreen({ path, onClose, goHome }: {
         <div className="pool-buttons">
           <button className="secondary" ref={newButton} onClick={() => setEditing(true)}
             disabled={editing || closing} aria-expanded={editing} aria-controls="strategy-composer">New strategy</button>
-          <button className="text-button" disabled aria-describedby="generation-help">Generate strategy</button>
+          <button className="secondary" disabled aria-describedby="generation-help">Generate strategy</button>
         </div>
       </div>
       <p id="generation-help" className="hint generation-help">Generation is unavailable. Agent generation is planned for a later release.</p>
