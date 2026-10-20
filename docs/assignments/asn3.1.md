@@ -1,5 +1,7 @@
 # ASN-3.1: Move Fork under Actions
 
+Status: Verified; already implemented in ASN-3. See [verification](../STATUS.md#asn-31-verification).
+
 Context: ASN-3 is complete. This is a small UI-only follow-up.
 
 ## Change

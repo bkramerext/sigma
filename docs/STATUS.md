@@ -19,6 +19,21 @@ All checks below passed on 2026-10-20:
 
 Tests used temporary projects; RH data was preserved. Existing non-failing Starlette TestClient deprecation notice remains.
 
+## ASN-3.1 verification
+
+Verified on 2026-10-20 after pulling `38f48c4`. ASN-3 already puts the single Fork
+control inside Actions, alongside Schedule and Report artifact; no UI code change
+was needed.
+
+- `uv run --with playwright python /tmp/sigma-asn31-browser.py`: real Chrome check
+  passed. Fork is hidden while Actions is closed, disabled when opened, and linked
+  to “Forking is not available yet.” No duplicate exists. Keyboard Enter/Escape
+  and focus restoration work; 320px/390px layouts have no horizontal overflow.
+- `./sigma test`: all scenarios, Ruff, Pyright, frontend typecheck/build passed.
+- Temporary-project bytes and RH data were unchanged by menu interactions.
+  Desktop/mobile screenshots: `/tmp/sigma-asn31-desktop.png` and
+  `/tmp/sigma-asn31-mobile-320.png`; mobile screenshot visually inspected.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).
