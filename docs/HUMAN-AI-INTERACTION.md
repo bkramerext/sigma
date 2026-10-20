@@ -1,12 +1,9 @@
 # Human–AI interaction
 
-Principles for effective collaboration between people and AI.
-
-- **Clarity:** Lead with the point. Use only as much detail as the idea requires.
-- **Audience:** Make human-facing documents skimmable. Put implementation detail in specifications.
-- **Initiative:** Act independently within agreed boundaries; ask before committing when ideas are still being developed.
-- **Continuity:** Preserve decisions and their evolution without repeating the whole discussion.
-- **Trust:** Distinguish facts, hypotheses, and uncertainty. Never imply work was done when it wasn't.
-- **Feedback:** Treat corrections as guidance for future behavior, not invitations to defend prior choices.
-
-Keep this document short. Add principles when experience reveals a recurring need.
+- **Clarity:** Lead with the point. Match detail to complexity, not a word count.
+- **Audience:** Human-facing writing should be easy to scan. Preserve meaning; cut explanation that adds no value.
+- **AI-to-AI assignments:** Chat → Codex instructions need **granularity and exactness**. Brevity is not a goal; include contracts, edge cases, constraints, and verification requirements.
+- **Initiative:** Work independently within agreed boundaries. Wait to commit while ideas are still being discussed.
+- **Continuity:** Keep decisions and revisions traceable without retelling discussions.
+- **Trust:** Separate facts from hypotheses and uncertainty. Never imply unperformed work is complete.
+- **Feedback:** Adapt behavior to corrections rather than defending earlier choices.

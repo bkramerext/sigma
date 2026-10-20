@@ -1,20 +1,24 @@
 # SPEC-001: Browser-first project lifecycle
 
-Status: Approved for implementation
+Status: Implemented
 
-## First user experience
-Run a local React/TypeScript/Vite UI with a FastAPI backend. Open the source-controlled seed directory `projects/rh.sigma/` and inspect the RH project's title, problem, identity, and event history. Deliver CLI and executable scenarios in tandem.
+## Goal
 
-## Coding exercise: project representation
-The project is a directory ending in `.sigma`. Its initial source-controlled contents are only `.gitkeep`. **Codex must design its data model, serialization, directory layout, persistence and safe initialization workflow.** No `config.json`, `state.db`, or specific storage layout is mandated. Explain the choice and tradeoffs. Ensure the RH seed can be initialized reproducibly, then reopened without losing its identity or history. Source-control stable inputs as appropriate, but exclude generated state and secrets.
+Open the source-controlled `projects/rh.sigma/` seed in a local browser, showing project identity, problem, and history. Preserve identity on reopen.
 
-## Application interface
-Provide typed shared Python commands/queries for creating/initializing, opening, inspecting and closing a project, and listing its events. CLI, FastAPI and scenario runner are peer adapters; never call each other as subprocesses. Preserve identity and history on reopen; validate incompatible or corrupt projects; avoid partial initialization and accidental overwrites.
+## Contract
 
-## UI, CLI, and tests
-Browser: project path selection, Open action, project metadata/history view, clear error display, and close/switch action. Localhost only; no authentication required in this slice.
-CLI: argparse commands to initialize/open/inspect projects and list events, with documented machine-readable output.
-Scenarios: readable source-controlled executable examples calling shared services directly. Verify seed initialization, persistence, repeat reads, invalid inputs, safe failure and event ordering. Use focused Python/API tests where appropriate. Run frontend build/typecheck, scenarios, API/CLI smoke checks, Ruff and Pyright.
+- A project is a `.sigma/` directory. Codex chooses safe storage and initialization; never overwrite existing research.
+- Typed shared Python services support init, open, inspect, close, and event listing. Browser, FastAPI, CLI, and scenarios are peer adapters.
+- Reject invalid/corrupt/incompatible projects without modifying them. Initialization must avoid partial publication.
+- Browser supports path selection, open, close/switch, details/history, and visible errors.
+- CLI provides machine-readable project commands.
+- Executable scenarios verify initialization, persistence, immutable reads, failures, and event ordering.
+
+## Verification
+
+Run scenarios, API/CLI checks, frontend typecheck/build, Ruff, and Pyright. Record actual results in `docs/STATUS.md`.
 
 ## Scope
-Keep dependencies and abstractions minimal. No agents, scheduler, rubrics, advanced visualization, paid APIs or cloud features. Record actual verification commands and results in `docs/STATUS.md`, then commit and push.
+
+No agents, scheduler, rubric engine, paid APIs, or remote hosting in SPEC-001. Later assignments extend the foundation.

@@ -1,9 +1,7 @@
 # SIGMA coding guidance
 
-Read `docs/PROJECT.md`, `docs/DECISIONS.md`, `docs/STATUS.md`, `docs/BRAINSTORM.md`, and the active `specs/project-lifecycle.md`.
+Read [project](docs/PROJECT.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), and the active assignment in `docs/assignments/`. Follow [human–AI interaction](docs/HUMAN-AI-INTERACTION.md): assignments need precision, not forced brevity.
 
-Implement SPEC-001 as a browser-first vertical slice: React/TypeScript/Vite UI, FastAPI API, argparse CLI, and source-controlled executable scenarios, all calling common typed Python application services.
+Use shared typed Python services across browser, API, CLI, and executable scenarios. Protect project identity, research history, and existing data. Choose simple implementations; document consequential tradeoffs.
 
-**Project data model, serialization, internal directory structure and initialization are your coding exercise.** The source-controlled `projects/rh.sigma/` contains only a placeholder. Choose a simple approach, explain tradeoffs, protect existing research from overwrite, and make the seed openable from the browser.
-
-Run scenarios, frontend build/typecheck, API/CLI checks, Ruff and Pyright. Record actual results in STATUS; commit and push. No speculative agent features, paid API calls, secrets, force pushes, or private recruiting context.
+Run `./sigma test` and relevant real-browser checks. Record actual results in STATUS; commit and push completed assignments. No speculative agents, paid calls, secrets, force pushes, or private recruiting context.
