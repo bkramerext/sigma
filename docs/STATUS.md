@@ -86,3 +86,16 @@ Verification on 2026-10-20:
 
 These checks use temporary projects and leave the RH seed unchanged. Browser
 interaction remains covered by the earlier browser verification, not `sigma test`.
+
+## Direct checkout launcher
+
+Added executable `./sigma` for use without environment activation; it delegates to
+uv with the checkout's absolute project path and forwards all arguments. The name
+avoids shadowing the `sigma` Python package (a root `sigma.py` broke module imports
+in CLI smoke verification and was replaced before delivery). Plain `sigma` remains
+available after `source .venv/bin/activate`. README now leads with the direct launcher.
+
+Verification on 2026-10-20: `./sigma --help`, `./sigma setup`, `./sigma test`, and
+`uv run pyright sigma` all passed. The test command includes launcher lint and
+format checks (nine Python files). Missing uv produces an actionable error and
+exit status 2. Existing non-failing dependency notices are unchanged.

@@ -9,7 +9,7 @@ Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+ an
 Run from the repository root:
 
 ```sh
-uv run sigma setup
+./sigma setup
 uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8000
 ```
 
@@ -58,13 +58,14 @@ The same services are exposed as `POST /api/projects/init`, `POST
 ## Verify
 
 ```sh
-uv run sigma setup
-uv run sigma test
+./sigma setup
+./sigma test
 ```
 
 `setup` installs the locked Python dependencies (including development tools) and
-runs `npm ci` for the frontend. Install uv and Node/npm first. On a fresh checkout,
-`uv run` bootstraps the CLI so it can perform setup. If you prefer bare commands:
+runs `npm ci` for the frontend. Install uv and Node/npm first. The executable
+`sigma` launcher uses uv internally to select the project environment and bootstrap the CLI on a fresh checkout. No activation is required.
+If you prefer the installed `sigma` command, activate the environment once per terminal:
 
 ```sh
 source .venv/bin/activate
@@ -76,7 +77,8 @@ sigma test
 failure checks, Ruff lint/format checks, Pyright, frontend typechecking, and the
 production build. Setup and test stream progress and tool output, stop at the
 first failure, and return a nonzero exit status if a step fails. They run in the
-source checkout regardless of your current directory. `test` uses installed
+source checkout regardless of your current directory. `uv run sigma ...` is also
+supported; it is the explicit equivalent of the launcher. `test` uses installed
 dependencies without syncing; run `setup` first. It uses temporary projects and
 does not modify the RH seed. It does not launch servers or run a browser.
 

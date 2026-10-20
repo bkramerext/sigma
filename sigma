@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""Run the SIGMA CLI from this checkout without activating its environment."""
+
+import os
+import shutil
+import sys
+from pathlib import Path
+
+
+def main() -> None:
+    uv = shutil.which("uv")
+    if uv is None:
+        print("SIGMA requires uv. Install uv, then retry ./sigma setup.", file=sys.stderr)
+        sys.exit(2)
+    root = Path(__file__).resolve().parent
+    os.execv(uv, [uv, "run", "--project", str(root), "sigma", *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    main()
