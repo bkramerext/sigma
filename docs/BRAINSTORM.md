@@ -46,6 +46,17 @@ This is a source-controlled record of design ideas, not an implementation specif
 - Public repository structure should demonstrate separation of intent, agent judgment, governance, execution, and verification through actual code and scenarios. Keep README and docs technically grounded, without recruitment-oriented claims or private background.
 - SIGMA is a research orchestration system, not a claim to be a general software factory.
 
+## Configuration, spending, and progress notifications
+
+These are candidate features for later agent-execution increments, **not additions to the active UI assignment**.
+
+- **Project-level configuration** establishes defaults and guardrails for the research environment: model/provider selection, overall spending ceiling, agent execution limits (steps, tool calls, recursion/depth, concurrent runs), timeouts, retry policies, report-back intervals, evaluation rubric, and notification preferences. Draw on established industry practices for bounded, observable agent workflows; evaluate specific defaults when implementing.
+- **Strategy-level configuration** should remain minimal initially: scheduling state, priority, and a per-strategy spending ceiling. Strategies inherit project defaults unless a justified override is necessary. Do not build a complex settings form before real use reveals what is needed.
+- **Cost visibility:** Show actual accrued spending and the strategy's limit as restrained secondary text on an in-progress strategy, e.g. `Spent $2.34 / $10.00 limit`. Distinguish actual measured costs from estimates, and enforce limits through application services rather than merely displaying them.
+- **Progress reports:** A configurable report-back timeout/interval should ensure a long-running investigation provides periodic progress even without a breakthrough. Clarify how elapsed-time limits differ from reporting cadence and execution deadlines.
+- **Notifications:** Allow opt-in alerts for significant research events, especially a **candidate solution**. A message such as `I think I found a solution to the RH project!` should clearly indicate an unverified claim. Track separate states for candidate discovery, independent verification, and any later externally validated result; do not equate agent confidence or finite tests with mathematical proof.
+- Keep notification delivery channels, provider integrations, and detailed strategy overrides undecided until a concrete implementation slice calls for them.
+
 ## Documentation reconciliation
 
 SPEC-001 uses a `.sigma/` directory with a versioned JSON document and shared typed services. SQLite remains a potential later storage choice; executable scenarios are the current acceptance checks. See DECISIONS.md for the implemented format and tradeoffs.
