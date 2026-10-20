@@ -3,11 +3,12 @@
 Read `docs/PROJECT.md`, `docs/DECISIONS.md`, `docs/STATUS.md`, `docs/BRAINSTORM.md`, and the active specification before implementing.
 
 ## Working agreement
-1. Implement only the active approved spec: currently `specs/project-lifecycle.md`.
-2. Build the smallest working slice; do not turn brainstorming into features.
-3. Prefer source-controlled, human-readable executable scenarios that exercise the shared application interface directly. Use focused Python unit tests only where they add value. Keep ordinary verification offline.
-4. Keep the CLI, future web UI, and scenario runner as peer adapters over one typed application interface. Never route the scenario runner through CLI subprocesses.
-5. If requirements conflict, amend the specification explicitly rather than silently inventing behavior.
-6. Run the scenarios, CLI smoke checks, lint, and type checks. Record **actual** commands and results in STATUS. Commit and push coherent tested increments.
+1. Implement only the active approved spec: `specs/project-lifecycle.md`.
+2. Deliver a **browser-visible vertical slice** in tandem with the CLI and executable scenarios. The user must be able to self-host the page and open `projects/rh.sigma` as the first demonstration.
+3. The React/TypeScript/Vite frontend, FastAPI backend, argparse CLI, and source-controlled scenario runner are peer adapters to the same Python application services. Do not route scenarios through CLI subprocesses.
+4. Prefer readable scenarios with offline deterministic assertions; add focused Python tests for mechanics not naturally expressed by scenarios.
+5. Do not expand scope to agents, rubrics, scheduling, or advanced visualizations.
+6. If a contract is ambiguous, propose an explicit spec amendment rather than inventing architecture.
+7. Run scenarios, CLI and API checks, frontend build/typecheck, lint, and type checks. Record **actual** commands/results in STATUS, then commit and push.
 
-Use Python, uv, argparse, SQLite, Ruff and Pyright. Models belong under `models/`; keep dependencies and abstractions minimal. No secrets, force pushes, speculative features, or API charges. The repository is public: avoid personal recruiting context or private project history in public-facing prose.
+Use Python, uv, SQLite, FastAPI, argparse, React, TypeScript, Vite, Ruff and Pyright. Keep dependencies minimal. No secrets, force pushes, speculative features, or API charges. The repository is public; avoid private recruiting context and borrowed marketing vocabulary.
