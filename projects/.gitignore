@@ -1,0 +1,7 @@
+# Keep example projects and their declarative source files tracked.
+# Ignore mutable runtime state and generated outputs within project packages.
+*.sigma/state.db
+*.sigma/state.db-*
+*.sigma/artifacts/*
+!*.sigma/artifacts/.gitkeep
+*.sigma/.cache/
