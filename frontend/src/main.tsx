@@ -67,25 +67,20 @@ function Home({ initialPath, onOpen, goHome }: {
   return <div className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-    <Header goHome={goHome}/>
-    <div className="home-hero"><p className="home-kicker">THE UNKNOWN IS AN INVITATION</p>
-    <h1 ref={heading} tabIndex={-1}>Explore the paths to discovery.</h1>
-    <p className="intro">Investigate competing ideas, test their assumptions, and preserve what each exploration reveals.</p>
+    <div className="home-topline"><span>STRATEGY INVESTIGATION · GENERATION · MEASUREMENT · ASSESSMENT</span><span>● LOCAL WORKSPACE</span></div>
+    <div className="home-hero"><h1 ref={heading} tabIndex={-1}>Open a Project</h1>
+    <p className="intro">Every discovery begins with a question. Open a research project to explore its possibilities.</p>
     </div>
     <form className="open-form" onSubmit={open}>
-      <label htmlFor="path">Project directory</label>
+      <label htmlFor="path">PROJECT DIRECTORY</label>
       <div className="input-row">
         <input id="path" value={path} onChange={event => setPath(event.target.value)} required disabled={busy}/>
-        <button disabled={busy}>{busy ? 'Opening…' : 'Open project'} <span aria-hidden="true">↗</span></button>
+        <button disabled={busy}>{busy ? 'Opening…' : 'Open Project'} <span aria-hidden="true">↗</span></button>
       </div>
-      <p className="hint">Open a local SIGMA project directory.</p>
+      <p className="hint">Enter a local SIGMA project directory.</p>
     </form>
     {error && <p role="alert" className="error">{error}</p>}
-    <div className="empty home-empty">
-      <span aria-hidden="true">◌</span>
-      <h2>Every investigation starts somewhere.</h2>
-      <p>Begin with the included Riemann Hypothesis project.</p>
-    </div>
+    <div className="empty home-empty"><h2>Recent Projects</h2><p>No recent project history is available yet. You can open the included <strong>projects/rh.sigma</strong> directory above.</p></div>
     </div>
   </div>;
 }
