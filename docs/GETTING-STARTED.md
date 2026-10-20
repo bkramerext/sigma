@@ -13,7 +13,7 @@ From the repository root:
 ./sigma ui
 ```
 
-Open **http://127.0.0.1:5173**. Choose `projects/rh.sigma` and **Open project**. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
+Open **http://127.0.0.1:5173**. Choose **Open Project**, enter `projects/rh.sigma` in the dialog, and open it. **New Project** asks for a name, multiline research problem, and research mode (Default or Mathematical), then opens the created workspace. Cancel or Escape returns Home. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
 
 Use the chevron beside a strategy name, then **Actions → Edit** to change its
 name and description in a dialog. **Actions → Remove** asks for confirmation and
@@ -28,6 +28,7 @@ The launcher starts FastAPI on localhost port 8000 and Vite on port 5173. Both p
 ## CLI
 
 ```sh
+./sigma create --title 'My investigation' --problem 'Investigate it' --research-mode mathematical
 ./sigma init /tmp/example.sigma --title 'Example' --problem 'Investigate it'
 ./sigma open projects/rh.sigma
 ./sigma inspect projects/rh.sigma
@@ -40,7 +41,7 @@ The launcher starts FastAPI on localhost port 8000 and Vite on port 5173. Both p
 ```
 
 Successful commands print JSON to stdout (exit 0). Project errors print `{"error":"..."}` to stderr (exit 2); argparse syntax errors also exit 2. `close` is stateless. `strategies` lists the active pool; `inspect` retains removed
-records and all audit events. Edit/remove commands return the updated project. Only the canonical RH seed initializes implicitly; other projects require `init`.
+records and all audit events. Edit/remove commands return the updated project. Only the canonical RH seed initializes implicitly; other projects require `create` (managed location) or `init` (explicit directory). Both accept `--research-mode default|mathematical`, defaulting to `default`.
 
 ## API
 
@@ -49,6 +50,8 @@ The local API exposes the same services:
 | Method | Endpoint |
 | --- | --- |
 | POST | `/api/projects/init` |
+| GET | `/api/projects/destination?title=...` |
+| POST | `/api/projects/create` |
 | POST | `/api/projects/open` |
 | GET | `/api/projects/inspect?path=...` |
 | GET | `/api/projects/events?path=...` |
@@ -58,7 +61,7 @@ The local API exposes the same services:
 | POST | `/api/projects/strategies/edit` |
 | POST | `/api/projects/strategies/remove` |
 
-Init accepts `{path,title,problem}`; open accepts `{path}`; create-strategy accepts `{path,title,approach}`. Strategy titles are 1–200 characters; approaches are 1–10,000 after trimming. Project errors return HTTP 400; invalid bodies 422; creation 201.
+Managed create accepts `{title,problem,research_mode?}`; additional fields such as `path` are rejected. Destination preview returns `{root,path,exists}` (omit title for root only). Unknown modes return 400. Init accepts `{path,title,problem,research_mode?}`; open accepts `{path}`; create-strategy accepts `{path,title,approach}`. Strategy titles are 1–200 characters; approaches are 1–10,000 after trimming. Project errors return HTTP 400; invalid bodies 422; creation 201.
 
 Edit accepts `{path,strategy_id,title,approach}`; remove accepts `{path,strategy_id}`.
 Both return the updated project (HTTP 200). Unknown or already-removed strategies
@@ -73,10 +76,18 @@ dialog map to the existing title/approach fields and share their length limits.
 
 Runs lifecycle/strategy scenarios, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary projects and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma ui`, and `sigma test` also work.
 
+## Project location
+
+New Project and `sigma create` use this checkout's absolute `projects/` directory, independent of the browser or shell working directory. To choose another root, create a directory owned by the server user and launch with `SIGMA_PROJECTS_ROOT=/absolute/path ./sigma ui` (or the same environment variable for CLI commands). The root must already exist, be absolute, and must not itself be a symlink. Missing parents are not created.
+
+The server derives a lowercase Unicode-normalized directory name, joining punctuation/spacing with hyphens and adding `.sigma`. Names are 1–200 characters, reject path separators/control characters, and must contain a letter or number. Directory stems are limited to 80 characters/180 UTF-8 bytes. Different names can normalize to the same directory: choose another name when a collision is reported; existing files and projects are never reused or overwritten. The dialog previews this destination read-only. Research problems are 1–20,000 characters after trimming. Open Project still accepts arbitrary valid existing local project paths.
+
+Canonical artwork lives in `assets/`; Vite copies its exact bytes into runtime public assets on dev startup and builds. No manual frontend artwork copy is needed.
+
 ## Data and limitations
 
-New projects use JSON schema v2. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
-V3 retains removed records and edit/removal events; older clients cannot read v3.
+New projects use JSON schema v4 with persisted `research_mode`. Existing v1–v3 documents default to Default without being rewritten; strategy writes retain their established lazy migration behavior. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
+V3/v4 retain removed records and edit/removal events; older clients cannot read newer schemas.
 Unchanged edits add no event or migration. Writes use POSIX advisory locks and atomic replacement. Use a local macOS/Linux filesystem; do not edit project JSON while a save is running. Generated RH project state is excluded from Git.
 
 See [Architectural Decisions](DECISIONS.md) for concurrency/crash limitations, [Status](STATUS.md) for verified behavior, and [SPEC-001](../specs/project-lifecycle.md) for the original lifecycle contract.

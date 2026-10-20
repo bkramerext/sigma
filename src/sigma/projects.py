@@ -3,11 +3,14 @@
 import fcntl
 import json
 import os
+import re
 import stat
 import tempfile
+import unicodedata
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -15,6 +18,18 @@ from uuid import UUID, uuid4
 
 class ProjectError(ValueError):
     """An invalid request or a project that cannot safely be used."""
+
+
+class ResearchMode(str, Enum):
+    DEFAULT = "default"
+    MATHEMATICAL = "mathematical"
+
+
+def _research_mode(value: str) -> ResearchMode:
+    try:
+        return ResearchMode(value)
+    except (ValueError, TypeError) as exc:
+        raise ProjectError("Research mode must be default or mathematical") from exc
 
 
 @dataclass(frozen=True)
@@ -52,6 +67,7 @@ class Project:
     problem: str
     events: tuple[Event, ...]
     strategies: tuple[Strategy, ...] = ()
+    research_mode: ResearchMode = ResearchMode.DEFAULT
 
 
 @dataclass(frozen=True)
@@ -97,19 +113,22 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3)
+        or raw["schema_version"] not in (1, 2, 3, 4)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1, 2 or 3)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1, 2, 3 or 4)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
         fields.add("strategies")
+    if version >= 4:
+        fields.add("research_mode")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
     for key in ("id", "title", "problem"):
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise ProjectError(f"Project {key} must be a nonempty string")
     UUID(raw["id"])
+    mode = _research_mode(raw.get("research_mode", "default"))
     strategies: list[Strategy] = []
     seen: set[str] = set()
     if version >= 2:
@@ -117,7 +136,7 @@ def _decode(raw: Any) -> Project:
             raise ProjectError("Strategies must be a list")
         for item in raw["strategies"]:
             strategy_fields = {"id", "title", "approach", "author_kind", "created_at"}
-            if version == 3:
+            if version >= 3:
                 strategy_fields.add("removed_at")
             if not isinstance(item, dict) or set(item) != strategy_fields:
                 raise ProjectError("Invalid strategy fields")
@@ -171,7 +190,7 @@ def _decode(raw: Any) -> Project:
             ):
                 raise ProjectError("Strategy creation event does not match its record")
             created.add(strategy.id)
-        elif item["kind"] == "strategy.updated" and version == 3:
+        elif item["kind"] == "strategy.updated" and version >= 3:
             strategy_id = item["strategy_id"]
             change = item["change"]
             if (
@@ -196,7 +215,7 @@ def _decode(raw: Any) -> Project:
             ):
                 raise ProjectError("Strategy edit history is inconsistent")
             edits[strategy_id] = StrategyChange(**change)
-        elif item["kind"] == "strategy.removed" and version == 3:
+        elif item["kind"] == "strategy.removed" and version >= 3:
             strategy_id = item["strategy_id"]
             if (
                 not isinstance(strategy_id, str)
@@ -219,12 +238,14 @@ def _decode(raw: Any) -> Project:
         if strategy.title != change.title or strategy.approach != change.approach:
             raise ProjectError("Latest edit does not match the strategy record")
     return Project(
-        version, raw["id"], raw["title"], raw["problem"], tuple(events), tuple(strategies)
+        version, raw["id"], raw["title"], raw["problem"], tuple(events), tuple(strategies), mode
     )
 
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if project.schema_version < 4:
+        del raw["research_mode"]
     if project.schema_version < 3:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
@@ -262,7 +283,10 @@ def inspect_project(value: str | Path) -> ProjectView:
         raise ProjectError(f"Cannot open {path}: {exc}") from exc
 
 
-def initialize_project(value: str | Path, title: str, problem: str) -> ProjectView:
+def initialize_project(
+    value: str | Path, title: str, problem: str, research_mode: str = "default"
+) -> ProjectView:
+    mode = _research_mode(research_mode)
     path = project_path(value)
     if not title.strip() or not problem.strip():
         raise ProjectError("Title and problem must be nonempty")
@@ -277,11 +301,12 @@ def initialize_project(value: str | Path, title: str, problem: str) -> ProjectVi
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            2,
+            4,
             str(uuid4()),
             title.strip(),
             problem.strip(),
             (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
+            research_mode=mode,
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -371,7 +396,7 @@ def remove_strategy(value: str | Path, strategy_id: str) -> ProjectView:
         timestamp = _next_timestamp(project)
         return replace(
             project,
-            schema_version=3,
+            schema_version=max(3, project.schema_version),
             strategies=tuple(
                 replace(s, removed_at=timestamp) if s.id == strategy_id else s
                 for s in project.strategies
@@ -401,7 +426,7 @@ def edit_strategy(value: str | Path, strategy_id: str, title: str, approach: str
         change = StrategyChange(strategy.title, strategy.approach, title, approach)
         return replace(
             project,
-            schema_version=3,
+            schema_version=max(3, project.schema_version),
             strategies=tuple(
                 replace(s, title=title, approach=approach) if s.id == strategy_id else s
                 for s in project.strategies
@@ -465,3 +490,74 @@ def _update_project(value: str | Path, update: Callable[[Project], Project]) -> 
         for staged in (temporary, backup_temporary):
             if staged is not None:
                 staged.unlink(missing_ok=True)
+
+
+@dataclass(frozen=True)
+class ProjectDestination:
+    root: str
+    path: str | None
+    exists: bool
+
+
+def projects_root() -> Path:
+    """Explicit server-side location, independent of the browser or current directory."""
+    try:
+        configured = Path(
+            os.environ.get("SIGMA_PROJECTS_ROOT", str(ROOT / "projects"))
+        ).expanduser()
+        if not configured.is_absolute() or configured.is_symlink():
+            raise ProjectError("SIGMA_PROJECTS_ROOT must be an absolute directory, not a symlink")
+        root = configured.resolve()
+        if not root.is_dir() or root.stat().st_uid != os.geteuid():
+            raise ProjectError("Projects root must already exist and be owned by the server user")
+        return root
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ProjectError(f"Projects location unavailable: {exc}") from exc
+
+
+def _project_name(title: str) -> tuple[str, str]:
+    title = _text(title, "Project name", 200)
+    if any(char in "/\\" or ord(char) < 32 or ord(char) == 127 for char in title):
+        raise ProjectError("Project name cannot contain path separators or control characters")
+    slug = re.sub(r"[^\w]+", "-", unicodedata.normalize("NFKC", title).casefold()).strip("-_")[:80]
+    while len(slug.encode("utf-8")) > 180:
+        slug = slug[:-1]
+    slug = slug.rstrip("-_")
+    if not slug or not any(char.isalnum() for char in slug):
+        raise ProjectError("Project name must contain a letter or number")
+    return title, slug + ".sigma"
+
+
+def project_destination(title: str = "") -> ProjectDestination:
+    root = projects_root()
+    if not title:
+        return ProjectDestination(str(root), None, False)
+    _, name = _project_name(title)
+    path = root / name
+    return ProjectDestination(str(root), str(path), os.path.lexists(path))
+
+
+def create_project(title: str, problem: str, research_mode: str = "default") -> ProjectView:
+    """Reserve a name beneath the configured root; never reuse an existing directory."""
+    title, name = _project_name(title)
+    problem = _text(problem, "Research problem", 20000)
+    mode = _research_mode(research_mode)
+    root = projects_root()
+    destination = root / name
+    reserved = False
+    try:
+        destination.mkdir(mode=0o700)  # Exclusive reservation also rejects files/broken symlinks.
+        reserved = True
+        return initialize_project(destination, title, problem, mode)
+    except FileExistsError as exc:
+        raise ProjectError(
+            f"A project or file already exists at {destination}; choose another name"
+        ) from exc
+    except OSError as exc:
+        raise ProjectError(f"Cannot create project: {exc}") from exc
+    finally:
+        if reserved:
+            try:
+                destination.rmdir()  # Remove only this attempt's still-empty directory on failure.
+            except OSError:
+                pass

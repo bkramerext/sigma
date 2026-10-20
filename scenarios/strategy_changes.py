@@ -32,6 +32,10 @@ def rejects(action) -> None:
 
 def fixture(path: Path):
     initialize_project(path, "Research", "Preserve the project and earlier text")
+    raw = json.loads((path / STATE).read_bytes())
+    raw["schema_version"] = 2
+    del raw["research_mode"]
+    (path / STATE).write_text(json.dumps(raw))
     view = create_strategy(path, "Original name", "Original description")
     return view, view.project.strategies[0]
 

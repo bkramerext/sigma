@@ -34,6 +34,7 @@ def legacy(path: Path) -> bytes:
     raw = json.loads((path / STATE).read_bytes())
     raw["schema_version"] = 1
     del raw["strategies"]
+    del raw["research_mode"]
     contents = (json.dumps(raw, indent=2) + "\n").encode()
     (path / STATE).write_bytes(contents)
     return contents

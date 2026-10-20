@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEve
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
+import './project-entry.css';
 
 type Strategy = {
   id: string;
@@ -18,6 +19,7 @@ type ProjectView = {
     title: string;
     problem: string;
     schema_version: number;
+    research_mode: 'default' | 'mathematical';
     events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
       change?: { previous_title: string; previous_approach: string; title: string; approach: string } | null }[];
     strategies: Strategy[];
@@ -96,38 +98,120 @@ function WorkspaceFrame({ children, goHome, close, projectTitle }: {
   </>;
 }
 
+type ResearchMode = 'default' | 'mathematical';
+type Destination = { root: string; path: string | null; exists: boolean };
+
+function ProjectEntryDialog({ mode, initialPath, onOpen, onCancel }: {
+  mode: 'open' | 'new'; initialPath: string; onOpen: (view: ProjectView) => void; onCancel: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const firstField = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const [path, setPath] = useState(initialPath);
+  const [title, setTitle] = useState('');
+  const [problem, setProblem] = useState('');
+  const [researchMode, setResearchMode] = useState<ResearchMode>('default');
+  const [destination, setDestination] = useState<Destination | null>(null);
+  const [previewError, setPreviewError] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { dialog.current?.showModal(); firstField.current?.focus(); }, []);
+  useEffect(() => {
+    if (mode !== 'new') return;
+    const controller = new AbortController();
+    setPreviewBusy(true); setDestination(null); setPreviewError('');
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/projects/destination?${new URLSearchParams({ title })}`, { signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Project location is unavailable');
+        setDestination(data);
+      } catch (error) {
+        if (!controller.signal.aborted) setPreviewError(errorMessage(error));
+      } finally { if (!controller.signal.aborted) setPreviewBusy(false); }
+    }, title ? 180 : 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [mode, title]);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (submitting.current || (mode === 'new' && (!destination?.path || destination.exists || previewBusy))) return;
+    submitting.current = true; setBusy(true); setError('');
+    try {
+      onOpen(await post<ProjectView>(mode === 'open' ? 'open' : 'create', mode === 'open'
+        ? { path } : { title, problem, research_mode: researchMode }));
+    } catch (error) { setError(errorMessage(error)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading"
+    aria-describedby="project-entry-help" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <h2 id="project-entry-heading">{mode === 'open' ? 'Open Project' : 'New Project'}</h2>
+    <p id="project-entry-help" className="entry-help">{mode === 'open'
+      ? 'Choose an existing local project by its directory path.'
+      : 'Give your investigation a name, a problem, and a research mode.'}</p>
+    <form onSubmit={submit}>
+      <fieldset disabled={busy}>
+        {mode === 'open' ? <>
+          <label htmlFor="open-project-path">Project directory</label>
+          <input ref={firstField} id="open-project-path" value={path} required aria-describedby="project-path-help"
+            onChange={event => setPath(event.target.value)}/>
+          <p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
+        </> : <>
+          <label htmlFor="new-project-name">Project name</label>
+          <input ref={firstField} id="new-project-name" value={title} required maxLength={200}
+            onChange={event => setTitle(event.target.value)}/>
+          <label htmlFor="new-project-problem">Research problem</label>
+          <textarea id="new-project-problem" value={problem} required maxLength={20000} rows={4}
+            onChange={event => setProblem(event.target.value)}/>
+          <label htmlFor="new-project-mode">Research mode</label>
+          <select id="new-project-mode" value={researchMode} onChange={event => setResearchMode(event.target.value as ResearchMode)}>
+            <option value="default">Default</option><option value="mathematical">Mathematical</option>
+          </select>
+          <p className="project-destination" aria-live="polite"><span>Project location</span>
+            <code>{previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code>
+            {!title && destination && <small>The project name determines its directory.</small>}
+          </p>
+          {previewError && <p role="alert" className="error">{previewError}</p>}
+          {destination?.exists && <p role="alert" className="error">A project or file already exists here. Choose another name.</p>}
+        </>}
+        {error && <p role="alert" className="error">{error}</p>}
+        <div className="entry-dialog-actions">
+          <button type="submit" disabled={busy || (mode === 'new' && (previewBusy || !destination?.path || destination.exists))}>
+            {busy ? mode === 'open' ? 'Opening…' : 'Creating…' : mode === 'open' ? 'Open Project' : 'Create Project'}
+          </button>
+          <button type="button" className="entry-cancel" onClick={onCancel}>Cancel</button>
+        </div>
+      </fieldset>
+    </form>
+  </dialog>;
+}
+
 function Home({ initialPath, onOpen, goHome }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
-  const [path, setPath] = useState(initialPath);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const newButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
-  async function open(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError('');
-    try { onOpen(await post<ProjectView>('open', { path })); }
-    catch (error) { setError(errorMessage(error)); }
-    finally { setBusy(false); }
+  function cancel() {
+    const trigger = entry === 'open' ? openButton : newButton;
+    setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
   }
   return <div className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
     <div className="home-topline"><span>STRATEGY INVESTIGATION · GENERATION · MEASUREMENT · ASSESSMENT</span><span>● LOCAL WORKSPACE</span></div>
     <div className="home-hero"><h1 ref={heading} tabIndex={-1}>Open a Project</h1>
-    <p className="intro">Every discovery begins with a question. Open a research project to explore its possibilities.</p>
+    <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>
-    <form className="open-form" onSubmit={open}>
-      <label htmlFor="path">PROJECT DIRECTORY</label>
-      <div className="input-row">
-        <input id="path" value={path} onChange={event => setPath(event.target.value)} required disabled={busy}/>
-        <button disabled={busy}>{busy ? 'Opening…' : 'Open Project'} <span aria-hidden="true">↗</span></button>
-      </div>
-      <p className="hint">Enter a local SIGMA project directory.</p>
-    </form>
-    {error && <p role="alert" className="error">{error}</p>}
-    <div className="empty home-empty"><h2>Recent Projects</h2><p>No recent project history is available yet. You can open the included <strong>projects/rh.sigma</strong> directory above.</p></div>
+    <div className="home-entry-actions">
+      <button ref={openButton} onClick={() => setEntry('open')}>Open Project <span aria-hidden="true">↗</span></button>
+      <button ref={newButton} className="home-new-project" onClick={() => setEntry('new')}>New Project</button>
+    </div>
+    <div className="empty home-empty"><h2>Recent Projects</h2><p>No recent project history is available yet.</p></div>
+    {entry && <ProjectEntryDialog mode={entry} initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
     </div>
   </div>;
 }
@@ -366,7 +450,7 @@ function ProjectScreen({ path, onClose, goHome }: {
       }}/>}
     <details className="project-details">
       <summary>Project details &amp; history</summary>
-      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd></dl>
+      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research mode</dt><dd>{project.research_mode === 'mathematical' ? 'Mathematical' : 'Default'}</dd></dl>
       <h3>Event history</h3>
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>

@@ -4,12 +4,13 @@ from dataclasses import asdict
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma.projects import (
     ProjectError,
     close_project,
+    create_project,
     create_strategy,
     edit_strategy,
     initialize_project,
@@ -17,6 +18,7 @@ from sigma.projects import (
     list_events,
     list_strategies,
     open_project,
+    project_destination,
     remove_strategy,
 )
 
@@ -44,6 +46,7 @@ class OpenRequest(BaseModel):
 class InitRequest(OpenRequest):
     title: str
     problem: str
+    research_mode: str = "default"
 
 
 @app.post("/api/projects/open")
@@ -53,7 +56,7 @@ def open_view(body: OpenRequest):
 
 @app.post("/api/projects/init", status_code=201)
 def init_view(body: InitRequest):
-    return asdict(initialize_project(body.path, body.title, body.problem))
+    return asdict(initialize_project(body.path, body.title, body.problem, body.research_mode))
 
 
 @app.get("/api/projects/inspect")
@@ -103,3 +106,20 @@ class EditStrategyRequest(StrategyRequest):
 @app.post("/api/projects/strategies/edit")
 def edit_strategy_view(body: EditStrategyRequest):
     return asdict(edit_strategy(body.path, body.strategy_id, body.title, body.approach))
+
+
+class CreateProjectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str
+    problem: str
+    research_mode: str = "default"
+
+
+@app.get("/api/projects/destination")
+def destination_view(title: str = ""):
+    return asdict(project_destination(title))
+
+
+@app.post("/api/projects/create", status_code=201)
+def create_project_view(body: CreateProjectRequest):
+    return asdict(create_project(body.title, body.problem, body.research_mode))

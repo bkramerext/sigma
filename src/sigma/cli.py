@@ -8,6 +8,7 @@ from dataclasses import asdict
 from sigma.projects import (
     ProjectError,
     close_project,
+    create_project,
     create_strategy,
     edit_strategy,
     initialize_project,
@@ -28,6 +29,11 @@ def main() -> None:
     init.add_argument("path")
     init.add_argument("--title", required=True)
     init.add_argument("--problem", required=True)
+    init.add_argument("--research-mode", default="default")
+    create = commands.add_parser("create", help="Create a project in the configured projects root")
+    create.add_argument("--title", required=True)
+    create.add_argument("--problem", required=True)
+    create.add_argument("--research-mode", default="default")
     for name in ("open", "inspect", "events"):
         commands.add_parser(name).add_argument("path")
     strategies = commands.add_parser("strategies", help="List persistent strategies")
@@ -59,7 +65,11 @@ def main() -> None:
         sys.exit(run_tooling(args.command))
     try:
         if args.command == "init":
-            result = asdict(initialize_project(args.path, args.title, args.problem))
+            result = asdict(
+                initialize_project(args.path, args.title, args.problem, args.research_mode)
+            )
+        elif args.command == "create":
+            result = asdict(create_project(args.title, args.problem, args.research_mode))
         elif args.command == "open":
             result = asdict(open_project(args.path))
         elif args.command == "inspect":

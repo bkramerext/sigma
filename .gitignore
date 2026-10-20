@@ -224,3 +224,5 @@ __marimo__/
 !projects/rh.sigma/.gitkeep
 frontend/node_modules/
 frontend/dist/
+# Home runtime artwork is copied byte-for-byte from assets/ by Vite.
+frontend/public/sigma-home-background.png

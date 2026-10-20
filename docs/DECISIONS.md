@@ -41,3 +41,31 @@ trap focus and support Escape. Successful edits focus the strategy heading;
 removal focuses Strategy pool; cancellation returns to the chevron. Failed saves
 keep the dialog and entered text. The remaining scheduling/report/fork commands
 stay unavailable.
+
+## ASN-6: managed creation and research modes
+
+New initialization writes schema v4 with `research_mode` as an extensible string
+enum (`default`, `mathematical`), preserving v3 strategy/history semantics. Unknown
+modes are rejected. Existing v1–v3 documents read as Default without mutation;
+their existing lazy migrations and byte-exact backups are unchanged. Mode is
+returned consistently through shared services/API/CLI and displayed in Project
+details. Future LaTeX artifacts apply to every mode; Lean applies to Mathematical.
+Neither artifact engine is implemented here.
+
+Managed creation reserves a deterministic normalized name with exclusive mkdir
+under an explicit owned local root (checkout `projects/`, or absolute existing
+`SIGMA_PROJECTS_ROOT`). Preview and creation share the server naming function;
+create accepts no client path. Reject final-root symlinks, missing/foreign roots,
+unsafe names, and any existing destination, including broken symlinks. Reserve
+first, stage/fsync the project document, and publish without replacement. Failure
+removes only an empty reservation; concurrent files are retained. A crash may
+leave an empty reserved directory requiring inspection/removal before retry. This
+is a cooperative local-filesystem design, not protection against a noncooperating
+process swapping parent directories or changing ownership during a request.
+
+The Home command pair uses native modal dialogs for focus trapping and Escape,
+with focus restoration on cancellation, retained inputs on error and synchronous
+duplicate-submit guards. Creation shows server-derived location context rather
+than a path editor. Canonical artwork is copied byte-for-byte by Vite on startup
+and build; accepted Home art is committed unchanged from its pre-assignment bytes.
+ASN-5 workspace styles and ASN-4.1's on-hold animation remain untouched.

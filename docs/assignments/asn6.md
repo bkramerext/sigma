@@ -1,6 +1,6 @@
 # ASN-6: New Project creation and research mode
 
-**Status:** Ready for Codex after ASN-5 is complete or in a nonconflicting implementation branch.
+**Status:** Implemented and verified on 2026-10-20. See `docs/STATUS.md` for actual checks and limitations.
 
 ## Purpose
 
