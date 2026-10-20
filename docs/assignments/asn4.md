@@ -4,9 +4,9 @@
 
 ## Canonical reference: approved 2026-10-20 split-screen mockup
 
-The user enthusiastically approved the generated **1536 × 1024** split-screen image showing **Home page (launch)** on the left and **Project page (research workspace)** on the right. This specific image is the pixel-level composition and styling reference, not a generic style suggestion. The original generated image is available in the design conversation. **Do not use the earlier simplified SVGs as the reference or claim that they are equivalent.**
+The split-screen image is a layout reference **only**: its LEFT Home artwork is a degraded regeneration and MUST NOT be reproduced. Its RIGHT project-workspace layout is approved. The original full-width Home image is the sole authoritative visual source for the Home artwork. The original generated image is available in the design conversation. **Do not use the earlier simplified SVGs as the reference or claim that they are equivalent.**
 
-The approved earlier **1536 × 1024 full-width Home background image** (metallic Σ at upper center, deep navy negative space on left, luminous blue/gold mathematical waves on upper and lower right) remains the *Home background asset*. The split-screen mockup is the canonical *UI overlay, project workspace and styling reference*. These are complementary, not competing, approvals.
+The approved earlier **1536 × 1024 full-width Home background image** (metallic Σ at upper center, deep navy negative space on left, luminous blue/gold mathematical waves on upper and lower right) remains the *Home background asset*. The split-screen mockup supplies *UI placement and project workspace layout only*, never replacement Home artwork. These are complementary, not competing, approvals.
 
 ### Asset handoff — blocking requirement
 
@@ -18,7 +18,7 @@ The approved earlier **1536 × 1024 full-width Home background image** (metallic
 
 ## Home page (left mockup panel)
 
-- Use the **exact approved full-width Home background** as the foundation. The mockup illustrates how the UI overlays it. Preserve the dramatic blue/copper waves and mathematical notation at the right, with deep dark negative space under controls. Do not rebuild the image in CSS or SVG.
+- Use the **exact approved full-width Home background** as the foundation. The mockup illustrates UI placement only; its regenerated Home art is rejected. Preserve the dramatic blue/copper waves and mathematical notation at the right, with deep dark negative space under controls. Do not rebuild the image in CSS or SVG.
 - Metallic, illuminated Σ centered near the upper part of the original artwork, with spaced SIGMA wordmark and concise subtitle. Avoid a second redundant logo overlay if the background already includes the mark.
 - Place the **Open a Project** dark translucent panel on the left beneath the branding, as in the mockup: warm copper heading, brief explanatory text, directory path input with folder icon, Browse affordance, and primary copper/gold **Open Project →** action.
 - Show **Recent Projects** below as a restrained list with copper folder icons, thin rules and subdued labels. **Do not fabricate recent-project history**: populate only from real persisted data if available; otherwise use an honest empty state. The project names visible in the concept image are illustrative, not seeded records.
@@ -52,4 +52,4 @@ The approved earlier **1536 × 1024 full-width Home background image** (metallic
 
 ## Acceptance
 
-The user should recognize **the exact two approved images**, not a stylistic interpretation: the full-width cosmic Home artwork with the coppery launch UI, and the quiet project workspace with the same compact metallic identity, rail and real working content. The two images must be stored under `assets/` and the running app must use the exact Home background. Existing core behavior must remain intact.
+The user should recognize the **exact original Home artwork** (never the degraded left mockup) and the right-hand workspace layout: the full-width cosmic Home artwork with the coppery launch UI, and the quiet project workspace with the same compact metallic identity, rail and real working content. The two images must be stored under `assets/` and the running app must use the exact Home background. Existing core behavior must remain intact.
