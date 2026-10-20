@@ -157,3 +157,69 @@ Verification on 2026-10-20:
 
 Only frontend copy/presentation and delivery documentation changed; project
 services, storage, and CLI behavior are unchanged.
+
+## ASN-3: project workspace and persistent manual strategies
+
+Implemented Home `/` and a distinct `/project?path=...` research workspace. Opening
+navigates to the project; title/problem lead the page, followed by an initially
+empty strategy pool. Close returns Home. Reload, direct project URLs, and browser
+back/forward reopen the correct data; Home remembers the last project path after
+close, including after a project-page reload. Project details/history remain in a
+secondary disclosure. The initial interaction/visual decisions were recorded in
+[asn3-design.md](asn3-design.md) before implementation.
+
+New strategy opens an inline form with focused title input, title/approach fields,
+Save and Cancel. A successful save focuses the new strategy and announces success;
+errors retain both fields. Cancel/Escape restores focus to New strategy. Strategy
+rows show full approach and human authorship. Keyboard-accessible native Actions
+and nested Schedule/Report artifact disclosures expose the assigned hierarchy.
+Generate strategy, Promote, Demote, Pause/Resume, Remove, Audit, other artifact
+types and Fork remain explicitly unavailable with explanations. No scheduling,
+agent work, reports or forks are simulated; no artifact types were invented.
+
+Shared typed services now create/list strategies via API, CLI and executable
+scenarios. Each record has a stable UUID, human author kind, title, approach and
+creation timestamp, with a linked contiguous event. New projects use JSON schema
+v2. v1 opens without rewriting; first strategy save preserves an exact v1 backup
+and atomically publishes v2 with old identity/history intact. Cooperative writers
+serialize through a stable advisory lock. See [DECISIONS](DECISIONS.md) for backup,
+POSIX/local-filesystem, external-edit, lost-response and crash limitations.
+
+Actual verification on 2026-10-20:
+
+- `git pull --ff-only`: retrieved ASN-3 at `3459102`.
+- `./sigma test`: all lifecycle and strategy scenario groups, CLI smoke checks,
+  maintenance/UI supervision checks, Ruff lint/format (eleven Python files),
+  Pyright (zero errors/warnings), frontend typecheck and production build passed.
+  The existing non-failing Starlette TestClient deprecation notice remains.
+- Strategy scenarios cover v1 read-only compatibility, exact backup/migration,
+  stable identity and history, save/reopen, validation limits, failed file
+  flush/replacement/backup link, migration retry and backup conflicts, detected
+  external edits, unsafe lock symlinks, missing projects, concurrent writers,
+  corrupt strategy/event records, and real API create/list/error responses.
+- CLI smoke checks cover `new-strategy`, `strategies`, reopen persistence, JSON
+  output, validation errors and unchanged state on rejection, alongside lifecycle.
+- `npm --prefix frontend run build`: passed during UI implementation and after
+  navigation/focus fixes; final typecheck/build also passed through `./sigma test`.
+- `./sigma ui`: restarted the local servers to load the new API, verified readiness;
+  left the final implementation running at http://127.0.0.1:5173 for review.
+- `uv run --with playwright python /tmp/sigma-asn3-browser.py`: passed on the final
+  running implementation in real headless Google Chrome. Verified Home → open RH
+  → project → close → Home, back/forward, heading focus, disabled generation with
+  explanation, direct reload, form input focus and Escape, injected save failure
+  with retained text and successful retry, saved-strategy focus/announcement,
+  persistence and stable IDs after reload/close/reopen, and first-save v1 backup.
+  Exercised Schedule and Report artifact with keyboard, confirmed every future
+  action disabled/explained, and checked Escape restores Actions focus.
+- Browser checks used a temporary project for writes. RH remained byte-identical
+  with its real objective and empty pool; no test strategies were added to it.
+  Checked 390px/320px widths, including the expanded action hierarchy and mobile
+  creation form, without horizontal overflow. Invalid project URLs displayed an
+  error and recovered through Close. No JavaScript page errors occurred.
+- Screenshots inspected: `/tmp/sigma-asn3-rh.png`, `/tmp/sigma-asn3-saved.png`,
+  `/tmp/sigma-asn3-mobile-320.png`, and `/tmp/sigma-asn3-mobile-form.png`. A desktop
+  expanded-menu capture is also at `/tmp/sigma-asn3-menu.png`.
+
+All required ASN-3 interactions are implemented. Future commands listed above are
+intentionally unavailable under the assignment boundary. No agents, scheduler,
+evaluator, audits, autonomous forks, paid calls or cloud services were added.

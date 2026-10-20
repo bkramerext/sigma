@@ -10,9 +10,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sigma.projects import (
     ProjectError,
     close_project,
+    create_strategy,
     initialize_project,
     inspect_project,
     list_events,
+    list_strategies,
     open_project,
 )
 
@@ -66,3 +68,18 @@ def events_view(path: str):
 def close_view():
     close_project()
     return {"closed": True}
+
+
+class StrategyRequest(OpenRequest):
+    title: str
+    approach: str
+
+
+@app.get("/api/projects/strategies")
+def strategies_view(path: str):
+    return {"strategies": [asdict(s) for s in list_strategies(path)]}
+
+
+@app.post("/api/projects/strategies", status_code=201)
+def create_strategy_view(body: StrategyRequest):
+    return asdict(create_strategy(body.path, body.title, body.approach))

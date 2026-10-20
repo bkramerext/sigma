@@ -8,9 +8,11 @@ from dataclasses import asdict
 from sigma.projects import (
     ProjectError,
     close_project,
+    create_strategy,
     initialize_project,
     inspect_project,
     list_events,
+    list_strategies,
     open_project,
 )
 from sigma.tooling import run_tooling
@@ -26,6 +28,12 @@ def main() -> None:
     init.add_argument("--problem", required=True)
     for name in ("open", "inspect", "events"):
         commands.add_parser(name).add_argument("path")
+    strategies = commands.add_parser("strategies", help="List persistent strategies")
+    strategies.add_argument("path")
+    strategy = commands.add_parser("new-strategy", help="Save a human-authored strategy")
+    strategy.add_argument("path")
+    strategy.add_argument("--title", required=True)
+    strategy.add_argument("--approach", required=True)
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
@@ -42,6 +50,10 @@ def main() -> None:
             result = asdict(open_project(args.path))
         elif args.command == "inspect":
             result = asdict(inspect_project(args.path))
+        elif args.command == "new-strategy":
+            result = asdict(create_strategy(args.path, args.title, args.approach))
+        elif args.command == "strategies":
+            result = {"strategies": [asdict(s) for s in list_strategies(args.path)]}
         elif args.command == "events":
             result = {"events": [asdict(e) for e in list_events(args.path)]}
         else:

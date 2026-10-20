@@ -31,6 +31,7 @@ def run_tooling(command: str) -> int:
         python = ["uv", "run", "--locked", "--no-sync"]
         steps = [
             [*python, "python", "scenarios/lifecycle.py"],
+            [*python, "python", "scenarios/strategies.py"],
             [*python, "python", "scenarios/cli_smoke.py"],
             [*python, "python", "scenarios/tooling.py"],
             [*python, "ruff", "check", "src", "scenarios", "sigma"],

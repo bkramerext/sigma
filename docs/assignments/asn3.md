@@ -1,6 +1,6 @@
 # ASN-3: Project page and strategy pool foundation
 
-Status: Ready for Codex
+Status: Implemented and verified; see [results](../STATUS.md)
 Context: ASN-1 and ASN-2 are implemented. This assignment establishes the main research workspace, its first meaningful interactions, and the visual language for later work.
 
 ## Primary objective

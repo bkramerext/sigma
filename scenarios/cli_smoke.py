@@ -35,9 +35,20 @@ def main() -> None:
             assert result.returncode == 2 and not result.stdout
             assert "error" in json.loads(result.stderr)
         assert (Path(path) / "project.json").read_bytes() == before
+        result = cli("new-strategy", path, "--title", "Manual idea", "--approach", "Investigate it")
+        assert result.returncode == 0, result.stderr
+        strategy = json.loads(result.stdout)["project"]["strategies"][0]
+        result = cli("strategies", path)
+        assert result.returncode == 0 and json.loads(result.stdout)["strategies"] == [strategy]
+        result = cli("open", path)
+        assert json.loads(result.stdout)["project"]["strategies"][0]["id"] == strategy["id"]
+        snapshot = (Path(path) / "project.json").read_bytes()
+        result = cli("new-strategy", path, "--title", " ", "--approach", "Invalid")
+        assert result.returncode == 2 and "error" in json.loads(result.stderr)
+        assert (Path(path) / "project.json").read_bytes() == snapshot
         result = cli("close")
         assert result.returncode == 0 and json.loads(result.stdout) == {"closed": True}
-    print("PASS CLI lifecycle, JSON output, error exit codes and safe failure")
+    print("PASS CLI lifecycle, strategy create/list/reopen, JSON output and safe failure")
 
 
 if __name__ == "__main__":

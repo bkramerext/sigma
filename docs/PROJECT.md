@@ -24,4 +24,4 @@ and storage tradeoffs. Generated project state is excluded from Git.
 ## Implementation
 Python and uv; argparse CLI; FastAPI API; React/TypeScript/Vite browser. Agent runtime remains deferred. Source-controlled executable scenarios are the primary acceptance tests, with deterministic fake agents for offline runs. Ruff and Pyright provide static checks.
 
-Build and verify one specification at a time. **Current implementation target:** [SPEC-001: Project lifecycle](../specs/project-lifecycle.md). See [status](STATUS.md), [decisions](DECISIONS.md), and [brainstorm](BRAINSTORM.md). Features beyond the active spec are intentionally deferred.
+Build and verify one specification at a time. **Implemented foundation:** [SPEC-001: Project lifecycle](../specs/project-lifecycle.md), extended by [ASN-3: Project page and strategy pool](assignments/asn3.md) with persistent manual strategies. See [status](STATUS.md), [decisions](DECISIONS.md), and [brainstorm](BRAINSTORM.md). Features beyond the bounded assignments are intentionally deferred.
