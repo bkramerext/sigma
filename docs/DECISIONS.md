@@ -1,12 +1,12 @@
-# SIGMA decisions
+# SIGMA architectural decisions
 Date: 2026-10-20
 
-1. **Name:** SIGMA means Strategy Investigation, Generation, Measurement & Assessment. RH is the flagship sample, not a claimed proof.
-2. **Projects:** Local-first, one portable SQLite-backed .sigma file per project; transactional autosave, open/close and event history.
-3. **Vocabulary:** Strategy pool contains high-level approaches; iterations are bounded agent runs; artifacts are durable outputs; events are the audit trail.
-4. **Scoring:** Versioned configurable rubric; uncertainty can increase exploratory priority. Verified solution is a terminal status displayed as +infinity.
-5. **Interfaces:** argparse CLI and FastAPI/HTMX browser share application services. SSE provides live updates initially.
-6. **Agents:** OpenAI Agents SDK executes agent runs; SIGMA controls scheduling, evaluation, budgets, state and persistence.
-7. **Engineering:** uv, Python, pytest under tests/, Ruff, Pyright; domain models under models/.
-8. **Collaboration:** GitHub is the shared source of truth between ChatGPT and Codex. AGENTS.md and docs/ track requirements, status and decisions. Commit/push tested increments; avoid force-push and secrets.
-9. **Scope:** Complete a tested local end-to-end loop before Lean, LaTeX, elaborate visualizations or other domains.
+1. **Project package:** Each project is a `.sigma/` directory with `config.json`, SQLite `state.db`, `artifacts/`, and `scenarios/`. Generated packages may be ignored with `*.sigma/`.
+2. **Common application interface:** CLI, web UI, and executable scenario runner are peer adapters calling the same typed commands/queries.
+3. **Research vocabulary:** A strategy is an evolving investigation seeded by an idea, not a single result. Strategies form a genealogy: generation-0 roots and parent-linked forks. Iterations are bounded runs; events are the audit trail.
+4. **Rubrics:** Human-editable natural-language criteria evaluate whether strategies have promising paths. Some criteria direct bounded adversarial testing. Evidence, uncertainty, novelty, and strategic promise are distinct; no false calibrated probabilities.
+5. **Governance:** Independent evaluators assess evidence. A deterministic scheduler enforces hard constraints and allocates effort. Human controls change priorities, constraints, and pause state without rewriting assessments. Version and audit consequential changes.
+6. **Verification:** Human-readable source-controlled scenarios are the primary acceptance mechanism; they invoke the application interface, not CLI subprocesses. Focused unit tests remain optional.
+7. **Engineering:** Python, uv, SQLite, argparse, Ruff, Pyright; FastAPI/HTMX/SSE and agent runtime later. Models under `models/`. Build one small specification at a time.
+8. **Collaboration:** GitHub docs, specifications, code, and commits are the shared handoff between ChatGPT and Codex. Public repository; no secrets or recruiting narrative in project documentation.
+9. **Scope:** SPEC-001 is project lifecycle only. Strategy generation, scoring, scheduling, UI, and advanced research features remain deferred.
