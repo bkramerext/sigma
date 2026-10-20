@@ -1,50 +1,36 @@
 # ASN-3.2: SIGMA visual identity and Home page
 
-Context: ASN-3 provides the project launcher and research workspace. ASN-3.1 relocates Fork under Actions. This assignment applies the approved visual direction without changing research behavior.
+Context: ASN-3 establishes Home and Project; ASN-3.1 adjusts the Fork menu. This is the approved visual-design implementation.
 
-## Goal
+## Visual source and assets
 
-Make the **entire Home page** feel like the approved SIGMA artwork: deep navy/near-black, luminous icy blue and restrained warm gold, mathematical diagrams, and flowing wave/cloud fields. Keep the project launcher legible and functional. Give the **Project workspace** a compact, transparent-background variant of the SIGMA logo in its top header.
+- Approved generated references from the design conversation (2026-10-20): a cinematic metallic Σ/SIGMA image and a landscape with blue/gold mathematical waves concentrated at the upper-right and lower-right.
+- **Repository assets supplied here:** `assets/sigma-logo.svg` (transparent mark/wordmark) and `assets/sigma-atmosphere.svg` (transparent atmospheric overlay). These are **vector recreations of the direction**, not the original generated PNGs. The originals have not been transferred to GitHub; do not claim pixel-identical reproduction.
+- The visual standard is **wonder, restraint, anticipation**. This should feel like the threshold to scientific exploration, not a generic dashboard.
 
-## Approved visual direction
+## Home implementation
 
-Two generated reference images were approved in chat on 2026-10-20:
-1. A large metallic Greek capital sigma with SIGMA wordmark, blue/gold illumination and subtle mathematical diagrams on a dark field.
-2. A wider Home composition: smaller SIGMA emblem near the upper middle, broad quiet dark space on the left, bright wave/cloud fields on the **upper-right and lower-right**, with subtle zeta/RH mathematical references.
-
-**Asset handoff:** The images currently exist as conversation-generated PNG files, not in the GitHub repository. Do not pretend they are already available in the checkout. Obtain the approved images from the project owner before final visual verification, or implement a faithful, maintainable CSS/SVG recreation and explicitly note the difference. Do not use unrelated stock imagery or silently replace the approved design.
-
-## Home
-
-- Theme the whole viewport, not a framed hero card. Dark navy/black base with icy blue and gold accents.
-- Anchor atmospheric cloud/wave effects to **top-right and bottom-right**; they should remain anchored on resizing, including tall/narrow viewports. Do not stretch a fixed raster image in a way that moves or distorts them.
-- Keep enough negative space for the launcher and make all project actions readable with sufficient contrast.
-- Preserve the RH tease: subtle mathematical graphics such as `ζ(s)` and `Re(s) = 1/2`. These are atmospheric references, not claims of results.
-- Avoid excessive animation and respect reduced-motion preferences.
-- Keep responsive layout, focus states, and accessibility intact.
+- Make the **whole page** a continuous deep navy-to-black canvas, not a rectangular image/card. Use the supplied SVGs as independent visual layers and improve them as needed to match the approved reference.
+- Position atmospheric fields against the **top-right and bottom-right viewport edges**. Keep both anchored as viewport aspect ratio changes; do not center/stretch a single bitmap. The logo should be a focal point, with a quiet area for project selection.
+- Use subtle blue/gold lighting, mathematical curves and the RH hints (`ζ(s)`, `Re(s) = ½`). These are references to SIGMA's origin, not research results.
+- Compose the launcher as a polished, legible part of the environment. Maintain accessible contrast, obvious actions and focus states.
+- Consider a single restrained entrance sequence: faint lines/waves emerge, then the illuminated mark; no looping spectacle. Disable movement for `prefers-reduced-motion`.
+- Do not hardcode one screenshot's dimensions. Check large desktop, tall viewport, 390px and 320px mobile.
 
 ## Research workspace
 
-- Use a **transparent-background** SIGMA mark/wordmark in the top header, smaller and quieter than Home.
-- Do not place a dark rectangular image behind the header logo.
-- Keep the research content restrained and easy to read for long sessions. Carry the palette into subtle accents rather than replicating Home's atmospheric effects across the working surface.
-- Prefer a proper transparent asset (SVG if faithful, otherwise alpha-channel PNG); do not fake transparency with a background-colored rectangle.
+- Put `assets/sigma-logo.svg` (or an improved transparent equivalent) at the top, scaled to a compact header mark.
+- **True alpha transparency**, not a rectangle whose color happens to match the background.
+- Keep the workspace readable, calm and functional; carry over the palette as restrained accents. The Home page is dramatic; the working environment is a scientific instrument.
 
-## Engineering boundaries
+## Engineering and verification
 
-- Preserve all project navigation, project data, strategy creation, command hierarchy, and disabled-action explanations.
-- Keep visuals modular: separate mark/wordmark, atmosphere, and page content. Avoid hardcoded screenshot-sized positioning.
-- Prefer a small set of well-structured styles/components over introducing a theming framework.
-- No fake functionality, no changes to research persistence or agent behavior.
+- Preserve project opening, navigation, persistence, strategies and contextual commands. Do not add research features.
+- Prefer modular CSS/SVG and minimal components; no heavyweight theme framework.
+- Verify with a real browser at desktop, narrow and tall sizes. Inspect both cloud anchors, launcher contrast, header transparency, focus and reduced-motion behavior.
+- Run `./sigma test` and relevant browser checks; record **actual** results in `docs/STATUS.md`.
+- Commit and push implementation with a precise message. Do not represent SVG recreations as the original generated raster artwork.
 
-## Verification and delivery
+## Acceptance standard
 
-1. Inspect Home and Project in a real browser at desktop, 390px and 320px widths, and a tall viewport; verify upper-right/lower-right anchors and readable launcher.
-2. Check keyboard navigation, focus contrast, and reduced motion.
-3. Verify the workspace logo has genuine transparency and remains legible on its actual header.
-4. Run `./sigma test` and relevant browser checks; record observed results in `docs/STATUS.md`.
-5. Commit and push the implementation with a specific message. If approved image assets are unavailable, report that blocker and do not claim visual fidelity was verified.
-
-## Scope
-
-This is a visual/UI assignment only. Do not add research features, restructure the workspace, or change the research model.
+Not just dark styling: the Home page should inspire **awe and curiosity**, and opening a project should feel like moving from mystery into a serious research workspace. If the first visual pass looks generic, revise before delivery.
