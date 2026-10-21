@@ -60,6 +60,7 @@ with sync_playwright() as p:
         recents.locator(".recent-open").filter(has_text="Nonconsecutive Subset Sums Modulo 3")
     ).to_be_visible()
     expect(recents.get_by_text("Mathematical · Included example", exact=True)).to_be_visible()
+    expect(recents.locator(".recent-open").filter(has_text="Did Jesus Use Cannabis?")).to_be_visible()
     seed = listing()[0]
     source = Path("examples/nonconsecutive-subset-sums/project.json").read_bytes()
     assert Path(seed["path"]).joinpath("project.json").read_bytes() == source
@@ -71,7 +72,7 @@ with sync_playwright() as p:
         else True
     )
     close_project()
-    expect(recents.locator(".recent-open")).to_have_count(1)
+    expect(recents.locator(".recent-open")).to_have_count(2)
     assert not listing()[0]["included_example"]
 
     # Each create/edit mode keeps title-adjacent controls visible while only body scrolls.
