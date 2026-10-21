@@ -930,3 +930,15 @@ and opt-in real-process suspended-launcher/shutdown lifecycle checks were added.
 These changes were committed via GitHub and **have not been locally executed or
 verified yet**; run `./sigma test` and the opt-in `scenarios/ui_lifecycle.py`
 before treating the behavior as verified.
+
+## Legacy suspended UI startup recovery (2026-10-21, pending local verification)
+
+A launch or `shutdown` previously could block behind an older suspended SIGMA
+launcher that predated owner registration. When a startup lock is held without
+an owner record, the replacement path now queries the OS for the actual lock
+holder and checks the exact checkout CLI path, user identity and process birth
+before resuming it. If the same verified process retains the lock after a grace
+period, termination escalates with identity rechecks. It never kills a process
+merely for using ports 8000/5173. An offline regression covers legacy lock
+inspection, suspension recovery and rejection of unrelated processes. The
+change is committed but awaits macOS startup/restart/shutdown testing.
