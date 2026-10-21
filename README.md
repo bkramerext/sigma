@@ -50,6 +50,10 @@ Requires macOS/Linux, Python 3.11+, uv, Node.js 20.19+ and npm.
 
 Open http://127.0.0.1:5173. Use Open Project or New Project, then **New Strategy**
 to write manually or choose **Generate with AI** from its adjacent dropdown.
+Home keeps four recent projects and includes the supplied Mathematical example
+with three Draft strategies on first setup. Opening/creating updates recents;
+Close never saves or reorders them. New/Edit Project keep their action buttons
+visible beside the title while the body scrolls.
 
 `./sigma ui` automatically loads this checkout’s gitignored `.env` and restarts
 its own previous instance. Existing shell variables take precedence. Ctrl+C stops

@@ -1,6 +1,6 @@
 # A9: Four Recent Projects and a seeded mathematical sample
 
-**Status:** Ready for Codex **after A8** is committed and inspected. This assignment is deliberately separate from A8's shared Create/Edit form and provider settings. Do not roll back A8 or redesign approved artwork.
+**Status:** Implemented and verified after A8.2. This assignment is deliberately separate from A8's shared Create/Edit form and provider settings. Do not roll back A8 or redesign approved artwork.
 
 ## Intent
 

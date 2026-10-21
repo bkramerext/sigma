@@ -65,3 +65,14 @@ expiry/offline/permission states, keyboard focus and 1280/1440/390/320px screens
 Screenshots: `/tmp/sigma-a82-*.png`. These are fixtures, not live entitlement or
 plan-capacity verification. The API-key regression fixture explicitly selects
 its dummy key mode during fixture startup; production never does that implicitly.
+
+## A9 recents and dialog actions
+
+Start a fresh `provider_fixture:app` as above, then run
+`uv run --with playwright python browser_checks/recents.py`.
+This check expects a fresh disposable fixture state so it can verify one-time
+Included example labeling. It measures action-button bounds at 1280x720,
+1440x900, 390x844 and 320x700 while scrolling, showing errors and holding a save.
+It also exercises actual sample opening, five UI creations, LRU eviction, reopen,
+missing/corrupt entries and forgetting. Captures are `/tmp/sigma-a9-*.png`.
+`settings.py` remains the shared-form persistence/focus regression.

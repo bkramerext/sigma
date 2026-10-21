@@ -1,0 +1,12 @@
+.home-recents ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.home-recents li { display: flex; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #8e70452e; }
+.home-page .home-recents .recent-open { flex: 1; min-width: 0; text-align: left; border: 0; border-radius: 0; padding: 12px 8px 12px 0; background: transparent; box-shadow: none; color: #d6b588; }
+.home-recents .recent-open strong, .home-recents .recent-open small, .home-recents .recent-open span { display: block; overflow-wrap: anywhere; }
+.home-recents .recent-open strong { font: 400 17px/1.45 Georgia, serif; }
+.home-recents .recent-open small { font-size: 11px; color: #bcc8d4; margin-top: 4px; }
+.home-recents .recent-open span { font-size: 10px; color: #95a7b8; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; margin-top: 3px; }
+.home-page .home-recents .recent-open:hover:not(:disabled) { background: #bc965714; }
+.home-page .home-recents .recent-open:disabled { color: #9aa6af; background: transparent; }
+.home-page .home-recents .recent-forget { flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 0; box-shadow: none; color: #a8b4c0; background: transparent; font-size: 20px; }
+.home-page .home-recents .recent-forget:hover { background: #bc965714; }
+.home-page .home-recents .recent-unavailable { width: 100%; font-size: 11px; margin: 0 0 10px; }

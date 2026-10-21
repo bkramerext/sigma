@@ -1,9 +1,12 @@
 """Repository maintenance commands with streamed output and fail-fast exit codes."""
 
+import os
 import shlex
 import shutil
 import subprocess
 import sys
+from contextlib import nullcontext
+from tempfile import TemporaryDirectory
 
 from sigma.projects import ROOT
 
@@ -32,6 +35,8 @@ def run_tooling(command: str) -> int:
         steps = [
             [*python, "python", "scenarios/lifecycle.py"],
             [*python, "python", "scenarios/project_creation.py"],
+            [*python, "python", "scenarios/recents.py"],
+            [*python, "python", "scenarios/example_math.py"],
             [*python, "python", "scenarios/project_settings.py"],
             [*python, "python", "scenarios/model_connection.py"],
             [*python, "python", "scenarios/chatgpt.py"],
@@ -50,18 +55,26 @@ def run_tooling(command: str) -> int:
             ["npm", "--prefix", "frontend", "run", "typecheck"],
             ["npm", "--prefix", "frontend", "run", "build"],
         ]
-    for step in steps:
-        print(f"\n> {shlex.join(step)}", flush=True)
-        try:
-            result = subprocess.run(step, cwd=ROOT, check=False)
-        except OSError as exc:
-            print(f"Could not start {step[0]}: {exc}", file=sys.stderr)
-            return 2
-        if result.returncode:
-            print(
-                f"sigma {command} stopped: {shlex.join(step)} failed (exit {result.returncode}).",
-                file=sys.stderr,
-            )
-            return result.returncode if result.returncode > 0 else 1
+    with (
+        TemporaryDirectory(prefix="sigma-test-state-")
+        if command == "test"
+        else nullcontext(None) as temporary_state
+    ):
+        environment = (
+            {**os.environ, "SIGMA_STATE_DIR": str(temporary_state)} if temporary_state else None
+        )
+        for step in steps:
+            print(f"\n> {shlex.join(step)}", flush=True)
+            try:
+                result = subprocess.run(step, cwd=ROOT, check=False, env=environment)
+            except OSError as exc:
+                print(f"Could not start {step[0]}: {exc}", file=sys.stderr)
+                return 2
+            if result.returncode:
+                print(
+                    f"sigma {command} stopped: {shlex.join(step)} failed (exit {result.returncode}).",
+                    file=sys.stderr,
+                )
+                return result.returncode if result.returncode > 0 else 1
     print(f"\nsigma {command}: all steps passed.", flush=True)
     return 0

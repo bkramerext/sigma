@@ -5,6 +5,7 @@ import './workspace.css';
 import './project-entry.css';
 import './strategies.css';
 import './project-settings.css';
+import './recents.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, useAI } from './ai-connection';
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
@@ -190,10 +191,13 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-settings-dialog" aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <h2 id="project-settings-heading">{initial ? 'Edit Project' : 'New Project'}</h2>
-    <p id="project-settings-help">{initial ? 'Update this investigation. Changes apply when you save; its identity and location stay fixed.' : 'Name an investigation and choose how to explore it.'}</p>
-    <form onSubmit={save}><fieldset disabled={busy}>
+  return <dialog ref={dialog} className="project-settings-dialog" aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
+    <form onSubmit={save}>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Edit Project' : 'New Project'}</h2>
+        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
+      </header>
+      <div className="settings-body"><p id="project-settings-help">{initial ? 'Update this investigation. Changes apply when you save; its identity and location stay fixed.' : 'Name an investigation and choose how to explore it.'}</p>
+      <fieldset disabled={busy}>
       <label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/>
       <label htmlFor="project-mode">Research mode</label><select id="project-mode" value={values.research_mode} onChange={event => change('research_mode', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
@@ -213,9 +217,45 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">A project or file already exists here. Choose another name.</p>}
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'New Project'}</button><button className="settings-cancel" type="button" onClick={onCancel}>Cancel</button></div>
-    </fieldset></form>
+    </fieldset></div></form>
   </dialog>;
+}
+
+type RecentProject = { id: string; path: string; title: string; research_mode: string | null; included_example: boolean; available: boolean; error: string | null };
+function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+  const [projects, setProjects] = useState<RecentProject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [opening, setOpening] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const pending = useRef(false);
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch('/api/projects/recent', { signal });
+    const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
+    setProjects(data.projects); setNotice(data.notice); setLoading(false);
+  }, []);
+  useEffect(() => { const controller = new AbortController(); void load(controller.signal).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } }); return () => controller.abort(); }, [load]);
+  async function open(entry: RecentProject) {
+    if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
+    try { onOpen(await post<ProjectView>('open', { path: entry.path })); }
+    catch (error) { setError(errorMessage(error)); }
+    finally { pending.current = false; setOpening(''); }
+  }
+  async function forget(entry: RecentProject) {
+    if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
+    try { await post('recent/forget', { project_id: entry.id }); await load(); }
+    catch (error) { setError(errorMessage(error)); }
+    finally { pending.current = false; setOpening(''); }
+  }
+  return <section className="empty home-empty home-recents" aria-labelledby="recents-heading"><h2 id="recents-heading">Recent Projects</h2>
+    {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new investigation.</p>}
+    <ul>{projects.map(entry => <li key={entry.id}>
+      <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong><small>{entry.research_mode === 'mathematical' ? 'Mathematical' : entry.research_mode === 'default' ? 'Default' : 'Unavailable'}{entry.included_example ? ' · Included example' : ''}</small><span title={entry.path}>{entry.path}</span></button>
+      <button className="recent-forget" disabled={!!opening} aria-label={`Forget ${entry.title} from Recent Projects`} title="Forget from Recent Projects; keep all research" onClick={() => void forget(entry)}>×</button>
+      {entry.error && <p className="recent-unavailable">{entry.error}</p>}
+    </li>)}</ul>
+    {notice && <p role="status">{notice}</p>}{error && <p role="alert" className="error">{error}</p>}
+  </section>;
 }
 
 function Home({ initialPath, onOpen, goHome }: {
@@ -242,7 +282,7 @@ function Home({ initialPath, onOpen, goHome }: {
       <button ref={openButton} onClick={() => setEntry('open')}>Open Project <span aria-hidden="true">↗</span></button>
       <button ref={newButton} className="home-new-project" onClick={() => setEntry('new')}>New Project</button>
     </div>
-    <div className="empty home-empty"><h2>Recent Projects</h2><p>No recent project history is available yet.</p></div>
+    <RecentProjects onOpen={onOpen}/>
     {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
     {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
@@ -524,11 +564,11 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   </dialog>;
 }
 
-function ProjectScreen({ path, onClose, goHome }: {
-  path: string; onClose: () => void;
+function ProjectScreen({ path, initialView, onClose, goHome }: {
+  path: string; initialView?: ProjectView; onClose: () => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
-  const [view, setView] = useState<ProjectView | null>(null);
+  const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -546,6 +586,7 @@ function ProjectScreen({ path, onClose, goHome }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    if (initialView) return;
     const controller = new AbortController();
     post<ProjectView>('open', { path }, controller.signal).then(setView).catch(error => {
       if (!controller.signal.aborted) setError(errorMessage(error));
@@ -713,11 +754,12 @@ function ProjectScreen({ path, onClose, goHome }: {
 }
 
 function App() {
+  const [openedView, setOpenedView] = useState<ProjectView | null>(null);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
   useEffect(() => {
-    const pop = () => setLocation(window.location.pathname + window.location.search);
+    const pop = () => { setOpenedView(null); setLocation(window.location.pathname + window.location.search); };
     window.addEventListener('popstate', pop);
     return () => window.removeEventListener('popstate', pop);
   }, []);
@@ -725,21 +767,22 @@ function App() {
     window.history.pushState(null, '', url); setLocation(url); window.scrollTo(0, 0);
   }, []);
   const closeProject = useCallback(() => {
+    setOpenedView(null);
     const path = new URLSearchParams(window.location.search).get('path');
     if (path) setLastPath(path);
     navigate('/');
   }, [navigate]);
   function goHome(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
-      event.preventDefault(); navigate('/');
+      event.preventDefault(); setOpenedView(null); navigate('/');
     }
   }
   const url = new URL(location, window.location.origin);
   return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} goHome={goHome} onOpen={view => {
-      setLastPath(view.path); navigate(projectUrl(view.path));
+      setOpenedView(view); setLastPath(view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
-      path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
+      initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}
   </main>;
 }

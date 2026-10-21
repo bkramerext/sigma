@@ -343,3 +343,43 @@ run the separate real-process/Chrome regression:
 `uv run --with playwright python scenarios/ui_lifecycle.py`. It uses disposable
 checkouts and fixture credentials, exercises restart/crash/conflicts, and leaves
 normal project files untouched. Chrome is expected at the standard macOS path.
+
+## Recent Projects and the included mathematical example (A9)
+
+Home lists up to four distinct projects, newest successful access first. Create,
+Open Project and recent-row clicks update the same application index; CLI
+create/open/init and API create/open/init do likewise. Inspect, settings edits,
+cancel and Close do not change access order. Titles refresh from the actual
+project. Forget (the small ×) removes only the index entry, never research.
+Missing/corrupt/moved entries remain clearly unavailable until located with
+Open Project or forgotten. Opening a moved copy updates its path by stable UUID.
+
+State is `~/.local/state/sigma/recents.json` (or `$XDG_STATE_HOME/sigma/`), with
+an owned 0700 directory, 0600 index and persistent lock, atomic replacement and
+fsync. `SIGMA_STATE_DIR` can point to an existing-parent absolute private directory
+outside the checkout/project packages. The index holds only UUID/path/access
+metadata and bootstrap facts; it is separate from OAuth credentials and project
+JSON. Index failure warns without reporting a successful research save as failed.
+The Home list then reports the state problem; Open/New Project remain available.
+
+The first successful UI launch/Home setup copies the immutable v5 source
+`examples/nonconsecutive-subset-sums/project.json` into the configured projects
+root as `nonconsecutive-subset-sums.sigma/project.json`, with exclusive publication.
+The provided Mathematical exercise opens with exactly three real Draft
+strategies. It is initially labeled Included example, with no invented human
+access time; opening it makes it a normal recent. Installation never overwrites
+an existing project. An evolved same-UUID copy is preserved; other collisions are
+reported. A per-root bootstrap fact prevents reseeding after deletion/forgetting,
+and four genuine entries are never evicted merely to include the sample.
+Changing the root installs its copy independently while UUID deduplication still
+limits the installation's index to four. User edits never alter the Git template.
+
+New/Edit Project now have a fixed title/action header: Create or Save Changes,
+plus Cancel. Only the body scrolls, so controls remain visible on laptop and
+phone screens. Busy saves disable both buttons and Escape; native required-field
+validation, keyboard submit, retry and focus restoration remain in place.
+
+The independent mathematical verification is in
+[example-math-verification.md](example-math-verification.md), outside the active
+project. The future [agent output reader design](agent-output-design.md) is only
+a proposal; no autonomous work, proof execution or transcript renderer is added.

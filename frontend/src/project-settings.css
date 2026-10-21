@@ -58,3 +58,18 @@
 /* Reserve status space so changing health labels cannot shift workspace content. */
 .workspace-page .api-connection > summary { min-height: 44px; }
 @media (max-width: 700px) { .workspace-page .api-connection > summary { min-height: 55px; } }
+
+/* A9: one form, persistent title/actions, one scrolling body. */
+.project-settings-dialog { padding: 0; overflow: hidden; }
+.project-settings-dialog > form { display: flex; flex-direction: column; max-height: calc(100dvh - 42px); margin: 0; min-height: 0; }
+.project-settings-dialog .settings-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 14px; padding: 20px 24px 16px; border-bottom: 1px solid #35404a; }
+.project-settings-dialog .settings-header h2 { font-size: 25px; margin: 0; }
+.project-settings-dialog .settings-header .settings-actions { margin: 0; gap: 6px; flex: 0 1 auto; }
+.project-settings-dialog .settings-header button { padding: 9px 11px; min-height: 40px; overflow-wrap: anywhere; }
+.project-settings-dialog .settings-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 24px 24px; }
+@media (max-width: 560px) {
+ .project-settings-dialog .settings-header { flex-wrap: wrap; gap: 10px; padding: 16px 18px 12px; }
+ .project-settings-dialog .settings-header h2 { width: 100%; font-size: 24px; }
+ .project-settings-dialog .settings-header .settings-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+ .project-settings-dialog .settings-body { padding: 16px 18px 20px; }
+}

@@ -73,7 +73,7 @@ with sync_playwright() as p:
         "Preserve the complete research problem.\nTest assumptions critically."
     )
     dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
-    expect(dialog.get_by_role("button", name="New Project", exact=True)).to_be_enabled()
+    expect(dialog.get_by_role("button", name="Create", exact=True)).to_be_enabled()
     destination = Path(dialog.locator(".project-destination code").inner_text())
     assert not destination.exists()
     for width in (1672, 768, 390, 320):
@@ -87,7 +87,7 @@ with sync_playwright() as p:
             status=400, content_type="application/json", body='{"error":"Injected create failure"}'
         ),
     )
-    dialog.get_by_role("button", name="New Project", exact=True).click()
+    dialog.get_by_role("button", name="Create", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_text("Injected create failure")
     expect(dialog.get_by_label("Project name", exact=True)).to_have_value(title)
     assert not destination.exists()

@@ -88,16 +88,18 @@ def open_view(body: OpenRequest):
 
 @app.post("/api/projects/init", status_code=201)
 def init_view(body: InitRequest):
-    return asdict(
-        initialize_project(
-            body.path,
-            body.title,
-            body.problem,
-            body.research_mode,
-            body.ai_model,
-            body.reasoning_effort,
-        )
+    view = initialize_project(
+        body.path,
+        body.title,
+        body.problem,
+        body.research_mode,
+        body.ai_model,
+        body.reasoning_effort,
     )
+    from sigma.recents import record_access
+
+    record_access(view)
+    return asdict(view)
 
 
 @app.get("/api/projects/inspect")
@@ -330,3 +332,23 @@ async def auth_disconnect():
 async def auth_welcome():
     await chatgpt_auth.welcome_seen()
     return {"dismissed": True}
+
+
+@app.get("/api/projects/recent")
+def recent_view():
+    from sigma.recents import home_projects
+
+    return home_projects()
+
+
+class ForgetRecentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+
+
+@app.post("/api/projects/recent/forget")
+def forget_recent_view(body: ForgetRecentRequest):
+    from sigma.recents import forget_recent
+
+    forget_recent(body.project_id)
+    return {"forgotten": True}

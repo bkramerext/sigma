@@ -242,3 +242,36 @@ Limits/outages/unsupported capability errors never retry or change billing.
 The exact docs, storage/security limits and fixture-only verification boundary
 are recorded in [A8.2 security notes](asn8.2-security.md). Existing art stays fixed;
 only the unmodified official ChatGPT sign-in mark is added. A9 remains separate.
+
+## A9: application recents, exact example import and bounded dialogs
+
+Use a separate versioned four-entry index under XDG/per-user state. Records carry
+existing canonical UUID, canonical path, actual access time, and an honest included
+example flag. A private no-follow lock serializes multiprocess read/modify/atomic
+replace; publication fsyncs the file and directory. List refresh fully validates
+at most four actual project documents and returns minimal metadata; titles are
+not a stale parallel authority. Missing/corrupt/identity-changed paths are shown
+unavailable without writes. Forget only changes the index. Successful shared
+create/open services record access; explicit init adapters do the same. Inspect,
+metadata edits and Close stay read-only with respect to access order. Home passes
+the already opened/created view into the workspace, avoiding an incidental second
+Open write during navigation.
+
+Import the supplied v5 example byte-for-byte through an exclusive reservation,
+validated schema/UUID and no-replace publication. Never synthesize research or
+reset an existing copy. Root-specific bootstrap facts are committed with initial
+index inclusion under the same lock; deletion, eviction and forgetting do not
+reseed. Four genuine accesses take priority. Existing same-UUID evolved copies
+are preserved, different occupants/symlinks report conflicts. Project data and
+index cannot form one cross-file atomic transaction: an index failure is reported
+as a secondary warning, not a failed research creation that encourages duplicates.
+A bootstrap crash after project publication is recoverable from its UUID. A hard
+crash can leave an empty project reservation requiring inspection; no empty
+existing directory is silently reused.
+
+The shared settings dialog remains one native form with a non-scrolling header
+and one scrolling body. Buttons are title-adjacent; narrow screens use a deliberate
+second header row. Both busy buttons and Escape consult the submit guard. Accepted
+Home/workspace artwork and strategy layouts remain unchanged. Independent DP,
+exact transfer identities and an analytic recurrence/density derivation live
+outside the unproved example. Mathematical transcript rendering is design-only.

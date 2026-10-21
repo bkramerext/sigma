@@ -13,6 +13,7 @@ from sigma.api import app
 
 __all__ = ["app"]
 
+os.environ["SIGMA_STATE_DIR"] = mkdtemp(prefix="sigma-browser-recents-")
 os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-browser-managed-")
 os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"

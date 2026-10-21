@@ -144,6 +144,10 @@ def main() -> None:
         else:
             close_project()
             result = {"closed": True}
+        if args.command == "init":
+            from sigma.recents import record_access
+
+            record_access(inspect_project(args.path))
         print(json.dumps(result))
     except (ProjectError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}), file=sys.stderr)

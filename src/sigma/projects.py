@@ -558,7 +558,7 @@ def initialize_project(
                 pass
 
 
-def open_project(value: str | Path) -> ProjectView:
+def _open_project(value: str | Path) -> ProjectView:
     path = project_path(value)
     # Only the checked-in RH seed has implicit initialization. Unknown/corrupt
     # directories always require an explicit init command and are never repaired.
@@ -577,6 +577,14 @@ def open_project(value: str | Path) -> ProjectView:
                 return inspect_project(path)
             raise
     return inspect_project(path)
+
+
+def open_project(value: str | Path) -> ProjectView:
+    view = _open_project(value)
+    from sigma.recents import record_access
+
+    record_access(view)
+    return view
 
 
 def list_events(value: str | Path) -> tuple[Event, ...]:
@@ -818,7 +826,11 @@ def create_project(
     try:
         destination.mkdir(mode=0o700)  # Exclusive reservation also rejects files/broken symlinks.
         reserved = True
-        return initialize_project(destination, title, problem, mode, ai_model, reasoning_effort)
+        view = initialize_project(destination, title, problem, mode, ai_model, reasoning_effort)
+        from sigma.recents import record_access
+
+        record_access(view)
+        return view
     except FileExistsError as exc:
         raise ProjectError(
             f"A project or file already exists at {destination}; choose another name"

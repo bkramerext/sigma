@@ -142,6 +142,15 @@ def run_ui() -> int:
                             and ready(URL + "/api/ui-instance", instance_id)
                             and ready(URL)
                         ):
+                            from sigma.projects import ProjectError
+                            from sigma.recents import bootstrap_example
+
+                            try:
+                                notice = bootstrap_example()
+                                if notice:
+                                    print(notice, file=sys.stderr)
+                            except ProjectError as error:
+                                print(f"Recent Projects setup: {error}", file=sys.stderr)
                             print(
                                 f"\nSIGMA UI ready: {URL}\nPress Ctrl+C to stop both servers.\n",
                                 flush=True,

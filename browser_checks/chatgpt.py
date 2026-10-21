@@ -65,7 +65,7 @@ with sync_playwright() as p:
     dialog.get_by_label("Research problem", exact=True).fill(
         "Compare necessary moment constraints without claiming a proof."
     )
-    dialog.get_by_role("button", name="New Project", exact=True).click()
+    dialog.get_by_role("button", name="Create", exact=True).click()
     expect(page.get_by_role("heading", name="Strategies", exact=True)).to_be_visible()
     path = Path(parse_qs(urlsplit(page.url).query)["path"][0])
     page.get_by_title("Write manually", exact=True).click()

@@ -88,7 +88,7 @@ def main():
         base = Path(temporary)
         root = base / "checkout"
         root.mkdir()
-        for name in ("src", "frontend", "assets"):
+        for name in ("src", "frontend", "assets", "examples"):
             shutil.copytree(
                 ROOT / name,
                 root / name,
@@ -114,6 +114,7 @@ def main():
             PYTHONPATH=str(fixtures),
             SIGMA_FIXTURE_LOG=str(base / "provider.log"),
             SIGMA_AUTH_HOME=str(base / "auth"),
+            SIGMA_STATE_DIR=str(base / "state"),
         )
         subprocess.run(
             ["uv", "sync", "--locked", "--project", str(root)],

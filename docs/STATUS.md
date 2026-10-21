@@ -534,3 +534,80 @@ publication can require reconnect. Tested on macOS/Chrome, not physical devices
 or Linux. A9's Recent Projects and dialog-header correction are not implemented
 here. Local .env, existing research, canonical artwork and untracked models.json
 are not committed or rewritten.
+
+## A9 — four recents, included exercise and visible dialog controls
+
+Implemented a private application-level four-item LRU keyed by existing project
+UUID. Successful create/open services and explicit API/CLI init record canonical
+path and actual access time; inspect, edits and Close do not reorder or write the
+index. Home reads fresh titles/minimal metadata, opens actual projects, disables
+unavailable entries and can forget a pointer without deleting research. Creation/
+recent navigation passes its already-loaded view into the workspace, avoiding an
+incidental second Open write. Index state uses an owned 0700 XDG/per-user directory,
+0600 no-follow index/lock, multiprocess serialization and atomic fsynced writes.
+Index failure warns separately from an already successful research operation.
+
+The supplied Mathematical template is installed byte-for-byte with validated v5
+schema/UUID/history and exclusive no-replace publication. Existing same-UUID
+research is preserved; other occupants/symlinks report a conflict. Per-root
+bootstrap facts prevent reinstatement after deletion/forgetting/eviction and do
+not displace four real accesses. Initial inclusion says Included example and has
+no invented last-opened time. Opening shows the three real Draft strategies;
+normal edits evolve the copy independently of the unchanged Git template.
+
+New/Edit Project now use a title/action header (Create or Save Changes, Cancel)
+and one scrolling body in one native form. The header remains visible at laptop
+and mobile sizes; busy buttons/Escape, native validation, duplicate guards,
+errors/retry and focus restoration remain operational. No artwork redesign or
+provider behavior change. Future Markdown/LaTeX transcript rendering is documented
+in agent-output-design.md, without implementing execution or hidden reasoning.
+Independent mathematical verification is outside the active project template.
+
+Actual verification:
+
+- `./sigma test` passed all existing and new scenarios, API/CLI checks, Ruff,
+  Pyright (zero errors), frontend typecheck and production build. Existing
+  non-failing TestClient deprecation notice remains. Final targeted recents
+  scenarios, Ruff check/format over src/scenarios/browser_checks (43 files) and
+  Pyright passed after the state-path guard and extra failure cases.
+- `scenarios/recents.py`: exact first/second bootstrap, strict seed/event/strategy
+  identity, five creates/four-entry eviction, actual API/CLI accesses, repeated
+  opens, Close/inspect/title-refresh byte immutability, renamed/moved/corrupt
+  projects, forget/no reseed, concurrent real processes/threads and parallel
+  bootstrap. Full genuine lists survive inclusion; bad templates, publication
+  failure, edited existing seed, other-project collisions, symlinks, root switches,
+  corrupt index and failed index replacement preserve research. State permissions
+  and refusal of checkout/project-package state locations are checked. The two
+  expected index-failure warnings demonstrate secondary-error handling.
+- `scenarios/example_math.py`: independent residue/adjacency DP cross-checked by
+  exhaustive enumeration through n=12 gives a_12=128; recurrence checked through
+  n=120. Exact arithmetic in Z[omega] verifies three-step traces, determinant and
+  Cayley–Hamilton identities in all phases. The analytic root-of-unity recurrence
+  and density proof is in docs/example-math-verification.md; no proof/answer was
+  inserted into the unproved seed and no agent/Lean activity is claimed.
+- Real Chrome `browser_checks/recents.py` passed actual example opening with three
+  Draft strategies, first inclusion versus actual access, five UI creations,
+  eviction, Open/recent click UUID deduplication, corrupt/unavailable/forget flow,
+  unchanged template and zero JavaScript errors. Measured header button bounds
+  at 1280x720, 1440x900, 390x844 and 320x700 for Create and Edit before/after body
+  scroll, long problem/help/localized labels, save spinner, Escape/duplicate guard,
+  failure with retained text and successful retry. Confirmed no second post-create
+  Open request. Home also checked at 768x1024. Captures: /tmp/sigma-a9-*.png;
+  desktop Home and 320px Edit were visually inspected.
+- Existing real Chrome `browser_checks/settings.py` passed shared form defaults,
+  field/pair validation, offline retention, create/edit/no-op/conflict/error/retry,
+  UUID/history preservation, keyboard/focus, responsive and connection-state
+  checks. Fixtures use isolated app/credential/project roots and no live provider.
+- Normal `./sigma ui` safely replaced its prior instance and became ready, with
+  the included example installed in the configured root. Canonical artwork and
+  source example bytes remain unchanged; no tracked live research was added.
+
+Limits: local cooperative POSIX locking and same-OS-account trust boundary remain.
+Research publication and secondary-index updates are not one cross-file atomic
+transaction; a failed index update can be retried by a later explicit Open without
+resubmitting creation. A hard crash can leave an empty reserved example directory;
+existing directories are inspected, never silently reset. Up to four full project
+files are validated server-side to refresh metadata, while the browser receives
+only the small index view. Chrome checks used macOS emulation, not physical
+phones or Linux. No paid calls, autonomous agents or transcript renderer. Existing
+untracked models.json and local .env remain unmodified and uncommitted.
