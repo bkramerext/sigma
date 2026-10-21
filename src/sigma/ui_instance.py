@@ -161,7 +161,8 @@ class Instance:
     def _resume_suspended(self) -> bool:
         owners = self._recoverable_owners()
         suspended = [
-            (pid, process) for pid, process in owners
+            (pid, process)
+            for pid, process in owners
             if "T" in process["stat"].upper()
         ]
         if not suspended:
