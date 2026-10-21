@@ -192,6 +192,96 @@ Limitations remain local POSIX storage and path-based Open (no native picker).
 Crash leftovers and ambiguous lost responses are documented; artifact engines,
 recent-project indexing and agent functionality remain deferred.
 
+## A7: Strategies workspace and human-reviewed AI proposals
+
+Implemented the approved compact Strategies workspace with two-level rows,
+full-approach disclosure, vertical three-dot commands and upper-right grips.
+New Strategy is a single warm split action: primary Write manually, dropdown
+Write manually / Generate with AI. Stage rings include text and are explicitly
+manually tracked: Draft, Ready to explore, Exploring, On hold. No automatic
+research activity or evaluation is claimed. Existing edit/remove/history and
+Open/Close remain functional; removed research stays in the project.
+
+Order is durable and active-only, with pointer, Chrome touch, and keyboard
+pick-up/move/drop/cancel. Previews do not save; errors revert; stale concurrent
+order/active-list changes are rejected. Schema v5 validates order/stage audit
+replay and adds optional summary/provenance. V1–v4 reads remain unchanged with
+creation-order/Draft defaults and exact backups on actual v5 updates. Existing
+manual-only lazy migrations remain compatible.
+
+OpenAI Responses integration is opt-in and server-configured (`SIGMA_AI_ENABLED`,
+`OPENAI_API_KEY`, optional `SIGMA_AI_MODEL`, default `gpt-4.1`). Generate returns
+one strictly validated, unsaved draft. Context disclosure/consent, optional seed,
+editable review, explicit regeneration, human acceptance and provider/model
+provenance are implemented. Server timeout/concurrency/context/output bounds,
+lexical duplicate rejection and request cancellation are enforced. No keys or
+prompt dumps are stored in projects or browser bundles. No paid calls were made.
+
+Actual verification on 2026-10-20:
+
+- Asset gate: exact supplied `assets/sigma-strategies-reference.png` inspected,
+  1672×941 PNG, SHA-256
+  `9cf973b6552f755061b8f45aecbfdd17275a1e6b50bd84a4ce0536da13e49858`.
+  Retained as reference only. Original Home PNG and workspace logo hashes match
+  the A6 baseline. Obsolete unused SVG logos removed after checking references;
+  Home/atmosphere assets retained.
+- `./sigma test`: all lifecycle/project-create/strategy/change/tracking/proposal/
+  API/CLI/launcher scenarios passed, plus Ruff check/format (16 files), Pyright
+  (0 errors), frontend typecheck and production build. The existing non-failing
+  Starlette TestClient deprecation warning remains.
+- `scenarios/strategy_tracking.py`: v1–v4 no-write reads/defaults, exact backups,
+  active-only order, removed history, stable IDs/timestamps, no-ops, failed saves,
+  stale order, competing reorder/stage/edit writes, corruption and API/CLI checks.
+- `scenarios/proposals.py`: exact official Responses endpoint/payload, strict
+  schema/full context, empty/seeded generation, no mutation until human-edited
+  acceptance, signed provenance, unavailable/invalid config, bad/refused/
+  incomplete output, rate errors, lexical duplicate, timeout, concurrent requests,
+  oversized context and cancellation. ASGI middleware/endpoint disconnect replay
+  confirms cancellation joins the adapter and releases its request slot.
+- `uv run --with playwright python browser_checks/strategies.py`: real installed
+  Chrome passed desktop/manual/stage/menu/detail flows, keyboard reorder/cancel,
+  save rollback, reload, desktop pointer drag, actual CDP touch drag/drop/cancel,
+  narrow layouts, AI fixture error/retry/review/edited acceptance and cancellation,
+  and reduced motion. No JavaScript errors. These are browser touch-emulation
+  checks, not physical-device testing. Provider is an explicitly identified
+  HTTP fixture on a separate API port, forwarded only in the test browser.
+- `uv run python browser_checks/http_cancel.py`: real HTTP disconnect against the
+  fixture cancels an in-flight request, permits an immediate next request, and
+  leaves project bytes identical. This caught/fixed receive-channel polling that
+  missed disconnect events behind middleware. No claim of live provider billing
+  cancellation: OpenAI may already have processed a sent request.
+- `uv run ruff check src scenarios browser_checks` and format checks passed.
+  Browser fixture/checks are source-controlled and documented separately from
+  `sigma test`; they require installed Chrome and Playwright.
+- Compared actual workspace at 1672×941 with the approved reference; inspected
+  screenshots for split menu, clamped Actions menu, expanded approach, lifted
+  touch row, 768/390/320px layouts and desktop/mobile draft review. Artifacts are
+  `/tmp/sigma-a7-workspace-*.png`, `-split-1672.png`, `-actions-1672.png`,
+  `-detail-1672.png`, `-touch-lift-390.png`, and `-ai-review-*.png`.
+- Home before/after screenshots byte-identical at 1672×941, 768×1024, 390×844 and
+  320×844 against the A6 implementation. Actual default server checked for
+  unavailable-provider messaging, disabled Generate, Escape/focus restoration,
+  RH Open/Close and browser back/forward. RH document, Home art and logo bytes
+  remain unchanged. Tests used temporary projects only.
+
+Intentional differences from the mock: omit invented S-IDs/sample data; full UUID
+and real creation metadata live in expanded details. Stages reflect human work
+rather than fictitious automated evaluation. Unimplemented rail destinations
+remain disabled/Later; retain actual project title and Close instead of fake
+selector/theme/settings controls. Small +/− detail affordances expose full text;
+manual writing retains its working inline composer. On mobile the rail scrolls,
+rows stack stage labels, and menus/dialogs fit the viewport. Draft review collapses
+context after generation. No Home changes or A4.1 animation.
+
+Live OpenAI account access, billing and mathematical proposal quality were not
+verified: controlled HTTP fixtures exercised the real adapter and no paid calls
+were authorized. Set the documented server environment and make an explicit user
+request to use live generation. Semantic novelty/proof validity still require
+human judgment; no runner, evaluator, branch lineage or artifact engine is added.
+The UI is running normally with default project location; the test fixture server
+is stopped after verification. See Getting Started for setup/limits and Decisions
+for schema/concurrency/receipt tradeoffs.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).

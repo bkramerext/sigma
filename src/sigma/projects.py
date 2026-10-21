@@ -40,6 +40,25 @@ class StrategyChange:
     approach: str
 
 
+class Stage(str, Enum):
+    DRAFT = "draft"
+    READY = "ready"
+    EXPLORING = "exploring"
+    HOLD = "hold"
+
+
+@dataclass(frozen=True)
+class Provenance:
+    provider: str
+    model: str
+
+
+@dataclass(frozen=True)
+class StageChange:
+    previous: str
+    stage: str
+
+
 @dataclass(frozen=True)
 class Event:
     sequence: int
@@ -47,6 +66,8 @@ class Event:
     timestamp: str
     strategy_id: str | None = None
     change: StrategyChange | None = None
+    stage_change: StageChange | None = None
+    order: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +78,9 @@ class Strategy:
     author_kind: Literal["human"]
     created_at: str
     removed_at: str | None = None
+    stage: Stage = Stage.DRAFT
+    summary: str = ""
+    provenance: Provenance | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +92,7 @@ class Project:
     events: tuple[Event, ...]
     strategies: tuple[Strategy, ...] = ()
     research_mode: ResearchMode = ResearchMode.DEFAULT
+    active_order: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,15 +138,19 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1, 2, 3 or 4)")
+        raise ProjectError(
+            "Unsupported or missing project schema_version (expected 1, 2, 3, 4 or 5)"
+        )
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
         fields.add("strategies")
     if version >= 4:
         fields.add("research_mode")
+    if version >= 5:
+        fields.add("active_order")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
     for key in ("id", "title", "problem"):
@@ -138,6 +167,8 @@ def _decode(raw: Any) -> Project:
             strategy_fields = {"id", "title", "approach", "author_kind", "created_at"}
             if version >= 3:
                 strategy_fields.add("removed_at")
+            if version >= 5:
+                strategy_fields.update({"stage", "summary", "provenance"})
             if not isinstance(item, dict) or set(item) != strategy_fields:
                 raise ProjectError("Invalid strategy fields")
             if not isinstance(item["id"], str) or item["id"] in seen:
@@ -151,7 +182,30 @@ def _decode(raw: Any) -> Project:
             _timestamp(item["created_at"])
             if item.get("removed_at") is not None:
                 _timestamp(item["removed_at"])
-            strategies.append(Strategy(**item))
+            values = dict(item)
+            if version >= 5:
+                try:
+                    values["stage"] = Stage(item["stage"])
+                except (ValueError, TypeError) as exc:
+                    raise ProjectError("Invalid manual stage") from exc
+                if (
+                    not isinstance(item["summary"], str)
+                    or len(item["summary"]) > 300
+                    or "\n" in item["summary"]
+                    or "\r" in item["summary"]
+                ):
+                    raise ProjectError("Summary must be one line, at most 300 characters")
+                provenance = item["provenance"]
+                if provenance is not None:
+                    if (
+                        not isinstance(provenance, dict)
+                        or set(provenance) != {"provider", "model"}
+                        or provenance["provider"] != "openai"
+                    ):
+                        raise ProjectError("Invalid generation provenance")
+                    _text(provenance["model"], "Model", 100)
+                    values["provenance"] = Provenance(**provenance)
+            strategies.append(Strategy(**values))
     if not isinstance(raw["events"], list) or not raw["events"]:
         raise ProjectError("Project requires an initialization event")
     created: set[str] = set()
@@ -160,12 +214,18 @@ def _decode(raw: Any) -> Project:
     by_id = {strategy.id: strategy for strategy in strategies}
     events: list[Event] = []
     previous = None
+    active_order: list[str] = []
+    stages: dict[str, str] = {}
     for index, item in enumerate(raw["events"], 1):
         if not isinstance(item, dict):
             raise ProjectError("Invalid event")
         expected = {"sequence", "kind", "timestamp"}
-        if index > 1:
+        if index > 1 and item.get("kind") != "strategies.reordered":
             expected.add("strategy_id")
+        if item.get("kind") == "strategies.reordered":
+            expected.add("order")
+        if item.get("kind") == "strategy.stage_changed":
+            expected.add("stage_change")
         if item.get("kind") == "strategy.updated":
             expected.add("change")
         if set(item) != expected:
@@ -190,6 +250,8 @@ def _decode(raw: Any) -> Project:
             ):
                 raise ProjectError("Strategy creation event does not match its record")
             created.add(strategy.id)
+            active_order.append(strategy.id)
+            stages[strategy.id] = "draft"
         elif item["kind"] == "strategy.updated" and version >= 3:
             strategy_id = item["strategy_id"]
             change = item["change"]
@@ -225,11 +287,50 @@ def _decode(raw: Any) -> Project:
             ):
                 raise ProjectError("Strategy removal event does not match its record")
             removed.add(strategy_id)
+            active_order.remove(strategy_id)
+        elif item["kind"] == "strategies.reordered" and version >= 5:
+            order = item["order"]
+            if (
+                not isinstance(order, list)
+                or any(not isinstance(i, str) for i in order)
+                or len(order) != len(active_order)
+                or set(order) != set(active_order)
+                or order == active_order
+            ):
+                raise ProjectError("Invalid active strategy order event")
+            active_order = order.copy()
+        elif item["kind"] == "strategy.stage_changed" and version >= 5:
+            strategy_id = item["strategy_id"]
+            change = item["stage_change"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in active_order
+                or not isinstance(change, dict)
+                or set(change) != {"previous", "stage"}
+            ):
+                raise ProjectError("Invalid manual stage event")
+            if (
+                change["previous"] != stages[strategy_id]
+                or change["stage"] not in {s.value for s in Stage}
+                or change["stage"] == change["previous"]
+            ):
+                raise ProjectError("Manual stage history is inconsistent")
+            stages[strategy_id] = change["stage"]
         else:
             raise ProjectError("Unsupported strategy event")
-        event = Event(**{key: value for key, value in item.items() if key != "change"})
+        event = Event(
+            **{
+                key: value
+                for key, value in item.items()
+                if key not in {"change", "stage_change", "order"}
+            }
+        )
         if "change" in item:
             event = replace(event, change=StrategyChange(**item["change"]))
+        if "stage_change" in item:
+            event = replace(event, stage_change=StageChange(**item["stage_change"]))
+        if "order" in item:
+            event = replace(event, order=tuple(item["order"]))
         events.append(event)
     if created != seen or removed != {s.id for s in strategies if s.removed_at is not None}:
         raise ProjectError("Strategy records and history do not match")
@@ -237,19 +338,38 @@ def _decode(raw: Any) -> Project:
         strategy = by_id[strategy_id]
         if strategy.title != change.title or strategy.approach != change.approach:
             raise ProjectError("Latest edit does not match the strategy record")
+    if version >= 5 and (
+        raw["active_order"] != active_order or any(s.stage != stages[s.id] for s in strategies)
+    ):
+        raise ProjectError("Strategy order/stages do not match history")
     return Project(
-        version, raw["id"], raw["title"], raw["problem"], tuple(events), tuple(strategies), mode
+        version,
+        raw["id"],
+        raw["title"],
+        raw["problem"],
+        tuple(events),
+        tuple(strategies),
+        mode,
+        tuple(active_order),
     )
 
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if project.schema_version < 5:
+        del raw["active_order"]
+        for strategy in raw["strategies"]:
+            for key in ("stage", "summary", "provenance"):
+                del strategy[key]
     if project.schema_version < 4:
         del raw["research_mode"]
     if project.schema_version < 3:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
     for event in raw["events"]:
+        for key in ("stage_change", "order"):
+            if event[key] is None:
+                del event[key]
         if event["change"] is None:
             del event["change"]
         if event["strategy_id"] is None:
@@ -360,20 +480,40 @@ def close_project() -> None:
 
 def list_strategies(value: str | Path) -> tuple[Strategy, ...]:
     """List the active pool; inspect retains removed records and their history."""
-    return tuple(s for s in inspect_project(value).project.strategies if s.removed_at is None)
+    project = inspect_project(value).project
+    by_id = {s.id: s for s in project.strategies}
+    return tuple(by_id[i] for i in project.active_order)
 
 
-def create_strategy(value: str | Path, title: str, approach: str) -> ProjectView:
+def create_strategy(
+    value: str | Path,
+    title: str,
+    approach: str,
+    summary: str = "",
+    provenance: Provenance | None = None,
+) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
     approach = _text(approach, "Hypothesis / approach", 10000)
 
+    if not isinstance(summary, str) or len(summary) > 300 or "\n" in summary or "\r" in summary:
+        raise ProjectError("Summary must be one line, at most 300 characters")
+
     def append(project: Project) -> Project:
         timestamp = _next_timestamp(project)
-        strategy = Strategy(str(uuid4()), title, approach, "human", timestamp)
+        strategy = Strategy(
+            str(uuid4()),
+            title,
+            approach,
+            "human",
+            timestamp,
+            summary=summary.strip(),
+            provenance=provenance,
+        )
         return replace(
             project,
-            schema_version=max(2, project.schema_version),
+            schema_version=5 if summary or provenance else max(2, project.schema_version),
+            active_order=(*project.active_order, strategy.id),
             strategies=(*project.strategies, strategy),
             events=(
                 *project.events,
@@ -397,6 +537,7 @@ def remove_strategy(value: str | Path, strategy_id: str) -> ProjectView:
         return replace(
             project,
             schema_version=max(3, project.schema_version),
+            active_order=tuple(i for i in project.active_order if i != strategy_id),
             strategies=tuple(
                 replace(s, removed_at=timestamp) if s.id == strategy_id else s
                 for s in project.strategies
@@ -428,7 +569,14 @@ def edit_strategy(value: str | Path, strategy_id: str, title: str, approach: str
             project,
             schema_version=max(3, project.schema_version),
             strategies=tuple(
-                replace(s, title=title, approach=approach) if s.id == strategy_id else s
+                replace(
+                    s,
+                    title=title,
+                    approach=approach,
+                    summary="" if approach != s.approach else s.summary,
+                )
+                if s.id == strategy_id
+                else s
                 for s in project.strategies
             ),
             events=(
@@ -561,3 +709,73 @@ def create_project(title: str, problem: str, research_mode: str = "default") -> 
                 destination.rmdir()  # Remove only this attempt's still-empty directory on failure.
             except OSError:
                 pass
+
+
+def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
+    try:
+        chosen = Stage(stage)
+    except (ValueError, TypeError) as exc:
+        raise ProjectError(
+            "Stage must be draft, ready, exploring or hold (manually tracked)"
+        ) from exc
+
+    def update(project: Project) -> Project:
+        strategy = next(
+            (s for s in project.strategies if s.id == strategy_id and not s.removed_at), None
+        )
+        if strategy is None:
+            raise ProjectError("Active strategy not found")
+        if strategy.stage == chosen:
+            return project
+        return replace(
+            project,
+            schema_version=5,
+            strategies=tuple(
+                replace(s, stage=chosen) if s.id == strategy_id else s for s in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategy.stage_changed",
+                    _next_timestamp(project),
+                    strategy_id,
+                    stage_change=StageChange(strategy.stage, chosen),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)
+
+
+def reorder_strategies(
+    value: str | Path, order: list[str], expected_order: list[str]
+) -> ProjectView:
+    def update(project: Project) -> Project:
+        if (
+            not isinstance(order, list)
+            or any(not isinstance(i, str) for i in order)
+            or len(order) != len(project.active_order)
+            or set(order) != set(project.active_order)
+        ):
+            raise ProjectError("Order must contain every active strategy exactly once")
+        if expected_order != list(project.active_order):
+            raise ProjectError("Strategy order changed elsewhere; reopen the project and retry")
+        if order == list(project.active_order):
+            return project
+        return replace(
+            project,
+            schema_version=5,
+            active_order=tuple(order),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategies.reordered",
+                    _next_timestamp(project),
+                    order=tuple(order),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)

@@ -7,6 +7,7 @@ from dataclasses import asdict
 
 from sigma.projects import (
     ProjectError,
+    change_stage,
     close_project,
     create_project,
     create_strategy,
@@ -17,6 +18,7 @@ from sigma.projects import (
     list_strategies,
     open_project,
     remove_strategy,
+    reorder_strategies,
 )
 from sigma.tooling import run_tooling
 from sigma.ui import run_ui
@@ -54,6 +56,16 @@ def main() -> None:
     edit.add_argument("strategy_id")
     edit.add_argument("--title", required=True)
     edit.add_argument("--approach", required=True)
+    stage = commands.add_parser("stage-strategy", help="Change a manually tracked stage")
+    stage.add_argument("path")
+    stage.add_argument("strategy_id")
+    stage.add_argument("stage", choices=["draft", "ready", "exploring", "hold"])
+    reorder = commands.add_parser(
+        "reorder-strategies", help="Reorder all active IDs with stale-order protection"
+    )
+    reorder.add_argument("path")
+    reorder.add_argument("--order", nargs="+", required=True)
+    reorder.add_argument("--expected-order", nargs="+", required=True)
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
@@ -80,6 +92,10 @@ def main() -> None:
             result = asdict(edit_strategy(args.path, args.strategy_id, args.title, args.approach))
         elif args.command == "remove-strategy":
             result = asdict(remove_strategy(args.path, args.strategy_id))
+        elif args.command == "stage-strategy":
+            result = asdict(change_stage(args.path, args.strategy_id, args.stage))
+        elif args.command == "reorder-strategies":
+            result = asdict(reorder_strategies(args.path, args.order, args.expected_order))
         elif args.command == "strategies":
             result = {"strategies": [asdict(s) for s in list_strategies(args.path)]}
         elif args.command == "events":

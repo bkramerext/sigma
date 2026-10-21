@@ -3,7 +3,11 @@ name = "sigma-research"
 version = "0.1.0"
 description = "Local-first research project lifecycle"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "httpx==0.28.1",
+    "uvicorn>=0.30,<1",
+]
 
 [project.scripts]
 sigma = "sigma.cli:main"

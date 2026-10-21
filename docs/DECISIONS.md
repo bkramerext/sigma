@@ -69,3 +69,57 @@ duplicate-submit guards. Creation shows server-derived location context rather
 than a path editor. Canonical artwork is copied byte-for-byte by Vite on startup
 and build; accepted Home art is committed unchanged from its pre-assignment bytes.
 ASN-5 workspace styles and ASN-4.1's on-hold animation remain untouched.
+
+## A7: Strategies, manual stages and proposal review
+
+Schema v5 adds a single `active_order` list, per-strategy `stage`, optional one-line
+`summary` (empty means derive preview), and nullable provider/model `provenance`.
+The underlying strategies array stays in creation order, including removals;
+active order is the sole presentation order. New items append; removal drops its
+active ID. Legacy reads derive order and Draft without mutation. Existing manual
+write/migration behavior remains; first stage/reorder/summary/provenance write
+upgrades to v5 through the existing lock/stage/exact-backup path. All later writes
+preserve v5. No-op stages/orders do not migrate or append events.
+
+Validation replays creation/removal/reorder events to the exact active ID set and
+order, and replays manual stage transitions from Draft to the final record for
+every strategy. Unsupported stages, mismatched before-values, duplicate or removed
+IDs and incomplete orders are rejected. Reorder requires the caller's prior order
+to match under the same write lock; stale concurrent creates/removes/reorders fail
+instead of clobbering newer ordering. Concurrent independent stage/edit writes
+serialize; last stage write wins with every transition retained. Existing edit and
+removal semantics/identities/timestamps remain intact. Editing an approach clears
+its summary to prevent a misleading old preview; the full previous approach is
+still audited.
+
+Rows use a native details expansion and a separate three-dot command disclosure.
+Only the corner grip begins dragging. Pointer capture plus document-level move/up
+handling survive keyed DOM relocation on touch; removing an old error during
+pickup was avoided to keep targets stationary. Keyboard and pointer share the
+same preview/drop/cancel logic; save failures revert. Menus are viewport-clamped,
+with mobile bottom surfaces. Home rules/artwork are untouched.
+
+The opt-in OpenAI adapter uses the documented Responses REST API, strict JSON
+schema and runtime-pinned httpx. Configuration is server-wide, AI off by default,
+model `gpt-4.1` unless explicitly overridden. Full bounded context is sent or
+rejected, never silently truncated. One request per process, no retries/tools,
+60-second HTTP deadline, bounded response and independent field validation.
+Exact/strong lexical duplicates are rejected; this cannot establish semantic
+novelty or mathematical validity, which require human review.
+
+Generation never saves project state. Save accepts editable fields and a signed
+24-hour receipt binding returned provider/model metadata to project identity.
+Process-local receipt secrets are never persisted or returned; restart invalidates
+receipts. This keeps provenance honest without a parallel draft store. Drafts may
+be edited before acceptance and are lost on dialog close. Lost save responses can
+still be ambiguous under the existing persistence contract. A cancelled local
+request cannot guarantee the provider stops billing or computation.
+
+The endpoint awaits ASGI disconnect events directly and cancels/joins both the
+provider and connection-watcher tasks. Polling `Request.is_disconnected()` missed
+receive-channel events behind middleware in an actual HTTP disconnect test; it
+was replaced before completion. Provider errors are generic and never include raw
+request/response dumps or keys. No configurable external endpoint, redirects,
+ambient proxy forwarding, or browser credentials are introduced. `store:false`
+does not override provider retention policies. Live billing/quality is unverified:
+all development integration tests use clearly identified controlled HTTP fixtures.

@@ -2,45 +2,64 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
-SIGMA is installable, local-first software for organizing AI-assisted research into sustained, critical investigations of difficult problems.
+SIGMA makes branching research investigations manageable and trackable. Difficult
+problems—especially in mathematics—invite several competing avenues at once.
+Ideas can diverge, stall, be compared, revisited and eventually evaluated without
+losing the assumptions, earlier text and history that explain how you got there.
 
-Instead of committing to one promising idea, SIGMA is designed to maintain competing **strategies**, investigate their assumptions, test their claims, and preserve what was learned. Independent evaluation and bounded scheduling are intended to help direct effort without mistaking confidence for proof.
-
-## Inspiration
-
-SIGMA grew out of the author's multiday explorations of the **Riemann Hypothesis** with ChatGPT.
-
-There was no realistic expectation that an amateur working with ChatGPT would solve one of mathematics' great unsolved problems. But trying to understand it was hugely educational: each investigation opened up new mathematics, new questions, and new ways to think about evidence.
-
-The experience also exposed weaknesses in free-form AI research. Investigations wandered, earlier findings became hard to recover, and plausible ideas sometimes consumed substantial effort before revealing basic flaws.
-
-SIGMA asks: **Can AI-assisted exploration become a cumulative research process that learns from failure as well as success?**
-
-## How SIGMA is intended to work
-
-- **Strategies:** Competing lines of investigation, each with its own history and possible forks.
-- **Research:** Bounded attempts to develop ideas, test assumptions, and gather evidence.
-- **Evaluation:** Independent scrutiny of claims, uncertainty, and remaining proof obligations.
-- **Scheduling:** Resource-aware allocation of effort, with explicit human control.
-- **Artifacts:** Durable records of what was tried, established, refuted, or left unresolved.
-
-One envisioned artifact, **Show Me**, would turn a strategy's actual findings into an accessible, originally illustrated explanation. A failed investigation deserves the same care as a successful one. Presentation may be imaginative; evidence must not be embellished.
+The current application organizes those avenues as **strategies** within portable
+local projects. It helps a person keep research coherent; it does not claim that
+an appealing argument, finite experiment or AI suggestion is a proof.
 
 ## What works today
 
-The current foundation opens local projects, preserves project identity and history, and lets people create and revisit strategies in a browser. CLI, API, and executable scenarios share the same Python services.
+- Browser-first local projects with name, research problem and Default/Mathematical mode.
+- Manual strategy creation, editing, removal from the active list, full approaches
+  and retained audit history.
+- Persistent drag ordering with pointer/touch and keyboard controls, plus explicitly
+  **human-maintained** Draft, Ready to explore, Exploring and On hold stages.
+- Optional AI proposals: one direction per explicit request, an optional starting
+  point, editable draft review, and human acceptance before anything is saved.
+  Accepted suggestions retain provider/model provenance. Manual writing works
+  without AI configuration.
+- Shared typed Python services behind the browser, CLI, API and executable scenarios.
 
-**Not implemented yet:** autonomous agents, evaluation, scheduling, forks, and generated research reports. The Riemann Hypothesis is the initial example project, not a claimed solution.
+**Future ambitions:** actual forks and branch lineage, autonomous investigations,
+independent evaluators, Lean verification, LaTeX artifacts, scheduling and generated
+research reports. These are not implemented. Exploring means the person is
+investigating; no agent or proof checker is running.
 
-## Getting started
+## Inspiration
 
-SIGMA runs locally on macOS/Linux with Python, uv, and Node.js.
+SIGMA grew out of the author's multiday explorations of the Riemann Hypothesis
+with ChatGPT. There was no realistic expectation that an amateur working with AI
+would solve it. The educational value was in the mathematics, questions and
+critical examination of evidence. Free-form conversations also made earlier
+findings hard to recover and sometimes let plausible ideas consume effort before
+basic flaws emerged. SIGMA aims to make that exploration cumulative, including
+what was learned from failure. The RH seed is an example project, not a solution.
+
+## Get started
+
+Requires macOS/Linux, Python 3.11+, uv, Node.js 20.19+ and npm.
 
 ```sh
 ./sigma setup
 ./sigma ui
 ```
 
-Open http://127.0.0.1:5173.
+Open http://127.0.0.1:5173. Use Open Project or New Project, then **New Strategy**
+to write manually or choose **Generate with AI** from its adjacent dropdown.
 
-See **[Getting Started](docs/GETTING-STARTED.md)** for prerequisites, usage, CLI/API commands, testing, and storage cautions. See [Project](docs/PROJECT.md), [Status](docs/STATUS.md), and [Brainstorm](docs/BRAINSTORM.md) for more context.
+AI is off by default. The initial provider is OpenAI Responses, configured only
+on the server with `SIGMA_AI_ENABLED=1`, `OPENAI_API_KEY` and optionally
+`SIGMA_AI_MODEL` (default `gpt-4.1`). Restart the launcher after changing them.
+Do not put a key in frontend code or Git. API billing is separate from ChatGPT or
+Codex access. The dialog requires consent before transmitting the project problem,
+mode, all strategy titles/approaches and optional seed. No calls happen on load or
+while typing. Tests use identified fixtures and make no paid calls.
+
+See **[Getting Started](docs/GETTING-STARTED.md)** for setup, keyboard controls,
+provider limits, CLI/API commands and storage limitations. [Status](docs/STATUS.md)
+records actual verification; [Project](docs/PROJECT.md) and
+[Brainstorm](docs/BRAINSTORM.md) describe the longer-term direction.

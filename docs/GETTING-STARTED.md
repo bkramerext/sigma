@@ -15,7 +15,7 @@ From the repository root:
 
 Open **http://127.0.0.1:5173**. Choose **Open Project**, enter `projects/rh.sigma` in the dialog, and open it. **New Project** asks for a name, multiline research problem, and research mode (Default or Mathematical), then opens the created workspace. Cancel or Escape returns Home. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
 
-Use the chevron beside a strategy name, then **Actions → Edit** to change its
+Use the three-dot menu beside a strategy, then **Actions → Edit** to change its
 name and description in a dialog. **Actions → Remove** asks for confirmation and
 removes it from the active pool while retaining the research record and history.
 Cancel/Escape leaves data unchanged; failed saves retain dialog text for retry.
@@ -23,7 +23,7 @@ Edit events include **View changes** with before-and-after text.
 
 The launcher starts FastAPI on localhost port 8000 and Vite on port 5173. Both ports must be free. Ctrl+C stops both servers. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
 
-**Generate strategy**, scheduling, reports, and forks are unavailable; the UI explains their status.
+Scheduling, reports and forks are unavailable; the UI explains their status. Optional AI proposal generation is described below.
 
 ## CLI
 
@@ -91,3 +91,93 @@ V3/v4 retain removed records and edit/removal events; older clients cannot read 
 Unchanged edits add no event or migration. Writes use POSIX advisory locks and atomic replacement. Use a local macOS/Linux filesystem; do not edit project JSON while a save is running. Generated RH project state is excluded from Git.
 
 See [Architectural Decisions](DECISIONS.md) for concurrency/crash limitations, [Status](STATUS.md) for verified behavior, and [SPEC-001](../specs/project-lifecycle.md) for the original lifecycle contract.
+
+## Strategies and human-tracked stages
+
+Click a strategy's title/preview to expand the complete approach, actual creation
+metadata and UUID. The one-line preview is the accepted AI summary when present,
+otherwise whitespace-collapsed full approach; ellipsis affects display only.
+Editing the approach clears an old summary so the preview cannot become stale.
+
+The vertical three-dot control opens commands. Under Actions, Edit and Remove
+retain earlier text/history; Change stage records an explicit manual update.
+Draft, Ready to explore, Exploring and On hold describe the person's tracking.
+Exploring does **not** start an agent, evaluate evidence or check a proof.
+
+Drag only the upper-right grip to reorder; ordinary row text remains selectable.
+Touch works on the grip. Keyboard: focus a grip, Space to pick up, Up/Down to move,
+Enter/Space to drop, Escape to cancel. Preview moves do not save until drop.
+Failures restore the previous order. Concurrent order or active-list changes
+reject a stale drop: reopen/refresh before retrying. New strategies append to the
+active list; removal preserves the underlying record and creation timestamp.
+
+```sh
+./sigma stage-strategy /path/project.sigma STRATEGY_ID exploring
+./sigma reorder-strategies /path/project.sigma --order ID_B ID_A --expected-order ID_A ID_B
+```
+
+API: `POST /api/projects/strategies/stage` accepts `{path,strategy_id,stage}`
+(`draft|ready|exploring|hold`). `POST /api/projects/strategies/reorder` accepts
+`{path,order:[all active IDs],expected_order:[previous active IDs]}`. Both return
+the updated project. `ProjectView.project.active_order` is the authoritative
+active list; the stored `strategies` array retains creation order and removed
+records. First stage/reorder/AI-assisted save upgrades to schema v5 with an exact
+old-version backup; legacy files read as Draft/in creation order without writes.
+Existing manual-only create/edit/remove lazy migrations remain unchanged.
+
+## Optional AI proposals (OpenAI)
+
+Use **New Strategy → Generate with AI**. Writing manually remains the primary
+click and needs no provider configuration. AI is disabled by default. Configure
+these variables in the **server's environment** before launching:
+
+```sh
+export SIGMA_AI_ENABLED=1
+export SIGMA_AI_MODEL=gpt-4.1
+# Set OPENAI_API_KEY securely in your shell/environment; never commit it.
+./sigma ui
+```
+
+The key must be an OpenAI API key with access/billing for the selected model.
+ChatGPT/Codex access does not configure this key or include these API charges.
+The model must support Responses strict structured output. `gpt-4.1` is the
+explicit default; no model/reasoning settings are added to projects.
+
+The dialog discloses and requires consent for transmission of the project
+research problem, mode, **all** existing strategy titles/full approaches (including
+removed directions) and optional Starting point. An empty seed requests an
+independent direction. There are no provider calls on load or typing. A seed is
+context to scrutinize, not a claim to endorse.
+
+Generate draft makes **one** request; Regenerate is a separate explicitly billed
+request and replaces editable fields only after success. Review/edit the title,
+one-line preview and full approach (including first tests, assumptions and ways
+the idea might fail). Save strategy is the only persistence action; it records an
+AI-assisted suggestion accepted/edited by a human, with returned provider/model.
+Cancel leaves project files unchanged. Failed generation or acceptance retains
+existing draft edits. Cancelling a request closes the local connection; provider
+processing/billing may already have occurred. No automatic retries.
+
+Operational limits: one proposal request at a time per API process; 60-second
+whole HTTP operation deadline; 48,000-character full JSON context (reject rather
+than truncate); 4,000-character seed; 3,500 maximum output tokens; 128KB response
+cap. Validated fields: title 200, summary 300, approach 6,000, first tests,
+assumptions and failure modes 1,000 characters each. Final saved approach stays
+within the existing 10,000-character limit. Obvious duplicate titles and strongly
+repetitive approaches are rejected; semantic distinctness still needs human review.
+No tools, outbound research, code execution, queues or autonomous loops.
+
+Uses pinned `httpx==0.28.1` with the official Responses REST endpoint and
+[`text.format` strict JSON schema](https://developers.openai.com/api/docs/guides/structured-outputs).
+`store:false` is requested; provider retention policies still apply. SIGMA does
+not log prompts, responses or keys by default. Errors expose generic status/help,
+not raw provider responses. Proxies/redirects/custom provider URLs are disabled.
+
+`GET /api/projects/proposals/config` reports safe availability/model metadata.
+`POST /api/projects/proposals` accepts `{path,seed?,consent:true}` and returns an
+unsaved structured draft, provenance and a signed acceptance receipt. Saving uses
+`POST /api/projects/strategies` with `{path,title,approach,summary,receipt}`. The
+receipt binds provenance to that project, expires after 24 hours, and expires on
+server restart. If it expires, copy your edits before regenerating, or write the
+text manually (without AI attribution). Receipts contain no request/response dump
+or key. There is no persistent draft store.

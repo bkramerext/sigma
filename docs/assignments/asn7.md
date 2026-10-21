@@ -1,6 +1,6 @@
 # A7: Strategies workspace, human-guided AI proposals, and honest stage tracking
 
-**Implementation status:** Ready for Codex after approved artwork is installed in `assets/`. A5 and A6 are implemented; inspect their actual code and verified status before changing it.
+**Implementation status:** Implemented and verified on 2026-10-20 using the installed approved artwork and controlled provider HTTP fixtures. Live API account/billing/quality remains unverified; see `docs/STATUS.md`.
 
 ## Intent and authoritative visual reference
 

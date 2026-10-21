@@ -1,5 +1,6 @@
 """Local browser adapter. Launch on 127.0.0.1; never bind to a public interface."""
 
+import asyncio
 from dataclasses import asdict
 
 from fastapi import FastAPI, Request
@@ -9,6 +10,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma.projects import (
     ProjectError,
+    change_stage,
     close_project,
     create_project,
     create_strategy,
@@ -20,7 +22,9 @@ from sigma.projects import (
     open_project,
     project_destination,
     remove_strategy,
+    reorder_strategies,
 )
+from sigma.proposals import accepted_provenance, configuration, generate_proposal
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -85,9 +89,15 @@ def strategies_view(path: str):
     return {"strategies": [asdict(s) for s in list_strategies(path)]}
 
 
+class CreateStrategyRequest(StrategyRequest):
+    summary: str = ""
+    receipt: str | None = None
+
+
 @app.post("/api/projects/strategies", status_code=201)
-def create_strategy_view(body: StrategyRequest):
-    return asdict(create_strategy(body.path, body.title, body.approach))
+def create_strategy_view(body: CreateStrategyRequest):
+    provenance = accepted_provenance(body.receipt, body.path) if body.receipt else None
+    return asdict(create_strategy(body.path, body.title, body.approach, body.summary, provenance))
 
 
 class RemoveStrategyRequest(OpenRequest):
@@ -123,3 +133,56 @@ def destination_view(title: str = ""):
 @app.post("/api/projects/create", status_code=201)
 def create_project_view(body: CreateProjectRequest):
     return asdict(create_project(body.title, body.problem, body.research_mode))
+
+
+class StageRequest(RemoveStrategyRequest):
+    stage: str
+
+
+class ReorderRequest(OpenRequest):
+    order: list[str]
+    expected_order: list[str]
+
+
+@app.post("/api/projects/strategies/stage")
+def stage_view(body: StageRequest):
+    return asdict(change_stage(body.path, body.strategy_id, body.stage))
+
+
+@app.post("/api/projects/strategies/reorder")
+def reorder_view(body: ReorderRequest):
+    return asdict(reorder_strategies(body.path, body.order, body.expected_order))
+
+
+class ProposalRequest(OpenRequest):
+    seed: str = ""
+    consent: bool = False
+
+
+@app.get("/api/projects/proposals/config")
+def proposal_config():
+    return configuration()
+
+
+@app.post("/api/projects/proposals")
+async def proposal_view(body: ProposalRequest, request: Request):
+    async def disconnected():
+        # Await the ASGI event directly. is_disconnected() polling can miss events
+        # behind BaseHTTPMiddleware's receive channel.
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+
+    task = asyncio.create_task(generate_proposal(body.path, body.seed, body.consent))
+    connection = asyncio.create_task(disconnected())
+    try:
+        done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
+        if connection in done:
+            return JSONResponse(
+                {"error": "Proposal request cancelled; nothing saved"}, status_code=499
+            )
+        return await task
+    finally:
+        for pending in (task, connection):
+            if not pending.done():
+                pending.cancel()
+        await asyncio.gather(task, connection, return_exceptions=True)
