@@ -851,3 +851,18 @@ The browser fixture's provider output is deterministic and does not demonstrate
 live-model research quality, entitlement or account usage. Playwright's API
 proxy can outlive a locally aborted request briefly; the direct ASGI disconnect
 scenario verifies server-side cancellation and run-gate release.
+
+## Project header spacing follow-up (2026-10-21)
+
+The project header now displays the upper 64% of its unchanged artwork, retaining
+the complete raised SIGMA lettering and visible copper/blue wires while removing
+the remaining dark area beneath them. Its bottom padding is zero, so the project
+workspace begins at about 125px on desktop instead of about 166px. Header
+controls and the project title stay above the content without overlap.
+
+Actual verification: `./sigma test` passed all scenarios, API/CLI checks,
+Ruff, Pyright and frontend typecheck/build. Real Chrome `browser_checks/header.py`
+passed at 1280, 1100, 700, 390 and 320px, and `browser_checks/strategies.py`
+passed the project layout and strategy regressions. Desktop and 390px project
+screenshots were visually inspected; no horizontal overflow or JavaScript errors
+were observed. The public PNG and source artwork were not changed.

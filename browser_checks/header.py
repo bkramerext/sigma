@@ -102,10 +102,11 @@ with sync_playwright() as playwright:
         assert art_box and art_frame and workspace_box and title_box and close_box and pill_box
         assert abs(art_box["x"]) < 1 and abs(art_box["y"]) < 1
         assert abs(art_box["width"] / art_box["height"] - 2) < 0.01
-        assert abs(art_frame["height"] / art_box["height"] - 0.75) < 0.02
+        assert abs(art_frame["height"] / art_box["height"] - 0.64) < 0.02
         assert art_frame["y"] + art_frame["height"] <= workspace_box["y"] + 1
         assert title_box["x"] + title_box["width"] <= width + 1
         if width >= 1100:
+            assert workspace_box["y"] <= 130
             assert title_box["x"] >= art_box["x"] + art_box["width"] - 1
             assert close_box["x"] + close_box["width"] <= pill_box["x"] + 1
         else:
