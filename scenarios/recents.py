@@ -28,6 +28,10 @@ from sigma.projects import (
 from sigma.recents import (
     EXAMPLE_ID,
     EXAMPLE_NAME,
+    HISTORY_ID,
+    HISTORY_NAME,
+    HISTORY_TEMPLATE,
+    bootstrap_history_example,
     TEMPLATE,
     bootstrap_example,
     forget_recent,
@@ -270,6 +274,34 @@ def failures(base):
     )
 
 
+def historical_sample(base):
+    root, state = base / "historical-projects", base / "historical-state"
+    root.mkdir()
+    with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(root), "SIGMA_STATE_DIR": str(state)}):
+        # Simulate a user whose first included example was already installed in A9.
+        assert not bootstrap_example()
+        original = (root / EXAMPLE_NAME / "project.json").read_bytes()
+        assert not bootstrap_history_example()
+        historical = root / HISTORY_NAME
+        assert (historical / "project.json").read_bytes() == HISTORY_TEMPLATE.read_bytes()
+        view = inspect_project(historical)
+        assert view.project.id == HISTORY_ID and len(view.project.strategies) == 5
+        assert all(item.stage == "draft" for item in view.project.strategies)
+        assert len(entries()) == 2
+        assert not bootstrap_history_example() and len(entries()) == 2
+        assert (root / EXAMPLE_NAME / "project.json").read_bytes() == original
+        open_project(historical)
+        assert entries()[0]["id"] == HISTORY_ID
+        # A previously visited/edited historical sample must not be overwritten.
+        before = (historical / "project.json").read_bytes()
+        assert not bootstrap_history_example()
+        assert (historical / "project.json").read_bytes() == before
+        shutil.rmtree(historical)
+        forget_recent(HISTORY_ID)
+        assert not bootstrap_history_example() and not historical.exists()
+    print("PASS historical sample installs for existing roots, preserves math sample, tracks recent access and never re-seeds")
+
+
 def main():
     with TemporaryDirectory() as temporary:
         base = Path(temporary)
@@ -280,6 +312,7 @@ def main():
         ):
             check(root)
         failures(base)
+        historical_sample(base)
         with patch.dict(os.environ, {"XDG_STATE_HOME": str(ROOT / "frontend")}):
             os.environ.pop("SIGMA_STATE_DIR", None)
             try:
