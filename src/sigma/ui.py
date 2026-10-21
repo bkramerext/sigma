@@ -89,9 +89,11 @@ def run_ui() -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
+        print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance() as instance:
             try:
                 wait_for_ports()
+                print("Starting SIGMA backend and frontend…", flush=True)
                 commands = [
                     [
                         sys.executable,
