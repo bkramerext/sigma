@@ -55,9 +55,20 @@ async def check(path):
     calls = []
 
     async def handler(request):
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "object": "list",
+                    "data": [{"id": "gpt-6.1-sol"}, {"id": "gpt-6-luna"}, {"id": "gpt-6-astra"}],
+                },
+            )
         assert str(request.url) == "https://api.openai.com/v1/responses"
         payload = json.loads(request.content)
         assert payload["store"] is False and payload["text"]["format"]["strict"] is True
+        assert payload["reasoning"] == {"effort": "high"}
+        assert payload["model"] == "gpt-6.1-sol"
+        assert payload["max_output_tokens"] == 25000
         context = json.loads(payload["input"])
         assert context["research_problem"] == "A real mathematical question"
         assert context["research_mode"] == "mathematical"
@@ -196,14 +207,16 @@ async def check(path):
     print(
         "PASS ASGI endpoint disconnection through middleware cancels transport and releases request slot"
     )
-    with patch.dict(os.environ, {"SIGMA_AI_ENABLED": "0"}):
-        await rejects(proposals.generate_proposal(str(path), consent=True))
-    with patch.dict(os.environ, {"SIGMA_AI_MODEL": "bad model"}):
-        assert not proposals.configuration()["available"]
     for i in range(6):
         create_strategy(path, str(i), "X" * 10000)
     with patch("sigma.proposals.httpx.AsyncClient", side_effect=AssertionError("must not send")):
         await rejects(proposals.generate_proposal(str(path), consent=True))
+    with patch.dict(os.environ, {"SIGMA_AI_ENABLED": "0"}):
+        await rejects(proposals.generate_proposal(str(path), consent=True))
+    with patch.dict(os.environ, {"SIGMA_AI_MODEL": "bad model"}):
+        from sigma.model_catalog import legacy_model
+
+        assert legacy_model() == "gpt-6.1-sol"
     print(
         "PASS unavailable/invalid configuration, malformed/refused/incomplete/rate errors, duplicate, hard timeout, cancellation, concurrency and oversized-context nonmutation"
     )

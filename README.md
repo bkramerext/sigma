@@ -13,7 +13,7 @@ an appealing argument, finite experiment or AI suggestion is a proof.
 
 ## What works today
 
-- Browser-first local projects with name, research problem and Default/Mathematical mode.
+- Browser-first local projects with a shared Create/Edit form, stable identity, research problem, mode, AI model and Thinking level.
 - Manual strategy creation, editing, removal from the active list, full approaches
   and retained audit history.
 - Persistent drag ordering with pointer/touch and keyboard controls, plus explicitly
@@ -51,15 +51,29 @@ Requires macOS/Linux, Python 3.11+, uv, Node.js 20.19+ and npm.
 Open http://127.0.0.1:5173. Use Open Project or New Project, then **New Strategy**
 to write manually or choose **Generate with AI** from its adjacent dropdown.
 
-AI is off by default. The initial provider is OpenAI Responses, configured only
-on the server with `SIGMA_AI_ENABLED=1`, `OPENAI_API_KEY` and optionally
-`SIGMA_AI_MODEL` (default `gpt-4.1`). Restart the launcher after changing them.
+AI is off by default. Enable OpenAI Responses on the server with
+`SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY`, then restart the launcher. Choose the
+project model and Thinking level in Create Project or the pencil beside its name.
+The reviewed choices are Luna · Economy ($), Sol · Balanced ($$), and Astra ·
+Advanced ($$$); these are relative cost tiers, not price quotes. New projects
+prefer Sol/High when account access is verified. Offline defaults and unavailable
+choices are clearly qualified; no generation request silently substitutes models.
+`SIGMA_AI_MODEL` is only a reviewed-model bootstrap override for legacy files.
 Do not put a key in frontend code or Git. API billing is separate from ChatGPT or
 Codex access. The dialog requires consent before transmitting the project problem,
-mode, all strategy titles/approaches and optional seed. No calls happen on load or
-while typing. Tests use identified fixtures and make no paid calls.
+mode, all strategy titles/approaches and optional seed. No generation calls happen on load or while typing; cached non-generating
+model-list checks provide connection health and account availability. Tests use identified fixtures and make no paid calls.
 
 See **[Getting Started](docs/GETTING-STARTED.md)** for setup, keyboard controls,
 provider limits, CLI/API commands and storage limitations. [Status](docs/STATUS.md)
 records actual verification; [Project](docs/PROJECT.md) and
 [Brainstorm](docs/BRAINSTORM.md) describe the longer-term direction.
+
+The small **OpenAI API** indicator checks actual API authentication/reachability.
+Green does not establish model generation, credit, quota or billing. Its details
+show the last check and a Retry action; no paid generation lights the indicator.
+
+Close Project currently returns Home without saving or flushing anything—changes
+are already saved by explicit actions. When real running agents exist, closing
+will need active-work confirmation and an explicit policy for whether they continue.
+A8 does not introduce such agents or an imaginary confirmation.

@@ -243,6 +243,7 @@ with sync_playwright() as p:
     assert raw["strategies"][-1]["provenance"] == {
         "provider": "openai",
         "model": "gpt-4.1-TEST-FIXTURE",
+        "reasoning_effort": "high",
     }
     assert raw["strategies"][-1]["stage"] == "draft"
     # Cancelling an in-flight request leaves files unchanged and restores focus.

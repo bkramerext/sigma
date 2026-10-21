@@ -29,3 +29,18 @@ keyboard, stage/manual CRUD and editable AI-draft acceptance are also exercised.
 The second check uses actual HTTP disconnection to verify backend cancellation
 and slot release, independently of Playwright's forwarding request lifecycle.
 Stop the fixture server after testing; leave the ordinary UI running as desired.
+
+A8 shared project form and connection-status checks use the same fixture:
+
+```sh
+uv run --with playwright python browser_checks/settings.py
+```
+
+The fixture uses its own temporary managed-project root. The settings check covers
+Create/Edit field order, Sol/High, mode/model/effort changes, no-op/cancel/focus,
+failed-save retry, synchronous duplicate submits/busy handling, stale editors,
+offline model retention/metadata save, explicit unsupported-effort correction,
+connection checking/green/auth/permission/rate/offline/stale labels and mobile
+screens. The fixture's authenticated `/v1/models` response includes an unreviewed
+ID deliberately; it must never become a dropdown option. This is a controlled
+transport test, not verification of real API credentials, credits or billing.

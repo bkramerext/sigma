@@ -32,6 +32,8 @@ def run_tooling(command: str) -> int:
         steps = [
             [*python, "python", "scenarios/lifecycle.py"],
             [*python, "python", "scenarios/project_creation.py"],
+            [*python, "python", "scenarios/project_settings.py"],
+            [*python, "python", "scenarios/model_connection.py"],
             [*python, "python", "scenarios/strategy_tracking.py"],
             [*python, "python", "scenarios/proposals.py"],
             [*python, "python", "scenarios/strategies.py"],

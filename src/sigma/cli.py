@@ -19,6 +19,7 @@ from sigma.projects import (
     open_project,
     remove_strategy,
     reorder_strategies,
+    update_project,
 )
 from sigma.tooling import run_tooling
 from sigma.ui import run_ui
@@ -32,10 +33,14 @@ def main() -> None:
     init.add_argument("--title", required=True)
     init.add_argument("--problem", required=True)
     init.add_argument("--research-mode", default="default")
+    init.add_argument("--model", default="gpt-6.1-sol")
+    init.add_argument("--thinking", default="high")
     create = commands.add_parser("create", help="Create a project in the configured projects root")
     create.add_argument("--title", required=True)
     create.add_argument("--problem", required=True)
     create.add_argument("--research-mode", default="default")
+    create.add_argument("--model", default="gpt-6.1-sol")
+    create.add_argument("--thinking", default="high")
     for name in ("open", "inspect", "events"):
         commands.add_parser(name).add_argument("path")
     strategies = commands.add_parser("strategies", help="List persistent strategies")
@@ -66,6 +71,13 @@ def main() -> None:
     reorder.add_argument("path")
     reorder.add_argument("--order", nargs="+", required=True)
     reorder.add_argument("--expected-order", nargs="+", required=True)
+    edit_project = commands.add_parser(
+        "edit-project",
+        help="Atomically update project settings with a prior settings JSON snapshot",
+    )
+    edit_project.add_argument("path")
+    for field in ("title", "problem", "research-mode", "model", "thinking", "expected"):
+        edit_project.add_argument("--" + field, required=True)
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
@@ -78,10 +90,37 @@ def main() -> None:
     try:
         if args.command == "init":
             result = asdict(
-                initialize_project(args.path, args.title, args.problem, args.research_mode)
+                initialize_project(
+                    args.path,
+                    args.title,
+                    args.problem,
+                    args.research_mode,
+                    args.model,
+                    args.thinking,
+                )
             )
         elif args.command == "create":
-            result = asdict(create_project(args.title, args.problem, args.research_mode))
+            result = asdict(
+                create_project(
+                    args.title, args.problem, args.research_mode, args.model, args.thinking
+                )
+            )
+        elif args.command == "edit-project":
+            try:
+                expected = json.loads(args.expected)
+            except ValueError as exc:
+                raise ProjectError("--expected must be a JSON settings snapshot") from exc
+            result = asdict(
+                update_project(
+                    args.path,
+                    args.title,
+                    args.problem,
+                    args.research_mode,
+                    args.model,
+                    args.thinking,
+                    expected,
+                )
+            )
         elif args.command == "open":
             result = asdict(open_project(args.path))
         elif args.command == "inspect":

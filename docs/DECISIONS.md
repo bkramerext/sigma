@@ -123,3 +123,64 @@ request/response dumps or keys. No configurable external endpoint, redirects,
 ambient proxy forwarding, or browser credentials are introduced. `store:false`
 does not override provider retention policies. Live billing/quality is unverified:
 all development integration tests use clearly identified controlled HTTP fixtures.
+
+## A8: project settings and connection proof
+
+Schema v6 persists `ai_model` and `reasoning_effort` alongside existing project
+metadata. Every new init/create writes v6. Existing v1–v5 reads derive a reviewed
+legacy bootstrap (Sol/High by default) without rewriting. Metadata updates use the
+existing lock/stage/full validation/atomic replace and exact old-version backup.
+`project.updated` retains complete old/new five-field snapshots, checks chain
+continuity and final state, and forbids no-op audit entries. A compare of all five
+expected settings under lock rejects stale editors, while independent strategy
+writes retain their updates. UUID/path are never mutable settings. V6 is never
+downgraded by stage/order/manual strategy operations. Old provenance retains null
+thinking; new signed receipts include actual returned model and requested effort.
+
+The one shared Create/Edit form saves once per explicit submit, restores focus,
+and retains drafts on failure. New uses the derived readonly destination; Edit
+shows the unchanged location. Unsupported new model/effort pairs require explicit
+correction; unavailable stored pairs can survive metadata-only edits. The main
+heading's 44px pencil is the only project-settings entry in the workspace. Close
+remains navigation only; future real active agents will require confirmation and
+a clear continue/stop policy, not an imaginary A8 runner or Close-time save.
+
+A reviewed server catalog includes the verified Responses/text/strict-JSON/
+reasoning aliases Sol, Luna, Astra, deliberately offering the common four levels
+Low/Medium/High/Extra high. Official model links and verification date are in
+Getting Started. Account IDs are intersected with that catalog; unknown IDs and
+raw provider metadata never become UI options. Relative $/$$/$$$ cost labels are
+editorial tiers linked to official pricing, not inferred token prices. No pricing
+lookup or cost accounting is claimed. The form prefers verified Sol/High, explicitly
+discloses a different initial default when necessary, and qualifies offline
+Sol/High. Saved choices never change because discovery fails or a model vanishes.
+`SIGMA_AI_MODEL` affects only missing legacy settings when it names a reviewed
+model; an unreviewed override is called out. V6 project choices always win.
+
+Authentication status is an independent, bounded GET /v1/models proof, not a key
+presence indicator or proof of model generation/billing. A valid 200 list is
+required for fresh green. Missing/auth/permission/rate/network/invalid response
+states have generic safe guidance. Backend requests share one 60-second cache
+and pending task, with a 3-second manual Retry cooldown, 8-second deadline and
+1MB/10,000-model cap. Key changes invalidate cache; secrets are never returned.
+Frontend checks once per App mount, reuses it across routes and marks expired
+checks stale using a timer without polling. Settings discovery/proposal readiness
+share the backend cache. Workspace status space is reserved to avoid content
+jumps between longer labels; Home's status occupies existing header/empty sky
+space without moving the accepted hero. The browser can retain stale local status
+until Retry even if another client refreshes the server cache; it never falsely
+claims current success from that older check.
+
+Generation snapshots project/context/model/effort before awaiting discovery. The
+selected reviewed pair plus fresh cached account membership are required, then
+`reasoning.effort` is sent explicitly. Max output is 25,000 tokens including
+reasoning (per official initial-budget guidance), while visible field limits and
+the 60-second hard HTTP deadline remain. High/Extra high may still time out or
+return incomplete: failures never retry, lower thinking, substitute models or
+save automatically. Receipts use the immutable snapshot even if settings change
+while generating. No live billable calls were used to test this integration.
+
+A clean-checkout comparison exposed A6's dev asset copy running after Vite's
+public-file scan. Copy now happens during config evaluation, before that scan;
+canonical PNG bytes are unchanged. This fixes first-launch artwork availability
+and requires no human file copying.

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
     change_stage,
@@ -23,6 +24,7 @@ from sigma.projects import (
     project_destination,
     remove_strategy,
     reorder_strategies,
+    update_project,
 )
 from sigma.proposals import accepted_provenance, configuration, generate_proposal
 
@@ -51,6 +53,8 @@ class InitRequest(OpenRequest):
     title: str
     problem: str
     research_mode: str = "default"
+    ai_model: str | None = None
+    reasoning_effort: str = "high"
 
 
 @app.post("/api/projects/open")
@@ -60,7 +64,16 @@ def open_view(body: OpenRequest):
 
 @app.post("/api/projects/init", status_code=201)
 def init_view(body: InitRequest):
-    return asdict(initialize_project(body.path, body.title, body.problem, body.research_mode))
+    return asdict(
+        initialize_project(
+            body.path,
+            body.title,
+            body.problem,
+            body.research_mode,
+            body.ai_model,
+            body.reasoning_effort,
+        )
+    )
 
 
 @app.get("/api/projects/inspect")
@@ -123,6 +136,8 @@ class CreateProjectRequest(BaseModel):
     title: str
     problem: str
     research_mode: str = "default"
+    ai_model: str | None = None
+    reasoning_effort: str = "high"
 
 
 @app.get("/api/projects/destination")
@@ -132,7 +147,11 @@ def destination_view(title: str = ""):
 
 @app.post("/api/projects/create", status_code=201)
 def create_project_view(body: CreateProjectRequest):
-    return asdict(create_project(body.title, body.problem, body.research_mode))
+    return asdict(
+        create_project(
+            body.title, body.problem, body.research_mode, body.ai_model, body.reasoning_effort
+        )
+    )
 
 
 class StageRequest(RemoveStrategyRequest):
@@ -160,8 +179,8 @@ class ProposalRequest(OpenRequest):
 
 
 @app.get("/api/projects/proposals/config")
-def proposal_config():
-    return configuration()
+async def proposal_config(path: str | None = None):
+    return await configuration(path)
 
 
 @app.post("/api/projects/proposals")
@@ -186,3 +205,42 @@ async def proposal_view(body: ProposalRequest, request: Request):
             if not pending.done():
                 pending.cancel()
         await asyncio.gather(task, connection, return_exceptions=True)
+
+
+class ProjectSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str
+    problem: str
+    research_mode: str
+    ai_model: str
+    reasoning_effort: str
+
+
+class UpdateProjectRequest(ProjectSettingsRequest):
+    path: str
+    expected: ProjectSettingsRequest
+
+
+@app.post("/api/projects/update")
+def update_project_view(body: UpdateProjectRequest):
+    return asdict(
+        update_project(
+            body.path,
+            body.title,
+            body.problem,
+            body.research_mode,
+            body.ai_model,
+            body.reasoning_effort,
+            body.expected.model_dump(),
+        )
+    )
+
+
+@app.get("/api/ai/connection")
+async def connection_view(refresh: bool = False):
+    return await connection(refresh)
+
+
+@app.get("/api/ai/models")
+async def models_view(refresh: bool = False):
+    return await models(refresh)

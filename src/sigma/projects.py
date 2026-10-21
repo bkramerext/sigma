@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+from sigma.model_catalog import EFFORTS, legacy_model, validate_pair, validate_stored
+
 
 class ProjectError(ValueError):
     """An invalid request or a project that cannot safely be used."""
@@ -51,12 +53,50 @@ class Stage(str, Enum):
 class Provenance:
     provider: str
     model: str
+    reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)
 class StageChange:
     previous: str
     stage: str
+
+
+@dataclass(frozen=True)
+class ProjectSettings:
+    title: str
+    problem: str
+    research_mode: ResearchMode
+    ai_model: str
+    reasoning_effort: str
+
+
+@dataclass(frozen=True)
+class ProjectChange:
+    previous: ProjectSettings
+    current: ProjectSettings
+
+
+def _settings(raw: Any) -> ProjectSettings:
+    if not isinstance(raw, dict) or set(raw) != {
+        "title",
+        "problem",
+        "research_mode",
+        "ai_model",
+        "reasoning_effort",
+    }:
+        raise ProjectError("Invalid project settings fields")
+    try:
+        validate_stored(raw["ai_model"], raw["reasoning_effort"])
+    except (ValueError, TypeError) as exc:
+        raise ProjectError(str(exc)) from exc
+    return ProjectSettings(
+        _text(raw["title"], "Project name", 200),
+        _text(raw["problem"], "Research problem", 20000),
+        _research_mode(raw["research_mode"]),
+        raw["ai_model"],
+        raw["reasoning_effort"],
+    )
 
 
 @dataclass(frozen=True)
@@ -68,6 +108,7 @@ class Event:
     change: StrategyChange | None = None
     stage_change: StageChange | None = None
     order: tuple[str, ...] | None = None
+    project_change: ProjectChange | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +134,8 @@ class Project:
     strategies: tuple[Strategy, ...] = ()
     research_mode: ResearchMode = ResearchMode.DEFAULT
     active_order: tuple[str, ...] = ()
+    ai_model: str = "gpt-6.1-sol"
+    reasoning_effort: str = "high"
 
 
 @dataclass(frozen=True)
@@ -138,10 +181,10 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6)
     ):
         raise ProjectError(
-            "Unsupported or missing project schema_version (expected 1, 2, 3, 4 or 5)"
+            "Unsupported or missing project schema_version (expected 1, 2, 3, 4, 5 or 6)"
         )
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
@@ -151,6 +194,8 @@ def _decode(raw: Any) -> Project:
         fields.add("research_mode")
     if version >= 5:
         fields.add("active_order")
+    if version >= 6:
+        fields.update({"ai_model", "reasoning_effort"})
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
     for key in ("id", "title", "problem"):
@@ -158,6 +203,21 @@ def _decode(raw: Any) -> Project:
             raise ProjectError(f"Project {key} must be a nonempty string")
     UUID(raw["id"])
     mode = _research_mode(raw.get("research_mode", "default"))
+    settings = (
+        _settings(
+            {
+                "title": raw["title"],
+                "problem": raw["problem"],
+                "research_mode": mode,
+                "ai_model": raw.get("ai_model", legacy_model()),
+                "reasoning_effort": raw.get("reasoning_effort", "high"),
+            }
+        )
+        if version >= 6
+        else ProjectSettings(raw["title"], raw["problem"], mode, legacy_model(), "high")
+    )
+    if version >= 6 and (raw["title"] != settings.title or raw["problem"] != settings.problem):
+        raise ProjectError("Project settings text must be canonical")
     strategies: list[Strategy] = []
     seen: set[str] = set()
     if version >= 2:
@@ -199,11 +259,21 @@ def _decode(raw: Any) -> Project:
                 if provenance is not None:
                     if (
                         not isinstance(provenance, dict)
-                        or set(provenance) != {"provider", "model"}
+                        or set(provenance)
+                        != (
+                            {"provider", "model", "reasoning_effort"}
+                            if version >= 6
+                            else {"provider", "model"}
+                        )
                         or provenance["provider"] != "openai"
                     ):
                         raise ProjectError("Invalid generation provenance")
                     _text(provenance["model"], "Model", 100)
+                    if (
+                        provenance.get("reasoning_effort") is not None
+                        and provenance["reasoning_effort"] not in EFFORTS
+                    ):
+                        raise ProjectError("Invalid generation reasoning effort")
                     values["provenance"] = Provenance(**provenance)
             strategies.append(Strategy(**values))
     if not isinstance(raw["events"], list) or not raw["events"]:
@@ -216,16 +286,19 @@ def _decode(raw: Any) -> Project:
     previous = None
     active_order: list[str] = []
     stages: dict[str, str] = {}
+    project_change: ProjectChange | None = None
     for index, item in enumerate(raw["events"], 1):
         if not isinstance(item, dict):
             raise ProjectError("Invalid event")
         expected = {"sequence", "kind", "timestamp"}
-        if index > 1 and item.get("kind") != "strategies.reordered":
+        if index > 1 and item.get("kind") not in {"strategies.reordered", "project.updated"}:
             expected.add("strategy_id")
         if item.get("kind") == "strategies.reordered":
             expected.add("order")
         if item.get("kind") == "strategy.stage_changed":
             expected.add("stage_change")
+        if item.get("kind") == "project.updated":
+            expected.add("project_change")
         if item.get("kind") == "strategy.updated":
             expected.add("change")
         if set(item) != expected:
@@ -316,13 +389,25 @@ def _decode(raw: Any) -> Project:
             ):
                 raise ProjectError("Manual stage history is inconsistent")
             stages[strategy_id] = change["stage"]
+        elif item["kind"] == "project.updated" and version >= 6:
+            change = item["project_change"]
+            if not isinstance(change, dict) or set(change) != {"previous", "current"}:
+                raise ProjectError("Invalid project edit event")
+            next_change = ProjectChange(_settings(change["previous"]), _settings(change["current"]))
+            if asdict(next_change) != change:
+                raise ProjectError("Project change text must be canonical")
+            if next_change.previous == next_change.current or (
+                project_change and project_change.current != next_change.previous
+            ):
+                raise ProjectError("Project settings edit chain is inconsistent")
+            project_change = next_change
         else:
             raise ProjectError("Unsupported strategy event")
         event = Event(
             **{
                 key: value
                 for key, value in item.items()
-                if key not in {"change", "stage_change", "order"}
+                if key not in {"change", "stage_change", "order", "project_change"}
             }
         )
         if "change" in item:
@@ -331,6 +416,8 @@ def _decode(raw: Any) -> Project:
             event = replace(event, stage_change=StageChange(**item["stage_change"]))
         if "order" in item:
             event = replace(event, order=tuple(item["order"]))
+        if "project_change" in item:
+            event = replace(event, project_change=project_change)
         events.append(event)
     if created != seen or removed != {s.id for s in strategies if s.removed_at is not None}:
         raise ProjectError("Strategy records and history do not match")
@@ -342,6 +429,8 @@ def _decode(raw: Any) -> Project:
         raw["active_order"] != active_order or any(s.stage != stages[s.id] for s in strategies)
     ):
         raise ProjectError("Strategy order/stages do not match history")
+    if project_change and project_change.current != settings:
+        raise ProjectError("Latest project edit does not match settings")
     return Project(
         version,
         raw["id"],
@@ -351,11 +440,19 @@ def _decode(raw: Any) -> Project:
         tuple(strategies),
         mode,
         tuple(active_order),
+        settings.ai_model,
+        settings.reasoning_effort,
     )
 
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if project.schema_version < 6:
+        del raw["ai_model"]
+        del raw["reasoning_effort"]
+        for strategy in raw["strategies"]:
+            if strategy["provenance"] is not None:
+                del strategy["provenance"]["reasoning_effort"]
     if project.schema_version < 5:
         del raw["active_order"]
         for strategy in raw["strategies"]:
@@ -367,7 +464,7 @@ def _document(project: Project) -> bytes:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
     for event in raw["events"]:
-        for key in ("stage_change", "order"):
+        for key in ("stage_change", "order", "project_change"):
             if event[key] is None:
                 del event[key]
         if event["change"] is None:
@@ -404,9 +501,19 @@ def inspect_project(value: str | Path) -> ProjectView:
 
 
 def initialize_project(
-    value: str | Path, title: str, problem: str, research_mode: str = "default"
+    value: str | Path,
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
 ) -> ProjectView:
     mode = _research_mode(research_mode)
+    resolved_model = legacy_model() if ai_model is None else ai_model
+    try:
+        validate_pair(resolved_model, reasoning_effort)
+    except ValueError as exc:
+        raise ProjectError(str(exc)) from exc
     path = project_path(value)
     if not title.strip() or not problem.strip():
         raise ProjectError("Title and problem must be nonempty")
@@ -421,12 +528,14 @@ def initialize_project(
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            4,
+            6,
             str(uuid4()),
             title.strip(),
             problem.strip(),
             (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
             research_mode=mode,
+            ai_model=resolved_model,
+            reasoning_effort=reasoning_effort,
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -512,7 +621,14 @@ def create_strategy(
         )
         return replace(
             project,
-            schema_version=5 if summary or provenance else max(2, project.schema_version),
+            schema_version=max(
+                project.schema_version,
+                6
+                if provenance and provenance.reasoning_effort
+                else 5
+                if summary or provenance
+                else 2,
+            ),
             active_order=(*project.active_order, strategy.id),
             strategies=(*project.strategies, strategy),
             events=(
@@ -685,7 +801,13 @@ def project_destination(title: str = "") -> ProjectDestination:
     return ProjectDestination(str(root), str(path), os.path.lexists(path))
 
 
-def create_project(title: str, problem: str, research_mode: str = "default") -> ProjectView:
+def create_project(
+    title: str,
+    problem: str,
+    research_mode: str = "default",
+    ai_model: str | None = None,
+    reasoning_effort: str = "high",
+) -> ProjectView:
     """Reserve a name beneath the configured root; never reuse an existing directory."""
     title, name = _project_name(title)
     problem = _text(problem, "Research problem", 20000)
@@ -696,7 +818,7 @@ def create_project(title: str, problem: str, research_mode: str = "default") -> 
     try:
         destination.mkdir(mode=0o700)  # Exclusive reservation also rejects files/broken symlinks.
         reserved = True
-        return initialize_project(destination, title, problem, mode)
+        return initialize_project(destination, title, problem, mode, ai_model, reasoning_effort)
     except FileExistsError as exc:
         raise ProjectError(
             f"A project or file already exists at {destination}; choose another name"
@@ -729,7 +851,7 @@ def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView
             return project
         return replace(
             project,
-            schema_version=5,
+            schema_version=max(5, project.schema_version),
             strategies=tuple(
                 replace(s, stage=chosen) if s.id == strategy_id else s for s in project.strategies
             ),
@@ -765,7 +887,7 @@ def reorder_strategies(
             return project
         return replace(
             project,
-            schema_version=5,
+            schema_version=max(5, project.schema_version),
             active_order=tuple(order),
             events=(
                 *project.events,
@@ -774,6 +896,74 @@ def reorder_strategies(
                     "strategies.reordered",
                     _next_timestamp(project),
                     order=tuple(order),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)
+
+
+def project_settings(project: Project) -> ProjectSettings:
+    return ProjectSettings(
+        project.title,
+        project.problem,
+        project.research_mode,
+        project.ai_model,
+        project.reasoning_effort,
+    )
+
+
+def update_project(
+    value: str | Path,
+    title: str,
+    problem: str,
+    research_mode: str,
+    ai_model: str,
+    reasoning_effort: str,
+    expected: dict[str, Any],
+) -> ProjectView:
+    wanted = _settings(
+        {
+            "title": title,
+            "problem": problem,
+            "research_mode": research_mode,
+            "ai_model": ai_model,
+            "reasoning_effort": reasoning_effort,
+        }
+    )
+    prior = _settings(expected)
+
+    def update(project: Project) -> Project:
+        current = project_settings(project)
+        if current != prior:
+            raise ProjectError(
+                "Project settings changed elsewhere. Refresh/reopen before editing again; your changes have not been saved"
+            )
+        if current == wanted:
+            return project
+        if (wanted.ai_model, wanted.reasoning_effort) != (
+            current.ai_model,
+            current.reasoning_effort,
+        ):
+            try:
+                validate_pair(wanted.ai_model, wanted.reasoning_effort)
+            except ValueError as exc:
+                raise ProjectError(str(exc)) from exc
+        return replace(
+            project,
+            schema_version=6,
+            title=wanted.title,
+            problem=wanted.problem,
+            research_mode=wanted.research_mode,
+            ai_model=wanted.ai_model,
+            reasoning_effort=wanted.reasoning_effort,
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "project.updated",
+                    _next_timestamp(project),
+                    project_change=ProjectChange(current, wanted),
                 ),
             ),
         )

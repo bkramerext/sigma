@@ -282,6 +282,107 @@ The UI is running normally with default project location; the test fixture serve
 is stopped after verification. See Getting Started for setup/limits and Decisions
 for schema/concurrency/receipt tradeoffs.
 
+## A8: shared project settings, curated models and real API status
+
+Implemented one Create/Edit project dialog (exact headers/actions), the small
+44px pencil beside the project heading, and transactional name/problem/mode/model/
+Thinking level updates. Creation retains its readonly managed destination; Edit
+never moves it. No-op, Cancel/Escape and Close do not save. Successful edits update
+the workspace in place and return focus; failed/stale saves retain entered values.
+All new init/create operations persist schema v6. Legacy v1–v5 reads stay unchanged;
+first settings updates make an exact version backup and retain UUID, strategies,
+stages, active order, archived records and prior events. Strict `project.updated`
+before/after chains and expected-settings conflict checks protect concurrent edits.
+
+Reviewed Sol/Luna/Astra choices use four compatible efforts (High default), with
+relative $/$$/$$$ cost tiers and official pricing link. Official model pages were
+opened/verified on 2026-10-20 for text, Responses, strict JSON and reasoning support;
+references are in Getting Started and `model_catalog.py`. No token prices are
+inferred from `/v1/models`. Fresh account discovery intersects known IDs only;
+unavailable/unverified choices are qualified and stored selections are retained.
+Sol/High is preferred when verified accessible; alternate initial defaults and
+provisional offline Sol/High are explicit. Unreviewed bootstrap overrides are
+called out; saved project settings win. Requests never substitute another model
+or drop/lower effort. Proposal receipts and new provenance bind requested effort
+and actual returned model to the immutable request snapshot.
+
+The upper-right dot/text now verifies actual API authentication with bounded
+GET /v1/models. Checking/missing/auth/permission/rate/network/invalid/stale states
+are distinct; green means only fresh valid HTTP 200 authentication/reachability,
+not selected-model generation, credits, quota or billing. Requests coalesce/cache
+for 60 seconds (3-second Retry cooldown), with 8-second deadline and response bounds.
+The browser checks once on app load, reuses state across routes, and expires green
+without polling. No credential/raw provider error/catalog is exposed to React.
+Workspace status space is reserved; Home uses existing header/sky space.
+
+Actual verification on 2026-10-20:
+
+- Final `./sigma test`: all lifecycle/create/settings/model-connection/tracking/
+  proposal/strategy/edit/remove/API/CLI/launcher scenarios passed. Ruff check/format
+  (20 files), Pyright (0 errors), frontend typecheck and production build passed.
+  Existing non-failing Starlette TestClient deprecation notice remains.
+- `scenarios/project_settings.py`: explicit model/High creation, v1–v5 no-write
+  defaults, no-op, exact backups, both mode directions, stable identity/location/
+  archived research/order, failed writes, stale editor races, independent strategy
+  changes, strict corrupt audit rejection, and API/CLI update/conflict checks.
+  Empty/unknown models and unsupported efforts are rejected without creating files.
+- `scenarios/model_connection.py`: valid curated discovery (unreviewed models do
+  not escape), coalescing eight calls into one, cache/TTL/Retry, zero accessible
+  choices, missing setup, 401, 403, 429, 500, redirect, malformed/oversized responses,
+  network failure and timeout. Controlled Responses fixture verifies saved model
+  plus real `reasoning.effort` (including High and Extra high across scenarios),
+  strict schema, 25,000-token bound, no pre-acceptance mutation, concurrent settings
+  snapshot/provenance, unavailable model/no fallback and offline metadata edits.
+- `uv run --with playwright python browser_checks/settings.py`: real Chrome passed
+  shared field order/Create/Edit headers, Sol/High, pencil keyboard opening and
+  return focus, no-op/cancel, failed create/update retry, duplicate synchronous
+  submits/busy/Escape guard, both mode/model/effort changes, reload, UUID/path/audit
+  retention, stale edits preserving unsaved text, explicit unsupported-effort
+  correction, unavailable-model retention and actual offline metadata save.
+  Status checks cover initial Checking/no green, authenticated fixture green,
+  key/permission/rate/offline/unconfigured alternatives, stale success, safe details
+  and Retry access. No JavaScript errors. Screenshots at 1672/768/390/320px are
+  `/tmp/sigma-a8-create-*.png`, `-edit-*.png`, and `-status-*-320.png`.
+- Real 320px Chrome stress check: unbroken 200-character title, long visible problem
+  and 20,000-character form problem fit without horizontal overflow; Escape keeps
+  document bytes and returns focus. Screenshot: `/tmp/sigma-a8-long-edit-320.png`.
+- `uv run --with playwright python browser_checks/strategies.py` and
+  `uv run python browser_checks/http_cancel.py`: A7 manual/edit/remove, stage,
+  keyboard/mouse/CDP touch reorder/drop/cancel, rollback/reload, AI draft review/
+  human acceptance/cancellation and actual HTTP disconnect/slot release all pass.
+  Tests use explicitly identified no-network provider fixtures and temporary
+  projects, not physical-device or live API-account claims.
+- `uv run ruff check src scenarios browser_checks` and corresponding format check
+  passed (24 files). Browser fixture and A8 checks are source-controlled and
+  documented separately from the standard suite.
+- Compared current UI with a temporary checkout of actual A7 `2a8f90b`, serving the
+  same approved PNG. `/tmp/sigma-a8-compare.py` with Playwright/Pillow confirmed Home
+  pixels outside the requested header/sky status area identical at 1672×941,
+  768×1024, 390×844 and 320×844. The initial baseline captured before Vite served its
+  generated public image was rejected; comparisons awaited decoded art and visible
+  UI. Strategy list at desktop is pixel-identical; tablet/mobile lists have the
+  same dimensions/composition (up to one screenshot crop pixel), visually reviewed.
+  Header height changes alter gradient/capture phase, not row styling. Artifacts:
+  `/tmp/sigma-a8-home-reference-*.png`, `-home-current-*.png`, and
+  `-strategies-reference/current-*.png`. Temporary reference server/worktree removed.
+- Fresh dev startup test removed only the generated public Home copy and restarted
+  `./sigma ui`: new config-evaluation copy served HTTP 200 `image/png` on first
+  launch with exact canonical bytes. Fixes the older late buildStart copy, which
+  could miss Vite's initial public-file scan. Human copying is not required.
+- RH document, canonical Home PNG and workspace logo hashes match the pre-A8
+  baseline; existing untracked `models.json` also stayed byte-identical and is not
+  committed or used as authentication proof. No image generation or A4.1 animation.
+  Test API fixture server is stopped; normal UI runs with default project root.
+
+Limits: no live OpenAI generation/billing/quality check was performed; all provider
+integration uses controlled HTTP fixtures. Normal server currently reports Not
+configured, never fake green. Configure server API enablement/key and restart to
+check real authentication; an explicit user request is needed for billable
+proposals. Higher thinking may hit the unchanged 60-second deadline or 25,000-token
+budget; failures never downgrade or retry automatically. API/catalog changes need
+deliberate review. Past missing effort remains unknown. No cost accounting,
+per-strategy settings, agent work or Close-time save/confirmation is introduced.
+
 ## Current boundaries
 
 No live agents, scheduler, evaluator, generated reports, forks, paid calls, or hosting. Local POSIX storage limitations and migration behavior are in [DECISIONS](DECISIONS.md). Run instructions are in [Getting Started](GETTING-STARTED.md).

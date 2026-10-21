@@ -50,7 +50,7 @@ def main() -> None:
                 assert expected.path and not expected.exists
                 created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
-                assert created.project.schema_version == 4
+                assert created.project.schema_version == 6
                 assert created.project.research_mode == mode
                 raw = json.loads((Path(created.path) / STATE).read_bytes())
                 assert raw["research_mode"] == mode.value
@@ -62,7 +62,7 @@ def main() -> None:
                 edit_strategy(created.path, strategy_id, "Edited idea", "Updated approach")
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
-                assert removed.project.schema_version == 4
+                assert removed.project.schema_version == 6
                 snapshot = (Path(created.path) / STATE).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
@@ -217,6 +217,12 @@ def main() -> None:
                     )
             raw = json.loads((legacy / STATE).read_bytes())
             raw["schema_version"] = version
+            raw.pop("active_order", None)
+            for item in raw.get("strategies", []):
+                for key in ("stage", "summary", "provenance"):
+                    item.pop(key, None)
+            raw.pop("ai_model", None)
+            raw.pop("reasoning_effort", None)
             del raw["research_mode"]
             if version == 1:
                 del raw["strategies"]

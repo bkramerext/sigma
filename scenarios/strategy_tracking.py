@@ -43,6 +43,12 @@ def main():
                 create_strategy(path, "Second", "Full second approach")
             raw = json.loads((path / "project.json").read_bytes())
             raw["schema_version"] = version
+            raw.pop("active_order", None)
+            for item in raw.get("strategies", []):
+                for key in ("stage", "summary", "provenance"):
+                    item.pop(key, None)
+            raw.pop("ai_model", None)
+            raw.pop("reasoning_effort", None)
             if version < 4:
                 del raw["research_mode"]
             if version == 1:

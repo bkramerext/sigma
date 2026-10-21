@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { createContext, useContext, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
 import './project-entry.css';
 import './strategies.css';
+import './project-settings.css';
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
@@ -13,7 +14,7 @@ type Strategy = {
   approach: string;
   stage: Stage;
   summary: string;
-  provenance: { provider: string; model: string } | null;
+  provenance: { provider: string; model: string; reasoning_effort?: string | null } | null;
   author_kind: 'human';
   created_at: string;
   removed_at?: string | null;
@@ -25,8 +26,11 @@ type ProjectView = {
     title: string;
     problem: string;
     schema_version: number;
+    ai_model: string;
+    reasoning_effort: string;
     research_mode: 'default' | 'mathematical';
     events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
+      project_change?: { previous: Settings; current: Settings } | null;
       order?: string[] | null; stage_change?: { previous: Stage; stage: Stage } | null;
       change?: { previous_title: string; previous_approach: string; title: string; approach: string } | null }[];
     strategies: Strategy[];
@@ -47,6 +51,35 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
+type ConnectionInfo = { status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number };
+const ConnectionContext = createContext<{ info: ConnectionInfo | null; checking: boolean; refresh: () => void }>({ info: null, checking: true, refresh: () => {} });
+function ConnectionStatus() {
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    function outside(event: PointerEvent) { if (event.target instanceof Node && disclosure.current && !disclosure.current.contains(event.target)) disclosure.current.open = false; }
+    function escape(event: KeyboardEvent) { if (event.key === 'Escape' && disclosure.current?.open) { disclosure.current.open = false; disclosure.current.querySelector('summary')?.focus(); } }
+    document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
+  }, []);
+  const { info, checking, refresh } = useContext(ConnectionContext);
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    setStale(false);
+    if (!info?.checked_at) return;
+    const remaining = Date.parse(info.checked_at) + info.ttl_seconds * 1000 - Date.now();
+    if (remaining <= 0) { setStale(true); return; }
+    const timer = window.setTimeout(() => setStale(true), remaining); return () => clearTimeout(timer);
+  }, [info]);
+  const status = checking ? 'checking' : stale ? 'stale' : info?.status ?? 'unknown';
+  const label = checking ? 'Checking OpenAI API…' : stale ? 'OpenAI API status stale' : info?.label ?? 'OpenAI API status unknown';
+  return <details ref={disclosure} className="api-connection"><summary aria-label="OpenAI API connection details"><span className={`connection-dot connection-${status}`} aria-hidden="true"/><span role="status" aria-live="polite">{label}</span></summary>
+    <div className="connection-details"><p>{stale ? 'This check has expired. Retry to verify the current API connection.' : info?.guidance ?? 'Checking the local server. No model generation is requested.'}</p>
+      {info?.checked_at && <p>Last checked: <time dateTime={info.checked_at}>{dateLabel(info.checked_at)}</time></p>}
+      <button type="button" disabled={checking} onClick={refresh}>{checking ? 'Checking…' : 'Retry API connection'}</button>
+    </div>
+  </details>;
+}
+
 function Header({ goHome, close, projectTitle }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string }) {
   return <header className="site-header">
@@ -59,6 +92,7 @@ function Header({ goHome, close, projectTitle }: { goHome: (event: MouseEvent<HT
     {close ? <button className="text-button close-project" onClick={close.action} disabled={close.busy}>
       Close project
     </button> : <span className="local">● Local workspace</span>}
+    <ConnectionStatus/>
     </div>
   </header>;
 }
@@ -109,88 +143,105 @@ function WorkspaceFrame({ children, goHome, close, projectTitle }: {
 type ResearchMode = 'default' | 'mathematical';
 type Destination = { root: string; path: string | null; exists: boolean };
 
-function ProjectEntryDialog({ mode, initialPath, onOpen, onCancel }: {
-  mode: 'open' | 'new'; initialPath: string; onOpen: (view: ProjectView) => void; onCancel: () => void;
+function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
+  initialPath: string; onOpen: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const firstField = useRef<HTMLInputElement>(null);
+  const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const [path, setPath] = useState(initialPath);
-  const [title, setTitle] = useState('');
-  const [problem, setProblem] = useState('');
-  const [researchMode, setResearchMode] = useState<ResearchMode>('default');
-  const [destination, setDestination] = useState<Destination | null>(null);
-  const [previewError, setPreviewError] = useState('');
-  const [previewBusy, setPreviewBusy] = useState(false);
-  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => { dialog.current?.showModal(); firstField.current?.focus(); }, []);
-  useEffect(() => {
-    if (mode !== 'new') return;
-    const controller = new AbortController();
-    setPreviewBusy(true); setDestination(null); setPreviewError('');
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/projects/destination?${new URLSearchParams({ title })}`, { signal: controller.signal });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? 'Project location is unavailable');
-        setDestination(data);
-      } catch (error) {
-        if (!controller.signal.aborted) setPreviewError(errorMessage(error));
-      } finally { if (!controller.signal.aborted) setPreviewBusy(false); }
-    }, title ? 180 : 0);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [mode, title]);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (submitting.current || (mode === 'new' && (!destination?.path || destination.exists || previewBusy))) return;
-    submitting.current = true; setBusy(true); setError('');
-    try {
-      onOpen(await post<ProjectView>(mode === 'open' ? 'open' : 'create', mode === 'open'
-        ? { path } : { title, problem, research_mode: researchMode }));
-    } catch (error) { setError(errorMessage(error)); }
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
+  async function save(event: FormEvent) {
+    event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
+    try { onOpen(await post<ProjectView>('open', { path })); }
+    catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading"
-    aria-describedby="project-entry-help" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <h2 id="project-entry-heading">{mode === 'open' ? 'Open Project' : 'New Project'}</h2>
-    <p id="project-entry-help" className="entry-help">{mode === 'open'
-      ? 'Choose an existing local project by its directory path.'
-      : 'Give your investigation a name, a problem, and a research mode.'}</p>
-    <form onSubmit={submit}>
-      <fieldset disabled={busy}>
-        {mode === 'open' ? <>
-          <label htmlFor="open-project-path">Project directory</label>
-          <input ref={firstField} id="open-project-path" value={path} required aria-describedby="project-path-help"
-            onChange={event => setPath(event.target.value)}/>
-          <p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
-        </> : <>
-          <label htmlFor="new-project-name">Project name</label>
-          <input ref={firstField} id="new-project-name" value={title} required maxLength={200}
-            onChange={event => setTitle(event.target.value)}/>
-          <label htmlFor="new-project-problem">Research problem</label>
-          <textarea id="new-project-problem" value={problem} required maxLength={20000} rows={4}
-            onChange={event => setProblem(event.target.value)}/>
-          <label htmlFor="new-project-mode">Research mode</label>
-          <select id="new-project-mode" value={researchMode} onChange={event => setResearchMode(event.target.value as ResearchMode)}>
-            <option value="default">Default</option><option value="mathematical">Mathematical</option>
-          </select>
-          <p className="project-destination" aria-live="polite"><span>Project location</span>
-            <code>{previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code>
-            {!title && destination && <small>The project name determines its directory.</small>}
-          </p>
-          {previewError && <p role="alert" className="error">{previewError}</p>}
-          {destination?.exists && <p role="alert" className="error">A project or file already exists here. Choose another name.</p>}
-        </>}
-        {error && <p role="alert" className="error">{error}</p>}
-        <div className="entry-dialog-actions">
-          <button type="submit" disabled={busy || (mode === 'new' && (previewBusy || !destination?.path || destination.exists))}>
-            {busy ? mode === 'open' ? 'Opening…' : 'Creating…' : mode === 'open' ? 'Open Project' : 'Create Project'}
-          </button>
-          <button type="button" className="entry-cancel" onClick={onCancel}>Cancel</button>
-        </div>
-      </fieldset>
-    </form>
+  return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <h2 id="project-entry-heading">Open Project</h2><p className="entry-help">Choose an existing local project by its directory path.</p>
+    <form onSubmit={save}><fieldset disabled={busy}><label htmlFor="open-project-path">Project directory</label><input ref={first} id="open-project-path" required value={path} onChange={event => setPath(event.target.value)} aria-describedby="project-path-help"/><p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
+    {error && <p className="error" role="alert">{error}</p>}<div className="entry-dialog-actions"><button type="submit">{busy ? 'Opening…' : 'Open Project'}</button><button type="button" className="entry-cancel" onClick={onCancel}>Cancel</button></div></fieldset></form>
+  </dialog>;
+}
+
+type Settings = { title: string; problem: string; research_mode: ResearchMode; ai_model: string; reasoning_effort: string };
+type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; availability: 'available' | 'unavailable' | 'unverified' };
+const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
+const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, research_mode: view.project.research_mode, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort });
+
+function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const first = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', research_mode: 'default', ai_model: '', reasoning_effort: 'high' });
+  const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
+  const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
+  const [destination, setDestination] = useState<Destination | null>(null);
+  const [locationError, setLocationError] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(!initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/ai/models', { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Model catalog unavailable. Check the local server; existing settings are retained.'); return response.json(); }).then(data => {
+      setCatalog(data.models); setCatalogMessage(data.message);
+      if (!initial) setValues(previous => previous.ai_model ? previous : { ...previous, ai_model: data.default_model, reasoning_effort: data.default_effort });
+    }).catch(error => { if (!controller.signal.aborted) setCatalogMessage(errorMessage(error)); });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    if (initial) return;
+    const controller = new AbortController(); setPreviewBusy(true); setDestination(null); setLocationError('');
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/projects/destination?${new URLSearchParams({ title: values.title })}`, { signal: controller.signal });
+        const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Project location unavailable');
+        setDestination(data);
+      } catch (error) { if (!controller.signal.aborted) setLocationError(errorMessage(error)); }
+      finally { if (!controller.signal.aborted) setPreviewBusy(false); }
+    }, values.title ? 180 : 0);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [values.title]);
+  function change(key: keyof Settings, value: string) { setValues(previous => ({ ...previous, [key]: value })); }
+  const selected = catalog.find(model => model.id === values.ai_model);
+  const samePair = !!initial && values.ai_model === initial.project.ai_model && values.reasoning_effort === initial.project.reasoning_effort;
+  const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
+  const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
+  async function save(event: FormEvent) {
+    event.preventDefault(); if (submitting.current || !compatible || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
+    submitting.current = true; setBusy(true); setError('');
+    try { onSaved(await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : values)); }
+    catch (error) { setError(errorMessage(error)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog" aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <h2 id="project-settings-heading">{initial ? 'Edit Project' : 'Create Project'}</h2>
+    <p id="project-settings-help">{initial ? 'Update this investigation. Changes apply when you save; its identity and location stay fixed.' : 'Name an investigation and choose how to explore it.'}</p>
+    <form onSubmit={save}><fieldset disabled={busy}>
+      <label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
+      <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/>
+      <label htmlFor="project-mode">Research mode</label><select id="project-mode" value={values.research_mode} onChange={event => change('research_mode', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
+      <label htmlFor="project-model">AI model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
+        {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
+        {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
+        {catalog.map(model => <option key={model.id} value={model.id}>{model.label}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
+      </select>
+      <p id="project-model-help" className="settings-hint">{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p>
+      <label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
+        {!selected?.efforts.includes(values.reasoning_effort) && <option value={values.reasoning_effort}>{thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · {selected ? 'unsupported' : 'preserved'}</option>}
+        {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
+      </select>
+      <p className="settings-hint">Applies to future AI proposals. Higher thinking can take longer and use more API tokens. Cost tiers are relative; <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">current token prices</a>. Earlier strategy provenance stays unchanged.</p>
+      {pairError && <p className="error" role="alert">{pairError}</p>}
+      <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
+      {locationError && <p className="error" role="alert">{locationError}</p>}
+      {destination?.exists && <p className="error" role="alert">A project or file already exists here. Choose another name.</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'Create Project'}</button><button className="settings-cancel" type="button" onClick={onCancel}>Cancel</button></div>
+    </fieldset></form>
   </dialog>;
 }
 
@@ -210,7 +261,7 @@ function Home({ initialPath, onOpen, goHome }: {
   return <div className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-    <div className="home-topline"><span>STRATEGY INVESTIGATION · GENERATION · MEASUREMENT · ASSESSMENT</span><span>● LOCAL WORKSPACE</span></div>
+    <div className="home-topline"><span>STRATEGY INVESTIGATION · GENERATION · MEASUREMENT · ASSESSMENT</span><ConnectionStatus/></div>
     <div className="home-hero"><h1 ref={heading} tabIndex={-1}>Open a Project</h1>
     <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>
@@ -219,7 +270,8 @@ function Home({ initialPath, onOpen, goHome }: {
       <button ref={newButton} className="home-new-project" onClick={() => setEntry('new')}>New Project</button>
     </div>
     <div className="empty home-empty"><h2>Recent Projects</h2><p>No recent project history is available yet.</p></div>
-    {entry && <ProjectEntryDialog mode={entry} initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
+    {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
+    {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
   </div>;
 }
@@ -406,14 +458,14 @@ function SplitStrategyAction({ buttonRef, disabled, onManual, onAI }: {
   </div>;
 }
 
-type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string }; receipt: string };
+type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
 function GenerateStrategy({ path, onSaved, onCancel }: {
   path: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
   const submitting = useRef(false);
-  const [config, setConfig] = useState<{ available: boolean; provider: string; model: string; message: string } | null>(null);
+  const [config, setConfig] = useState<{ available: boolean; provider: string; model: string; reasoning_effort: string; message: string } | null>(null);
   const [seed, setSeed] = useState('');
   const [consent, setConsent] = useState(false);
   const [result, setResult] = useState<ProposalResult | null>(null);
@@ -426,7 +478,7 @@ function GenerateStrategy({ path, onSaved, onCancel }: {
   useEffect(() => {
     dialog.current?.showModal(); dialog.current?.querySelector('textarea')?.focus();
     const controller = new AbortController();
-    fetch('/api/projects/proposals/config', { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Could not read AI configuration'); return response.json(); }).then(setConfig).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
+    fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Could not read AI configuration'); return response.json(); }).then(setConfig).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
     return () => { controller.abort(); request.current?.abort(); };
   }, []);
   function cancel() { if (saving) return; request.current?.abort(); onCancel(); }
@@ -450,7 +502,7 @@ function GenerateStrategy({ path, onSaved, onCancel }: {
   return <dialog ref={dialog} className="strategy-dialog proposal-dialog" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onCancel={event => { event.preventDefault(); cancel(); }}>
     <h2 id="proposal-heading">Generate a strategy</h2>
     <p id="proposal-help" className="hint">Propose one distinct research direction. Review and edit the draft before saving. Nothing runs or saves automatically.</p>
-    <p className="provider-context">{config ? `${config.provider} · ${config.model}` : 'Reading server configuration…'}</p>
+    <p className="provider-context">{config ? `${config.provider} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading server configuration…'}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
     <label htmlFor="proposal-seed">Starting point <span className="hint">(optional)</span></label>
@@ -468,7 +520,7 @@ function GenerateStrategy({ path, onSaved, onCancel }: {
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
         <label htmlFor="proposal-summary">One-line preview</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
         <label htmlFor="proposal-approach">Proposed approach, first tests, assumptions and failure modes</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
-        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}. Saving records your acceptance and edits; it does not validate the research.</p>
+        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; it does not validate the research.</p>
       </fieldset>}
       <div className="form-actions">
         {result && <button type="submit" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}
@@ -487,6 +539,8 @@ function ProjectScreen({ path, onClose, goHome }: {
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [projectEditing, setProjectEditing] = useState(false);
+  const editProjectButton = useRef<HTMLButtonElement>(null);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -507,7 +561,7 @@ function ProjectScreen({ path, onClose, goHome }: {
     if (view) document.title = `${view.project.title} · SIGMA`;
     else if (error) document.title = 'Project unavailable · SIGMA';
     heading.current?.focus();
-  }, [view?.project.id, !!error]);
+  }, [view?.project.id, view?.project.title, !!error]);
   useEffect(() => {
     if (focusStrategy) document.getElementById(`strategy-${focusStrategy}`)?.focus();
   }, [focusStrategy]);
@@ -577,8 +631,8 @@ function ProjectScreen({ path, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <div className="project-intro">
       <p className="project-eyebrow">Research project</p>
-      <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || closing || ordering || !!dragId} onManual={() => setEditing(true)} onAI={() => setGenerating(true)}/>
-      <h1 ref={heading} tabIndex={-1}>{project.title}</h1>
+      <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => setEditing(true)} onAI={() => setGenerating(true)}/>
+      <div className="project-name-line"><h1 ref={heading} tabIndex={-1}>{project.title}</h1><button ref={editProjectButton} className="edit-project-button" aria-label="Edit Project" title="Edit Project" disabled={closing || ordering || !!dragId || editing || generating} onClick={() => setProjectEditing(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Z M14 6l4 4"/></svg></button></div>
       <p className="objective">{project.problem}</p>
     </div>
     {error && <p role="alert" className="error">{error}</p>}
@@ -603,7 +657,7 @@ function ProjectScreen({ path, onClose, goHome }: {
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
             <div className="strategy-expanded"><p className="strategy-approach">{strategy.approach}</p>
-              <p className="strategy-byline">{strategy.provenance ? `AI-assisted suggestion · ${strategy.provenance.provider} / ${strategy.provenance.model} · Accepted/edited by a human` : 'Human-authored'} · <time dateTime={strategy.created_at}>{dateLabel(strategy.created_at)}</time></p>
+              <p className="strategy-byline">{strategy.provenance ? `AI-assisted suggestion · ${strategy.provenance.provider} / ${strategy.provenance.model}${strategy.provenance.reasoning_effort ? ` · ${thinkingLabels[strategy.provenance.reasoning_effort] ?? strategy.provenance.reasoning_effort} thinking` : ''} · Accepted/edited by a human` : 'Human-authored'} · <time dateTime={strategy.created_at}>{dateLabel(strategy.created_at)}</time></p>
               <code className="strategy-identity">{strategy.id}</code>
             </div>
           </details>
@@ -625,6 +679,7 @@ function ProjectScreen({ path, onClose, goHome }: {
       {(dragId || ordering) && <p className="reorder-feedback">{ordering ? 'Saving order…' : 'Moving strategy · Release or press Enter to save · Escape cancels'}</p>}
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
     </section>
+    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     {generating && <GenerateStrategy path={view.path} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
       const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
     }}/>}
@@ -641,11 +696,12 @@ function ProjectScreen({ path, onClose, goHome }: {
       }}/>}
     <details className="project-details">
       <summary>Project details &amp; history</summary>
-      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research mode</dt><dd>{project.research_mode === 'mathematical' ? 'Mathematical' : 'Default'}</dd></dl>
+      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research mode</dt><dd>{project.research_mode === 'mathematical' ? 'Mathematical' : 'Default'}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
       <h3>Event history</h3>
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
+          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', research_mode: 'Research mode', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {event.project_change!.previous[key]}<br/>After: {event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
           {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>
@@ -662,6 +718,16 @@ function ProjectScreen({ path, onClose, goHome }: {
 }
 
 function App() {
+  const [connectionInfo, setConnectionInfo] = useState<ConnectionInfo | null>(null);
+  const [connectionChecking, setConnectionChecking] = useState(true);
+  const connectionPending = useRef(false);
+  const checkConnection = useCallback(async (refresh = false) => {
+    if (connectionPending.current) return; connectionPending.current = true; setConnectionChecking(true);
+    try { const response = await fetch(`/api/ai/connection?refresh=${refresh}`); if (!response.ok) throw new Error(); setConnectionInfo(await response.json()); }
+    catch { setConnectionInfo({ status: 'unknown', label: 'OpenAI API status unknown', guidance: 'Could not reach the local server. Try again; API credentials have not been checked.', checked_at: null, ttl_seconds: 60 }); }
+    finally { connectionPending.current = false; setConnectionChecking(false); }
+  }, []);
+  useEffect(() => { void checkConnection(); }, [checkConnection]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
@@ -684,13 +750,13 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
-  return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
+  return <ConnectionContext.Provider value={{ info: connectionInfo, checking: connectionChecking, refresh: () => void checkConnection(true) }}><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} goHome={goHome} onOpen={view => {
       setLastPath(view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
       path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}
-  </main>;
+  </main></ConnectionContext.Provider>;
 }
 
 createRoot(document.getElementById('root')!).render(<App/>);

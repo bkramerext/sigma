@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from tempfile import mkdtemp
 
 import httpx
 
@@ -11,6 +12,7 @@ from sigma.api import app
 
 __all__ = ["app"]
 
+os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-browser-managed-")
 os.environ["SIGMA_AI_ENABLED"] = "1"
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
@@ -18,6 +20,19 @@ real_client = httpx.AsyncClient
 
 
 async def handler(request):
+    if request.method == "GET":
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"id": "gpt-6.1-sol"},
+                    {"id": "gpt-6-luna"},
+                    {"id": "gpt-6-astra"},
+                    {"id": "unreviewed-embedding-model"},
+                ],
+            },
+        )
     body = json.loads(request.content)
     context = json.loads(body["input"])
     seed = context["starting_point"]

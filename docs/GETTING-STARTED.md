@@ -86,8 +86,8 @@ Canonical artwork lives in `assets/`; Vite copies its exact bytes into runtime p
 
 ## Data and limitations
 
-New projects use JSON schema v4 with persisted `research_mode`. Existing v1–v3 documents default to Default without being rewritten; strategy writes retain their established lazy migration behavior. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
-V3/v4 retain removed records and edit/removal events; older clients cannot read newer schemas.
+New projects use JSON schema v6 with persisted research mode, AI model and Thinking level. Existing v1–v5 documents open without rewriting; missing mode defaults to Default and missing AI settings use the documented legacy bootstrap; strategy writes retain their established lazy migration behavior. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
+V3–v6 retain removed records and edit/removal events; older clients cannot read newer schemas.
 Unchanged edits add no event or migration. Writes use POSIX advisory locks and atomic replacement. Use a local macOS/Linux filesystem; do not edit project JSON while a save is running. Generated RH project state is excluded from Git.
 
 See [Architectural Decisions](DECISIONS.md) for concurrency/crash limitations, [Status](STATUS.md) for verified behavior, and [SPEC-001](../specs/project-lifecycle.md) for the original lifecycle contract.
@@ -121,8 +121,8 @@ API: `POST /api/projects/strategies/stage` accepts `{path,strategy_id,stage}`
 `{path,order:[all active IDs],expected_order:[previous active IDs]}`. Both return
 the updated project. `ProjectView.project.active_order` is the authoritative
 active list; the stored `strategies` array retains creation order and removed
-records. First stage/reorder/AI-assisted save upgrades to schema v5 with an exact
-old-version backup; legacy files read as Draft/in creation order without writes.
+records. Legacy first stage/reorder saves upgrade to at least v5; project settings and
+new reasoning-provenance saves upgrade to v6 with an exact old-version backup; legacy files read as Draft/in creation order without writes.
 Existing manual-only create/edit/remove lazy migrations remain unchanged.
 
 ## Optional AI proposals (OpenAI)
@@ -133,34 +133,35 @@ these variables in the **server's environment** before launching:
 
 ```sh
 export SIGMA_AI_ENABLED=1
-export SIGMA_AI_MODEL=gpt-4.1
 # Set OPENAI_API_KEY securely in your shell/environment; never commit it.
 ./sigma ui
 ```
 
 The key must be an OpenAI API key with access/billing for the selected model.
 ChatGPT/Codex access does not configure this key or include these API charges.
-The model must support Responses strict structured output. `gpt-4.1` is the
-explicit default; no model/reasoning settings are added to projects.
+Choose the project model/Thinking level in the shared Create/Edit form. Only
+reviewed Responses/strict JSON/reasoning pairs are eligible; account discovery
+checks access separately. See project settings and API connection details below.
 
 The dialog discloses and requires consent for transmission of the project
 research problem, mode, **all** existing strategy titles/full approaches (including
 removed directions) and optional Starting point. An empty seed requests an
-independent direction. There are no provider calls on load or typing. A seed is
+independent direction. There are no generation calls on load or typing; a cached, non-generating
+model-list check supplies connection status and model availability. A seed is
 context to scrutinize, not a claim to endorse.
 
 Generate draft makes **one** request; Regenerate is a separate explicitly billed
 request and replaces editable fields only after success. Review/edit the title,
 one-line preview and full approach (including first tests, assumptions and ways
 the idea might fail). Save strategy is the only persistence action; it records an
-AI-assisted suggestion accepted/edited by a human, with returned provider/model.
+AI-assisted suggestion accepted/edited by a human, with returned provider/model and the requested thinking level.
 Cancel leaves project files unchanged. Failed generation or acceptance retains
 existing draft edits. Cancelling a request closes the local connection; provider
 processing/billing may already have occurred. No automatic retries.
 
 Operational limits: one proposal request at a time per API process; 60-second
 whole HTTP operation deadline; 48,000-character full JSON context (reject rather
-than truncate); 4,000-character seed; 3,500 maximum output tokens; 128KB response
+than truncate); 4,000-character seed; 25,000 maximum output tokens including reasoning; 128KB response
 cap. Validated fields: title 200, summary 300, approach 6,000, first tests,
 assumptions and failure modes 1,000 characters each. Final saved approach stays
 within the existing 10,000-character limit. Obvious duplicate titles and strongly
@@ -173,7 +174,9 @@ Uses pinned `httpx==0.28.1` with the official Responses REST endpoint and
 not log prompts, responses or keys by default. Errors expose generic status/help,
 not raw provider responses. Proxies/redirects/custom provider URLs are disabled.
 
-`GET /api/projects/proposals/config` reports safe availability/model metadata.
+`GET /api/projects/proposals/config?path=...` reports the saved project model/effort
+and account eligibility separately from authentication health; it does not prove
+generation or billing readiness.
 `POST /api/projects/proposals` accepts `{path,seed?,consent:true}` and returns an
 unsaved structured draft, provenance and a signed acceptance receipt. Saving uses
 `POST /api/projects/strategies` with `{path,title,approach,summary,receipt}`. The
@@ -181,3 +184,106 @@ receipt binds provenance to that project, expires after 24 hours, and expires on
 server restart. If it expires, copy your edits before regenerating, or write the
 text manually (without AI attribution). Receipts contain no request/response dump
 or key. There is no persistent draft store.
+
+## Project settings and curated models (A8)
+
+**New Project** opens **Create Project**. On the workspace, the pencil immediately
+beside the main project name opens **Edit Project**. Both use the same fields:
+name, research problem, research mode, AI model, Thinking level. Name/problem are
+required; Low, Medium, High and Extra high map to `low`, `medium`, `high`, `xhigh`.
+High is the default. Edits save together on **Save Changes**; Cancel/Escape does
+not save, and a no-op save does not rewrite files or append an event. Errors keep
+your edits. Stale editors must refresh/reopen before retrying; the app does not
+overwrite another editor's settings. Strategy edits can proceed independently.
+
+Changing display name never moves the directory or changes the existing UUID.
+Create still derives a safe readonly destination. Mode can change in either
+direction; no strategies, stages, order, archived records or provenance reset.
+Project details expose identity/settings and before/after `project.updated` audit.
+Close Project simply returns Home, with no save/flush/confirmation or work teardown.
+
+The backend-reviewed capability catalog (verified 2026-10-20) includes:
+
+| Choice | Model | Offered thinking levels | Relative cost |
+| --- | --- | --- | --- |
+| Sol · Balanced | `gpt-6.1-sol` | Low, Medium, High, Extra high | $$ |
+| Luna · Economy | `gpt-6-luna` | Low, Medium, High, Extra high | $ |
+| Astra · Advanced | `gpt-6-astra` | Low, Medium, High, Extra high | $$$ |
+
+Sources: official [Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol),
+[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), and
+[Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) model pages
+verify text, Responses, structured output and these effort values. We deliberately
+offer a common four-level subset. These tiers describe relative cost; no numerical
+rate is inferred from `/v1/models`. Consult [current pricing](https://developers.openai.com/api/docs/pricing)
+for input/cache/output rates and processing-tier differences. There is no documented
+per-model price-lookup endpoint in the model-list API. Actual cost also depends on
+usage and reasoning. This assignment does not implement cost accounting.
+
+New forms prefer Sol/High when the account list verifies Sol access. If only
+another reviewed model is accessible, the form explicitly identifies its initial
+default. With no verified access, Sol/High is a clearly labeled offline preference;
+manual research remains available. Catalog entries carry available/unavailable/
+unverified labels and only the reviewed IDs are returned, never a raw account
+catalog. Stored choices stay visible, even after disappearance or network failure.
+Metadata can be saved offline. Generation requires a reviewed compatible pair and
+current cached account access; it never substitutes a different model/effort.
+
+All new init/create operations write v6. Legacy v1–v5 reads do not change bytes;
+missing model/effort defaults to Sol/High, or a reviewed `SIGMA_AI_MODEL` bootstrap
+override plus High. Unreviewed overrides (including A7's `gpt-4.1`) are explicitly
+qualified in discovery guidance and do not enter the reasoning catalog. Once v6
+settings are saved, environment model overrides have no effect on that project.
+Old AI provenance retains unknown thinking as null; no historical effort is invented.
+New proposals snapshot context/model/effort at request start, send actual
+`reasoning: {effort: ...}`, and bind returned model/requested effort into acceptance
+receipts. A concurrent settings edit cannot misattribute a generated draft.
+
+The 25,000-token maximum includes reasoning and visible output, following the
+official [reasoning budget guidance](https://developers.openai.com/api/docs/guides/reasoning).
+It is an upper bound, not a requested output size or cost estimate. High/Extra high
+can still timeout (60 seconds) or exhaust budget; failures are explicit and no
+retry, downgrade or save happens automatically. Visible draft fields retain A7's
+limits. No per-strategy configuration or agent loop is added.
+
+```sh
+./sigma init /tmp/settings.sigma --title 'Question' --problem 'Investigate it' --model gpt-6.1-sol --thinking high
+./sigma create --title 'Question' --problem 'Investigate it' --model gpt-6-luna --thinking high
+```
+
+`./sigma edit-project PATH --title ... --problem ... --research-mode mathematical
+--model gpt-6-astra --thinking high --expected 'JSON'` takes the five previous
+settings as JSON (`title`, `problem`, `research_mode`, `ai_model`,
+`reasoning_effort`) for conflict detection. The equivalent API is
+`POST /api/projects/update` with `{path,title,problem,research_mode,ai_model,reasoning_effort,expected:{...}}`.
+It returns the complete updated ProjectView. No UUID/path mutation fields exist.
+Init/create bodies now accept `ai_model` and `reasoning_effort`. The shared service
+uses the existing lock, full-document validation, exact backup and atomic replace.
+
+## OpenAI API status and server setup
+
+The upper-right dot **and text** report the actual server's OpenAI API connection,
+not ChatGPT login. Initial checking is neutral. Fresh Connected/green requires
+HTTP 200 and valid bounded JSON from `GET https://api.openai.com/v1/models`. It
+verifies authentication/reachability only—not generation, billing, credits or quota.
+Missing configuration, 401 authentication, 403 permissions, 429 rate/quota, network/
+timeout/5xx and invalid responses have distinct safe guidance. Expired checks show
+Stale rather than remaining green. Details include the last check and Retry.
+
+`GET /api/ai/connection?refresh=true` returns classified status/label/guidance,
+checked time and TTL only. `GET /api/ai/models` returns reviewed labels/descriptions/
+efforts with qualified account availability and initial defaults. Server cache TTL
+is 60 seconds with coalesced requests and a 3-second Retry cooldown; the browser
+checks once at app load, never on each render, keystroke or route. Opening the
+settings/proposal form reuses the shared backend cache. No background polling or
+model generation is used for status. Requests have an 8-second whole-operation
+deadline, 1MB/10,000-record limits, fixed trusted endpoint, no redirects or ambient
+proxies, and generic errors. Keys, Authorization headers and raw errors/catalogs
+are never returned to the browser or logged by these services.
+
+Set only `SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY` to enable the provider, then
+restart `./sigma ui`. Model/Thinking level belong to projects. SIGMA does not
+automatically read `.env`; if you use a gitignored local `.env`, source it in your
+launcher shell (`set -a`, then `. ./.env`, then `set +a`) before launching. Never
+use `VITE_` variables for secrets. Tests use explicit no-network fixtures. Live
+provider billing/quality is unverified and no billable request is made by setup.

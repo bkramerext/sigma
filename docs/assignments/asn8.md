@@ -1,6 +1,6 @@
 # A8: Project settings, model selection, and OpenAI API connection status
 
-**Status:** Ready for Codex. A5–A7 are implemented; begin by inspecting the current repository and `docs/STATUS.md`. Follow `docs/HUMAN-AI-INTERACTION.md`.
+**Status:** Implemented and verified on 2026-10-20. Provider/model/effort and health checks used controlled HTTP fixtures; live billing/quality is unverified. See `docs/STATUS.md` for actual checks and limits.
 
 ## Purpose and design invariants
 
