@@ -1,6 +1,6 @@
 # A8.2.1: Keep AI connection status fresh without nagging the user
 
-**Status:** Ready for Codex. Targeted follow-up to **implemented A8.2**. This is a UI/connection-health fix, not a new authentication feature, a provider redesign or part of A9. Implement, test, and commit; do not merely write a design note.
+**Status:** Implemented and verified. Targeted follow-up to **implemented A8.2**. This is a UI/connection-health fix, not a new authentication feature, a provider redesign or part of A9.
 
 ## Problem demonstrated in the current code
 

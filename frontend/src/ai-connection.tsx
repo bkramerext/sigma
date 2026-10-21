@@ -3,7 +3,7 @@ import './ai-connection.css';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
 type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; signal?: AbortSignal };
-type AIState = { info: ConnectionInfo | null; checking: boolean; connecting: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: () => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<void> };
+type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<void> };
 const Context = createContext<AIState | null>(null);
 export function useAI() { const value = useContext(Context); if (!value) throw new Error('AI connection context missing'); return value; }
 const message = (error: unknown) => error instanceof Error ? error.message : 'Could not reach the local server.';
@@ -14,23 +14,98 @@ export async function aiPost<T>(route: string, body: object = {}, signal?: Abort
 export function AIProvider({ children }: { children: ReactNode }) {
   const [info, setInfo] = useState<ConnectionInfo | null>(null);
   const [checking, setChecking] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  const [healthError, setHealthError] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
   const [error, setError] = useState('');
   const [handoff, setHandoff] = useState('');
   const [welcome, setWelcome] = useState(false);
   const welcomed = useRef(false);
   const retryAttempt = useRef<{ id: string; accountId?: string } | null>(null);
   const pending = useRef<{ controller: AbortController; id?: string } | null>(null);
-  const check = useRef<Promise<ConnectionInfo> | null>(null);
-  const refresh = useCallback((): Promise<ConnectionInfo> => {
-    if (check.current) return check.current;
-    setChecking(true);
+  const check = useRef<{ promise: Promise<ConnectionInfo>; controller: AbortController; generation: number } | null>(null);
+  const generation = useRef(0);
+  const retryCount = useRef(0);
+  const mounted = useRef(true);
+  const transitioningRef = useRef(false);
+  const refresh = useCallback((source: 'initial' | 'background' | 'manual' = 'manual'): Promise<ConnectionInfo> => {
+    if (check.current?.generation === generation.current) return check.current.promise;
+    const requestGeneration = generation.current;
+    const controller = new AbortController();
+    if (source === 'background') setBackgroundRefreshing(true);
+    else { setChecking(true); if (source === 'initial') setInitialLoading(true); }
+    const request = { promise: Promise.resolve(null as unknown as ConnectionInfo), controller, generation: requestGeneration };
     const promise = (async () => {
-      try { const response = await fetch('/api/ai/connection?refresh=true'); if (!response.ok) throw new Error('Could not read AI connection'); const data: ConnectionInfo = await response.json(); setInfo(data); return data; }
-      finally { setChecking(false); check.current = null; }
-    })(); check.current = promise; return promise;
+      try {
+        const response = await fetch('/api/ai/connection?refresh=true', { signal: controller.signal });
+        if (!response.ok) throw new Error('Could not read AI connection');
+        const data: ConnectionInfo = await response.json();
+        if (mounted.current && requestGeneration === generation.current) {
+          setInfo(data);
+          const failed = data.status === 'unavailable';
+          setHealthError(failed);
+          retryCount.current = failed ? retryCount.current + 1 : 0;
+        }
+        return data;
+      } catch (error) {
+        if (mounted.current && requestGeneration === generation.current && !controller.signal.aborted) {
+          setHealthError(true);
+          retryCount.current += 1;
+        }
+        throw error;
+      } finally {
+        if (mounted.current && requestGeneration === generation.current) {
+          setChecking(false);
+          setInitialLoading(false);
+          setBackgroundRefreshing(false);
+        }
+        if (check.current === request) check.current = null;
+      }
+    })();
+    request.promise = promise;
+    check.current = request;
+    return promise;
   }, []);
-  useEffect(() => { void refresh().catch(error => setError(message(error))); return () => pending.current?.controller.abort(); }, [refresh]);
+  useEffect(() => {
+    mounted.current = true;
+    void refresh('initial').catch(() => {});
+    return () => { mounted.current = false; check.current?.controller.abort(); pending.current?.controller.abort(); };
+  }, [refresh]);
+  useEffect(() => {
+    let timer = 0;
+    const clear = () => { window.clearTimeout(timer); timer = 0; };
+    const eligible = info && (info.status === 'connected' || info.status === 'unavailable') &&
+      (info.mode === 'api_key' || (info.mode === 'chatgpt' && !!info.active_account));
+    const schedule = () => {
+      clear();
+      if (document.visibilityState !== 'visible' || !eligible || connecting || transitioning) return;
+      let delay: number;
+      if (healthError || info.status === 'unavailable') {
+        delay = Math.min(300, 30 * 2 ** Math.max(0, retryCount.current - 1)) * 1000;
+      } else {
+        const checked = info.checked_at ? Date.parse(info.checked_at) : NaN;
+        const ttl = Number.isFinite(info.ttl_seconds) && info.ttl_seconds > 0 ? info.ttl_seconds : 60;
+        const safeAge = Number.isFinite(checked) && checked <= Date.now() + 60_000 ? checked : Date.now();
+        delay = Math.max(0, safeAge + Math.min(50, ttl * 0.8) * 1000 - Date.now());
+      }
+      timer = window.setTimeout(() => { timer = 0; if (!transitioningRef.current) void refresh('background').catch(() => {}); }, delay);
+    };
+    const visibility = () => {
+      if (document.visibilityState !== 'visible') { clear(); return; }
+      if (!eligible || connecting || transitioning || transitioningRef.current) return;
+      const checked = info?.checked_at ? Date.parse(info.checked_at) : NaN;
+      const ttl = info && Number.isFinite(info.ttl_seconds) && info.ttl_seconds > 0 ? info.ttl_seconds : 60;
+      const due = healthError || info?.status === 'unavailable' || !Number.isFinite(checked) || checked > Date.now() + 60_000 || Date.now() >= checked + ttl * 1000;
+      if (due) { clear(); void refresh('background').catch(() => {}); } else schedule();
+    };
+    const online = () => { if (document.visibilityState === 'visible' && healthError && !transitioningRef.current) { clear(); void refresh('background').catch(() => {}); } };
+    schedule();
+    document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('online', online);
+    return () => { clear(); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('online', online); };
+  }, [info, healthError, connecting, transitioning, refresh]);
   useEffect(() => {
     if (info?.welcome_pending && !welcomed.current) {
       welcomed.current = true; setWelcome(true);
@@ -40,6 +115,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
   }, [info]);
   async function signIn(options: SignInOptions = {}): Promise<boolean> {
     if (pending.current) { setError('A ChatGPT sign-in is already pending. Complete or cancel it.'); return false; }
+    invalidateChecks();
     const controller = new AbortController(); const attempt = { controller, id: undefined as string | undefined }; pending.current = attempt;
     const abort = () => controller.abort(); options.signal?.addEventListener('abort', abort, { once: true });
     if (options.signal?.aborted) controller.abort();
@@ -60,7 +136,7 @@ export function AIProvider({ children }: { children: ReactNode }) {
         const response = await fetch(`/api/ai/auth/attempt/${encodeURIComponent(data.id)}`, { signal: controller.signal });
         const state = await response.json(); if (!response.ok) throw new Error(state.error ?? 'Sign-in session lost. Retry.');
         if (state.status !== 'connecting') {
-          await refresh();
+          await refresh('background');
           if (state.status === 'connected') { retryAttempt.current = null; return true; }
           retryAttempt.current = state.retryable ? { id: data.id, accountId: options.accountId } : null;
           setError(state.message); return false;
@@ -78,9 +154,10 @@ export function AIProvider({ children }: { children: ReactNode }) {
     }
   }
   function cancelSignIn() { pending.current?.controller.abort(); }
-  async function selectMode(mode: 'chatgpt' | 'api_key', accountId?: string) { cancelSignIn(); setError(''); try { setInfo(await aiPost<ConnectionInfo>('mode', { mode, account_id: accountId })); } catch (error) { setError(message(error)); } }
-  async function disconnect() { cancelSignIn(); setError(''); try { const result = await aiPost<{ message: string; remote_revocation_confirmed: boolean }>('disconnect'); if (!result.remote_revocation_confirmed) setError(result.message); await refresh(); } catch (error) { setError(message(error)); } }
-  const value = { info, checking, connecting, error, handoff, welcome, dismissWelcome: () => setWelcome(false), refresh, signIn, cancelSignIn, selectMode, disconnect };
+  function invalidateChecks() { generation.current += 1; check.current?.controller.abort(); check.current = null; retryCount.current = 0; setHealthError(false); setChecking(false); setInitialLoading(false); setBackgroundRefreshing(false); }
+  async function selectMode(mode: 'chatgpt' | 'api_key', accountId?: string) { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { const next = await aiPost<ConnectionInfo>('mode', { mode, account_id: accountId }); if (selectedGeneration === generation.current) setInfo(next); } catch (error) { if (selectedGeneration === generation.current) setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
+  async function disconnect() { invalidateChecks(); const selectedGeneration = generation.current; transitioningRef.current = true; setTransitioning(true); cancelSignIn(); setError(''); try { const result = await aiPost<{ message: string; remote_revocation_confirmed: boolean }>('disconnect'); if (!result.remote_revocation_confirmed) setError(result.message); await refresh('background'); } catch (error) { setError(message(error)); } finally { if (selectedGeneration === generation.current) { transitioningRef.current = false; setTransitioning(false); } } }
+  const value = { info, checking, initialLoading, backgroundRefreshing, healthError, connecting, transitioning, error, handoff, welcome, dismissWelcome: () => setWelcome(false), refresh, signIn, cancelSignIn, selectMode, disconnect };
   return <Context.Provider value={value}>{children}{welcome && !document.querySelector('dialog[open]') && <div className="plan-welcome-toast"><PlanWelcome/></div>}</Context.Provider>;
 }
 export function ManageUsage() { return <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">Manage usage</a>; }
@@ -94,24 +171,22 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
 }
 export function ConnectionStatus() {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
-  const [stale, setStale] = useState(false);
   useEffect(() => {
     function outside(event: PointerEvent) { if (event.target instanceof Node && disclosure.current && !disclosure.current.contains(event.target)) disclosure.current.open = false; }
     function escape(event: KeyboardEvent) { if (event.key === 'Escape' && disclosure.current?.open) { disclosure.current.open = false; disclosure.current.querySelector('summary')?.focus(); } }
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape); return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, []);
-  useEffect(() => { setStale(false); if (!ai.info?.checked_at || ai.info.status !== 'connected') return; const timer = window.setTimeout(() => setStale(true), Math.max(0, Date.parse(ai.info.checked_at) + ai.info.ttl_seconds * 1000 - Date.now())); return () => clearTimeout(timer); }, [ai.info]);
-  const status = ai.connecting ? 'connecting' : ai.checking ? 'checking' : stale ? 'stale' : ai.info?.status ?? 'unknown';
-  const label = ai.connecting ? 'Connecting…' : ai.checking ? 'Checking AI…' : stale ? 'AI connection check expired' : ai.info?.label ?? 'Connect AI';
+  const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
+  const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
   return <details ref={disclosure} className="api-connection"><summary aria-label="AI connection settings"><span className={`connection-dot connection-${status}`} aria-hidden="true"/><span role="status">{label}</span></summary>
     <div className="connection-details">
       {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
       <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : ai.info?.active_account ? 'Using ChatGPT plan' : 'Connect your ChatGPT account'}</p>
-      <p>{stale ? 'Retry to verify the current account connection.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
-      {ai.info?.mode !== 'api_key' && <>{['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected') && <ConnectAction/>}{ai.info?.active_account && <><ManageUsage/><button type="button" disabled={ai.connecting} onClick={() => void ai.disconnect()}>Disconnect</button></>}</>}
-      {!!ai.info?.accounts?.length && <label>Switch account<select aria-label="Switch ChatGPT account" value={ai.info.active_account ?? ''} onChange={event => void ai.selectMode('chatgpt', event.target.value)}>{ai.info.accounts.map(account => <option key={account.id} value={account.id}>{account.label}</option>)}</select></label>}
+      <p>{ai.healthError && ai.info?.status !== 'unavailable' ? 'Connection status could not be refreshed. Retry when convenient.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
+      {ai.info?.mode !== 'api_key' && <>{['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected') && <ConnectAction/>}{ai.info?.active_account && <><ManageUsage/><button type="button" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.disconnect()}>Disconnect</button></>}</>}
+      {!!ai.info?.accounts?.length && <label>Switch account<select disabled={ai.transitioning} aria-label="Switch ChatGPT account" value={ai.info.active_account ?? ''} onChange={event => void ai.selectMode('chatgpt', event.target.value)}>{ai.info.accounts.map(account => <option key={account.id} value={account.id}>{account.label}</option>)}</select></label>}
       {ai.info?.active_account && <button type="button" disabled={ai.connecting} onClick={() => void ai.signIn({ newAccount: true })}>Connect another account</button>}
-      <button type="button" disabled={ai.checking || ai.connecting} onClick={() => void ai.refresh().catch(() => {})}>Retry connection</button>
+      <button type="button" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
       {ai.info?.mode === 'api_key' ? <button type="button" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>Use API key (advanced)</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" onClick={() => void ai.selectMode('api_key')}>Use API key · billed separately</button></details>}
       {ai.error && <p role="alert">{ai.error}</p>}
     </div>

@@ -66,6 +66,15 @@ Screenshots: `/tmp/sigma-a82-*.png`. These are fixtures, not live entitlement or
 plan-capacity verification. The API-key regression fixture explicitly selects
 its dummy key mode during fixture startup; production never does that implicitly.
 
+### A8.2.1 connection health refresh
+
+With the normal UI running on port 5173, run
+`uv run --with playwright python browser_checks/connection_refresh.py`.
+This focused Chrome check uses a controlled clock and mocked browser fetches to
+verify the shared 48-second refresh schedule for a 60-second TTL, stable status
+during background and manual requests, hidden-tab pause/resume, transient failure
+backoff and Retry, and one-time welcome behavior. It makes no provider calls.
+
 ## A9 recents and dialog actions
 
 Start a fresh `provider_fixture:app` as above, then run

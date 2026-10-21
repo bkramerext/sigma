@@ -611,3 +611,40 @@ files are validated server-side to refresh metadata, while the browser receives
 only the small index view. Chrome checks used macOS emulation, not physical
 phones or Linux. No paid calls, autonomous agents or transcript renderer. Existing
 untracked models.json and local .env remain unmodified and uncommitted.
+
+## A8.2.1 — quiet, current connection status
+
+AI connection health now refreshes centrally in `AIProvider`, once per app rather
+than once per header. For the current 60-second check TTL, a visible connected
+ChatGPT or API-key account is checked at 48 seconds. Hidden tabs pause scheduled
+requests and resume with one due check. Background checks leave the header label
+steady; manual Retry shows progress only in the account popover. Repeated network
+or provider-unavailable failures show a neutral actionable warning after a
+transport failure, retain a known provider-specific unavailable label, and retry
+with visible-only 30/60/120-second backoff capped at five minutes. A successful
+check or deliberate account/mode change resets backoff. No-account states are not
+polled. Old in-flight results are discarded after sign-in, account/mode changes
+or Disconnect. The A8.2 one-time welcome acknowledgment remains unchanged.
+
+Actual verification:
+
+- `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright (zero errors),
+  frontend typecheck and production build. The existing non-failing Starlette
+  TestClient deprecation notice remains.
+- Real Chrome `browser_checks/connection_refresh.py` passed with a controlled
+  clock and mocked browser fetches: one 48-second refresh, no header flash while
+  background/manual checks are held open, hidden-tab pause and one refresh on
+  return after expiry, transient failure warning and 30-second retry, manual
+  recovery, stale successful response rejected after Disconnect, and welcome
+  acknowledgment only once across multiple checks and reload. No provider calls.
+- Real Chrome `browser_checks/chatgpt.py` passed against the signed local OAuth
+  fixture: disconnected manual work, cancelled/declined and successful sign-in,
+  one explicit strategy save, account controls, separately billed API mode,
+  outage/limit/permission/reconnect states, and responsive 1280/1440/390/320px
+  layouts. No live sign-in or billable inference. Final frontend build/typecheck,
+  Ruff check/format (45 Python files), and Pyright all passed after changes.
+
+Limits: the verified status remains a bounded non-generating model-catalog
+authentication/reachability check; it does not establish inference entitlement,
+credits, quota or billing. Browser refresh behavior was controlled-clock tested;
+no live provider state or physical mobile device was used.
