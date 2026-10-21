@@ -157,13 +157,14 @@ def check_shutdown_and_suspended() -> None:
 
     # Pre-registration (legacy) suspended launcher: verify lock holder,
     # exact checkout CLI command, OS account, and process identity.
-    with TemporaryDirectory() as directory, patch(
-        "sigma.ui_instance.STATE_ROOT", Path(directory)
-    ):
+    with TemporaryDirectory() as directory, patch("sigma.ui_instance.STATE_ROOT", Path(directory)):
         legacy = Instance()
-        command = str(ROOT / ".venv" / "bin" / "python") + " " + str(
-            ROOT / ".venv" / "bin" / "sigma"
-        ) + " ui"
+        command = (
+            str(ROOT / ".venv" / "bin" / "python")
+            + " "
+            + str(ROOT / ".venv" / "bin" / "sigma")
+            + " ui"
+        )
         observed = {
             "uid": str(os.getuid()),
             "start": "Wed Oct 21 12:53:00 2026",
