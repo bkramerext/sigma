@@ -68,6 +68,10 @@ def safe_error_detail(raw: Any) -> str | None:
             continue
         if (
             re.fullmatch(r"[A-Za-z0-9 .,:;()/_-]+", value)
+            and re.search(
+                r"(?i)\\b(invalid|unsupported|missing|required|unknown|exceeded|malformed|request|schema|field|parameter|format|model|usage|quota|limit|permission)\\b",
+                value,
+            )
             and not re.search(r"(?i)bearer|token|secret|password|authorization", value)
             and not re.search(r"[A-Za-z0-9_-]{36,}", value)
         ):
