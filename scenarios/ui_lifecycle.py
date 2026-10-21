@@ -146,7 +146,7 @@ def main():
             return proc, log
 
         def ready(proc, log):
-            until(lambda: "SIGMA UI ready:" in log.read_text() or proc.poll() is not None)
+            until(lambda: "SIGMA servers ready:" in log.read_text() or proc.poll() is not None)
             assert proc.poll() is None, log.read_text()
 
         def stop(proc, sig=signal.SIGINT):
@@ -175,7 +175,7 @@ def main():
             ready(second, log2)
             assert first.wait(timeout=10) == 0
             until(lambda: gone(old_children))
-            assert "Restarting existing SIGMA instance" in log2.read_text()
+            assert "Stopping existing SIGMA instance" in log2.read_text()
             assert get("/api/ai/models")["default_model"] == "gpt-6-luna"
             assert get("/api/ai/connection", "http://127.0.0.1:5173")["status"] == "connected"
             from urllib.error import HTTPError
@@ -209,6 +209,31 @@ def main():
             print(
                 "PASS fresh-shell ./sigma ui, quoted export dotenv reload, verified fixture status/proxy/origin, Chrome, old owner/groups gone and Ctrl+C cleanup"
             )
+
+            # A launcher suspended with Ctrl+Z/SIGSTOP must be resumed and
+            # safely replaced without manual PID cleanup.
+            suspended, suspendedlog = launch(direct=True)
+            ready(suspended, suspendedlog)
+            os.kill(suspended.pid, signal.SIGSTOP)
+            replacement, replacementlog = launch()
+            ready(replacement, replacementlog)
+            until(lambda: suspended.poll() is not None)
+            assert "Resuming suspended SIGMA launcher" in replacementlog.read_text()
+            assert "Stopping existing SIGMA instance" in replacementlog.read_text()
+            # Explicit shutdown uses the same verified control channel.
+            command = subprocess.run(
+                [str(root / ".venv/bin/sigma"), "shutdown"],
+                cwd=base,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            assert command.returncode == 0, command.stderr
+            assert "shutdown complete" in command.stdout
+            until(lambda: replacement.poll() is not None)
+            check_ports()
+            print("PASS suspended-launcher recovery and explicit sigma shutdown")
 
             # A different canonical checkout must never replace this one's instance.
             owner, ownerlog = launch(direct=True)
@@ -259,7 +284,7 @@ def main():
             rapid2, rapidlog2 = launch()
             until(
                 lambda: (
-                    sum("SIGMA UI ready:" in log.read_text() for log in (rapidlog1, rapidlog2)) == 2
+                    sum("SIGMA servers ready:" in log.read_text() for log in (rapidlog1, rapidlog2)) == 2
                 )
             )
             until(lambda: (rapid1.poll() is None) != (rapid2.poll() is None))
