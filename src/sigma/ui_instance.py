@@ -126,8 +126,11 @@ class Instance:
             )
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return None
-        pids = {int(line[1:]) for line in output.splitlines() if line.startswith("p")
-                and line[1:].isdigit()}
+        pids = {
+            int(line[1:])
+            for line in output.splitlines()
+            if line.startswith("p") and line[1:].isdigit()
+        }
         pids.discard(os.getpid())
         if not pids:
             return None
