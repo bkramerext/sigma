@@ -9,7 +9,7 @@ import './recents.css';
 import './copper-controls.css';
 import './text-views.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, useAI } from './ai-connection';
-import { installRequestErrorToasts, RequestErrorToasts } from './request-toast';
+import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
@@ -113,7 +113,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
     try {
       const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal });
       const settings = await settingsResponse.json();
-      if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+      if (!settingsResponse.ok || !settings.available) { if (settingsResponse.ok) reportRequestFailure(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.'); throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.'); }
       const response = await fetch('/api/projects/text/convert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
         body: JSON.stringify({ path, scope, strategy_id: strategyId, target: targetFormat, expected_digest: data.source_digest, expected_binding: settings.binding }) });
       const next = await response.json();
@@ -131,7 +131,6 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
-  function cancelConversion() { abort.current?.abort(); abort.current = null; setBusy(false); setRendering(false); chooseView('plain'); setError('Conversion cancelled locally. Provider usage may already have begun.'); }
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}`}>
     <div className="text-view-controls">
@@ -147,7 +146,6 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
     </div>
     {editing ? <form className="text-view-editor" onSubmit={save}>
       <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
-      <p className="hint">Saving makes this the authoritative text. The other representation becomes out of date until regenerated.</p>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
       <div className="form-actions"><button type="submit" disabled={busy}>Save text</button><button type="button" className="text-button" disabled={busy} onClick={cancelBodyEdit}>Cancel</button></div>
     </form> : current && version ? scope === 'project' ? selected === 'rendered' ? <div ref={bodyTrigger as Ref<HTMLDivElement>} className={`${contentClass} rendered-text text-editable`} role="button" tabIndex={0} aria-label="Edit Markdown description" title="Click or press Enter to edit Markdown source" onClick={() => beginBodyEdit(true)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(true); } }}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
@@ -157,12 +155,9 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
         {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
-        {error && <button type="button" className="secondary" disabled={busy} onClick={() => void convert('markdown')}>Retry conversion</button>}
-        <p className="hint">Markdown conversion uses this project's selected model, Thinking and account. AI-generated; review before relying on it. Cached Markdown requires no provider call.</p>
       </div>}
-    {busy && !editing && <p className="text-view-working" role="status">Converting to {format === 'markdown' ? 'Markdown' : 'Plain'}… <button type="button" className="text-button" onClick={cancelConversion}>Cancel conversion</button></p>}
-    {version?.current && version.kind === 'ai_derived' && <p className="text-view-attribution">AI-generated conversion · Review before relying on it.{version.warnings.length ? ` ${version.warnings.join(' ')}` : ''}</p>}
-    {error && <p role="alert" className="error">{error} {error.includes('unavailable') || error.includes('Connect') ? 'Use the AI connection control in the header, then retry.' : ''}</p>}
+    {busy && !editing && <span className="sr-only" role="status">Converting to Markdown…</span>}
+    {error && editing && <p role="alert" className="error">{error}</p>}
   </div>;
 }
 
