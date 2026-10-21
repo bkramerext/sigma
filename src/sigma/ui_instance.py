@@ -45,7 +45,6 @@ class Instance:
         self.shutdown_only = shutdown_only
         self.register_owner = register_owner
         self.registered = False
-        self.recovering: dict[int, tuple[str, str]] = {}
         self.identity = identity(root)
         # Short Unix socket path, independently private for each OS account and checkout.
         base = STATE_ROOT / f"sigma-ui-{os.getuid()}"
@@ -158,7 +157,13 @@ class Instance:
             owners[registered[0]] = registered[1]
         return sorted(owners.items())
 
-    def _resume_suspended(self) -> bool:
+    def _terminate_suspended_lock_holders(self) -> bool:
+        """Stop dormant launch attempts without letting them start servers.
+
+        SIGCONT was unsafe: waking multiple old invocations let all of them
+        race to start FastAPI/Vite. The verified suspended owners are instead
+        terminated directly. Their pipe guardians clean up any child servers.
+        """
         owners = self._recoverable_owners()
         suspended = [
             (pid, process)
@@ -167,55 +172,34 @@ class Instance:
         ]
         if not suspended:
             return False
-        print(f"Resuming {len(suspended)} suspended SIGMA launcher(s)…", flush=True)
-        for pid, process in suspended:
-            self.recovering[pid] = (process["start"], process["command"])
-            try:
-                os.kill(pid, signal.SIGCONT)
-            except ProcessLookupError:
-                pass
-        return True
-
-    def _force_stopped(self) -> bool:
-        if not self.recovering:
-            return False
-        active = dict(self._recoverable_owners())
-        targets = []
-        for pid, (started, command) in self.recovering.items():
-            process = active.get(pid)
-            if process is None:
+        # Validate every identity before signalling any of them.
+        for pid, original in suspended:
+            current = self._process(pid)
+            if current is None:
                 continue
-            if process["start"] != started or process["command"] != command:
+            if (
+                current["uid"] != original["uid"]
+                or current["start"] != original["start"]
+                or current["command"] != original["command"]
+                or "T" not in current["stat"].upper()
+            ):
                 raise RuntimeError(
-                    "Recovered SIGMA process identity changed; no process was signalled."
+                    "SIGMA launcher identity changed during recovery; nothing was killed."
                 )
-            targets.append(pid)
-        recorded = list(self.recovering.items())
-        self.recovering.clear()
-        if not targets:
-            return False
-        print(f"Stopping {len(targets)} unresponsive SIGMA launcher(s)…", flush=True)
-        for pid in targets:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline:
-            current = dict(self._recoverable_owners())
-            if not any(pid in current for pid in targets):
-                return True
-            time.sleep(0.1)
-        current = dict(self._recoverable_owners())
-        for pid in targets:
-            process = current.get(pid)
-            if process is None:
+        print(f"Cleaning up {len(suspended)} suspended SIGMA launcher(s)…", flush=True)
+        for pid, original in suspended:
+            current = self._process(pid)
+            if current is None:
                 continue
-            started, command = next(
-                (start, cmd) for target, (start, cmd) in recorded if target == pid
-            )
-            if process["start"] != started or process["command"] != command:
-                raise RuntimeError("SIGMA process identity changed; refusing forced shutdown.")
+            if (
+                current["uid"] != original["uid"]
+                or current["start"] != original["start"]
+                or current["command"] != original["command"]
+                or "T" not in current["stat"].upper()
+            ):
+                raise RuntimeError(
+                    "SIGMA launcher identity changed during recovery; stopping safely."
+                )
             try:
                 os.kill(pid, signal.SIGKILL)
             except ProcessLookupError:
@@ -255,24 +239,19 @@ class Instance:
             raise RuntimeError("Unsafe SIGMA launch lock; refusing startup.")
         try:
             deadline = time.monotonic() + 12
-            recovered = False
             while True:
                 try:
                     fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
-                    if not recovered and self._resume_suspended():
-                        recovered = True
+                    if self._terminate_suspended_lock_holders():
+                        deadline = time.monotonic() + 8
                     if time.monotonic() >= deadline:
-                        if self._force_stopped():
-                            deadline = time.monotonic() + 6
-                        else:
-                            raise RuntimeError(
-                                "Another SIGMA launcher still holds the startup lock. "
-                                "Check its terminal; no unverified process was killed."
-                            ) from None
+                        raise RuntimeError(
+                            "Another active SIGMA launch holds the startup lock. "
+                            "No unverified process was killed."
+                        ) from None
                     time.sleep(0.1)
-            self._resume_suspended()
             self.replace()
             if not self.shutdown_only:
                 self.listener = socket.socket(socket.AF_UNIX)
