@@ -703,3 +703,9 @@ Actual verification:
 Limits: browser sizes were Chrome emulation, not physical devices. Stock copying
 preserves the template's historical research events while assigning new document
 and strategy identities; the copy's name and future edits are independent.
+
+Follow-up: the "Open a Project" heading retained a gold color from the older Home
+stylesheet. It now uses the exact resting copper text color of Open/New Project.
+Real Chrome checked the heading against both buttons' computed colors and the
+desktop screenshot was visually inspected. `./sigma test` and the full A11 Chrome
+check passed again after the change.

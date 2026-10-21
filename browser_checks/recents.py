@@ -42,6 +42,7 @@ with sync_playwright() as playwright:
     new_action = page.locator(".home-entry-actions").get_by_role("button", name="New Project")
     button_style = "e => { const s = getComputedStyle(e); return [s.backgroundColor, s.backgroundImage, s.color, s.borderColor] }"
     assert open_action.evaluate(button_style) == new_action.evaluate(button_style)
+    assert page.locator(".home-hero h1").evaluate("e => getComputedStyle(e).color") == open_action.evaluate("e => getComputedStyle(e).color")
     selected_style = stock_tab.evaluate("e => { const s = getComputedStyle(e); return [s.backgroundImage, s.color, s.borderColor] }")
     for action in (open_action, new_action):
         action.hover()
