@@ -206,7 +206,6 @@ with sync_playwright() as p:
     ).to_be_focused()
     expect(dialog.get_by_role("button", name="Generate draft", exact=True)).to_be_disabled()
     before = state.read_bytes()
-    dialog.locator("input[type=checkbox]").check()
     dialog.get_by_role("textbox", name="Starting point (optional)", exact=True).fill(
         "error-fixture"
     )
@@ -249,7 +248,6 @@ with sync_playwright() as p:
     # Cancelling an in-flight request leaves files unchanged and restores focus.
     split.click()
     page.get_by_role("button", name="Generate with AI", exact=True).click()
-    dialog.locator("input[type=checkbox]").check()
     dialog.get_by_role("textbox", name="Starting point (optional)", exact=True).fill(
         "timeout-fixture"
     )

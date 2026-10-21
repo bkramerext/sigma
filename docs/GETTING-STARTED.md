@@ -128,34 +128,35 @@ Existing manual-only create/edit/remove lazy migrations remain unchanged.
 ## Optional AI proposals (OpenAI)
 
 Use **New Strategy → Generate with AI**. Writing manually remains the primary
-click and needs no provider configuration. AI is disabled by default. Configure
-these values in the checkout’s gitignored **`.env`** (or export them in the server environment), then launch:
+click and needs no account, key, `.env`, or feature flag. **Connect AI** in the
+existing upper-right control offers **Continue with ChatGPT**. Eligible requests
+use your ChatGPT plan allowance or credits, subject to plan/app/workspace limits.
+The connection is remembered and refreshes when necessary. **Manage usage** opens
+[ChatGPT usage settings](https://chatgpt.com/settings/usage). A one-time dismissible
+welcome explains this; it never blocks generation or repeats after presentation.
 
-```sh
-# In ROOT/.env (never commit a real key):
-export SIGMA_AI_ENABLED=1
-export OPENAI_API_KEY="your-api-key"
-```
+You can instead open Generate, type a Starting point, and continue sign-in there.
+Successful sign-in resumes that one pending request with its seed preserved.
+Cancel/decline/failure retains your text; Continue manually transfers it to the
+manual composer. Header-only sign-in never generates. Account/project changes,
+unmounts, cancelled attempts and stale callbacks cannot authorize duplicate work.
 
-```sh
-./sigma ui
-```
+The advanced **Use API key · billed separately** action explicitly selects the
+optional `OPENAI_API_KEY` from checkout `.env` or server environment. It is separate
+API billing. No `SIGMA_AI_ENABLED` gate remains, and a present key never selects
+billing by itself. ChatGPT errors or limits never use a saved key automatically.
+Choose model/Thinking in New/Edit Project; mode/account are application preferences,
+not project credentials or research settings.
 
-The key must be an OpenAI API key with access/billing for the selected model.
-ChatGPT/Codex access does not configure this key or include these API charges.
-Choose the project model/Thinking level in the shared Create/Edit form. Only
-reviewed Responses/strict JSON/reasoning pairs are eligible; account discovery
-checks access separately. See project settings and API connection details below.
-
-The dialog discloses and requires consent for transmission of the project
+The dialog permanently explains transmission of the project
 research problem, mode, **all** existing strategy titles/full approaches (including
 removed directions) and optional Starting point. An empty seed requests an
 independent direction. There are no generation calls on load or typing; a cached, non-generating
 model-list check supplies connection status and model availability. A seed is
 context to scrutinize, not a claim to endorse.
 
-Generate draft makes **one** request; Regenerate is a separate explicitly billed
-request and replaces editable fields only after success. Review/edit the title,
+Generate draft makes **one** intentional request; Regenerate is a separate request
+using the selected billing mode and replaces editable fields only after success. Review/edit the title,
 one-line preview and full approach (including first tests, assumptions and ways
 the idea might fail). Save strategy is the only persistence action; it records an
 AI-assisted suggestion accepted/edited by a human, with returned provider/model and the requested thinking level.
@@ -165,8 +166,8 @@ processing/billing may already have occurred. No automatic retries.
 
 Operational limits: one proposal request at a time per API process; 60-second
 whole HTTP operation deadline; 48,000-character full JSON context (reject rather
-than truncate); 4,000-character seed; 25,000 maximum output tokens including reasoning; 128KB response
-cap. Validated fields: title 200, summary 300, approach 6,000, first tests,
+than truncate); 4,000-character seed; API-key mode 25,000 output-token/128KB response bounds;
+ChatGPT-plan mode 1MB/4,096-event stream bound. Validated fields: title 200, summary 300, approach 6,000, first tests,
 assumptions and failure modes 1,000 characters each. Final saved approach stays
 within the existing 10,000-character limit. Obvious duplicate titles and strongly
 repetitive approaches are rejected; semantic distinctness still needs human review.
@@ -181,7 +182,7 @@ not raw provider responses. Proxies/redirects/custom provider URLs are disabled.
 `GET /api/projects/proposals/config?path=...` reports the saved project model/effort
 and account eligibility separately from authentication health; it does not prove
 generation or billing readiness.
-`POST /api/projects/proposals` accepts `{path,seed?,consent:true}` and returns an
+`POST /api/projects/proposals` accepts `{path,seed?,expected_binding?,expected_project_id?}` and returns an
 unsaved structured draft, provenance and a signed acceptance receipt. Saving uses
 `POST /api/projects/strategies` with `{path,title,approach,summary,receipt}`. The
 receipt binds provenance to that project, expires after 24 hours, and expires on
@@ -243,12 +244,19 @@ New proposals snapshot context/model/effort at request start, send actual
 `reasoning: {effort: ...}`, and bind returned model/requested effort into acceptance
 receipts. A concurrent settings edit cannot misattribute a generated draft.
 
-The 25,000-token maximum includes reasoning and visible output, following the
+In explicitly selected API-key mode, the 25,000-token maximum includes reasoning
+and visible output, following the
 official [reasoning budget guidance](https://developers.openai.com/api/docs/guides/reasoning).
 It is an upper bound, not a requested output size or cost estimate. High/Extra high
 can still timeout (60 seconds) or exhaust budget; failures are explicit and no
 retry, downgrade or save happens automatically. Visible draft fields retain A7's
-limits. No per-strategy configuration or agent loop is added.
+limits. ChatGPT-plan requests omit the preview-prohibited output-token limit and
+instead bound the total stream (1MB, 4,096 events) and whole request (60 seconds).
+They require `store:false`, `stream:true`, array input, documented instructions,
+strict JSON fields, actual reasoning effort and `response.completed`. Partial,
+refused, malformed, failed, oversized and incomplete results are never drafts.
+Unsupported structured-output/model/effort capabilities fail explicitly without
+fallback. No per-strategy configuration or agent loop is added.
 
 ```sh
 ./sigma init /tmp/settings.sigma --title 'Question' --problem 'Investigate it' --model gpt-6.1-sol --thinking high
@@ -264,32 +272,48 @@ It returns the complete updated ProjectView. No UUID/path mutation fields exist.
 Init/create bodies now accept `ai_model` and `reasoning_effort`. The shared service
 uses the existing lock, full-document validation, exact backup and atomic replace.
 
-## OpenAI API status and server setup
+## Connection state and local configuration
 
-The upper-right dot **and text** report the actual server's OpenAI API connection,
-not ChatGPT login. Initial checking is neutral. Fresh Connected/green requires
-HTTP 200 and valid bounded JSON from `GET https://api.openai.com/v1/models`. It
-verifies authentication/reachability only—not generation, billing, credits or quota.
-Missing configuration, 401 authentication, 403 permissions, 429 rate/quota, network/
-timeout/5xx and invalid responses have distinct safe guidance. Expired checks show
-Stale rather than remaining green. Details include the last check and Retry.
+The upper-right control reports the selected path: **ChatGPT connected**,
+**Connect AI**, **Reconnect ChatGPT**, plan permission/usage/outage alternatives,
+or **OpenAI API · key billing**. Green requires usable session/permission and a
+valid account catalog, never just a key or identity-token presence. It does not
+promise inference entitlement, unlimited usage, remaining credits or billing.
+Expired health checks become subdued and offer Retry. Usage limits retain plan
+mode and direct users to Manage usage. No inference is performed for health.
 
-`GET /api/ai/connection?refresh=true` returns classified status/label/guidance,
-checked time and TTL only. `GET /api/ai/models` returns reviewed labels/descriptions/
-efforts with qualified account availability and initial defaults. Server cache TTL
-is 60 seconds with coalesced requests and a 3-second Retry cooldown; the browser
-checks once at app load, never on each render, keystroke or route. Opening the
-settings/proposal form reuses the shared backend cache. No background polling or
-model generation is used for status. Requests have an 8-second whole-operation
-deadline, 1MB/10,000-record limits, fixed trusted endpoint, no redirects or ambient
-proxies, and generic errors. Keys, Authorization headers and raw errors/catalogs
-are never returned to the browser or logged by these services.
+`GET /api/ai/connection` returns only sanitized mode/status/account labels,
+actions, last check/TTL and the welcome flag. `/api/ai/models` returns the curated
+intersection with the selected account’s list. Plan models use `models[].slug`,
+`display_name`, and `visibility:list`; API-key models use `data[].id`. Saved model
+choices are never silently rewritten when accounts change. Cached non-generating
+checks have a 60-second TTL/3-second Retry cooldown, 8-second deadline and 1MB/
+10,000-record bound. Tokens, raw provider bodies and full catalogs never reach React.
+Account mutations require exact local Origin and JSON; auth responses are no-store.
 
-Set only `SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY` to enable the provider, then
-run `./sigma ui` again. Model/Thinking level belong to projects. The launcher
+The documented OSS SIWC flow uses discovery, a persisted host UUID, state/nonce,
+PKCE S256, an already-listening exact 127.0.0.1 `/auth/callback`, the issued client
+ID, and RS256 ID-token/JWKS verification. It checks issuer, audience, expiry,
+nonce, subject/account binding and granted plan scopes before activation.
+Returning accounts reuse their client registration. Rotating refreshes serialize
+across processes and atomically replace tokens; terminal errors clear unusable
+tokens while preserving the account/client mapping. Disconnect attempts provider
+revocation; unconfirmed revocation is disclosed while local secrets are cleared.
+
+Storage is `~/.config/sigma/credentials.json`, outside this checkout/projects:
+owned 0700 directory, no-follow 0600 files, file locking, atomic replacement and
+fsync. This portable local-file choice avoids a platform Keychain dependency;
+other processes already running as your OS account remain a trust boundary.
+`SIGMA_AUTH_HOME` can select an owned private test/storage directory outside the
+checkout and project packages. Never copy tokens from another app or put them in
+`.env`, Vite, URLs, browser storage, logs or project JSON. Only a retained ID-token
+hint is sent directly to the trusted authorization endpoint through a backend
+redirect, never in a React payload. See [security notes](asn8.2-security.md).
+
+Optional API keys use `.env`; no configuration is needed for manual or ChatGPT
+work. Restart with `./sigma ui` after changing a file key. The launcher
 reads this checkout’s `ROOT/.env`, even when invoked from another directory;
-manual sourcing is unnecessary. Existing environment variables win, including an
-explicit `SIGMA_AI_ENABLED=0` or empty key. To use a changed file value, unset a
+manual sourcing is unnecessary. Existing environment variables win, including an empty key. The old enable variable is ignored. To use a changed file value, unset a
 previously exported shell override before restarting. Simple dotenv assignments,
 `export`, quotes, blank lines and comments are supported. Values are literal:
 no shell execution or variable expansion. Missing files are normal; malformed or

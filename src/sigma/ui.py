@@ -111,7 +111,18 @@ def run_ui() -> int:
                         subprocess.Popen(
                             [sys.executable, "-m", "sigma.ui_child", *command],
                             cwd=ROOT,
-                            env=child_env,
+                            env={
+                                key: value
+                                for key, value in child_env.items()
+                                if command[0] != "npm"
+                                or key
+                                not in {
+                                    "OPENAI_API_KEY",
+                                    "ACCESS_TOKEN",
+                                    "REFRESH_TOKEN",
+                                    "ID_TOKEN",
+                                }
+                            },
                             start_new_session=True,
                             stdin=subprocess.PIPE,
                         )

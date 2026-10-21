@@ -41,7 +41,7 @@ with sync_playwright() as p:
     held_connection = []
     page.route("**/api/ai/connection?*", lambda route: held_connection.append(route))
     page.goto("http://127.0.0.1:5173/")
-    expect(page.get_by_text("Checking OpenAI API…", exact=True)).to_be_visible()
+    expect(page.get_by_text("Checking AI…", exact=True)).to_be_visible()
     assert not page.locator(".connection-connected").count()
     held_connection[0].fulfill(
         response=held_connection[0].fetch(
@@ -49,12 +49,12 @@ with sync_playwright() as p:
         )
     )
     page.unroute("**/api/ai/connection?*")
-    expect(page.get_by_text("OpenAI API connected", exact=True)).to_be_visible()
+    expect(page.get_by_text("OpenAI API · key billing", exact=True)).to_be_visible()
     assert (
         page.locator(".connection-dot").evaluate("e=>getComputedStyle(e).backgroundColor")
         == "rgb(117, 177, 140)"
     )
-    page.get_by_label("OpenAI API connection details", exact=True).click()
+    page.get_by_label("AI connection settings", exact=True).click()
     expect(
         page.get_by_text("API authentication/reachability verified only.", exact=False)
     ).to_be_visible()
@@ -220,7 +220,9 @@ with sync_playwright() as p:
     # Saved per-project settings are surfaced in the AI draft flow; no user generation here.
     page.get_by_label("New Strategy options", exact=True).click()
     page.get_by_role("button", name="Generate with AI", exact=True).click()
-    expect(dialog.locator(".provider-context")).to_have_text("openai · gpt-6-luna · Extra high")
+    expect(dialog.locator(".provider-context")).to_have_text(
+        "OpenAI API · billed separately · gpt-6-luna · Extra high"
+    )
     dialog.press("Escape")
     pencil.click()
     dialog.get_by_label("Project name", exact=True).fill("Unsaved conflicting name")
@@ -271,10 +273,12 @@ with sync_playwright() as p:
         ("forbidden", "OpenAI API access denied", "403 permissions denied"),
         ("limited", "OpenAI API rate/quota limited", "429 rate/quota limited"),
         ("unavailable", "OpenAI API unavailable", "Check connection"),
-        ("unconfigured", "OpenAI API not configured", "Set SIGMA_AI_ENABLED=1 and OPENAI_API_KEY"),
-        ("connected", "OpenAI API connected", "Authentication only, not generation or billing"),
+        ("unconfigured", "OpenAI API not configured", "Set OPENAI_API_KEY"),
+        ("connected", "OpenAI API · key billing", "Authentication only, not generation or billing"),
     ]:
         data = {
+            "mode": "api_key",
+            "accounts": [],
             "status": status,
             "label": label,
             "guidance": guidance,
@@ -289,11 +293,11 @@ with sync_playwright() as p:
         expect(page.get_by_role("button", name="Edit Project", exact=True)).to_be_visible()
         expect(
             page.get_by_text(
-                "OpenAI API status stale" if status == "connected" else label, exact=True
+                "AI connection check expired" if status == "connected" else label, exact=True
             )
         ).to_be_visible()
-        page.get_by_label("OpenAI API connection details", exact=True).click()
-        expect(page.get_by_role("button", name="Retry API connection", exact=True)).to_be_enabled()
+        page.get_by_label("AI connection settings", exact=True).click()
+        expect(page.get_by_role("button", name="Retry connection", exact=True)).to_be_enabled()
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-status-{status}-320.png", full_page=True)
         page.unroute("**/api/ai/connection?*")

@@ -5,7 +5,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import re
 import secrets
 import threading
@@ -17,7 +16,8 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma.model_catalog import DEFAULT_MODEL, validate_pair
-from sigma.openai_connection import models
+from sigma.openai_connection import auth_context, models
+from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, ProjectView, Provenance, inspect_project
 
 TIMEOUT_SECONDS = 60
@@ -37,11 +37,14 @@ class Proposal(BaseModel):
     failure_modes: str = Field(min_length=1, max_length=1000)
 
 
-async def configuration(path: str | None = None, view: ProjectView | None = None) -> dict[str, Any]:
+async def configuration(
+    path: str | None = None, view: ProjectView | None = None, context: dict | None = None
+) -> dict[str, Any]:
     snapshot = view or (inspect_project(path) if path else None)
     model = snapshot.project.ai_model if snapshot else DEFAULT_MODEL
     effort = snapshot.project.reasoning_effort if snapshot else "high"
-    discovery = await models()
+    context = context or await auth_context()
+    discovery = await models(context=context)
     available = False
     message = discovery["connection"]["guidance"]
     try:
@@ -54,6 +57,9 @@ async def configuration(path: str | None = None, view: ProjectView | None = None
         message = str(exc)
     return {
         "provider": "openai",
+        "mode": discovery["connection"]["mode"],
+        "binding": context["identity"],
+        "project_id": snapshot.project.id if snapshot else None,
         "model": model,
         "reasoning_effort": effort,
         "available": available,
@@ -126,13 +132,24 @@ def context_for(path: str, seed: str, view: ProjectView | None = None) -> tuple[
     return project.id, context
 
 
-async def generate_proposal(path: str, seed: str = "", consent: bool = False) -> dict[str, Any]:
-    if not consent:
-        raise ProjectError(
-            "Consent is required to send the project problem, mode, existing strategies and optional starting point to OpenAI; API usage is billed separately."
-        )
+async def generate_proposal(
+    path: str,
+    seed: str = "",
+    consent: bool = False,
+    expected_binding: str | None = None,
+    expected_project_id: str | None = None,
+) -> dict[str, Any]:
     view = inspect_project(path)
-    config = await configuration(view=view)
+    if expected_project_id is not None and view.project.id != expected_project_id:
+        raise ProjectError(
+            "Project identity changed. Reopen it before generating; nothing was sent."
+        )
+    credential = await auth_context()
+    if expected_binding is not None and expected_binding != credential["identity"]:
+        raise ProjectError(
+            "AI account/billing mode changed. Review the current connection before generating; no request was sent."
+        )
+    config = await configuration(view=view, context=credential)
     if not config["available"]:
         raise ProjectError(config["message"])
     project_id, context = context_for(path, seed, view)
@@ -158,6 +175,15 @@ async def generate_proposal(path: str, seed: str = "", consent: bool = False) ->
                 }
             },
         }
+        if credential["mode"] == "chatgpt":
+            payload.pop("max_output_tokens")
+            payload["stream"] = True
+            payload["input"] = [{"role": "user", "content": context}]
+        current = await auth_context()
+        if current["identity"] != credential["identity"] or current["mode"] != credential["mode"]:
+            raise ProjectError(
+                "AI account/billing mode changed. Retry explicitly with the selected account; no request was sent."
+            )
         # asyncio.timeout bounds the whole operation, including slow streaming peers.
         async with (
             asyncio.timeout(TIMEOUT_SECONDS),
@@ -167,22 +193,37 @@ async def generate_proposal(path: str, seed: str = "", consent: bool = False) ->
             client.stream(
                 "POST",
                 "https://api.openai.com/v1/responses",
-                headers={"Authorization": "Bearer " + os.environ["OPENAI_API_KEY"]},
+                headers={"Authorization": "Bearer " + credential["token"]},
                 json=payload,
             ) as response,
         ):
-            if response.status_code != 200:
-                raise ProjectError(
-                    f"OpenAI request failed (HTTP {response.status_code}) for {config['model']} / {config['reasoning_effort']}. Check model/effort compatibility, API permissions or billing; no fallback or strategy save occurred."
+            if credential["mode"] == "chatgpt" and response.status_code == 200:
+                raw = await completed(
+                    response,
+                    hashlib.sha256((credential["mode"] + credential["token"]).encode()).hexdigest(),
                 )
-            data = bytearray()
-            async for chunk in response.aiter_bytes():
-                data.extend(chunk)
-                if len(data) > MAX_RESPONSE:
-                    raise ProjectError(
-                        "Provider response exceeded the limit; no strategy was saved."
+            else:
+                data = bytearray()
+                async for chunk in response.aiter_bytes():
+                    data.extend(chunk)
+                    if len(data) > MAX_RESPONSE:
+                        raise ProjectError(
+                            "Provider response exceeded the limit; no strategy was saved."
+                        )
+                if response.status_code != 200:
+                    try:
+                        detail = json.loads(data)
+                    except ValueError:
+                        detail = {}
+                    failure(
+                        response.status_code,
+                        detail,
+                        credential["mode"],
+                        hashlib.sha256(
+                            (credential["mode"] + credential["token"]).encode()
+                        ).hexdigest(),
                     )
-        raw = json.loads(data)
+                raw = json.loads(data)
         if raw.get("status") != "completed":
             raise ProjectError(
                 "Provider did not complete the proposal. Retry explicitly; no strategy was saved."

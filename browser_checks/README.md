@@ -44,3 +44,24 @@ connection checking/green/auth/permission/rate/offline/stale labels and mobile
 screens. The fixture's authenticated `/v1/models` response includes an unreviewed
 ID deliberately; it must never become a dropdown option. This is a controlled
 transport test, not verification of real API credentials, credits or billing.
+
+## A8.2 ChatGPT-plan sign-in
+
+Stop the API-key fixture before starting the separate OAuth fixture on port 8001:
+
+```sh
+uv run uvicorn chatgpt_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8001
+uv run --with playwright python browser_checks/chatgpt.py
+```
+
+The normal UI stays on 5173. Only the test browser forwards API requests to the
+fixture. The fixture creates private temporary app/project storage, validates
+real PKCE/code exchange and signed generated RSA ID tokens, and supplies bounded
+SSE. The browser substitutes the trusted authorization redirect with a simulated
+provider callback; it never contacts a live OAuth account. Tests cover manual
+work while disconnected, cancelled/declined auth with seed retained, one resumed
+generation, explicit human save, welcome once, accounts, billing choices, limits,
+expiry/offline/permission states, keyboard focus and 1280/1440/390/320px screens.
+Screenshots: `/tmp/sigma-a82-*.png`. These are fixtures, not live entitlement or
+plan-capacity verification. The API-key regression fixture explicitly selects
+its dummy key mode during fixture startup; production never does that implicitly.

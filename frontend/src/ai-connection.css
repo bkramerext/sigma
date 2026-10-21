@@ -1,0 +1,18 @@
+.connection-details { max-height: min(560px, calc(100dvh - 170px)); overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+.connection-details button { margin: 4px 6px 6px 0; min-height: 36px; }
+.connection-details a, .plan-welcome a { color: #e4b87f; display: inline-block; padding: 6px 0; }
+.connection-details label { display: block; font-size: 12px; margin: 10px 0; }
+.connection-details select { width: 100%; background: #07111e; color: #dce7f0; border: 1px solid #826442; padding: 8px; font-size: 12px; }
+.chatgpt-sign-in, .connection-details .chatgpt-sign-in { background: #fff; color: #111; border: 1px solid #fff; border-radius: 6px; font: 600 14px/1.5 ui-sans-serif, system-ui, sans-serif; padding: 10px 14px; min-height: 44px; }
+.ai-connect-actions p { margin: 8px 0; }
+.advanced-ai { margin-top: 10px; font-size: 12px; }
+.advanced-ai summary { cursor: pointer; padding: 8px 0; }
+.advanced-ai p { margin-top: 8px; }
+.plan-welcome { border: 1px solid #826442; border-radius: 6px; padding: 14px; color: #dce7f0; background: #08131f; font: 13px/1.6 ui-sans-serif, system-ui, sans-serif; margin: 12px 0; }
+.plan-welcome strong { display: block; }
+.plan-welcome p { margin: 6px 0; }
+.plan-welcome button { margin-left: 12px; padding: 6px 12px; }
+.plan-welcome-toast { position: fixed; bottom: 18px; right: 18px; width: min(360px, calc(100vw - 36px)); z-index: 100; }
+.ai-connect-actions { margin: 10px 0; }
+.provider-context a { margin-left: 8px; }
+.chatgpt-sign-in img { display: inline-block; vertical-align: middle; margin-right: 9px; }

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import httpx
 
+from sigma import chatgpt_auth
 from sigma import openai_connection as connection
 from sigma.model_catalog import CATALOG
 from sigma.projects import (
@@ -50,6 +51,7 @@ def client_factory(handler):
 
 
 async def checks():
+    await chatgpt_auth.select("api_key")
     calls = []
 
     async def success(request):
@@ -136,7 +138,7 @@ async def checks():
         assert (await connection.connection())["status"] == "unavailable"
     reset()
     with (
-        patch.dict(os.environ, {"SIGMA_AI_ENABLED": "0"}),
+        patch.dict(os.environ, {"OPENAI_API_KEY": ""}),
         patch(
             "sigma.openai_connection.httpx.AsyncClient", side_effect=AssertionError("must not send")
         ),
@@ -241,7 +243,12 @@ async def checks():
 
 
 def main():
-    with patch.dict(os.environ, {"SIGMA_AI_ENABLED": "1", "OPENAI_API_KEY": KEY}):
+    with (
+        TemporaryDirectory() as directory,
+        patch.dict(
+            os.environ, {"SIGMA_AUTH_HOME": str(Path(directory) / "auth"), "OPENAI_API_KEY": KEY}
+        ),
+    ):
         asyncio.run(checks())
 
 

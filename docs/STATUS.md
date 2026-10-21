@@ -454,3 +454,83 @@ Same-user malicious processes are outside the private-directory trust boundary.
 No paid generation or live provider billing/quality verification was performed.
 Existing untracked `models.json`, local `.env`, project research and artwork are
 not committed or rewritten by this change.
+
+## A8.2 — ChatGPT connection and explicit billing modes
+
+Implemented documented local OSS Sign in with ChatGPT. The repository's public
+visibility and Apache license were checked, and current official SIWC discovery,
+registration, session, token, model/inference, preview and UI documentation was
+read before implementation. Exact sources and security decisions are in
+[asn8.2-security.md](asn8.2-security.md).
+
+Home/workspace reuse the small top-right account control: Connect AI, official
+Continue with ChatGPT button, connected/account/usage/reconnect states, account
+switch/add, disconnect, and explicit advanced API-key billing. Manual work needs
+no connection, key, .env or enable flag. A present key never selects billing;
+SIGMA_AI_ENABLED no longer gates runtime behavior. Plan failures never use a key.
+
+Backend-owned PKCE/state/nonce and real loopback callback validate signed RS256
+OIDC identity, issued client/account binding, scopes and expiration. Stable host
+and separate registrations persist in private owner-only application storage,
+never projects, Git, Vite or React. Refresh rotation serializes across processes;
+terminal errors retain registration for reconnect. Invalid-grant code retries
+retain the issued client transiently. Disconnect reports unconfirmed revocation
+honestly. Account storage failures keep manual model defaults available.
+
+On-demand sign-in retains seed/draft and resumes one initiating generation,
+checking project/account bindings and cancellation. Header sign-in does not
+generate. Plan requests use the required bounded SSE Responses contract and
+preview-compatible body; API-key requests keep their existing contract. Both
+retain strict proposal validation, returned-model/effort receipts, explicit human
+Save Strategy and schema v6. No recurring consent checkbox or automatic saving.
+One-time welcome is informational. Existing SIGMA artwork is unchanged; the
+sign-in mark is the unmodified official asset. A9 remains separate.
+
+Actual verification:
+
+- `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright (zero errors),
+  frontend typecheck and production build. Existing non-failing TestClient
+  deprecation notice remains. Final frontend build and Ruff check/format over
+  src/scenarios/browser_checks passed (39 Python files); final Pyright passed.
+- `scenarios/chatgpt.py`: real loopback callback and generated RSA-signed OIDC
+  fixtures verify PKCE/exact code exchange, stable host/issued client, nonce,
+  state, issuer/audience/signature/expiry/subject/client rejection, missing tokens,
+  duplicate callback race, cancellation/decline, discovery endpoint validation,
+  scope denial/enablement, distinct same-email registrations, both catalog shapes,
+  strict completed SSE and malformed/out-of-order/incomplete/failed/oversized
+  errors, explicit API mode without flag, no billing fallback or sign-in writes,
+  project/account binding, terminal refresh and confirmed/unconfirmed revoke.
+  Added invalid-grant retry and unreadable-store/manual-default checks passed.
+- `scenarios/chatgpt_restart.py`: two fresh real processes contending for an
+  expired rotating session performed exactly one refresh, retained host/account/
+  client identity, and atomically stored the replacement with 0600 permissions.
+- Real Chrome `browser_checks/chatgpt.py` passed manual project/strategy creation
+  while disconnected, cancelled/declined login preserving a nonempty seed, signed
+  simulated authorization resuming exactly one SSE generation, no pre-acceptance
+  project write, one explicit human save, actual returned-model provenance,
+  welcome once/reload without generation, account menu/switch, explicit API billing,
+  expiry/offline/permission/usage-limit states, keyboard focus and no JS errors.
+  Responsive screenshots at 1280x720, 1440x900, 390x844 and 320x844 are under
+  `/tmp/sigma-a82-*.png`; desktop and mobile menu captures were visually inspected.
+- Existing `browser_checks/settings.py`, `browser_checks/strategies.py`, and
+  `browser_checks/http_cancel.py` passed with explicit no-network API-key fixtures.
+  Settings CRUD/conflicts/offline preservation, manual strategy CRUD/stages,
+  mouse/keyboard/touch ordering, draft review/acceptance and actual HTTP
+  disconnection/cancellation all remain working. Fixture startup now explicitly
+  selects dummy key billing; production never does so automatically.
+- `scenarios/ui_lifecycle.py` passed real fresh-shell restart with updated .env,
+  explicit persisted key-mode selection, proxy/origin routing, old owner/children
+  gone, Ctrl+C/SIGTERM, hard-crash pipe cleanup/stale recovery, rapid launches,
+  different checkout and unrelated listener refusal, and unchanged research.
+- Normal launcher was restarted; real Chrome confirmed Home/account control and
+  official sign-in asset without starting live OAuth or generation.
+
+Limits: all OAuth and inference verification uses controlled fixtures. Live
+sign-in, account/workspace eligibility, structured-output admission, plan capacity
+and billing/quality have not been verified or consumed. Live testing requires an
+explicit user request. Private files protect against other OS accounts, not code
+already running as this account; a crash between remote token rotation and local
+publication can require reconnect. Tested on macOS/Chrome, not physical devices
+or Linux. A9's Recent Projects and dialog-header correction are not implemented
+here. Local .env, existing research, canonical artwork and untracked models.json
+are not committed or rewritten.

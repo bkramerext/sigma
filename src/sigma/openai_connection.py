@@ -10,7 +10,9 @@ from typing import Any
 
 import httpx
 
+from sigma import chatgpt_auth
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL
+from sigma.projects import ProjectError
 
 TTL = 60
 RETRY_COOLDOWN = 3
@@ -21,14 +23,16 @@ _at = 0.0
 _identity = ""
 _pending: asyncio.Task | None = None
 _known: set[str] = set()
+_labels: dict[str, str] = {}
+_order: list[str] = []
 MESSAGES = {
     "connected": (
-        "OpenAI API connected",
+        "OpenAI API · key billing",
         "API authentication/reachability verified only. This does not verify selected-model generation, credits, quota or billing.",
     ),
     "unconfigured": (
         "OpenAI API not configured",
-        "Set SIGMA_AI_ENABLED=1 and OPENAI_API_KEY in the checkout .env (or server environment), then run ./sigma ui to restart. Manual work remains available.",
+        "API key not configured. Set OPENAI_API_KEY in the checkout .env (or server environment), then run ./sigma ui. This optional mode uses separate API billing; manual work remains available.",
     ),
     "unauthorized": (
         "Can't connect to OpenAI API · Check API key",
@@ -64,8 +68,8 @@ def _result(status: str, checked: str | None) -> dict[str, Any]:
     }
 
 
-async def _check(key: str) -> dict[str, Any]:
-    global _cached, _at, _known
+async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
+    global _cached, _at, _known, _labels, _order
     status = "unavailable"
     try:
         async with (
@@ -84,23 +88,42 @@ async def _check(key: str) -> dict[str, Any]:
                     if len(data) > MAX_BYTES:
                         raise ValueError()
                 raw = json.loads(data)
+                if not isinstance(raw, dict):
+                    raise ValueError()
+                records = raw.get("models") if mode == "chatgpt" else raw.get("data")
                 if (
-                    not isinstance(raw, dict)
-                    or raw.get("object") != "list"
-                    or not isinstance(raw.get("data"), list)
-                    or len(raw["data"]) > 10000
+                    not isinstance(records, list)
+                    or len(records) > 10000
+                    or (mode == "api_key" and raw.get("object") != "list")
                 ):
                     raise ValueError()
-                ids = set()
-                for model in raw["data"]:
-                    if (
-                        not isinstance(model, dict)
-                        or not isinstance(model.get("id"), str)
-                        or not 1 <= len(model["id"]) <= 200
+                ids = []
+                labels = {}
+                for model in records:
+                    identifier = (
+                        model.get("slug" if mode == "chatgpt" else "id")
+                        if isinstance(model, dict)
+                        else None
+                    )
+                    if not isinstance(identifier, str) or not 1 <= len(identifier) <= 200:
+                        raise ValueError()
+                    if mode == "chatgpt" and (
+                        not isinstance(model.get("display_name"), str)
+                        or model.get("visibility") not in {"list", "hide", "hidden"}
                     ):
                         raise ValueError()
-                    ids.add(model["id"])
-                _known = ids & set(CATALOG)
+                    if identifier in ids:
+                        raise ValueError()
+                    if mode != "chatgpt" or model.get("visibility") == "list":
+                        ids.append(identifier)
+                        if mode == "chatgpt":
+                            label = model["display_name"]
+                            if not 1 <= len(label) <= 100 or any(ord(char) < 32 for char in label):
+                                raise ValueError()
+                            labels[identifier] = label
+                _known = set(ids) & set(CATALOG)
+                _labels = labels
+                _order = [identifier for identifier in ids if identifier in CATALOG]
                 status = "connected"
             else:
                 status = {401: "unauthorized", 403: "forbidden", 429: "limited"}.get(
@@ -115,42 +138,150 @@ async def _check(key: str) -> dict[str, Any]:
     return dict(_cached)
 
 
-async def connection(refresh: bool = False) -> dict[str, Any]:
+async def auth_context() -> dict[str, Any]:
+    selected = await chatgpt_auth.session()
+    mode = selected["mode"]
+    if mode == "api_key":
+        token = os.environ.get("OPENAI_API_KEY", "").strip()
+        return {
+            "mode": mode,
+            "token": token,
+            "status": "connected" if token else "unconfigured",
+            "identity": "api_key",
+        }
+    account = selected.get("account") or {}
+    return {
+        "mode": mode,
+        "token": account.get("access_token", ""),
+        "status": selected.get("status", "disconnected"),
+        "identity": "chatgpt:" + str(selected.get("account_id", "")),
+        "account_label": account.get("email") or account.get("name"),
+    }
+
+
+PLAN_MESSAGES = {
+    "disconnected": (
+        "Connect AI",
+        "Use your ChatGPT plan for eligible requests, or choose optional API-key billing. Manual research needs no connection.",
+    ),
+    "connected": (
+        "ChatGPT connected",
+        "Using ChatGPT plan allowance or credits. Session, permission and catalog verified; inference and remaining usage are not guaranteed.",
+    ),
+    "reauth_required": (
+        "Reconnect ChatGPT",
+        "Your ChatGPT session needs sign-in again. Research and saved account identity are retained.",
+    ),
+    "plan_not_permitted": (
+        "ChatGPT · plan access not enabled",
+        "Enable ChatGPT plan use for this account, or explicitly choose API-key billing. No automatic billing switch.",
+    ),
+    "limited": (
+        "ChatGPT usage limit reached",
+        "Review plan or app limits in Manage usage. API-key billing has not been selected automatically.",
+    ),
+    "forbidden": (
+        "ChatGPT access restricted",
+        "A plan/workspace/region policy prevented access. Check your account permissions; no billing fallback occurred.",
+    ),
+    "unauthorized": (
+        "Reconnect ChatGPT",
+        "ChatGPT did not accept this authorization. Reconnect the selected account; no API key is needed.",
+    ),
+    "unavailable": (
+        "ChatGPT temporarily unavailable",
+        "Retry later. Your account is retained; no API-key fallback or inference health check was attempted.",
+    ),
+    "invalid_response": (
+        "ChatGPT access unknown",
+        "The account catalog could not be validated. Retry; existing settings and credentials are retained.",
+    ),
+}
+
+
+async def connection(refresh: bool = False, context: dict | None = None) -> dict[str, Any]:
     global _identity, _pending, _cached, _known
-    key = os.environ.get("OPENAI_API_KEY", "").strip()
-    enabled = os.environ.get("SIGMA_AI_ENABLED") == "1"
-    identity = hashlib.sha256((str(enabled) + key).encode()).hexdigest()
+    try:
+        context = context or await auth_context()
+        prefs = await chatgpt_auth.preferences()
+    except ProjectError:
+        return {
+            "mode": "unknown",
+            "status": "unavailable",
+            "label": "AI account storage unavailable",
+            "guidance": "Check private SIGMA account storage ownership/permissions. Manual research remains available; no credential or billing path was selected.",
+            "accounts": [],
+            "active_account": None,
+            "welcome_pending": False,
+            "checked_at": None,
+            "ttl_seconds": TTL,
+        }
+    key, mode = context["token"], context["mode"]
+    identity = hashlib.sha256((mode + key).encode()).hexdigest()
     if identity != _identity:
         if _pending and not _pending.done():
             _pending.cancel()
             await asyncio.gather(_pending, return_exceptions=True)
         _identity, _cached, _known, _pending = identity, None, set(), None
-    if not enabled or not key:
-        return _result("unconfigured", None)
-    age = time.monotonic() - _at
-    if _cached and age < (RETRY_COOLDOWN if refresh else TTL):
-        return dict(_cached)
-    if _pending is None or _pending.done():
-        _pending = asyncio.create_task(_check(key))
-    return dict(await asyncio.shield(_pending))
+    if context["status"] != "connected":
+        state = {"status": context["status"], "checked_at": None, "ttl_seconds": TTL}
+    else:
+        age = time.monotonic() - _at
+        if not _cached or age >= (RETRY_COOLDOWN if refresh else TTL):
+            if _pending is None or _pending.done():
+                _pending = asyncio.create_task(_check(key, mode))
+            await asyncio.shield(_pending)
+        state = dict(_cached or _result("unavailable", None))
+    label, guidance = (PLAN_MESSAGES if mode == "chatgpt" else MESSAGES)[state["status"]]
+    return {
+        **state,
+        **prefs,
+        "mode": mode,
+        "label": label,
+        "guidance": guidance,
+        "account_label": context.get("account_label"),
+        "welcome_pending": prefs["welcome_pending"]
+        and mode == "chatgpt"
+        and state["status"] == "connected",
+    }
 
 
-async def models(refresh: bool = False) -> dict[str, Any]:
-    state = await connection(refresh)
+def inference_failure(status: str, guard: str | None = None) -> None:
+    global _cached, _at
+    if guard is not None and guard != _identity:
+        return
+    _cached = {"status": status, "checked_at": datetime.now(UTC).isoformat(), "ttl_seconds": TTL}
+    _at = time.monotonic()
+
+
+async def models(refresh: bool = False, context: dict | None = None) -> dict[str, Any]:
+    state = await connection(refresh, context)
     verified = state["status"] == "connected"
     choices = [
         {
             "id": identifier,
             **capability,
+            "label": _labels.get(identifier, capability["label"])
+            if state["mode"] == "chatgpt" and verified
+            else capability["label"],
             "availability": ("available" if identifier in _known else "unavailable")
             if verified
             else "unverified",
         }
-        for identifier, capability in CATALOG.items()
+        for identifier in (
+            (_order + [key for key in CATALOG if key not in _order])
+            if state["mode"] == "chatgpt" and verified
+            else list(CATALOG)
+        )
+        for capability in [CATALOG[identifier]]
     ]
     accessible = [c["id"] for c in choices if c["availability"] == "available"]
     default = DEFAULT_MODEL if DEFAULT_MODEL in accessible or not accessible else accessible[0]
-    message = "Account access checked; generation/billing is not verified."
+    message = (
+        "Using ChatGPT plan allowance or credits."
+        if state["mode"] == "chatgpt"
+        else "OpenAI API · billed separately."
+    ) + " Account access checked; inference/remaining usage is not verified."
     if not accessible:
         message = "No reviewed model is verified accessible. Sol/High is an unverified offline preference; manual research remains available."
     elif default != DEFAULT_MODEL:

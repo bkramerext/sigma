@@ -214,3 +214,31 @@ conflict rather than automatic alternate ports. This avoids extra dynamic proxy
 and origin configuration. A per-launch public non-secret readiness ID must match
 through both backend and frontend proxy before the URL is announced. Project
 storage, Close semantics, frontend design and artwork are unchanged.
+
+## A8.2: explicit billing modes and remembered ChatGPT authorization
+
+The default connection path is ChatGPT plan with no key/flag requirement for
+manual research or sign-in. Header and on-demand proposal auth share one account
+control; OAuth alone never generates. A pending generation retains seed/draft,
+checks project/account bindings, resumes once, and still needs explicit Save.
+API-key billing is a persisted explicit application choice, never a fallback.
+The old enable gate and recurring consent checkbox are removed. Mode/account
+stay outside research packages; schema v6, High and historic provenance remain.
+
+Use documented OSS SIWC dynamic registration with stable host UUID, PKCE/state/
+nonce, an exact loopback callback and validated RS256/JWKS identity. Credentials
+and issued-client/account mappings use a portable private 0700/0600 no-follow
+app store, atomically replaced under a cross-process refresh lock. A Keychain
+integration is deferred; same-OS-account code remains the trust boundary. Rotate
+refresh tokens together, respect earliest refresh, retain account mapping after
+terminal errors, and disclose unconfirmed remote revocation. An unreadable
+account store leaves the unverified model defaults usable for manual creation.
+
+Plan and API-key providers have different model-list and inference contracts.
+Plan requests stream SSE through a validated completion with no preview-forbidden
+fields; key mode retains bounded non-streaming Responses. Both use reviewed
+models/efforts, immutable request snapshots and common structured validation.
+Limits/outages/unsupported capability errors never retry or change billing.
+The exact docs, storage/security limits and fixture-only verification boundary
+are recorded in [A8.2 security notes](asn8.2-security.md). Existing art stays fixed;
+only the unmodified official ChatGPT sign-in mark is added. A9 remains separate.

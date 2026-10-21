@@ -10,7 +10,7 @@ from unittest.mock import patch
 import httpx
 from fastapi.testclient import TestClient
 
-from sigma import proposals
+from sigma import chatgpt_auth, proposals
 from sigma.api import app
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 
@@ -51,6 +51,7 @@ async def rejects(awaitable, contains=None):
 
 
 async def check(path):
+    await chatgpt_auth.select("api_key")
     before = (path / "project.json").read_bytes()
     calls = []
 
@@ -81,8 +82,6 @@ async def check(path):
         return REAL_CLIENT(transport=httpx.MockTransport(handler), **kwargs)
 
     with patch("sigma.proposals.httpx.AsyncClient", side_effect=client):
-        await rejects(proposals.generate_proposal(str(path), consent=False))
-        assert not calls
         first = await proposals.generate_proposal(str(path), consent=True)
         second = await proposals.generate_proposal(str(path), "Try a necessary condition", True)
         assert len(calls) == 2
@@ -211,7 +210,7 @@ async def check(path):
         create_strategy(path, str(i), "X" * 10000)
     with patch("sigma.proposals.httpx.AsyncClient", side_effect=AssertionError("must not send")):
         await rejects(proposals.generate_proposal(str(path), consent=True))
-    with patch.dict(os.environ, {"SIGMA_AI_ENABLED": "0"}):
+    with patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
         await rejects(proposals.generate_proposal(str(path), consent=True))
     with patch.dict(os.environ, {"SIGMA_AI_MODEL": "bad model"}):
         from sigma.model_catalog import legacy_model
@@ -228,7 +227,7 @@ def main():
         patch.dict(
             os.environ,
             {
-                "SIGMA_AI_ENABLED": "1",
+                "SIGMA_AUTH_HOME": str(Path(directory) / "auth"),
                 "OPENAI_API_KEY": "explicit-test-fixture-not-a-secret",
                 "SIGMA_AI_MODEL": "gpt-4.1",
             },

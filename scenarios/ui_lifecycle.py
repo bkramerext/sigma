@@ -110,7 +110,11 @@ def main():
             if not key.startswith(("OPENAI_", "SIGMA_", "UV_"))
             and key not in {"VIRTUAL_ENV", "PYTHONPATH"}
         }
-        env.update(PYTHONPATH=str(fixtures), SIGMA_FIXTURE_LOG=str(base / "provider.log"))
+        env.update(
+            PYTHONPATH=str(fixtures),
+            SIGMA_FIXTURE_LOG=str(base / "provider.log"),
+            SIGMA_AUTH_HOME=str(base / "auth"),
+        )
         subprocess.run(
             ["uv", "sync", "--locked", "--project", str(root)],
             env=env,
@@ -153,6 +157,16 @@ def main():
             first, log1 = launch()
             ready(first, log1)
             old_children = descendants(first.pid)
+            # A8.2: merely configuring a key no longer selects separate billing.
+            assert get("/api/ai/connection")["status"] == "disconnected"
+            with urlopen(
+                Request(
+                    "http://127.0.0.1:5173/api/ai/mode",
+                    data=b'{"mode":"api_key"}',
+                    headers={"Origin": "http://127.0.0.1:5173", "Content-Type": "application/json"},
+                )
+            ) as selected:
+                assert selected.status == 200
             assert get("/api/ai/connection")["status"] == "connected"
             assert get("/api/ai/models")["default_model"] == "gpt-6.1-sol"
             configure("launcher-fixture-two")
@@ -179,7 +193,7 @@ def main():
                 )
                 page = browser.new_page()
                 page.goto("http://127.0.0.1:5173/")
-                expect(page.get_by_text("OpenAI API connected", exact=True)).to_be_visible()
+                expect(page.get_by_text("OpenAI API · key billing", exact=True)).to_be_visible()
                 page.get_by_role("button", name="New Project", exact=True).click()
                 expect(
                     page.get_by_role("dialog").get_by_role(

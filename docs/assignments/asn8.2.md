@@ -1,6 +1,6 @@
 # A8.2: Frictionless ChatGPT connection and explicit AI billing modes
 
-**Status:** Ready for Codex; specification only, no implementation yet. **Implement after A8.1** (already completed), coordinate with A9 (Recent Projects and the laptop-sized project-dialog fix) without overwriting either assignment. Before changing code, inspect the current `main`, `docs/STATUS.md`, `docs/HUMAN-AI-INTERACTION.md`, `src/sigma/proposals.py`, `src/sigma/openai_connection.py`, `src/sigma/model_catalog.py`, `src/sigma/local_config.py`, the A8 Create/Edit project form, the A7 AI proposal dialog, and real browser tests.
+**Status:** Implemented and fixture-verified; live account sign-in/inference not tested. **Implement after A8.1** (already completed), coordinate with A9 (Recent Projects and the laptop-sized project-dialog fix) without overwriting either assignment. Before changing code, inspect the current `main`, `docs/STATUS.md`, `docs/HUMAN-AI-INTERACTION.md`, `src/sigma/proposals.py`, `src/sigma/openai_connection.py`, `src/sigma/model_catalog.py`, `src/sigma/local_config.py`, the A8 Create/Edit project form, the A7 AI proposal dialog, and real browser tests.
 
 ## Product objective and non-negotiable design direction
 

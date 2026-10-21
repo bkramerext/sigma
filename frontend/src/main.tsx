@@ -1,10 +1,11 @@
-import { createContext, useContext, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
 import './project-entry.css';
 import './strategies.css';
 import './project-settings.css';
+import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, useAI } from './ai-connection';
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
@@ -50,35 +51,6 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
-
-type ConnectionInfo = { status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number };
-const ConnectionContext = createContext<{ info: ConnectionInfo | null; checking: boolean; refresh: () => void }>({ info: null, checking: true, refresh: () => {} });
-function ConnectionStatus() {
-  const disclosure = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    function outside(event: PointerEvent) { if (event.target instanceof Node && disclosure.current && !disclosure.current.contains(event.target)) disclosure.current.open = false; }
-    function escape(event: KeyboardEvent) { if (event.key === 'Escape' && disclosure.current?.open) { disclosure.current.open = false; disclosure.current.querySelector('summary')?.focus(); } }
-    document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
-    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, []);
-  const { info, checking, refresh } = useContext(ConnectionContext);
-  const [stale, setStale] = useState(false);
-  useEffect(() => {
-    setStale(false);
-    if (!info?.checked_at) return;
-    const remaining = Date.parse(info.checked_at) + info.ttl_seconds * 1000 - Date.now();
-    if (remaining <= 0) { setStale(true); return; }
-    const timer = window.setTimeout(() => setStale(true), remaining); return () => clearTimeout(timer);
-  }, [info]);
-  const status = checking ? 'checking' : stale ? 'stale' : info?.status ?? 'unknown';
-  const label = checking ? 'Checking OpenAI API…' : stale ? 'OpenAI API status stale' : info?.label ?? 'OpenAI API status unknown';
-  return <details ref={disclosure} className="api-connection"><summary aria-label="OpenAI API connection details"><span className={`connection-dot connection-${status}`} aria-hidden="true"/><span role="status" aria-live="polite">{label}</span></summary>
-    <div className="connection-details"><p>{stale ? 'This check has expired. Retry to verify the current API connection.' : info?.guidance ?? 'Checking the local server. No model generation is requested.'}</p>
-      {info?.checked_at && <p>Last checked: <time dateTime={info.checked_at}>{dateLabel(info.checked_at)}</time></p>}
-      <button type="button" disabled={checking} onClick={refresh}>{checking ? 'Checking…' : 'Retry API connection'}</button>
-    </div>
-  </details>;
-}
 
 function Header({ goHome, close, projectTitle }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string }) {
@@ -172,6 +144,7 @@ const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', h
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, research_mode: view.project.research_mode, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort });
 
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
+  const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -191,7 +164,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       if (!initial) setValues(previous => previous.ai_model ? previous : { ...previous, ai_model: data.default_model, reasoning_effort: data.default_effort });
     }).catch(error => { if (!controller.signal.aborted) setCatalogMessage(errorMessage(error)); });
     return () => controller.abort();
-  }, []);
+  }, [ai.info?.mode, ai.info?.active_account]);
   useEffect(() => {
     if (initial) return;
     const controller = new AbortController(); setPreviewBusy(true); setDestination(null); setLocationError('');
@@ -229,12 +202,12 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
         {catalog.map(model => <option key={model.id} value={model.id}>{model.label}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
       </select>
-      <p id="project-model-help" className="settings-hint">{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p>
+      <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately. ' : 'ChatGPT plan allowance or credits · connection required for generation. '}{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p>
       <label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
         {!selected?.efforts.includes(values.reasoning_effort) && <option value={values.reasoning_effort}>{thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · {selected ? 'unsupported' : 'preserved'}</option>}
         {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
       </select>
-      <p className="settings-hint">Applies to future AI proposals. Higher thinking can take longer and use more API tokens. Cost tiers are relative; <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">current token prices</a>. Earlier strategy provenance stays unchanged.</p>
+      <p className="settings-hint">Applies to future AI proposals. Higher thinking can take longer and consume more usage. API cost tiers are relative; <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">current token prices</a>. Earlier strategy provenance stays unchanged.</p>
       {pairError && <p className="error" role="alert">{pairError}</p>}
       <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
       {locationError && <p className="error" role="alert">{locationError}</p>}
@@ -401,12 +374,12 @@ function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
   </dialog>;
 }
 
-function NewStrategy({ path, onSaved, onCancel }: {
-  path: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
+function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
+  path: string; initialDraft?: { title: string; approach: string }; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const submitting = useRef(false);
-  const [title, setTitle] = useState('');
-  const [approach, setApproach] = useState('');
+  const [title, setTitle] = useState(initialDraft?.title ?? '');
+  const [approach, setApproach] = useState(initialDraft?.approach ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const titleInput = useRef<HTMLInputElement>(null);
@@ -459,15 +432,16 @@ function SplitStrategyAction({ buttonRef, disabled, onManual, onAI }: {
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
-function GenerateStrategy({ path, onSaved, onCancel }: {
-  path: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
+function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
+  path: string; projectId: string; onManual: (draft: { title: string; approach: string }) => void; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
   const submitting = useRef(false);
-  const [config, setConfig] = useState<{ available: boolean; provider: string; model: string; reasoning_effort: string; message: string } | null>(null);
+  const [config, setConfig] = useState<{ available: boolean; provider: string; mode: string; binding: string; project_id: string; model: string; reasoning_effort: string; message: string } | null>(null);
   const [seed, setSeed] = useState('');
-  const [consent, setConsent] = useState(false);
+  const ai = useAI();
+  const lifetime = useRef(new AbortController());
   const [result, setResult] = useState<ProposalResult | null>(null);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -479,14 +453,30 @@ function GenerateStrategy({ path, onSaved, onCancel }: {
     dialog.current?.showModal(); dialog.current?.querySelector('textarea')?.focus();
     const controller = new AbortController();
     fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Could not read AI configuration'); return response.json(); }).then(setConfig).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
-    return () => { controller.abort(); request.current?.abort(); };
+    return () => { controller.abort(); lifetime.current.abort(); request.current?.abort(); };
   }, []);
-  function cancel() { if (saving) return; request.current?.abort(); onCancel(); }
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal }).then(response => response.json()).then(setConfig).catch(() => {});
+    return () => controller.abort();
+  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
+  const needsConnection = ai.info?.mode !== 'api_key' && ['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected');
+  function cancel() { if (saving) return; lifetime.current.abort(); request.current?.abort(); onCancel(); }
   async function generate() {
     if (submitting.current) return; submitting.current = true;
     const controller = new AbortController(); request.current = controller; setBusy(true); setError('');
     try {
-      const next = await post<ProposalResult>('proposals', { path, seed, consent }, controller.signal);
+      if (needsConnection) {
+        const connected = await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted', signal: lifetime.current.signal });
+        if (!connected || lifetime.current.signal.aborted) return;
+      }
+      const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal });
+      if (!response.ok) throw new Error('Could not read current AI settings. Retry explicitly.');
+      const latest = await response.json(); setConfig(latest);
+      if (latest.project_id !== projectId) throw new Error('Project identity changed during sign-in. Reopen it before generating; your text is retained.');
+      if (!latest.available) throw new Error(latest.message);
+      if (lifetime.current.signal.aborted) return;
+      const next = await post<ProposalResult>('proposals', { path, seed, expected_binding: latest.binding, expected_project_id: projectId }, controller.signal);
       setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary);
       setApproach(`${next.draft.approach}\n\nFirst tests\n${next.draft.first_tests}\n\nAssumptions\n${next.draft.assumptions}\n\nWays this could fail\n${next.draft.failure_modes}`);
       requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
@@ -502,16 +492,20 @@ function GenerateStrategy({ path, onSaved, onCancel }: {
   return <dialog ref={dialog} className="strategy-dialog proposal-dialog" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onCancel={event => { event.preventDefault(); cancel(); }}>
     <h2 id="proposal-heading">Generate a strategy</h2>
     <p id="proposal-help" className="hint">Propose one distinct research direction. Review and edit the draft before saving. Nothing runs or saves automatically.</p>
-    <p className="provider-context">{config ? `${config.provider} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading server configuration…'}</p>
+    <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
     <label htmlFor="proposal-seed">Starting point <span className="hint">(optional)</span></label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
     <p id="seed-help" className="hint">A hunch, question, technique, observation or constraint—not an assumption to endorse. Leave empty for an independent direction.</p>
-    <label className="proposal-consent"><input type="checkbox" checked={consent} disabled={busy || saving} onChange={event => setConsent(event.target.checked)}/><span>I agree to send the project problem, research mode, all existing strategy titles/approaches (including removed ones), and this optional starting point to OpenAI. API usage is billed separately from ChatGPT/Codex.</span></label>
-    <p className="hint">One proposal per click, with a 60-second timeout. Oversized project context is rejected without truncation. Cancelling stops the local request; provider usage may already be billed.</p>
+    <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. One proposal per click, with a 60-second deadline. Cancelling stops the local request; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
-    <button type="button" className="secondary" disabled={!config?.available || !consent || busy || saving} onClick={() => void generate()}>{busy ? 'Generating…' : result ? 'Regenerate · new API request' : 'Generate draft'}</button>
+    <PlanWelcome/>
+    <button type="button" className={needsConnection ? 'chatgpt-sign-in' : 'secondary'} disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : 'Generating…' : needsConnection ? <><img src="/chatgpt-logo-black.svg" alt="" width="20" height="20"/>Continue with ChatGPT</> : result ? 'Regenerate · new request' : 'Generate draft'}</button>
+    {ai.connecting && <button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button>}
+    {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
+    {ai.error && <p role="alert" className="error">{ai.error}</p>}
+    <button type="button" className="text-button" disabled={busy || saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>
     <p role="status" className="sr-only">{busy ? 'Generating a draft. No strategy is being saved.' : result ? 'Editable draft ready for review.' : ''}</p>
     {error && <p role="alert" className="error">{error}</p>}
     <form onSubmit={save}>
@@ -539,6 +533,7 @@ function ProjectScreen({ path, onClose, goHome }: {
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [manualDraft, setManualDraft] = useState<{ title: string; approach: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const editProjectButton = useRef<HTMLButtonElement>(null);
   const [ordering, setOrdering] = useState(false);
@@ -631,7 +626,7 @@ function ProjectScreen({ path, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <div className="project-intro">
       <p className="project-eyebrow">Research project</p>
-      <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => setEditing(true)} onAI={() => setGenerating(true)}/>
+      <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
       <div className="project-name-line"><h1 ref={heading} tabIndex={-1}>{project.title}</h1><button ref={editProjectButton} className="edit-project-button" aria-label="Edit Project" title="Edit Project" disabled={closing || ordering || !!dragId || editing || generating} onClick={() => setProjectEditing(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Z M14 6l4 4"/></svg></button></div>
       <p className="objective">{project.problem}</p>
     </div>
@@ -642,7 +637,7 @@ function ProjectScreen({ path, onClose, goHome }: {
       </div>
       <p className="hint strategies-intro">Independent avenues of investigation. Stages are manually tracked.</p>
       <p className="sr-only" role="status">{announcement}</p>
-      <div id="strategy-composer">{editing && <NewStrategy path={view.path} onCancel={cancel} onSaved={next => {
+      <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
         const strategy = next.project.strategies[next.project.strategies.length - 1];
         setView(next); setEditing(false); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
@@ -680,7 +675,7 @@ function ProjectScreen({ path, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
     </section>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    {generating && <GenerateStrategy path={view.path} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
+    {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onManual={draft => { setManualDraft(draft); setGenerating(false); setEditing(true); }} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
       const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
     }}/>}
     {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
@@ -718,16 +713,6 @@ function ProjectScreen({ path, onClose, goHome }: {
 }
 
 function App() {
-  const [connectionInfo, setConnectionInfo] = useState<ConnectionInfo | null>(null);
-  const [connectionChecking, setConnectionChecking] = useState(true);
-  const connectionPending = useRef(false);
-  const checkConnection = useCallback(async (refresh = false) => {
-    if (connectionPending.current) return; connectionPending.current = true; setConnectionChecking(true);
-    try { const response = await fetch(`/api/ai/connection?refresh=${refresh}`); if (!response.ok) throw new Error(); setConnectionInfo(await response.json()); }
-    catch { setConnectionInfo({ status: 'unknown', label: 'OpenAI API status unknown', guidance: 'Could not reach the local server. Try again; API credentials have not been checked.', checked_at: null, ttl_seconds: 60 }); }
-    finally { connectionPending.current = false; setConnectionChecking(false); }
-  }, []);
-  useEffect(() => { void checkConnection(); }, [checkConnection]);
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
@@ -750,13 +735,13 @@ function App() {
     }
   }
   const url = new URL(location, window.location.origin);
-  return <ConnectionContext.Provider value={{ info: connectionInfo, checking: connectionChecking, refresh: () => void checkConnection(true) }}><main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
+  return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} goHome={goHome} onOpen={view => {
       setLastPath(view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
       path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}
-  </main></ConnectionContext.Provider>;
+  </main>;
 }
 
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(<AIProvider><App/></AIProvider>);

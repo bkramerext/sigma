@@ -5,10 +5,11 @@ import os
 from dataclasses import asdict
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from sigma import chatgpt_auth
 from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
@@ -42,9 +43,25 @@ def ui_instance() -> dict[str, str | None]:
 @app.middleware("http")
 async def local_browser_only(request: Request, call_next):
     origin = request.headers.get("origin")
+    if (
+        request.url.path.startswith("/api/ai/")
+        and request.method == "POST"
+        and (
+            origin not in {"http://127.0.0.1:5173", "http://localhost:5173"}
+            or request.headers.get("content-type", "").split(";")[0] != "application/json"
+        )
+    ):
+        return JSONResponse(
+            {"error": "Account changes require the local SIGMA browser origin and JSON."},
+            status_code=403,
+        )
     if origin and origin not in {"http://127.0.0.1:5173", "http://localhost:5173"}:
         return JSONResponse({"error": "Untrusted browser origin"}, status_code=403)
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path.startswith("/api/ai/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 @app.exception_handler(ProjectError)
@@ -182,7 +199,8 @@ def reorder_view(body: ReorderRequest):
 
 class ProposalRequest(OpenRequest):
     seed: str = ""
-    consent: bool = False
+    expected_binding: str | None = None
+    expected_project_id: str | None = None
 
 
 @app.get("/api/projects/proposals/config")
@@ -198,7 +216,14 @@ async def proposal_view(body: ProposalRequest, request: Request):
         while (await request.receive())["type"] != "http.disconnect":
             pass
 
-    task = asyncio.create_task(generate_proposal(body.path, body.seed, body.consent))
+    task = asyncio.create_task(
+        generate_proposal(
+            body.path,
+            body.seed,
+            expected_binding=body.expected_binding,
+            expected_project_id=body.expected_project_id,
+        )
+    )
     connection = asyncio.create_task(disconnected())
     try:
         done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
@@ -251,3 +276,57 @@ async def connection_view(refresh: bool = False):
 @app.get("/api/ai/models")
 async def models_view(refresh: bool = False):
     return await models(refresh)
+
+
+class AuthBeginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_id: str | None = None
+    enable_plan: bool = False
+    retry_attempt_id: str | None = None
+
+
+class AuthModeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: str
+    account_id: str | None = None
+
+
+@app.post("/api/ai/auth/begin")
+async def auth_begin(body: AuthBeginRequest):
+    return await chatgpt_auth.begin(body.account_id, body.enable_plan, body.retry_attempt_id)
+
+
+@app.get("/api/ai/auth/open/{identifier}")
+async def auth_open(identifier: str):
+    return RedirectResponse(
+        chatgpt_auth.authorization_url(identifier),
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+@app.get("/api/ai/auth/attempt/{identifier}")
+async def auth_attempt(identifier: str):
+    return chatgpt_auth.attempt_status(identifier)
+
+
+@app.post("/api/ai/auth/cancel/{identifier}")
+async def auth_cancel(identifier: str):
+    chatgpt_auth.cancel(identifier)
+    return {"cancelled": True}
+
+
+@app.post("/api/ai/mode")
+async def auth_mode(body: AuthModeRequest):
+    await chatgpt_auth.select(body.mode, body.account_id)
+    return await connection()
+
+
+@app.post("/api/ai/disconnect")
+async def auth_disconnect():
+    return await chatgpt_auth.disconnect()
+
+
+@app.post("/api/ai/welcome")
+async def auth_welcome():
+    await chatgpt_auth.welcome_seen()
+    return {"dismissed": True}

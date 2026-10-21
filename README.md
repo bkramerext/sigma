@@ -55,19 +55,25 @@ to write manually or choose **Generate with AI** from its adjacent dropdown.
 its own previous instance. Existing shell variables take precedence. Ctrl+C stops
 both servers; unrelated port listeners are never terminated.
 
-AI is off by default. Set `SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY` in `.env`
-(simple assignments or quoted `export` syntax), then run `./sigma ui` again.
-No manual sourcing or PID cleanup is needed. Choose the project model and Thinking
-level in New Project or the pencil beside its name.
-The reviewed choices are Luna · Economy ($), Sol · Balanced ($$), and Astra ·
-Advanced ($$$); these are relative cost tiers, not price quotes. New projects
-prefer Sol/High when account access is verified. Offline defaults and unavailable
-choices are clearly qualified; no generation request silently substitutes models.
-`SIGMA_AI_MODEL` is only a reviewed-model bootstrap override for legacy files.
-Do not put a key in frontend code or Git. API billing is separate from ChatGPT or
-Codex access. The dialog requires consent before transmitting the project problem,
-mode, all strategy titles/approaches and optional seed. No generation calls happen on load or while typing; cached non-generating
-model-list checks provide connection health and account availability. Tests use identified fixtures and make no paid calls.
+No account, key, `.env`, or feature flag is needed for manual research. Use the
+small **Connect AI** control in the upper-right, then **Continue with ChatGPT** to
+use an eligible ChatGPT plan allowance or credits. Sign-in is remembered, and
+Generate can connect in place while retaining your starting point. Plan/app and
+workspace limits apply; model listing does not prove inference entitlement.
+**Manage usage** links to ChatGPT settings. SIGMA never automatically switches
+from plan usage to API-key billing.
+
+**Use API key (advanced)** explicitly selects separate API billing using
+`OPENAI_API_KEY` from `.env` or the server environment. `SIGMA_AI_ENABLED` is no
+longer required. Choose the model/Thinking level in New/Edit Project; saved choices
+and High remain unchanged when account access changes. Curated API cost tiers
+are relative, not token price quotes. A Generate click sends the disclosed project
+context once; **Save strategy** remains the explicit human acceptance step. No
+repeated consent checkbox, automatic generation, or automatic saving.
+
+OAuth credentials live in private application storage outside projects and Git.
+All implementation verification uses controlled OAuth/JWKS/SSE fixtures; live
+account sign-in, plan inference and billing have **not** been verified or consumed.
 
 See **[Getting Started](docs/GETTING-STARTED.md)** for setup, keyboard controls,
 provider limits, CLI/API commands and storage limitations. [Status](docs/STATUS.md)

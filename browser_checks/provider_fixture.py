@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from tempfile import mkdtemp
 
 import httpx
@@ -13,7 +14,7 @@ from sigma.api import app
 __all__ = ["app"]
 
 os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-browser-managed-")
-os.environ["SIGMA_AI_ENABLED"] = "1"
+os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-browser-api-auth-")
 os.environ["OPENAI_API_KEY"] = "explicit-browser-test-fixture"
 os.environ["SIGMA_AI_MODEL"] = "gpt-4.1"
 real_client = httpx.AsyncClient
@@ -65,3 +66,14 @@ def client(**kwargs):
 
 
 proposals.httpx.AsyncClient = client
+
+
+@asynccontextmanager
+async def select_fixture_billing(app):
+    from sigma.chatgpt_auth import select
+
+    await select("api_key")
+    yield
+
+
+app.router.lifespan_context = select_fixture_billing
