@@ -195,3 +195,14 @@ def run_ui() -> int:
         finally:
             signal.signal(signal.SIGINT, prior_int)
             signal.signal(signal.SIGTERM, previous)
+
+def run_shutdown() -> int:
+    """Stop the verified same-checkout SIGMA UI; never start servers."""
+    try:
+        with Instance(shutdown_only=True):
+            pass
+        print("SIGMA UI shutdown complete.", flush=True)
+        return 0
+    except (OSError, RuntimeError) as exc:
+        print(f"Cannot shut down SIGMA UI: {exc}", file=sys.stderr)
+        return 1
