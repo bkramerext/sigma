@@ -21,6 +21,8 @@ removes it from the active pool while retaining the research record and history.
 Cancel/Escape leaves data unchanged; failed saves retain dialog text for retry.
 Edit events include **View changes** with before-and-after text.
 
+To stop the UI from another terminal, run `./sigma shutdown`. It stops only a verified instance belonging to the same checkout; it never stops an unrelated port owner. Running `./sigma ui` again starts or restarts SIGMA, including recovery from a previously suspended (`Ctrl+Z`) launcher when its process identity can be verified. An unverified process is never signalled. `Ctrl+C` in the launch terminal remains the normal clean shutdown.
+
 The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma ui` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
 
 Scheduling, reports and forks are unavailable; the UI explains their status. Optional AI proposal generation is described below.
