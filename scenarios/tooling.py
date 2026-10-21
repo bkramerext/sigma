@@ -43,10 +43,12 @@ def check_ui() -> None:
         patch("sigma.ui.shutil.which", return_value="npm"),
         patch("sigma.ui.wait_for_ports", side_effect=RuntimeError("port occupied")),
         patch("sigma.ui.subprocess.Popen") as launch,
+        patch("sigma.ui.webbrowser.open") as open_browser,
         patch("sigma.ui.stop_servers"),
     ):
         assert run_ui() == 1
         launch.assert_not_called()
+        open_browser.assert_not_called()
     with (
         patch("pathlib.Path.is_dir", return_value=False),
         patch("sigma.ui.subprocess.Popen") as launch,
@@ -73,6 +75,7 @@ def check_ui() -> None:
                 else [backend, frontend],
             ),
             patch("sigma.ui.ready", return_value=True),
+            patch("sigma.ui.webbrowser.open", return_value=True) as open_browser,
             patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
             patch("sigma.ui.stop_servers") as stop,
         ):
@@ -80,6 +83,10 @@ def check_ui() -> None:
             stop.assert_called_once_with(
                 [backend] if outcome == "launch failure" else [backend, frontend]
             )
+            if outcome == "interrupt":
+                open_browser.assert_called_once_with("http://127.0.0.1:5173", new=2)
+            else:
+                open_browser.assert_not_called()
     child = Mock()
     stop_servers([child])
     child.stdin.close.assert_called_once()
@@ -93,6 +100,8 @@ def main() -> None:
         check_ui()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()
+    assert "FastAPI API server: http://127.0.0.1:8000" in output.getvalue()
+    assert "Vite UI server:    http://127.0.0.1:5173" in output.getvalue()
     print("PASS maintenance failures and UI launch, early exit, interrupt and cleanup")
 
 

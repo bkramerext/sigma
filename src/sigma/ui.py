@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+import webbrowser
 from urllib.error import URLError
 from urllib.request import urlopen
 from uuid import uuid4
@@ -16,6 +17,7 @@ from sigma.local_config import load_local_config
 from sigma.projects import ROOT
 from sigma.ui_instance import Instance
 
+API_URL = "http://127.0.0.1:8000"
 URL = "http://127.0.0.1:5173"
 
 
@@ -138,16 +140,24 @@ def run_ui() -> int:
                             )
                     if not announced:
                         if (
-                            ready("http://127.0.0.1:8000/api/ui-instance", instance_id)
+                            ready(API_URL + "/api/ui-instance", instance_id)
                             and ready(URL + "/api/ui-instance", instance_id)
                             and ready(URL)
                         ):
                             print(
-                                f"\nSIGMA UI ready: {URL}\nPress Ctrl+C to stop both servers.\n",
+                                "\nSIGMA servers ready:\n"
+                                f"  FastAPI API server: {API_URL}\n"
+                                f"  Vite UI server:    {URL}\n"
+                                "Press Ctrl+C to stop both servers.\n",
                                 flush=True,
                             )
                             announced = True
                             instance.unlock()
+                            try:
+                                if not webbrowser.open(URL, new=2):
+                                    print(f"Open {URL} in your browser.", flush=True)
+                            except (OSError, webbrowser.Error):
+                                print(f"Open {URL} in your browser.", flush=True)
                         elif time.monotonic() >= deadline:
                             raise RuntimeError("Servers did not become ready within 30 seconds.")
                     replacement = instance.replacement_request()

@@ -790,3 +790,14 @@ Pyright, frontend typecheck and production build. Real Chrome
 flows after checking button placement, long-description scrolling and no
 horizontal overflow at desktop and 390px. Desktop/mobile screenshots were
 visually inspected. `browser_checks/header.py` passed at five widths.
+
+## UI browser launch follow-up
+
+`./sigma ui` now opens `http://127.0.0.1:5173` in the default browser after
+both the API and Vite frontend report ready. If the browser cannot open, the
+servers continue running and the terminal repeats the URL for manual use.
+The browser is not opened during failed startup. The tooling scenario checks
+the one-time launch and failure paths. Actual verification: `./sigma test`
+passed scenarios, API/CLI checks, Ruff, Pyright, frontend typecheck and build.
+The ready message also names the FastAPI API server at `127.0.0.1:8000` and
+the Vite UI server at `127.0.0.1:5173`; the tooling scenario asserts both lines.

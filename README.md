@@ -29,7 +29,7 @@ From the project directory:
 ./sigma ui
 ```
 
-Open **http://127.0.0.1:5173** in your browser. Start with the included example or create your own project, then add a strategy.
+The UI opens automatically at **http://127.0.0.1:5173** once both servers are ready. If your browser does not open, visit that address manually. Start with the included example or create your own project, then add a strategy.
 
 To explore with AI, select **Connect AI** and **Continue with ChatGPT**. Eligible requests use your ChatGPT plan allowance or credits, subject to applicable limits. An optional API-key connection uses separately billed API usage; SIGMA never switches billing modes without your choice.
 
