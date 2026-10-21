@@ -85,3 +85,12 @@ dialog, retained edits, exclusion from Recents, unavailable and forget behavior,
 source-file immutability, and 1280x720, 390x844 and 320x700 layouts. Captures
 are `/tmp/sigma-a11-*.png`.
 `settings.py` remains the shared-form persistence/focus regression.
+
+## A13 project header
+
+With a fresh `provider_fixture:app` on port 8001 and the normal UI on 5173, run
+`uv run --with playwright python browser_checks/header.py`. It checks the full
+project name and header reflow at 1280, 1100, 700, 390 and 320px, the absence of
+the workspace tagline, shared Home/Close button states, identical Home/workspace
+connection pill styling and live label, disclosure/focus behavior, and keyboard
+Close. Screenshots are `/tmp/sigma-a13-header-*.png`.

@@ -728,3 +728,28 @@ Vite production build. Byte comparisons confirmed the source, public and built
 PNG files are identical. Real Chrome `browser_checks/recents.py` passed, and its
 1280px and 390px project-page screenshots were visually inspected; the logo and
 copper/blue wire effects are visible without cropping or horizontal overflow.
+
+## A13 — project header and shared copper controls
+
+The workspace header now places the complete project name immediately to the
+right of the approved SIGMA artwork, replacing only the redundant workspace
+tagline. It wraps instead of clipping or hiding below 1100px. The unchanged
+`ConnectionStatus` component now uses one shared pill style on Home and in the
+workspace; Open/New Project and Close project use one shared copper button style
+with matching resting, hover, disabled and focus states. Home artwork, workspace
+navigation and project content remain unchanged.
+
+Actual verification:
+
+- `./sigma test` passed all scenarios and API/CLI checks, Ruff check/format,
+  Pyright (zero errors), frontend typecheck and production build. The existing
+  non-failing Starlette TestClient deprecation notice remains.
+- Real Chrome `browser_checks/header.py` passed full long-name display and no
+  overflow at 1280, 1100, 700, 390 and 320px; checked artwork dimensions,
+  workspace-only tagline removal, identical Home/Close button and connection
+  pill styles, live status/dot, disclosure, keyboard focus and Close. Its five
+  screenshots under `/tmp/sigma-a13-header-*.png` were inspected at desktop,
+  1100px, 700px and mobile widths.
+- Real Chrome `browser_checks/recents.py` passed Home and stock/recent regressions
+  after the shared CSS change. The 390px Home and project screenshots were
+  inspected, with the approved Home artwork and project navigation intact.

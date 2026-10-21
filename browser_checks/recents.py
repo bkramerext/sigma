@@ -76,7 +76,7 @@ with sync_playwright() as playwright:
     saved = page.request.post("http://127.0.0.1:8001/api/projects/strategies", data={"path": stock_path, "title": "Browser stock addition", "approach": "Keep this strategy"})
     assert saved.status == 201
     close_button = page.get_by_role("button", name="Close project")
-    assert close_button.evaluate("e=>getComputedStyle(e).borderRadius") == "999px"
+    assert close_button.evaluate("e=>getComputedStyle(e).borderRadius") == "5px"
     base_close = close_button.evaluate("e=>getComputedStyle(e).backgroundColor")
     close_button.hover()
     assert close_button.evaluate("e=>getComputedStyle(e).backgroundColor") != base_close

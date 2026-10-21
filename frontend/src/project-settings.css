@@ -21,44 +21,16 @@
 .workspace-page .project-name-line { display: flex; align-items: flex-start; gap: 8px; }
 .workspace-page .project-name-line h1 { min-width: 0; overflow-wrap: anywhere; }
 .workspace-page .edit-project-button { flex: 0 0 44px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; margin-top: 1px; border-color: transparent; background: transparent; color: #c7a16d; border-radius: 5px; }
-.api-connection { position: relative; color: #afbdc8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-transform: none; letter-spacing: 0; z-index: 30; min-width: 190px; max-width: 240px; }
-.api-connection > summary { display: flex; align-items: center; gap: 7px; list-style: none; cursor: pointer; padding: 5px 0; }
-.api-connection > summary::-webkit-details-marker { display: none; }
-.connection-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: #7f8c96; }
-.connection-connected { background: #75b18c; }
-.connection-unconfigured, .connection-limited, .connection-unavailable, .connection-stale { background: #c6a064; }
-.connection-unauthorized, .connection-forbidden { background: #d38578; }
-.connection-details { position: absolute; top: calc(100% + 8px); right: 0; width: min(300px, calc(100vw - 40px)); padding: 16px; border: 1px solid #73593e; border-radius: 5px; background: #08131f; color: #b9c7d3; box-shadow: 0 12px 36px #0008; }
-.connection-details p { font: 400 12px/1.7 Inter, ui-sans-serif, system-ui, sans-serif; color: inherit; margin: 0 0 12px; }
-.connection-details button { background: transparent; border: 1px solid #826442; color: #e1bc8c; padding: 8px 10px; font-size: 12px; }
-.api-connection :focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
-
 .project-settings-dialog a { color: #e4b87f; }
-.workspace-page .header-controls { gap: 18px; }
 /* Status uses existing header/empty sky space without moving Home's hero. */
 .home-page .home-topline { position: relative; }
 .home-page .home-topline > .api-connection { position: absolute; top: 24px; right: 0; width: 230px; }
-.home-page .home-topline .api-connection span[role="status"] { display: inline; }
-.home-page .home-topline .api-connection .connection-dot { display: inline-block; }
-.home-page .api-connection > summary { justify-content: flex-end; text-align: left; }
-.connection-details { text-align: left; }
-@media (max-width: 1100px) {
- .workspace-page .api-connection { min-width: 160px; max-width: 190px; }
-}
 @media (max-width: 700px) {
  .project-settings-dialog { padding: 22px; }
  .workspace-page .project-name-line { order: -2; }
  .workspace-page .project-name-line h1 { font-size: 30px; }
- .workspace-page .header-controls { flex-basis: 100%; flex-direction: row; align-items: center; justify-content: space-between; gap: 6px; }
- .workspace-page .api-connection { min-width: 0; width: 134px; font-size: 10px; }
- .api-connection > summary { align-items: flex-start; }
- .connection-dot { margin-top: 4px; }
  .home-page .home-topline > .api-connection { top: 76px; width: 132px; min-width: 0; max-width: 150px; }
 }
-/* Reserve status space so changing health labels cannot shift workspace content. */
-.workspace-page .api-connection > summary { min-height: 44px; }
-@media (max-width: 700px) { .workspace-page .api-connection > summary { min-height: 55px; } }
-
 /* A9: one form, persistent title/actions, one scrolling body. */
 .project-settings-dialog { padding: 0; overflow: hidden; }
 .project-settings-dialog > form { display: flex; flex-direction: column; max-height: calc(100dvh - 42px); margin: 0; min-height: 0; }
@@ -88,8 +60,3 @@
  .home-page .new-project-dialog input, .home-page .new-project-dialog select, .home-page .new-project-dialog textarea { padding-top: 8px; padding-bottom: 8px; }
  .home-page .new-project-dialog textarea { height: 90px; }
 }
-
-.workspace-page .close-project { min-height: 34px; margin: 0; padding: 7px 12px; border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; text-decoration: none; }
-.workspace-page .close-project:hover:not(:disabled) { background: #172536fa; border-color: #cd9270; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; text-decoration: none; }
-.workspace-page .close-project:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
-.workspace-page .close-project:disabled { opacity: .6; background: #07111ef2; color: #c3b4ac; }

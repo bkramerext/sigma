@@ -6,6 +6,7 @@ import './project-entry.css';
 import './strategies.css';
 import './project-settings.css';
 import './recents.css';
+import './copper-controls.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, useAI } from './ai-connection';
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
@@ -58,11 +59,11 @@ function Header({ goHome, close, projectTitle, projectArtwork = false }: { goHom
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>
+      {projectArtwork ? projectTitle && <span className="current-project">{projectTitle}</span>
+        : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
-    {projectTitle && <span className="current-project" title={projectTitle}>{projectTitle}</span>}
-    {close ? <button className="text-button close-project" onClick={close.action} disabled={close.busy}>
+    {close ? <button className="copper-button close-project" onClick={close.action} disabled={close.busy}>
       Close project
     </button> : <span className="local">● Local workspace</span>}
     <ConnectionStatus/>
@@ -326,8 +327,8 @@ function Home({ initialPath, onOpen, goHome }: {
     <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>
     <div className="home-entry-actions">
-      <button ref={openButton} onClick={() => setEntry('open')}>Open Project</button>
-      <button ref={newButton} className="home-new-project" onClick={() => setEntry('new')}>New Project</button>
+      <button ref={openButton} className="copper-button" onClick={() => setEntry('open')}>Open Project</button>
+      <button ref={newButton} className="copper-button" onClick={() => setEntry('new')}>New Project</button>
     </div>
     <HomeCatalog onOpen={onOpen}/>
     {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
