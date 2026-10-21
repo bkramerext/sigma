@@ -53,11 +53,11 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function Header({ goHome, close, projectTitle }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string }) {
-  return <header className="site-header">
+function Header({ goHome, close, projectTitle, projectArtwork = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean }) {
+  return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
-      <a href="/" className="brand" onClick={goHome} aria-label="SIGMA home"><img src="/sigma-workspace-logo.png" alt="SIGMA" /></a>
+      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>
     </div>
     <div className="header-controls">
@@ -96,7 +96,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle }: {
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectArtwork/>
     <div className="workspace-layout">
       <nav className="workspace-nav" aria-label="Project navigation">
         <a href="#pool-heading" aria-current="page" onClick={event => {

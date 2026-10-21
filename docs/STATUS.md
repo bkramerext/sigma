@@ -715,3 +715,16 @@ Chrome verified immediate opens, the same project path on repeat selections,
 retained edits, exclusion from Recents, source-file immutability, and desktop and
 mobile layouts. `./sigma test` passed the updated scenarios, API/CLI, Ruff,
 Pyright, frontend typecheck and production build after the correction.
+
+## Project header artwork
+
+The project-page header now uses the approved `assets/sigma-project-header.png`
+through an identical copy in `frontend/public/`. It is displayed as a full image
+with proportional sizing at desktop and narrow widths. The Home page and its
+artwork are unchanged.
+
+Actual verification: `npm --prefix frontend run build` passed TypeScript and the
+Vite production build. Byte comparisons confirmed the source, public and built
+PNG files are identical. Real Chrome `browser_checks/recents.py` passed, and its
+1280px and 390px project-page screenshots were visually inspected; the logo and
+copper/blue wire effects are visible without cropping or horizontal overflow.

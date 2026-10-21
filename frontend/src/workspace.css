@@ -25,6 +25,8 @@
 .workspace-page .brand-block { display: flex; align-items: center; gap: 32px; min-width: 0; }
 .workspace-page .brand { width: 194px; flex-shrink: 0; }
 .workspace-page .brand img { width: 100%; height: auto; }
+.workspace-page .project-header-art { width: min(34vw, 390px); }
+.workspace-page .project-header-art img { display: block; width: 100%; height: auto; }
 .workspace-page .expansion {
   margin: 0;
   max-width: 570px;
@@ -140,6 +142,7 @@
   .workspace-page .site-header { padding: 18px 24px; gap: 24px; }
   .workspace-page .brand-block { gap: 20px; }
   .workspace-page .brand { width: 160px; }
+  .workspace-page .project-header-art { width: 300px; }
   .workspace-page .expansion { max-width: 310px; font-size: 9px; }
   .workspace-page .current-project { display: none; }
   .workspace-page .workspace-layout { grid-template-columns: 190px minmax(0, 1fr); }
@@ -152,6 +155,10 @@
   .workspace-page .site-header { padding: 18px 20px; gap: 14px; flex-wrap: wrap; }
   .workspace-page .brand-block { flex-basis: auto; flex: 1; min-width: 160px; flex-direction: column; align-items: flex-start; gap: 10px; }
   .workspace-page .brand { width: 144px; }
+  .workspace-page .project-art-header { flex-direction: column; align-items: stretch; }
+  .workspace-page .project-art-header .brand-block { width: 100%; flex: none; }
+  .workspace-page .project-header-art { width: min(100%, 330px); }
+  .workspace-page .project-art-header .header-controls { width: 100%; }
   .workspace-page .expansion { font-size: 8px; letter-spacing: .06em; max-width: 240px; }
   .workspace-page .header-controls { align-self: flex-start; gap: 0; }
   .workspace-page .close-project { padding: 8px 0; }
