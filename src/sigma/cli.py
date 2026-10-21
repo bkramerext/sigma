@@ -24,7 +24,7 @@ from sigma.projects import (
 )
 from sigma.text_views import inspect_text, save_source
 from sigma.tooling import run_tooling
-from sigma.ui import run_ui
+from sigma.ui import run_ui, run_shutdown
 
 
 def main() -> None:
@@ -94,10 +94,13 @@ def main() -> None:
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
-    commands.add_parser("ui", help="Launch the local browser UI and API; Ctrl+C stops both")
+    commands.add_parser("ui", help="Start or safely restart this checkout's browser UI")
+    commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
     args = parser.parse_args()
     if args.command == "ui":
         sys.exit(run_ui())
+    if args.command == "shutdown":
+        sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:
         sys.exit(run_tooling(args.command))
     try:
