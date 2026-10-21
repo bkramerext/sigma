@@ -98,6 +98,8 @@ with sync_playwright() as playwright:
         close_box = close.bounding_box()
         pill_box = pill.bounding_box()
         assert art_box and title_box and close_box and pill_box
+        assert abs(art_box["x"]) < 1 and abs(art_box["y"]) < 1
+        assert abs(art_box["width"] / art_box["height"] - 2) < 0.01
         assert title_box["x"] + title_box["width"] <= width + 1
         if width >= 1100:
             assert title_box["x"] >= art_box["x"] + art_box["width"] - 1

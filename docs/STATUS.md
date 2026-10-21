@@ -753,3 +753,17 @@ Actual verification:
 - Real Chrome `browser_checks/recents.py` passed Home and stock/recent regressions
   after the shared CSS change. The 390px Home and project screenshots were
   inspected, with the approved Home artwork and project navigation intact.
+
+## Project header placement follow-up
+
+The approved project artwork now begins at the viewport's top-left corner. Its
+unused dark lower area no longer reserves extra vertical space above the project
+workspace. The project title, header controls and workspace navigation are
+layered above the artwork so they remain legible and clickable. The image file
+and its aspect ratio are unchanged.
+
+Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff,
+Pyright, frontend typecheck and production build. Real Chrome
+`browser_checks/header.py` passed at 1280, 1100, 700, 390 and 320px, including
+artwork top-left placement, aspect ratio, control interactions and no horizontal
+overflow. Desktop, tablet and mobile screenshots were visually inspected.
