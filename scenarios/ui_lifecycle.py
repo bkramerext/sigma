@@ -285,7 +285,8 @@ def main():
             rapid2, rapidlog2 = launch()
             until(
                 lambda: (
-                    sum("SIGMA servers ready:" in log.read_text() for log in (rapidlog1, rapidlog2)) == 2
+                    sum("SIGMA servers ready:" in log.read_text() for log in (rapidlog1, rapidlog2))
+                    == 2
                 )
             )
             until(lambda: (rapid1.poll() is None) != (rapid2.poll() is None))
