@@ -100,8 +100,8 @@ def check_ui() -> None:
 
 
 def check_shutdown_and_suspended() -> None:
-    # Exercise owner verification with a private directory and mocked process
-    # inspection. Never send signals to any real process from tests.
+    # Simulate two old suspended launchers sharing a private checkout lock.
+    # Signal calls are mocked; unrelated processes must never be touched.
     with TemporaryDirectory() as directory, patch("sigma.ui_instance.STATE_ROOT", Path(directory)):
         instance = Instance()
         command = (
@@ -110,81 +110,54 @@ def check_shutdown_and_suspended() -> None:
             + str(ROOT / ".venv" / "bin" / "sigma")
             + " ui"
         )
-        observed = {
-            "uid": str(os.getuid()),
-            "start": "Wed Oct 21 12:53:00 2026",
-            "stat": "T",
-            "command": command,
+        processes = {
+            123456: {
+                "uid": str(os.getuid()),
+                "start": "Wed Oct 21 12:53:00 2026",
+                "stat": "T",
+                "command": command,
+            },
+            123457: {
+                "uid": str(os.getuid()),
+                "start": "Wed Oct 21 12:54:00 2026",
+                "stat": "T",
+                "command": command,
+            },
         }
-        instance.owner_path.write_text(
-            json.dumps(
-                {
-                    "identity": instance.identity,
-                    "pid": 123456,
-                    "start": observed["start"],
-                    "command": observed["command"],
-                }
-            )
-        )
-        instance.owner_path.chmod(0o600)
         with (
-            patch.object(Instance, "_process", return_value=observed),
+            patch(
+                "sigma.ui_instance.subprocess.check_output",
+                return_value="p123456\\np123457\\n",
+            ),
+            patch.object(Instance, "_process", side_effect=lambda pid: processes.get(pid)),
             patch("sigma.ui_instance.os.kill") as send,
         ):
+            assert len(instance._legacy_lock_owners()) == 2
             assert instance._resume_suspended()
-            send.assert_called_once_with(123456, signal.SIGCONT)
+            assert send.call_args_list == [
+                call(123456, signal.SIGCONT),
+                call(123457, signal.SIGCONT),
+            ]
             send.reset_mock()
             with patch("sigma.ui_instance.time.monotonic", side_effect=[0, 3]):
                 assert instance._force_stopped()
             assert send.call_args_list == [
                 call(123456, signal.SIGTERM),
+                call(123457, signal.SIGTERM),
                 call(123456, signal.SIGKILL),
+                call(123457, signal.SIGKILL),
             ]
             send.reset_mock()
-            observed["stat"] = "S"
+            processes[123456]["stat"] = "S"
+            processes[123457]["stat"] = "S"
             assert not instance._resume_suspended()
             assert not instance._force_stopped()
             send.assert_not_called()
-            observed["stat"] = "T"
-            observed["start"] = "another process"
+            processes[123457]["command"] = "/usr/bin/unrelated ui"
             try:
                 instance._resume_suspended()
             except RuntimeError as exc:
-                assert "identity changed" in str(exc)
-            else:
-                raise AssertionError("Reused PID was signalled")
-            send.assert_not_called()
-
-    # Pre-registration (legacy) suspended launcher: verify lock holder,
-    # exact checkout CLI command, OS account, and process identity.
-    with TemporaryDirectory() as directory, patch("sigma.ui_instance.STATE_ROOT", Path(directory)):
-        legacy = Instance()
-        command = (
-            str(ROOT / ".venv" / "bin" / "python")
-            + " "
-            + str(ROOT / ".venv" / "bin" / "sigma")
-            + " ui"
-        )
-        observed = {
-            "uid": str(os.getuid()),
-            "start": "Wed Oct 21 12:53:00 2026",
-            "stat": "T",
-            "command": command,
-        }
-        with (
-            patch("sigma.ui_instance.subprocess.check_output", return_value="p123456\\n"),
-            patch.object(Instance, "_process", return_value=observed),
-            patch("sigma.ui_instance.os.kill") as send,
-        ):
-            assert legacy._legacy_lock_owner() == (123456, observed)
-            assert legacy._resume_suspended()
-            send.assert_called_once_with(123456, signal.SIGCONT)
-            send.reset_mock()
-            observed["command"] = "/usr/bin/unrelated ui"
-            try:
-                legacy._legacy_lock_owner()
-            except RuntimeError as exc:
-                assert "unverified process" in str(exc)
+                assert "unverified holder" in str(exc)
             else:
                 raise AssertionError("Unrelated process holding lock was trusted")
             send.assert_not_called()
