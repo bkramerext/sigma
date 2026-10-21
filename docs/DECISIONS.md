@@ -184,3 +184,33 @@ A clean-checkout comparison exposed A6's dev asset copy running after Vite's
 public-file scan. Copy now happens during config evaluation, before that scan;
 canonical PNG bytes are unchanged. This fixes first-launch artwork availability
 and requires no human file copying.
+
+## A8.1: local configuration and foreground instance ownership
+
+Use pinned python-dotenv 1.2.1 parsing (without shell/variable expansion or parser
+logging). Validate the complete checkout-root `.env` before setting missing
+process environment values; exported variables win. UI, CLI project commands and
+the standalone backend factory share this loader. Setup/test avoid loading it.
+Configuration errors occur before replacing the current UI. Provider enablement
+and per-generation consent remain separate.
+
+Serialize startup/replacement using a no-follow owned regular lock and a private
+Unix control socket under fixed `/tmp/sigma-ui-<uid>/<hash>/` directories verified
+0700/owned/non-symlink. Canonical checkout path plus device/inode form the identity;
+no PID file or port listener grants shutdown authority. A live identity handshake
+requests shutdown, then waits for a cleanup acknowledgement before binding new
+servers. Kernel locks and verified refused sockets recover crashes. A stalled
+launch lock times out safely. Same-user malicious processes are outside this OS
+account trust boundary.
+
+Each server runs inside a session-leader pipe guardian. Closing the supervisor's
+private pipe, including on SIGKILL/crash, causes the guardian to TERM its own
+actual process group and bound cleanup with KILL while retaining group ownership.
+The supervisor never signals stored PIDs. This adds two small foreground lifecycle
+helpers, not daemons or research agents. Existing instance replacement exits the
+old terminal cleanly. Fixed ports and current strict localhost host/origin checks
+remain; unrelated/different-checkout/unverified listeners produce a named safe
+conflict rather than automatic alternate ports. This avoids extra dynamic proxy
+and origin configuration. A per-launch public non-secret readiness ID must match
+through both backend and frontend proxy before the URL is announced. Project
+storage, Close semantics, frontend design and artwork are unchanged.

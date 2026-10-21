@@ -28,7 +28,7 @@ MESSAGES = {
     ),
     "unconfigured": (
         "OpenAI API not configured",
-        "Set SIGMA_AI_ENABLED=1 and OPENAI_API_KEY in the local server environment, then restart SIGMA. Manual work remains available.",
+        "Set SIGMA_AI_ENABLED=1 and OPENAI_API_KEY in the checkout .env (or server environment), then run ./sigma ui to restart. Manual work remains available.",
     ),
     "unauthorized": (
         "Can't connect to OpenAI API · Check API key",

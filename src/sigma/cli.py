@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import asdict
 
+from sigma.local_config import load_local_config
 from sigma.projects import (
     ProjectError,
     change_stage,
@@ -88,6 +89,7 @@ def main() -> None:
     if args.command in {"setup", "test"}:
         sys.exit(run_tooling(args.command))
     try:
+        load_local_config()
         if args.command == "init":
             result = asdict(
                 initialize_project(
@@ -143,7 +145,7 @@ def main() -> None:
             close_project()
             result = {"closed": True}
         print(json.dumps(result))
-    except ProjectError as exc:
+    except (ProjectError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}), file=sys.stderr)
         sys.exit(2)
 

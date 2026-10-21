@@ -3,7 +3,7 @@
 import subprocess
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from sigma.projects import ROOT
 from sigma.tooling import run_tooling
@@ -34,10 +34,14 @@ def check_failures() -> None:
 
 
 def check_ui() -> None:
+    # Process lifecycle/ownership is exercised separately with real processes.
+
     with (
+        patch("sigma.ui.Instance", return_value=MagicMock()),
+        patch("sigma.ui.load_local_config"),
         patch("pathlib.Path.is_dir", return_value=True),
         patch("sigma.ui.shutil.which", return_value="npm"),
-        patch("sigma.ui.check_ports", side_effect=RuntimeError("port occupied")),
+        patch("sigma.ui.wait_for_ports", side_effect=RuntimeError("port occupied")),
         patch("sigma.ui.subprocess.Popen") as launch,
         patch("sigma.ui.stop_servers"),
     ):
@@ -54,10 +58,14 @@ def check_ui() -> None:
         backend.poll.return_value = 7 if outcome == "early exit" else None
         frontend = Mock()
         frontend.poll.return_value = None
+        owner = MagicMock()
+        owner.__enter__.return_value.replacement_request.return_value = None
         with (
+            patch("sigma.ui.Instance", return_value=owner),
+            patch("sigma.ui.load_local_config"),
             patch("pathlib.Path.is_dir", return_value=True),
             patch("sigma.ui.shutil.which", return_value="npm"),
-            patch("sigma.ui.check_ports"),
+            patch("sigma.ui.wait_for_ports"),
             patch(
                 "sigma.ui.subprocess.Popen",
                 side_effect=[backend, OSError("failed")]
@@ -72,12 +80,10 @@ def check_ui() -> None:
             stop.assert_called_once_with(
                 [backend] if outcome == "launch failure" else [backend, frontend]
             )
-    child = Mock(pid=12345)
-    child.wait.side_effect = [subprocess.TimeoutExpired("server", 5), 0]
-    with patch("sigma.ui.os.killpg") as kill:
-        stop_servers([child])
-        assert kill.call_count == 2  # Escalates if a server fails to stop gracefully.
-        assert child.wait.call_count == 2
+    child = Mock()
+    stop_servers([child])
+    child.stdin.close.assert_called_once()
+    child.wait.assert_called_once_with(timeout=8)
 
 
 def main() -> None:

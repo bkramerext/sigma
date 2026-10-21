@@ -1,6 +1,7 @@
 """Local browser adapter. Launch on 127.0.0.1; never bind to a public interface."""
 
 import asyncio
+import os
 from dataclasses import asdict
 
 from fastapi import FastAPI, Request
@@ -30,6 +31,12 @@ from sigma.proposals import accepted_provenance, configuration, generate_proposa
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
+
+
+@app.get("/api/ui-instance")
+def ui_instance() -> dict[str, str | None]:
+    """Readiness identity only; grants no control or access to configuration."""
+    return {"instance": os.environ.get("SIGMA_UI_INSTANCE_ID")}
 
 
 @app.middleware("http")

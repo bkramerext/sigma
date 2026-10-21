@@ -1,5 +1,6 @@
 """Supervise the two localhost development servers as one foreground command."""
 
+import json
 import os
 import shutil
 import signal
@@ -9,8 +10,11 @@ import sys
 import time
 from urllib.error import URLError
 from urllib.request import urlopen
+from uuid import uuid4
 
+from sigma.local_config import load_local_config
 from sigma.projects import ROOT
+from sigma.ui_instance import Instance
 
 URL = "http://127.0.0.1:5173"
 
@@ -23,33 +27,47 @@ def check_ports() -> None:
                 listener.bind(("127.0.0.1", port))
             except OSError as exc:
                 raise RuntimeError(
-                    f"Port {port} is unavailable. Stop the server using it and retry ./sigma ui."
+                    f"Port {port} is occupied by an unrelated or unverifiable service. "
+                    "SIGMA cannot safely replace it. Close that service using its own controls, "
+                    "then retry ./sigma ui. No process was signalled."
                 ) from exc
 
 
+def wait_for_ports() -> None:
+    # A crashed owner's guardians may still be finishing bounded cleanup.
+    deadline = time.monotonic() + 6
+    while True:
+        try:
+            check_ports()
+            return
+        except RuntimeError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
+
+
 def stop_servers(children: list[subprocess.Popen[bytes]]) -> None:
-    # Each child owns a process group so npm's Vite descendants also stop.
+    # EOF is a capability held only by this parent. Guardians own and stop their
+    # actual groups, so no supervisor signal ever depends on a recorded PID.
+    for child in children:
+        if child.stdin is not None:
+            child.stdin.close()
     for child in children:
         try:
-            os.killpg(child.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-    for child in children:
-        try:
-            child.wait(timeout=5)
+            child.wait(timeout=8)
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(child.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            child.wait()
+            raise RuntimeError(
+                "Owned server did not confirm shutdown; refusing unsafe takeover."
+            ) from None
 
 
-def ready(url: str) -> bool:
+def ready(url: str, instance_id: str | None = None) -> bool:
     try:
         with urlopen(url, timeout=0.3) as response:
-            return response.status == 200
-    except (URLError, OSError):
+            return response.status == 200 and (
+                instance_id is None or json.loads(response.read(1024)) == {"instance": instance_id}
+            )
+    except (URLError, OSError, ValueError):
         return False
 
 
@@ -61,46 +79,85 @@ def run_ui() -> int:
         print("npm is missing. Install Node/npm, then run ./sigma setup.", file=sys.stderr)
         return 2
     children: list[subprocess.Popen[bytes]] = []
+    replacement: socket.socket | None = None
 
     def interrupted(signum: int, frame: object) -> None:
         raise KeyboardInterrupt
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
-        check_ports()
-        commands = [
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "sigma.api:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8000",
-            ],
-            ["npm", "--prefix", "frontend", "run", "dev"],
-        ]
-        for command in commands:
-            children.append(subprocess.Popen(command, cwd=ROOT, start_new_session=True))
-        deadline = time.monotonic() + 30
-        announced = False
-        while True:
-            for name, child in zip(("API", "frontend"), children, strict=True):
-                code = child.poll()
-                if code is not None:
-                    raise RuntimeError(
-                        f"{name} server exited (status {code}); stopping both servers."
+        load_local_config()
+        with Instance() as instance:
+            try:
+                wait_for_ports()
+                commands = [
+                    [
+                        sys.executable,
+                        "-m",
+                        "uvicorn",
+                        "sigma.server:create_app",
+                        "--factory",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "8000",
+                    ],
+                    ["npm", "--prefix", "frontend", "run", "dev"],
+                ]
+                instance_id = uuid4().hex
+                child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
+                for command in commands:
+                    children.append(
+                        subprocess.Popen(
+                            [sys.executable, "-m", "sigma.ui_child", *command],
+                            cwd=ROOT,
+                            env=child_env,
+                            start_new_session=True,
+                            stdin=subprocess.PIPE,
+                        )
                     )
-            if not announced:
-                if ready("http://127.0.0.1:8000/openapi.json") and ready(URL):
-                    print(
-                        f"\nSIGMA UI ready: {URL}\nPress Ctrl+C to stop both servers.\n", flush=True
-                    )
-                    announced = True
-                elif time.monotonic() >= deadline:
-                    raise RuntimeError("Servers did not become ready within 30 seconds.")
-            time.sleep(0.2)
+                deadline = time.monotonic() + 30
+                announced = False
+                while True:
+                    for name, child in zip(("API", "frontend"), children, strict=True):
+                        code = child.poll()
+                        if code is not None:
+                            raise RuntimeError(
+                                f"{name} server exited (status {code}); stopping both servers."
+                            )
+                    if not announced:
+                        if (
+                            ready("http://127.0.0.1:8000/api/ui-instance", instance_id)
+                            and ready(URL + "/api/ui-instance", instance_id)
+                            and ready(URL)
+                        ):
+                            print(
+                                f"\nSIGMA UI ready: {URL}\nPress Ctrl+C to stop both servers.\n",
+                                flush=True,
+                            )
+                            announced = True
+                            instance.unlock()
+                        elif time.monotonic() >= deadline:
+                            raise RuntimeError("Servers did not become ready within 30 seconds.")
+                    replacement = instance.replacement_request()
+                    if replacement is not None:
+                        break
+                    time.sleep(0.1)
+            finally:
+                prior_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
+                try:
+                    stop_servers(list(children))
+                    children.clear()
+                finally:
+                    signal.signal(signal.SIGINT, prior_int)
+                    signal.signal(signal.SIGTERM, previous)
+        if replacement is not None:
+            replacement.sendall(
+                (json.dumps({"identity": instance.identity, "status": "stopped"}) + "\n").encode()
+            )
+            replacement.close()
+        return 0
     except KeyboardInterrupt:
         print("\nStopping SIGMA UI…", flush=True)
         return 0
@@ -112,7 +169,8 @@ def run_ui() -> int:
         prior_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         try:
-            stop_servers(children)
+            if children:
+                stop_servers(children)
         finally:
             signal.signal(signal.SIGINT, prior_int)
             signal.signal(signal.SIGTERM, previous)

@@ -21,7 +21,7 @@ removes it from the active pool while retaining the research record and history.
 Cancel/Escape leaves data unchanged; failed saves retain dialog text for retry.
 Edit events include **View changes** with before-and-after text.
 
-The launcher starts FastAPI on localhost port 8000 and Vite on port 5173. Both ports must be free. Ctrl+C stops both servers. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
+The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma ui` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
 
 Scheduling, reports and forks are unavailable; the UI explains their status. Optional AI proposal generation is described below.
 
@@ -129,11 +129,15 @@ Existing manual-only create/edit/remove lazy migrations remain unchanged.
 
 Use **New Strategy → Generate with AI**. Writing manually remains the primary
 click and needs no provider configuration. AI is disabled by default. Configure
-these variables in the **server's environment** before launching:
+these values in the checkout’s gitignored **`.env`** (or export them in the server environment), then launch:
 
 ```sh
+# In ROOT/.env (never commit a real key):
 export SIGMA_AI_ENABLED=1
-# Set OPENAI_API_KEY securely in your shell/environment; never commit it.
+export OPENAI_API_KEY="your-api-key"
+```
+
+```sh
 ./sigma ui
 ```
 
@@ -187,7 +191,7 @@ or key. There is no persistent draft store.
 
 ## Project settings and curated models (A8)
 
-**New Project** opens **Create Project**. On the workspace, the pencil immediately
+**New Project** opens the **New Project** dialog. On the workspace, the pencil immediately
 beside the main project name opens **Edit Project**. Both use the same fields:
 name, research problem, research mode, AI model, Thinking level. Name/problem are
 required; Low, Medium, High and Extra high map to `low`, `medium`, `high`, `xhigh`.
@@ -282,8 +286,36 @@ proxies, and generic errors. Keys, Authorization headers and raw errors/catalogs
 are never returned to the browser or logged by these services.
 
 Set only `SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY` to enable the provider, then
-restart `./sigma ui`. Model/Thinking level belong to projects. SIGMA does not
-automatically read `.env`; if you use a gitignored local `.env`, source it in your
-launcher shell (`set -a`, then `. ./.env`, then `set +a`) before launching. Never
-use `VITE_` variables for secrets. Tests use explicit no-network fixtures. Live
-provider billing/quality is unverified and no billable request is made by setup.
+run `./sigma ui` again. Model/Thinking level belong to projects. The launcher
+reads this checkout’s `ROOT/.env`, even when invoked from another directory;
+manual sourcing is unnecessary. Existing environment variables win, including an
+explicit `SIGMA_AI_ENABLED=0` or empty key. To use a changed file value, unset a
+previously exported shell override before restarting. Simple dotenv assignments,
+`export`, quotes, blank lines and comments are supported. Values are literal:
+no shell execution or variable expansion. Missing files are normal; malformed or
+unreadable files stop startup with a safe line/permissions instruction before
+replacing the running instance. Never use frontend `.env` files or `VITE_` variables
+for secrets. The pinned parser is python-dotenv 1.2.1. `.env.example` is a template.
+CLI project commands use the same loader; setup/test do not load local credentials.
+A standalone backend can use `uv run uvicorn sigma.server:create_app --factory
+--host 127.0.0.1 --port 8000` for the same configuration behavior.
+
+Replacement uses an exclusive launch lock and checkout-identity handshake over a
+Unix socket in an owned 0700 `/tmp/sigma-ui-<uid>/<checkout-hash>/` directory.
+Identity includes canonical path and directory device/inode; symlink aliases
+resolve to the same checkout, while changed targets and other checkouts do not.
+The supervisor signals no stored PIDs. Its pipe guardians own the actual server
+process groups, give them SIGTERM, and bound cleanup with SIGKILL. A refused stale
+owned socket is recovered under the lock; suspicious files/permissions or an
+unverified live endpoint cause safe refusal. This is a local same-user trust
+boundary, not protection from another process already running as your account.
+Readiness checks a fresh non-secret instance ID at both API and Vite proxy, keeping
+fixed routing and existing origin/host restrictions intact. Starting/restarting
+never writes projects; Close Project remains navigation only.
+
+Tests use explicit no-network fixtures. Live provider billing/quality is
+unverified and no billable request is made by setup. With free 8000/5173 ports,
+run the separate real-process/Chrome regression:
+`uv run --with playwright python scenarios/ui_lifecycle.py`. It uses disposable
+checkouts and fixture credentials, exercises restart/crash/conflicts, and leaves
+normal project files untouched. Chrome is expected at the standard macOS path.

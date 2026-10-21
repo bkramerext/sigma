@@ -390,3 +390,67 @@ No live agents, scheduler, evaluator, generated reports, forks, paid calls, or h
 ## Project dialog terminology correction
 
 Per user request, the creation dialog heading and submit button now say “New Project” to match Home. Edit Project / Save Changes are unchanged. Updated browser-check expectations. Validation: `./sigma test` passed (scenarios, API/CLI, Ruff, Pyright, frontend typecheck/build); real Chrome confirmed both dialog labels.
+
+
+## A8.1 — automatic local configuration and safe UI replacement
+
+Implemented the one-command startup/restart fix independently of A9. `./sigma ui`
+loads checkout-root `.env` with pinned python-dotenv 1.2.1 before spawning the API;
+quoted `export` assignments work without sourcing. Environment values win. The
+whole file is validated before mutation; absent is normal, malformed/unreadable
+files get safe actionable diagnostics without raw contents. CLI project commands
+and the standalone backend factory share the loader. Setup/test avoid loading it.
+AI enablement and explicit billed-generation consent are preserved.
+
+A private owned 0700 state directory, no-follow launch lock and canonical
+path/device/inode identity handshake coordinate same-checkout replacement.
+Shutdown is requested through a private Unix socket; the old supervisor confirms
+both server guardians have exited before the replacement starts. Pipe guardians
+own the actual child groups and clean up after supervisor crashes as well as
+normal stops. No recorded PID or occupied port authorizes a signal. Stale refused
+owned sockets recover automatically. Unverified state, other checkouts and unrelated
+listeners cause a named safe conflict. Ports remain fixed at 8000/5173; no dynamic
+fallback or relaxed host/origin checks. Readiness verifies the per-launch public
+instance ID at the API and through Vite before announcing the URL. No project/UI
+artwork or Close behavior changed. README, Getting Started, decisions and a
+placeholder-only `.env.example` document the behavior.
+
+Actual verification:
+
+- `./sigma test` passed: all existing research lifecycle/settings/strategy/provider
+  scenarios, API/CLI checks, launcher failure/interrupt checks, new dotenv and
+  ownership scenarios, Ruff check/format (27 files), Pyright (zero errors),
+  frontend TypeScript check and production build. Existing non-failing Starlette
+  TestClient deprecation notice remains.
+- `scenarios/local_config.py`: missing file, quoted export/single/plain/empty
+  values, comments, explicit environment precedence (including disabled AI),
+  literal shell/variable syntax without execution/expansion, no key output,
+  atomic malformed-file rejection, UTF-8 and unreadable-file safe diagnostics.
+- `scenarios/instance_ownership.py`: canonical alias and changing symlink target,
+  different checkout IDs, directory permissions/symlink refusal, non-socket state
+  preservation, refused stale-socket recovery, live wrong-identity refusal without
+  sending shutdown or removing its endpoint, and no-follow lock protection.
+- `uv run --with playwright python scenarios/ui_lifecycle.py` passed against
+  disposable real checkouts and explicit no-network provider fixtures. Started
+  actual `./sigma ui` from another working directory; a fresh second invocation
+  loaded updated `.env`, verified the new model availability, and let the old
+  supervisor exit zero with both old child trees gone. API and frontend proxy,
+  allowed/forbidden origins, Chrome's authenticated-fixture connection status
+  and New Project dialog passed. Ctrl+C and SIGTERM cleaned up; actual supervisor
+  SIGKILL left a stale socket and pipe guardians recovered automatically. Rapid
+  concurrent launches serialized to one working owner. A different checkout and
+  unrelated listeners on each default port survived safe refusal. Fixture logs
+  contained no key; provider transport allowed only GET /v1/models. Source project
+  file hashes and temporary research sentinel stayed unchanged.
+- Also exercised actual normal-checkout `./sigma ui` followed by `./sigma ui`:
+  the second invocation printed the restart message and became ready while the
+  old command exited cleanly. Normal launcher is left running after verification.
+
+Limits: real-process/Chrome checks were run on macOS, not Linux or a physical
+browser device. The opt-in lifecycle check requires free default ports and Chrome
+at its documented macOS location. An older launcher without the ownership protocol
+cannot be safely replaced automatically; its own controls must stop it once.
+Same-user malicious processes are outside the private-directory trust boundary.
+No paid generation or live provider billing/quality verification was performed.
+Existing untracked `models.json`, local `.env`, project research and artwork are
+not committed or rewritten by this change.

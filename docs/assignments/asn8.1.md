@@ -1,6 +1,6 @@
 # A8.1: One-command SIGMA UI launch, automatic local configuration and safe instance replacement
 
-**Status:** Ready for Codex; targeted fix after A8, independent of A9. Implement rather than merely document. Read `docs/HUMAN-AI-INTERACTION.md`, current `src/sigma/ui.py`, `sigma`, `src/sigma/openai_connection.py`, `scenarios/tooling.py`, and current `docs/STATUS.md`. No new artwork or Home/Strategies redesign.
+**Status:** Implemented; targeted fix after A8, independent of A9. Implement rather than merely document. Read `docs/HUMAN-AI-INTERACTION.md`, current `src/sigma/ui.py`, `sigma`, `src/sigma/openai_connection.py`, `scenarios/tooling.py`, and current `docs/STATUS.md`. No new artwork or Home/Strategies redesign.
 
 ## User requirement
 

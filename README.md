@@ -51,9 +51,14 @@ Requires macOS/Linux, Python 3.11+, uv, Node.js 20.19+ and npm.
 Open http://127.0.0.1:5173. Use Open Project or New Project, then **New Strategy**
 to write manually or choose **Generate with AI** from its adjacent dropdown.
 
-AI is off by default. Enable OpenAI Responses on the server with
-`SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY`, then restart the launcher. Choose the
-project model and Thinking level in Create Project or the pencil beside its name.
+`./sigma ui` automatically loads this checkout’s gitignored `.env` and restarts
+its own previous instance. Existing shell variables take precedence. Ctrl+C stops
+both servers; unrelated port listeners are never terminated.
+
+AI is off by default. Set `SIGMA_AI_ENABLED=1` and `OPENAI_API_KEY` in `.env`
+(simple assignments or quoted `export` syntax), then run `./sigma ui` again.
+No manual sourcing or PID cleanup is needed. Choose the project model and Thinking
+level in New Project or the pencil beside its name.
 The reviewed choices are Luna · Economy ($), Sol · Balanced ($$), and Astra ·
 Advanced ($$$); these are relative cost tiers, not price quotes. New projects
 prefer Sol/High when account access is verified. Offline defaults and unavailable
