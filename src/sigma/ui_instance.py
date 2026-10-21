@@ -185,6 +185,30 @@ class Instance:
             self.__exit__(None, None, None)
             raise
 
+    def _terminate_unresponsive_owner(self) -> None:
+        """Escalate only against the verified owner of this checkout."""
+        owner = self._verified_owner()
+        if owner is None:
+            # The old launcher already exited, leaving a stale control socket.
+            return
+        pid = owner[0]
+        print("Verified SIGMA launcher is unresponsive; requesting shutdown…", flush=True)
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + 4
+        while time.monotonic() < deadline:
+            if self._verified_owner() is None:
+                return
+            time.sleep(0.1)
+        if self._verified_owner() is not None:
+            print("Verified launcher did not stop; forcing shutdown…", flush=True)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
     def replace(self) -> None:
         try:
             info = self.path.lstat()
@@ -193,29 +217,46 @@ class Instance:
         if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
             raise RuntimeError("Unverifiable SIGMA control record; refusing takeover.")
         with socket.socket(socket.AF_UNIX) as client:
-            client.settimeout(15)
+            client.settimeout(8)
             try:
                 client.connect(str(self.path))
+            except TimeoutError:
+                self._terminate_unresponsive_owner()
             except OSError as exc:
                 if exc.errno not in (errno.ECONNREFUSED, errno.ENOENT):
                     raise RuntimeError(
                         "Cannot verify previous SIGMA instance; refusing takeover."
                     ) from None
             else:
-                client.sendall(
-                    json.dumps({"identity": self.identity, "command": "identify"}).encode() + b"\n"
-                )
-                if self.receive(client) != {"identity": self.identity, "status": "owned"}:
-                    raise RuntimeError("Previous instance identity mismatch; refusing takeover.")
-                print("Restarting existing SIGMA instance…", flush=True)
-                client.sendall(
-                    json.dumps({"identity": self.identity, "command": "shutdown"}).encode() + b"\n"
-                )
-                if self.receive(client) != {"identity": self.identity, "status": "stopped"}:
-                    raise RuntimeError(
-                        "Previous SIGMA instance did not confirm cleanup; retry startup."
+                try:
+                    client.sendall(
+                        json.dumps({"identity": self.identity, "command": "identify"}).encode()
+                        + b"\\n"
                     )
-        # Only while holding the launch lock, after confirmed cleanup or refused socket.
+                    owned = self.receive(client)
+                except (OSError, TimeoutError):
+                    self._terminate_unresponsive_owner()
+                else:
+                    if owned != {"identity": self.identity, "status": "owned"}:
+                        raise RuntimeError(
+                            "Previous instance identity mismatch; refusing takeover."
+                        )
+                    print("Stopping existing SIGMA instance…", flush=True)
+                    try:
+                        client.sendall(
+                            json.dumps(
+                                {"identity": self.identity, "command": "shutdown"}
+                            ).encode() + b"\\n"
+                        )
+                        stopped = self.receive(client)
+                    except (OSError, TimeoutError):
+                        self._terminate_unresponsive_owner()
+                    else:
+                        if stopped != {"identity": self.identity, "status": "stopped"}:
+                            raise RuntimeError(
+                                "Previous SIGMA instance did not confirm cleanup."
+                            )
+        # Only while holding the launch lock, after confirmed or forced cleanup.
         self.path.unlink(missing_ok=True)
 
     @staticmethod
