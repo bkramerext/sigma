@@ -99,17 +99,17 @@ def check_ui() -> None:
     child.wait.assert_called_once_with(timeout=8)
 
 
-
 def check_shutdown_and_suspended() -> None:
     # Exercise owner verification with a private directory and mocked process
     # inspection. Never send signals to any real process from tests.
-    with TemporaryDirectory() as directory, patch(
-        "sigma.ui_instance.STATE_ROOT", Path(directory)
-    ):
+    with TemporaryDirectory() as directory, patch("sigma.ui_instance.STATE_ROOT", Path(directory)):
         instance = Instance()
-        command = str(ROOT / ".venv" / "bin" / "python") + " " + str(
-            ROOT / ".venv" / "bin" / "sigma"
-        ) + " ui"
+        command = (
+            str(ROOT / ".venv" / "bin" / "python")
+            + " "
+            + str(ROOT / ".venv" / "bin" / "sigma")
+            + " ui"
+        )
         observed = {
             "uid": str(os.getuid()),
             "start": "Wed Oct 21 12:53:00 2026",
@@ -157,6 +157,7 @@ def check_shutdown_and_suspended() -> None:
         factory.assert_called_once_with(shutdown_only=True)
         owner.__enter__.assert_called_once()
         owner.__exit__.assert_called_once()
+
 
 def main() -> None:
     output = StringIO()
