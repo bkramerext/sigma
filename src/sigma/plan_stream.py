@@ -2,6 +2,7 @@
 
 import codecs
 import json
+import re
 from typing import Any
 
 import httpx
@@ -79,6 +80,20 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
             ),
         )
         inference_failure(state, guard)
+        # For unknown provider failures, show only bounded machine-readable
+        # metadata. Provider freeform messages may contain echoed user input,
+        # credentials, or other sensitive material, so never forward them.
+        if state == "unavailable" and message.startswith("ChatGPT request could not complete"):
+            safe_code = (
+                code
+                if isinstance(code, str)
+                and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", code)
+                else "unspecified"
+            )
+            raise ProjectError(
+                f"ChatGPT rejected the request (HTTP {status}, error code: {safe_code}). "
+                "Account retained; no automatic billing fallback occurred."
+            )
         raise ProjectError(f"{message} No strategy was saved.")
     raise ProjectError(
         f"OpenAI API request failed (HTTP {status}). Check API model permissions or separate API billing; no fallback or strategy save occurred."
