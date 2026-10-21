@@ -172,11 +172,11 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page { background: #020711; }
 .home-atmosphere { background: #020711 url('/sigma-home-background-copper.png') center top / cover no-repeat; }
 .home-atmosphere::before, .home-atmosphere::after { content: none; }
-.home-content { width: min(100%, 1536px); min-height: 100dvh; padding: 0 clamp(26px, 5.4vw, 90px) 72px; }
+.home-content { width: 100%; min-height: 100dvh; padding: 0 clamp(26px, 5.4vw, 90px) 72px 0; }
 .home-page .home-topline { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; height: 52px; padding: 26px 0; }
 .home-page .home-slogan {
  position: absolute; z-index: 0; top: 0;
- left: calc(-1 * clamp(26px, 5.4vw, 90px));
+ left: 0;
  display: block; width: min(36vw, 520px); height: auto;
  mix-blend-mode: screen;
  mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%);
@@ -187,6 +187,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 }
 .home-page .home-topline .api-connection { position: relative; z-index: 1; margin-left: auto; }
 .home-page .home-hero { margin-top: clamp(170px, 28vh, 320px); max-width: 560px; animation: none; }
+.home-page :is(.home-hero, .home-entry-actions, .home-catalog) { margin-left: clamp(26px, 5.4vw, 90px); }
 .home-page .home-hero h1 { color: #e6af92; font-family: Georgia, serif; font-size: clamp(30px, 3.3vw, 49px); font-weight: 400; letter-spacing: -.02em; margin-bottom: 10px; }
 .home-page .intro { font-size: 14px; line-height: 1.7; color: #bcc8d4; margin-bottom: 18px; max-width: 420px; }
 .home-page .open-form { background: #07111ec7; border: 1px solid #a67b4e72; border-radius: 10px; padding: 26px; max-width: 560px; box-shadow: 0 24px 80px #0007; animation: none; }

@@ -801,3 +801,8 @@ the one-time launch and failure paths. Actual verification: `./sigma test`
 passed scenarios, API/CLI checks, Ruff, Pyright, frontend typecheck and build.
 The ready message also names the FastAPI API server at `127.0.0.1:8000` and
 the Vite UI server at `127.0.0.1:5173`; the tooling scenario asserts both lines.
+
+Home's content wrapper now has no left padding, so approved artwork starts at
+the viewport edge. The Open Project heading, action buttons and stock/recent
+catalog share a deliberate left inset. Real Chrome checks at 1280px and 390px
+confirmed their positions and no horizontal overflow; screenshots were inspected.
