@@ -774,3 +774,19 @@ visible. The source/public image files are untouched, and the clipped display
 ends above workspace navigation. `./sigma test` and real Chrome header checks
 passed again at all five viewport widths; desktop and mobile screenshots were
 visually inspected.
+
+## Project introduction and Strategies controls follow-up
+
+The upper project pane gives the title and description the full available width.
+It scrolls vertically when the description grows beyond the pane's bounded
+height. New Strategy now sits to the right of the Strategies heading below the
+divider and matches the Home action's 50px button height and padding. Strategy
+expand/collapse and the split action use standard chevrons instead of text
+symbols. The New Strategy action no longer has a leading plus.
+
+Actual verification: `./sigma test` passed scenarios, API/CLI checks, Ruff,
+Pyright, frontend typecheck and production build. Real Chrome
+`browser_checks/strategies.py` passed creation, edit/remove, reordering and AI
+flows after checking button placement, long-description scrolling and no
+horizontal overflow at desktop and 390px. Desktop/mobile screenshots were
+visually inspected. `browser_checks/header.py` passed at five widths.

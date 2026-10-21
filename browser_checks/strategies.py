@@ -51,6 +51,29 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="Research directions", exact=True)).to_be_visible()
     rows = page.locator(".strategy-row")
     assert rows.count() == 4
+    intro = page.locator(".project-intro")
+    new_strategy = page.get_by_role("button", name="New Strategy", exact=True)
+    heading_box = page.get_by_role("heading", name="Strategies", exact=True).bounding_box()
+    button_box = new_strategy.bounding_box()
+    intro_box = intro.bounding_box()
+    content_box = page.locator(".workspace-content").bounding_box()
+    assert heading_box and button_box and intro_box and content_box
+    assert button_box["y"] >= intro_box["y"] + intro_box["height"]
+    assert abs(button_box["y"] - heading_box["y"]) < 20
+    assert abs(button_box["x"] + button_box["width"] + 44 - (content_box["x"] + content_box["width"] - 40)) < 2
+    page.locator(".objective").evaluate("e => { e.dataset.original = e.textContent; e.textContent = (e.textContent + ' ').repeat(100); }")
+    assert intro.evaluate("e => e.scrollHeight > e.clientHeight")
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    intro.evaluate("e => e.scrollTop = e.scrollHeight")
+    assert intro.evaluate("e => e.scrollTop > 0")
+    page.screenshot(path="/tmp/sigma-strategies-long-description-1672.png", full_page=True)
+    page.set_viewport_size({"width": 390, "height": 844})
+    assert intro.evaluate("e => e.scrollHeight > e.clientHeight")
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.screenshot(path="/tmp/sigma-strategies-long-description-390.png", full_page=True)
+    page.set_viewport_size({"width": 1672, "height": 941})
+    page.locator(".objective").evaluate("e => e.textContent = e.dataset.original")
+    intro.evaluate("e => e.scrollTop = 0")
     assert page.get_by_text("Strategy pool", exact=True).count() == 0
     assert page.get_by_role("button", name="Promote", exact=True).count() == 0
     assert page.get_by_role("button", name="Demote", exact=True).count() == 0
@@ -93,6 +116,7 @@ with sync_playwright() as p:
     expect(rows.first.locator(".stage-label")).to_have_text("Ready to explore")
     rows.first.locator(".strategy-detail > summary").click()
     expect(rows.first.locator(".strategy-approach")).to_contain_text("boundary terms")
+    assert rows.first.locator(".strategy-expand-arrow").evaluate("e => getComputedStyle(e).transform") != "none"
     page.screenshot(path="/tmp/sigma-a7-detail-1672.png", full_page=True)
     rows.first.locator(".strategy-detail > summary").click()
     # Keyboard preview, cancel and persist; storage stays unchanged before drop.
@@ -177,7 +201,7 @@ with sync_playwright() as p:
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.screenshot(path=f"/tmp/sigma-a7-workspace-{w}.png", full_page=True)
     # Manual creation remains usable; menu exclusivity and edit/remove are real.
-    page.get_by_role("button", name="＋ New Strategy", exact=True).click()
+    page.get_by_role("button", name="New Strategy", exact=True).click()
     page.get_by_label("Title", exact=True).fill("Manual browser idea")
     page.get_by_label("Hypothesis / approach", exact=True).fill(
         "A complete approach.\nRetain all details."
@@ -204,7 +228,7 @@ with sync_playwright() as p:
     expect(
         dialog.get_by_role("textbox", name="Starting point (optional)", exact=True)
     ).to_be_focused()
-    expect(dialog.get_by_role("button", name="Generate draft", exact=True)).to_be_disabled()
+    expect(dialog.get_by_role("button", name="Generate draft", exact=True)).to_be_enabled()
     before = state.read_bytes()
     dialog.get_by_role("textbox", name="Starting point (optional)", exact=True).fill(
         "error-fixture"
@@ -255,7 +279,7 @@ with sync_playwright() as p:
     dialog.get_by_role("button", name="Generate draft", exact=True).click()
     expect(dialog.get_by_role("button", name="Generating…", exact=True)).to_be_disabled()
     dialog.get_by_role("button", name="Cancel request", exact=True).click()
-    expect(page.get_by_role("button", name="＋ New Strategy", exact=True)).to_be_focused()
+    expect(page.get_by_role("button", name="New Strategy", exact=True)).to_be_focused()
     assert state.read_bytes() == before
     page.emulate_media(reduced_motion="reduce")
     assert rows.first.evaluate("e => getComputedStyle(e).transitionDuration") == "0s"

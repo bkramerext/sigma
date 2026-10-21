@@ -3,12 +3,13 @@
 .workspace-page .workspace-layout { grid-template-columns: 246px minmax(0, 1fr); }
 .workspace-page .site-header { min-height: 96px; }
 .workspace-page .workspace-content { padding: 0 40px 40px; }
-.workspace-page .project-intro { position: relative; padding: 40px 320px 40px 0; margin-bottom: 24px; min-height: 198px; }
+.workspace-page .project-intro { padding: 34px 0 30px; margin-bottom: 24px; max-height: min(55dvh, 560px); overflow-y: auto; overflow-x: hidden; scrollbar-color: #6b5847 transparent; }
+.workspace-page .project-intro .objective { max-width: none; }
 .workspace-page .project-eyebrow { margin: 0 0 12px; text-transform: uppercase; letter-spacing: .25em; font-size: 11px; color: #e4ad67; }
 .workspace-page .project-intro h1 { font-size: clamp(28px, 2.6vw, 42px); }
-.workspace-page .new-strategy-split { position: absolute; right: 0; top: 66px; display: flex; z-index: 8; }
-.workspace-page .new-strategy-split > button { border-radius: 7px 0 0 7px; min-height: 60px; padding: 16px 32px; font-size: 15px; }
-.workspace-page .new-strategy-split > details > summary { list-style: none; display: grid; place-items: center; width: 54px; min-height: 60px; border: 1px solid #daa66a; border-left: 1px solid #af7c42; border-radius: 0 7px 7px 0; background: linear-gradient(115deg, #f0ca94, #bb8247); color: #1e1409; cursor: pointer; }
+.workspace-page .new-strategy-split { position: relative; display: flex; flex: 0 0 auto; z-index: 8; margin-left: auto; }
+.workspace-page .new-strategy-split > button { border-radius: 7px 0 0 7px; min-height: 50px; padding: 14px 20px; font-size: 15px; }
+.workspace-page .new-strategy-split > details > summary { list-style: none; display: grid; place-items: center; width: 44px; min-height: 50px; border: 1px solid #daa66a; border-left: 1px solid #af7c42; border-radius: 0 7px 7px 0; background: linear-gradient(115deg, #f0ca94, #bb8247); color: #1e1409; cursor: pointer; }
 .workspace-page .new-strategy-split > details > summary::-webkit-details-marker { display: none; }
 .workspace-page .new-strategy-split summary[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .workspace-page .strategy-choice-menu { position: absolute; right: 0; top: calc(100% + 6px); width: 342px; max-width: calc(100vw - 40px); background: #081521fa; border: 1px solid #b78040; border-radius: 8px; padding: 7px; box-shadow: 0 12px 36px #0008; }
@@ -16,6 +17,7 @@
 .workspace-page .strategy-choice-menu button > span:first-child { font-size: 21px; color: #d5a467; }
 .workspace-page .strategy-choice-menu small { display: block; color: #b3c3d2; font-size: 12px; font-weight: 400; margin-top: 5px; }
 .workspace-page .strategy-choice-menu button:hover:not(:disabled), .workspace-page .strategy-choice-menu button:focus-visible { background: #202e3d; }
+.workspace-page .pool-heading { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .workspace-page .pool-heading h2 { font-size: 30px; }
 .workspace-page .strategies-intro { font-size: 15px; margin: 6px 0 18px; }
 .workspace-page .strategies-table { border: 1px solid var(--workspace-line); border-radius: 12px; }
@@ -27,8 +29,8 @@
 .workspace-page .strategy-detail > summary::-webkit-details-marker { display: none; }
 .workspace-page .strategy-detail h3 { margin: 0; font: 500 16px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; color: #e4ebf3; overflow-wrap: anywhere; }
 .workspace-page .strategy-detail > summary:hover h3 { color: #f1c58d; text-decoration: underline; text-underline-offset: 4px; }
-.workspace-page .strategy-detail > summary h3::after { content: ' +'; color: #a98d68; font-size: 12px; margin-left: 6px; }
-.workspace-page .strategy-detail[open] > summary h3::after { content: ' −'; }
+.workspace-page .strategy-expand-arrow { margin-left: 8px; color: #a98d68; vertical-align: -2px; transition: transform .15s; }
+.workspace-page .strategy-detail[open] .strategy-expand-arrow { transform: rotate(90deg); }
 .workspace-page .strategy-preview { display: block; font-size: 13px; line-height: 1.6; color: #adbecf; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .workspace-page .strategy-expanded { margin-top: 12px; border-top: 1px solid #243441; padding-top: 10px; }
 .workspace-page .strategy-expanded .strategy-approach { margin: 0 0 14px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -58,23 +60,15 @@
 .workspace-page .proposal-review legend { padding-top: 24px; font-size: 14px; color: #e8c497; }
 @media (max-width: 1100px) {
  .workspace-page .workspace-layout { grid-template-columns: 190px minmax(0, 1fr); }
- .workspace-page .project-intro { padding-right: 0; padding-bottom: 24px; }
- .workspace-page .new-strategy-split { position: relative; top: auto; right: auto; float: right; margin: 0 0 18px 18px; }
- .workspace-page .new-strategy-split > button { padding: 12px 18px; min-height: 50px; }
- .workspace-page .new-strategy-split > details > summary { min-height: 50px; width: 44px; }
- .workspace-page .project-intro h1 { clear: both; }
+ .workspace-page .project-intro { padding-bottom: 24px; }
  .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 130px 36px; gap: 10px; padding-left: 18px; }
  .workspace-page .strategy-columns { grid-template-columns: minmax(0, 1fr) 190px; padding-left: 18px; }
 }
 @media (max-width: 700px) {
  .workspace-page .workspace-layout { grid-template-columns: 1fr; }
  .workspace-page .workspace-content { padding: 0 20px 40px; }
- .workspace-page .project-intro { display: flex; flex-direction: column; align-items: flex-start; gap: 0; padding-top: 26px; }
- .workspace-page .project-eyebrow { order: -3; }
- .workspace-page .project-intro h1 { order: -2; }
- .workspace-page .objective { order: -1; }
- .workspace-page .new-strategy-split { float: none; margin: 20px 0 0; }
- .workspace-page .strategy-choice-menu { left: 0; right: auto; width: min(342px, calc(100vw - 40px)); }
+ .workspace-page .project-intro { padding-top: 26px; }
+ .workspace-page .strategy-choice-menu { width: min(342px, calc(100vw - 40px)); }
  .workspace-page .strategy-columns { display: none; }
  .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 36px; padding: 16px 30px 16px 16px; column-gap: 8px; row-gap: 8px; }
  .workspace-page .strategy-detail { grid-column: 1; }

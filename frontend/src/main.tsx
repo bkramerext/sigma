@@ -508,9 +508,9 @@ function SplitStrategyAction({ buttonRef, disabled, onManual, onAI }: {
   }, []);
   function choose(action: () => void) { if (disabled) return; if (menu.current) menu.current.open = false; action(); }
   return <div className="new-strategy-split">
-    <button className="primary-action" ref={buttonRef} disabled={disabled} onClick={() => choose(onManual)} title="Write manually">＋ New Strategy</button>
+    <button className="primary-action" ref={buttonRef} disabled={disabled} onClick={() => choose(onManual)} title="Write manually">New Strategy</button>
     <details ref={menu} onKeyDown={event => { if (event.key === 'Escape' && menu.current) { event.preventDefault(); menu.current.open = false; menu.current.querySelector('summary')?.focus(); } }}>
-      <summary aria-label="New Strategy options" aria-disabled={disabled} onClick={event => { if (disabled) event.preventDefault(); }}>⌄</summary>
+      <summary aria-label="New Strategy options" aria-disabled={disabled} onClick={event => { if (disabled) event.preventDefault(); }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
       <div className="strategy-choice-menu" aria-label="Choose how to create a strategy">
         <button aria-label="Write manually" disabled={disabled} onClick={() => choose(onManual)}><span aria-hidden="true">✎</span><span>Write manually<small>Capture your own approach</small></span></button>
         <button aria-label="Generate with AI" disabled={disabled} onClick={() => choose(onAI)}><span aria-hidden="true">✧</span><span>Generate with AI<small>Start from the research problem or an idea</small></span></button>
@@ -715,7 +715,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <div className="project-intro">
       <p className="project-eyebrow">Research project</p>
-      <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
       <div className="project-name-line"><h1 ref={heading} tabIndex={-1}>{project.title}</h1><button ref={editProjectButton} className="edit-project-button" aria-label="Edit Project" title="Edit Project" disabled={closing || ordering || !!dragId || editing || generating} onClick={() => setProjectEditing(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Z M14 6l4 4"/></svg></button></div>
       <p className="objective">{project.problem}</p>
     </div>
@@ -723,6 +722,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <section className="pool" aria-labelledby="pool-heading">
       <div className="pool-heading">
         <h2 id="pool-heading" tabIndex={-1}>Strategies</h2>
+        <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
       </div>
       <p className="hint strategies-intro">Independent avenues of investigation. Stages are manually tracked.</p>
       <p className="sr-only" role="status">{announcement}</p>
@@ -736,7 +736,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <details className="strategy-detail">
-            <summary title="Expand or collapse the full approach"><h3 aria-label={strategy.title} id={`strategy-${strategy.id}`} tabIndex={-1}>{strategy.title}</h3>
+            <summary title="Expand or collapse the full approach"><h3 aria-label={strategy.title} id={`strategy-${strategy.id}`} tabIndex={-1}>{strategy.title}<svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></h3>
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
