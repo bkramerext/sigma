@@ -27,6 +27,9 @@ from sigma.ui_instance import private_directory
 TEMPLATE = ROOT / "examples/nonconsecutive-subset-sums/project.json"
 EXAMPLE_ID = "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a"
 EXAMPLE_NAME = "nonconsecutive-subset-sums.sigma"
+HISTORY_TEMPLATE = ROOT / "examples/jesus-cannabis/project.json"
+HISTORY_ID = "2b7628b3-9e25-445a-a3b4-54d69239e8bf"
+HISTORY_NAME = "jesus-cannabis.sigma"
 
 
 def state_directory() -> Path:
@@ -198,14 +201,14 @@ def forget_recent(project_id: str) -> None:
         index["entries"] = [entry for entry in index["entries"] if entry["id"] != project_id]
 
 
-def _install(root: Path) -> ProjectView:
-    if TEMPLATE.is_symlink() or not TEMPLATE.is_file():
+def _install(root: Path, template: Path = TEMPLATE, example_id: str = EXAMPLE_ID, example_name: str = EXAMPLE_NAME, expected_strategies: int = 3) -> ProjectView:
+    if template.is_symlink() or not template.is_file():
         raise ProjectError("Included example template must be a regular source file.")
-    contents = TEMPLATE.read_bytes()
+    contents = template.read_bytes()
     project = _decode(json.loads(contents))
-    if project.id != EXAMPLE_ID or project.schema_version != 5 or len(project.strategies) != 3:
+    if project.id != example_id or project.schema_version != 5 or len(project.strategies) != expected_strategies:
         raise ProjectError("Included example template failed its identity/schema checks.")
-    destination = root / EXAMPLE_NAME
+    destination = root / example_name
     reserved = False
     staged = None
     try:
@@ -219,7 +222,7 @@ def _install(root: Path) -> ProjectView:
                     "Included example destination is not an owned regular directory."
                 ) from None
             existing = inspect_project(destination)
-            if existing.project.id != EXAMPLE_ID:
+            if existing.project.id != example_id:
                 raise ProjectError(
                     "A different project occupies the included example location; it was not replaced."
                 )
@@ -250,6 +253,35 @@ def bootstrap_example() -> str:
             message = "Included example could not be installed. Check the template, project-root permissions, or an existing destination; nothing was overwritten."
             # A collision is a durable bootstrap decision; transient errors may be retried.
             if (root / EXAMPLE_NAME).exists() or (root / EXAMPLE_NAME).is_symlink():
+                index["bootstrapped_roots"][key] = message
+            return message
+        index["bootstrapped_roots"][key] = ""
+        if len(index["entries"]) < 4 and not any(
+            entry["id"] == view.project.id for entry in index["entries"]
+        ):
+            index["entries"].append(
+                {
+                    "id": str(UUID(view.project.id)),
+                    "path": view.path,
+                    "accessed_at": None,
+                    "included_example": True,
+                }
+            )
+    return ""
+
+
+def bootstrap_history_example() -> str:
+    """Install the second included sample once, including for previously bootstrapped roots."""
+    root = projects_root()
+    with _index() as index:
+        key = str(root / HISTORY_NAME)
+        if key in index["bootstrapped_roots"]:
+            return index["bootstrapped_roots"][key]
+        try:
+            view = _install(root, HISTORY_TEMPLATE, HISTORY_ID, HISTORY_NAME, 5)
+        except (ProjectError, OSError, ValueError, TypeError, KeyError):
+            message = "Historical example could not be installed; no existing project was overwritten."
+            if (root / HISTORY_NAME).exists() or (root / HISTORY_NAME).is_symlink():
                 index["bootstrapped_roots"][key] = message
             return message
         index["bootstrapped_roots"][key] = ""
@@ -316,6 +348,8 @@ def recent_projects() -> dict:
 def home_projects() -> dict:
     try:
         notice = bootstrap_example()
+        historical_notice = bootstrap_history_example()
+        notice = "; ".join(part for part in (notice, historical_notice) if part)
     except ProjectError as error:
         notice = str(error)
     return {**recent_projects(), "notice": notice}
