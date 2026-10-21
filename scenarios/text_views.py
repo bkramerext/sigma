@@ -67,6 +67,16 @@ async def main_async(root: Path):
         context = json.loads(body["input"])
         calls.append(context)
         assert body["model"] == MODEL and body["reasoning"]["effort"] == "high"
+        wire_schema = body["text"]["format"]["schema"]
+        assert wire_schema == {
+            "type": "object",
+            "properties": {
+                "body": {"type": "string"},
+                "warnings": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["body", "warnings"],
+            "additionalProperties": False,
+        }
         assert context["text"] == inspect_project(path).project.problem
         output = markdown if context["target_format"] == "markdown" else plain["plain"]["body"]
         return httpx.Response(200, json=provider_output(output))
@@ -422,6 +432,8 @@ async def main_async(root: Path):
     def plan_handler(request):
         payload = json.loads(request.content)
         assert payload["stream"] is True and "max_output_tokens" not in payload
+        assert "maxLength" not in json.dumps(payload["text"]["format"]["schema"])
+        assert "maxItems" not in json.dumps(payload["text"]["format"]["schema"])
         assert isinstance(payload["input"], list)
         assert request.headers.get("accept") == "text/event-stream"
         raw = {**provider_output("Count $a_n$ for $n \\ge 0$"), "id": "resp-text-fixture"}
