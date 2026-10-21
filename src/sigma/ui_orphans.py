@@ -29,9 +29,7 @@ def _listeners(port: int) -> set[int]:
     if result is None:
         return set()
     return {
-        int(line[1:])
-        for line in result.splitlines()
-        if line.startswith("p") and line[1:].isdigit()
+        int(line[1:]) for line in result.splitlines() if line.startswith("p") and line[1:].isdigit()
     }
 
 
