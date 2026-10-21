@@ -433,6 +433,18 @@ async def main_async(root: Path):
     assert not (rejected_path / "text-representations.json").exists()
     print("PASS ChatGPT HTTP rejection preserves source and exposes safe diagnostic code")
 
+    # Admission may return top-level detail instead of error.code.
+    from sigma.plan_stream import safe_error_detail
+
+    assert safe_error_detail({"detail": "Unsupported request input format"}) == (
+        "Unsupported request input format"
+    )
+    assert safe_error_detail({"detail": "Bearer secret-that-must-stay-private"}) is None
+    assert safe_error_detail({"message": "private research: a_n = F_n"}) is None
+    assert safe_error_detail({"error": {"message": "Invalid schema format"}}) == (
+        "Invalid schema format"
+    )
+
     def plan_handler(request):
         payload = json.loads(request.content)
         assert payload["stream"] is True and "max_output_tokens" not in payload
