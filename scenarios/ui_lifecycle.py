@@ -223,6 +223,7 @@ def main():
             # Explicit shutdown uses the same verified control channel.
             command = subprocess.run(
                 [str(root / ".venv/bin/sigma"), "shutdown"],
+                check=False,
                 cwd=base,
                 env=env,
                 capture_output=True,
