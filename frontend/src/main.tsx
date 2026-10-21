@@ -45,7 +45,7 @@ type ProjectView = {
 };
 
 type TextFormat = 'plain' | 'markdown';
-type TextDisplay = 'plain' | 'markdown' | 'rendered';
+type TextDisplay = 'plain' | 'rendered';
 type TextVersion = { body: string; kind: 'authored' | 'ai_derived'; current: boolean; source_digest: string; source_format: TextFormat; created_at: string; provenance: { provider: string; model: string; reasoning_effort: string | null } | null; warnings: string[] };
 type TextRepresentations = { source_format: TextFormat; source_digest: string; plain: TextVersion | null; markdown: TextVersion | null };
 
@@ -67,14 +67,15 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
   contentClass: string; onSaved: (view: ProjectView) => void;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
-  const [selected, setSelected] = useState<TextDisplay>('plain');
+  const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
+  const [selected, setSelected] = useState<TextDisplay>(() => window.localStorage.getItem(preferenceKey) === 'rendered' ? 'rendered' : 'plain');
+  const [rendering, setRendering] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editingFromRendered, setEditingFromRendered] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
-  const select = useRef<HTMLSelectElement>(null);
   const bodyTrigger = useRef<HTMLElement>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -84,27 +85,31 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not read text views');
       return result as TextRepresentations;
-    }).then(result => { setData(result); setSelected(result.markdown?.current ? 'rendered' : 'plain'); setDraft(result.markdown?.current ? result.markdown.body : result.plain?.body ?? ''); })
+    }).then(result => { setData(result); if (!result.markdown?.current) setSelected('plain'); setDraft(result.markdown?.current ? result.markdown.body : result.plain?.body ?? ''); })
       .catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
     return () => { controller.abort(); abort.current?.abort(); };
   }, [path, scope, strategyId, source]);
   const format: TextFormat = selected === 'plain' ? 'plain' : 'markdown';
+  function chooseView(view: TextDisplay) {
+    setSelected(view);
+    window.localStorage.setItem(preferenceKey, view);
+  }
   const version = data?.[format];
   const current = version?.current ?? false;
   function beginBodyEdit(fromRendered = false) {
     if (!version?.current || busy) return;
     setDraft(version.body); setEditingFromRendered(fromRendered);
-    if (fromRendered) setSelected('markdown');
+    if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
   function cancelBodyEdit() {
     setEditing(false);
-    if (editingFromRendered) setSelected('rendered');
+    if (editingFromRendered) chooseView('rendered');
     requestAnimationFrame(() => bodyTrigger.current?.focus());
   }
   async function convert(targetFormat: TextFormat = format) {
     if (!data || busy) return;
-    const controller = new AbortController(); abort.current = controller; setBusy(true); setError('');
+    const controller = new AbortController(); abort.current = controller; setBusy(true); setRendering(true); setError('');
     try {
       const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal });
       const settings = await settingsResponse.json();
@@ -113,9 +118,9 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
         body: JSON.stringify({ path, scope, strategy_id: strategyId, target: targetFormat, expected_digest: data.source_digest, expected_binding: settings.binding }) });
       const next = await response.json();
       if (!response.ok) throw new Error(next.error ?? 'Conversion failed; source text was kept.');
-      setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? '');
-    } catch (cause) { if (!controller.signal.aborted) setError(errorMessage(cause)); }
-    finally { if (abort.current === controller) { abort.current = null; setBusy(false); } }
+      setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? ''); chooseView('rendered');
+    } catch (cause) { if (!controller.signal.aborted) { chooseView('plain'); setError(errorMessage(cause)); } }
+    finally { if (abort.current === controller) { abort.current = null; setBusy(false); setRendering(false); } }
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (!data || busy) return;
@@ -126,15 +131,19 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
-  function cancelConversion() { abort.current?.abort(); abort.current = null; setBusy(false); setError('Conversion cancelled locally. Provider usage may already have begun.'); }
+  function cancelConversion() { abort.current?.abort(); abort.current = null; setBusy(false); setRendering(false); chooseView('plain'); setError('Conversion cancelled locally. Provider usage may already have begun.'); }
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}`}>
-    <div className="text-view-controls"><label htmlFor={`text-view-${scope}-${strategyId ?? 'project'}`}>View</label>
-      <select ref={select} id={`text-view-${scope}-${strategyId ?? 'project'}`} aria-label={`View ${name}`} value={selected} disabled={editing || busy} onChange={event => { const next = event.target.value as TextDisplay; const nextFormat = next === 'plain' ? 'plain' : 'markdown'; setSelected(next); setDraft(data?.[nextFormat]?.body ?? ''); if (data && !data[nextFormat]?.current) void convert(nextFormat); }}>
-        <option value="plain">Plain</option><option value="markdown">Markdown</option><option value="rendered">Rendered</option>
-      </select>
-      {data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>{version.current ? 'Edit' : 'Edit previous'} {format === 'plain' ? 'Plain' : 'Markdown'}</button>}
-      {version && !current && <span className="text-view-stale">Out of date</span>}
+    <div className="text-view-controls">
+      <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}`}
+        aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
+        aria-pressed={selected === 'rendered' || rendering} title={selected === 'rendered' ? 'Show plain text' : 'Render Markdown'}
+        disabled={editing || busy} onClick={() => {
+          if (selected === 'rendered') { chooseView('plain'); setError(''); }
+          else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
+          else { void convert('markdown'); }
+        }}><span aria-hidden="true">Σ</span></button>
+      {data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>Edit</button>}
     </div>
     {editing ? <form className="text-view-editor" onSubmit={save}>
       <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
@@ -142,16 +151,14 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
       <div className="form-actions"><button type="submit" disabled={busy}>Save text</button><button type="button" className="text-button" disabled={busy} onClick={cancelBodyEdit}>Cancel</button></div>
     </form> : current && version ? scope === 'project' ? selected === 'rendered' ? <div ref={bodyTrigger as Ref<HTMLDivElement>} className={`${contentClass} rendered-text text-editable`} role="button" tabIndex={0} aria-label="Edit Markdown description" title="Click or press Enter to edit Markdown source" onClick={() => beginBodyEdit(true)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(true); } }}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
-      : selected === 'markdown' ? <pre ref={bodyTrigger as Ref<HTMLPreElement>} className={`${contentClass} literal-markdown text-editable`} role="button" tabIndex={0} aria-label="Edit Markdown description" title="Click or press Enter to edit" onClick={() => beginBodyEdit()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(); } }}>{version.body}</pre>
-        : <p ref={bodyTrigger as Ref<HTMLParagraphElement>} className={`${contentClass} text-editable`} role="button" tabIndex={0} aria-label="Edit Plain description" title="Click or press Enter to edit" onClick={() => beginBodyEdit()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(); } }}>{version.body}</p>
+      : <p ref={bodyTrigger as Ref<HTMLParagraphElement>} className={`${contentClass} text-editable`} role="button" tabIndex={0} aria-label="Edit Plain description" title="Click or press Enter to edit" onClick={() => beginBodyEdit()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(); } }}>{version.body}</p>
       : selected === 'rendered' ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
-      : selected === 'markdown' ? <pre className={`${contentClass} literal-markdown`} aria-label={`Markdown source for ${name}`}>{version.body}</pre>
-        : <p className={contentClass}>{version.body}</p>
+      : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
         {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
-        {error && <button type="button" className="secondary" disabled={busy} onClick={() => void convert()}>Retry conversion</button>}
-        <p className="hint">Selecting a missing or out-of-date format sends one AI conversion using this project's selected model, Thinking and account. AI-generated; review before relying on it. Current cached views switch without a provider call.</p>
+        {error && <button type="button" className="secondary" disabled={busy} onClick={() => void convert('markdown')}>Retry conversion</button>}
+        <p className="hint">Markdown conversion uses this project's selected model, Thinking and account. AI-generated; review before relying on it. Cached Markdown requires no provider call.</p>
       </div>}
     {busy && !editing && <p className="text-view-working" role="status">Converting to {format === 'markdown' ? 'Markdown' : 'Plain'}… <button type="button" className="text-button" onClick={cancelConversion}>Cancel conversion</button></p>}
     {version?.current && version.kind === 'ai_derived' && <p className="text-view-attribution">AI-generated conversion · Review before relying on it.{version.warnings.length ? ` ${version.warnings.join(' ')}` : ''}</p>}
