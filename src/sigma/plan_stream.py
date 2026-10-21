@@ -55,6 +55,20 @@ KNOWN_ERRORS = {
 def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
     error = raw.get("error") if isinstance(raw, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
+    # Direct-route admission errors can have {"detail": "..."} rather
+    # than the conventional nested {"error": {"code": ...}} envelope.
+    shape = "unknown"
+    if isinstance(raw, dict):
+        if isinstance(error, dict):
+            shape = "responses-error"
+        elif isinstance(raw.get("detail"), str):
+            shape = "admission-detail"
+        elif isinstance(error, str):
+            shape = "error-string"
+        elif raw.get("type") == "error":
+            shape = "top-level-error"
+        else:
+            shape = "other-object"
     if mode == "chatgpt":
         state, message = KNOWN_ERRORS.get(
             code if isinstance(code, str) else "",
@@ -89,7 +103,7 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
                 if isinstance(code, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", code)
                 else "unspecified"
             )
-            details = [f"HTTP {status}", f"code: {safe_code}"]
+            details = [f"HTTP {status}", f"code: {safe_code}", f"shape: {shape}"]
             if isinstance(error, dict):
                 for key in ("type", "param"):
                     value = error.get(key)
