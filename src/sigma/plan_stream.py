@@ -86,8 +86,10 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
 
 
 async def completed(response: httpx.Response, guard: str | None = None) -> dict:
-    if response.headers.get("content-type", "").split(";")[0] != "text/event-stream":
-        raise ValueError()
+    content_type = response.headers.get("content-type", "")
+    ct_main = content_type.split(";")[0].strip().lower()
+    if ct_main not in {"", "text/event-stream"}:
+        raise ValueError(f"plan_stream:content_type({content_type!r})")
     decoder = codecs.getincrementaldecoder("utf-8")("strict")
     buffer = ""
     byte_count = event_count = 0
@@ -111,11 +113,11 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
                 continue
             if data == "[DONE]":
                 if terminal is None:
-                    raise ValueError()
+                    raise ValueError("plan_stream:done_before_terminal")
                 continue
             event_count += 1
             if event_count > MAX_EVENTS or terminal is not None:
-                raise ValueError()
+                raise ValueError("plan_stream:event_after_terminal")
             event = json.loads(data)
             kind = event.get("type")
             seq = event.get("sequence_number")
@@ -125,23 +127,23 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
                 or isinstance(seq, bool)
                 or seq <= sequence
             ):
-                raise ValueError()
+                raise ValueError(f"plan_stream:seq(kind={kind},seq={seq},expected>{sequence})")
             sequence = seq
             declared = [line[6:].strip() for line in block.split("\n") if line.startswith("event:")]
             if declared and declared != [kind]:
-                raise ValueError()
+                raise ValueError(f"plan_stream:declared_event({declared}!=[{kind}])")
             if kind == "response.created":
                 if response_id is not None or not isinstance(
                     event.get("response", {}).get("id"), str
                 ):
-                    raise ValueError()
+                    raise ValueError("plan_stream:created_id")
                 response_id = event["response"]["id"]
             elif response_id is None:
-                raise ValueError()
+                raise ValueError(f"plan_stream:no_id_before_{kind}")
             if kind in {"response.completed", "response.failed", "response.incomplete"}:
                 raw = event.get("response")
                 if not isinstance(raw, dict) or raw.get("id") != response_id:
-                    raise ValueError()
+                    raise ValueError("plan_stream:response_id_mismatch")
                 if kind == "response.failed":
                     failure(400, raw, "chatgpt", guard)
                 if kind == "response.incomplete":
@@ -157,7 +159,7 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
                 failure(400, {"error": event}, "chatgpt", guard)
             elif kind == "response.output_text.delta":
                 if not isinstance(event.get("delta"), str):
-                    raise ValueError()
+                    raise ValueError("plan_stream:delta_not_str")
                 deltas += event["delta"]
             elif kind.startswith("response.refusal."):
                 refused = True
@@ -174,5 +176,7 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
             if content.get("type") == "output_text"
         ]
         if texts != [deltas]:
-            raise ValueError()
+            raise ValueError(
+                f"plan_stream:delta_text_mismatch(len_texts={len(texts)},len_delta={len(deltas)})"
+            )
     return terminal

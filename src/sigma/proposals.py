@@ -183,10 +183,12 @@ async def generate_proposal(
                 }
             },
         }
+        headers = {"Authorization": "Bearer " + credential["token"]}
         if credential["mode"] == "chatgpt":
             payload.pop("max_output_tokens")
             payload["stream"] = True
             payload["input"] = [{"role": "user", "content": context}]
+            headers["Accept"] = "text/event-stream"
         current = await auth_context()
         if current["identity"] != credential["identity"] or current["mode"] != credential["mode"]:
             raise ProjectError(
@@ -201,7 +203,7 @@ async def generate_proposal(
             client.stream(
                 "POST",
                 "https://api.openai.com/v1/responses",
-                headers={"Authorization": "Bearer " + credential["token"]},
+                headers=headers,
                 json=payload,
             ) as response,
         ):

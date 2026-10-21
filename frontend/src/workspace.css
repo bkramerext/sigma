@@ -43,11 +43,16 @@
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
 .workspace-page .project-art-header .header-controls { position: relative; z-index: 1; flex: 0 0 auto; gap: 12px; margin-left: 0; padding-top: 12px; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; }
-.workspace-page .project-title-line { position: relative; z-index: 1; display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 12px; }
+.workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 12px; }
 .workspace-page .current-project { min-width: 0; margin: 0; color: var(--workspace-copper); font: 400 clamp(17px, 1.5vw, 22px)/1.35 Georgia, serif; overflow-wrap: anywhere; }
 .workspace-page .project-title-edit { display: inline; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .workspace-page .project-title-edit:hover { color: #f3d0a4; text-decoration: underline; text-decoration-color: #a77543; text-underline-offset: 4px; }
 .workspace-page .project-title-edit:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.workspace-page .current-project input { width: min(56vw, 560px); max-width: 100%; padding: 3px 7px; border: 1px solid #c38a50; border-radius: 4px; background: #091824; color: #f1c996; font: inherit; }
+.workspace-page .project-title-actions { display: flex; flex: 0 0 auto; gap: 6px; padding-top: 2px; }
+.workspace-page .project-title-actions button { min-height: 30px; padding: 4px 9px; border: 1px solid #ae7a44; border-radius: 5px; background: #281d16; color: #f0cca0; font-size: 11px; cursor: pointer; }
+.workspace-page .project-title-actions button:hover { background: #5b3920; }
+.workspace-page .project-title-error { color: #ffbdad; font-size: 11px; }
 .workspace-page .project-back { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid #8b6745; border-radius: 50%; background: #0b1a27e8; color: #e6bd88; cursor: pointer; }
 .workspace-page .project-back:hover { border-color: #d6a76e; background: #4b311c; color: #fff0d9; }
 .workspace-page .project-back:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }

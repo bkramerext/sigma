@@ -315,7 +315,7 @@ generation read-only and separates model review from verified research. The
 cost is that the first slice runs one local generation at a time and rejects
 large corpora rather than searching or summarizing them automatically.
 
-## A15: explicit text representations
+## A15: text representations and in-place edits
 
 Keep the current `project.json` problem and strategy approach fields as the sole
 current authored source consumed by API, CLI, and strategy generation. Store
@@ -330,7 +330,7 @@ published before a source edit so a crash cannot label an old body as a new
 source; a failed project publication can leave an unused future revision in the
 companion, but current reads only match the actual project body digest.
 
-Conversion is one explicit, bounded provider call with the project's selected
+Conversion is one bounded provider call with the project's selected
 model, thinking level and connected account/billing mode. The service rejects
 concurrent calls, validates the binding again before saving, and rechecks the
 source/model under the project lock. It neither interprets Markdown into Plain
@@ -339,3 +339,11 @@ local, read-only React Markdown/KaTeX preview. Markdown HTML, external images,
 unsafe links and KaTeX trust are disabled. Validation catches malformed,
 truncated and obvious raw-TeX Plain output, but cannot prove semantic or
 mathematical equivalence; the UI labels AI-derived text for human review.
+Per the later UI request, selecting a missing or stale view initiates its
+conversion automatically; cached switches remain local and free. Failure or
+cancellation retains the source and exposes Retry. This means a view switch
+may incur provider usage. Project title and Plain/Markdown description edits
+start in place and save only when requested; Rendered activates the Markdown
+source editor. Other project options remain in Project Settings. Home stores
+only the last opened path as a convenience pointer and validates it on display;
+the sidebar collapse preference is kept locally across navigation.

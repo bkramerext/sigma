@@ -82,9 +82,12 @@ with sync_playwright() as p:
     assert page.get_by_role("link", name="Strategies").is_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     page.screenshot(path="/tmp/sigma-project-sidebar-collapsed-1672.png", full_page=True)
+    page.reload()
+    expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
     page.get_by_role("button", name="Expand sidebar").click()
     assert abs(sidebar.bounding_box()["width"] - expanded_width) < 2
-    description = page.locator(".inline-description-editor textarea")
+    page.get_by_role("button", name="Edit Plain description").click()
+    description = page.get_by_label("Edit Plain source")
     description.evaluate(
         "e => { e.dataset.original = e.value; e.value = (e.value + ' ').repeat(100); }"
     )
@@ -100,6 +103,7 @@ with sync_playwright() as p:
     page.set_viewport_size({"width": 1672, "height": 941})
     description.evaluate("e => e.value = e.dataset.original")
     description.evaluate("e => e.scrollTop = 0")
+    page.locator(".project-intro").get_by_role("button", name="Cancel").click()
     resizer = divider
     resizer.focus()
     original_height = intro.bounding_box()["height"]

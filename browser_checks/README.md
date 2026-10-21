@@ -115,7 +115,8 @@ Run the normal Vite UI on `127.0.0.1:5173`, then start a fresh isolated mock
 provider (`uv run uvicorn browser_checks.provider_fixture:app --host 127.0.0.1
 --port 8001`). Run `uv run --with playwright python browser_checks/text_views.py`.
 The script opens the stock Nonconsecutive example into the fixture's managed
-copy, checks explicit Plain/Markdown conversion, rendered math, stale edits,
+copy, checks automatic Plain/Markdown conversion on selection, rendered math,
+in-place title/description edits and stale retries,
 cache reuse without conversion requests, desktop/mobile overflow and source
 fixture immutability. It uses no paid provider call. Restart the fixture before
 rerunning, since the script intentionally edits its managed stock copy.

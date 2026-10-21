@@ -384,6 +384,7 @@ async def main_async(root: Path):
         payload = json.loads(request.content)
         assert payload["stream"] is True and "max_output_tokens" not in payload
         assert isinstance(payload["input"], list)
+        assert request.headers.get("accept") == "text/event-stream"
         raw = {**provider_output("Count $a_n$ for $n \\ge 0$"), "id": "resp-text-fixture"}
         events = [
             {
@@ -401,7 +402,7 @@ async def main_async(root: Path):
         content = "".join(
             f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
         )
-        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+        return httpx.Response(200, headers={}, content=content)
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),

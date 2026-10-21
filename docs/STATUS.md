@@ -871,15 +871,18 @@ were observed. The public PNG and source artwork were not changed.
 
 The research problem and expanded strategy approaches now have a three-view
 control. Plain and Markdown are separate durable bodies; Rendered is a local
-read-only Markdown/KaTeX preview. A missing direction requires an explicit
-Generate click, and the UI reports AI attribution, working/cancellation,
-conversion errors, stale copies and regeneration. A direct description edit
-requires Save and makes that format authoritative. The project View selector
+read-only Markdown/KaTeX preview. Selecting a missing or stale view now starts
+its conversion automatically per the later user request; failures retain the
+source and offer Retry. The UI reports AI attribution, working/cancellation,
+conversion errors and stale copies. A direct in-place description or title
+edit requires Save; Escape cancels without writing. The project View selector
 sits at the lower-right of the description pane above its draggable divider.
 The project title appears once in the header, beside a back arrow; clicking it
-opens project settings. Home shows a Current Project shortcut after an open,
-validated through the read-only inspect endpoint. The stock source fixtures and
-approved artwork remain unchanged.
+edits the title in place. Other options remain in Project Settings. Home shows
+a Current Project shortcut above “Switch to a new project,” validated through
+the read-only inspect endpoint. The sidebar's collapse preference survives
+leaving and reopening a project. Stock source fixtures and approved artwork
+remain unchanged.
 
 A versioned portable `text-representations.json` companion stores format history
 and source-digest keyed conversions without rewriting legacy project documents
@@ -896,11 +899,14 @@ migration, stock immutability, cache reuse, stale edits/conflicts, cancellation,
 ASGI disconnect, malformed/truncated output, account/model availability and
 ChatGPT-plan streaming. Real Chrome `browser_checks/text_views.py` passed
 literal and rendered inline/display math, working/error/stale states,
-source editing and safe rendering, zero provider requests on cached switches,
+in-place title/description editing and safe rendering, zero provider requests on cached switches,
 Current Project reopen and desktop/390px layouts. Real Chrome
 `browser_checks/header.py` passed the back-arrow header at five widths;
 `browser_checks/strategies.py` passed layout, divider, strategy CRUD and AI
-regressions. Desktop/mobile screenshots were visually inspected and no
+regressions and sidebar persistence. Real Chrome `browser_checks/settings.py`
+passed in-place title/description editing, separate project settings, retained
+model selection and conflict/error handling; `browser_checks/recents.py`
+passed stock/recent Home navigation. Desktop/mobile screenshots were visually inspected and no
 horizontal viewport overflow or page errors occurred. The renderer can display
 an AI conversion faithfully but cannot verify mathematical equivalence; users
 must review derived text before relying on it.

@@ -116,10 +116,12 @@ async def _convert_text(
                     }
                 },
             }
+            headers = {"Authorization": "Bearer " + binding["token"]}
             if binding["mode"] == "chatgpt":
                 del payload["max_output_tokens"]
                 payload["stream"] = True
                 payload["input"] = [{"role": "user", "content": context}]
+                headers["Accept"] = "text/event-stream"
             guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
             try:
                 async with (
@@ -130,7 +132,7 @@ async def _convert_text(
                     client.stream(
                         "POST",
                         "https://api.openai.com/v1/responses",
-                        headers={"Authorization": "Bearer " + binding["token"]},
+                        headers=headers,
                         json=payload,
                     ) as response,
                 ):
@@ -176,8 +178,16 @@ async def _convert_text(
                     "Could not reach OpenAI for conversion; source text was kept"
                 ) from exc
             except (ValueError, KeyError, TypeError, AttributeError, ValidationError) as exc:
+                if isinstance(exc, ValidationError):
+                    detail = "; ".join(
+                        f"{'.'.join(map(str, e['loc']))}: {e['type']}"
+                        for e in exc.errors(include_input=False)
+                    )
+                else:
+                    detail = f"{type(exc).__name__}: {exc}"
+
                 raise ProjectError(
-                    "Provider returned malformed conversion output; source text was kept"
+                    f"Provider returned malformed conversion output ({detail}); source text was kept"
                 ) from exc
             body = result.body
             if (

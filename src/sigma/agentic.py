@@ -192,10 +192,12 @@ async def _invoke(
             }
         },
     }
+    headers = {"Authorization": "Bearer " + binding["token"]}
     if binding["mode"] == "chatgpt":
         del payload["max_output_tokens"]
         payload["stream"] = True
         payload["input"] = [{"role": "user", "content": context}]
+        headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
     try:
         async with (
@@ -206,7 +208,7 @@ async def _invoke(
             client.stream(
                 "POST",
                 "https://api.openai.com/v1/responses",
-                headers={"Authorization": "Bearer " + binding["token"]},
+                headers=headers,
                 json=payload,
             ) as response,
         ):

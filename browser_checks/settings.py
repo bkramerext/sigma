@@ -123,22 +123,42 @@ with sync_playwright() as p:
     strategy_id = added.project.strategies[-1].id
     page.reload()
     expect(page.get_by_role("heading", name="Existing research", exact=True)).to_be_visible()
-    pencil = page.get_by_role("button", name="Edit Project", exact=True)
     before = state.read_bytes()
-    pencil.focus()
-    pencil.press("Enter")
-    expect(dialog.get_by_role("heading", name="Edit Project", exact=True)).to_be_visible()
-    assert dialog.locator("label").all_text_contents() == labels
-    expect(dialog.get_by_label("Project name", exact=True)).to_be_focused()
-    expect(dialog.get_by_label("Project name", exact=True)).to_have_value(title)
-    dialog.get_by_label("Project name", exact=True).fill("Cancelled changes")
-    dialog.press("Escape")
-    expect(pencil).to_be_focused()
+    title_button = page.get_by_role("button", name=f"Edit project title: {title}")
+    title_button.focus()
+    title_button.press("Enter")
+    title_input = page.get_by_role("textbox", name="Project title")
+    expect(title_input).to_be_focused()
+    title_input.fill("Cancelled changes")
+    title_input.press("Escape")
+    expect(title_button).to_be_focused()
     assert state.read_bytes() == before
-    pencil.click()
-    dialog.get_by_role("button", name="Save Changes", exact=True).click()
-    expect(pencil).to_be_focused()
-    assert state.read_bytes() == before  # explicit no-op.
+    title_button.click()
+    title_input.fill("Renamed browser investigation")
+    page.locator(".project-title-actions").get_by_role("button", name="Save").click()
+    expect(page.get_by_role("heading", name="Renamed browser investigation")).to_be_visible()
+    description_button = page.get_by_role("button", name="Edit Plain description")
+    description_button.click()
+    description = page.get_by_label("Edit Plain source")
+    description.fill("A revised problem.\nKeep uncertainty explicit.")
+    description.press("Escape")
+    assert "A revised problem" not in state.read_text()
+    description_button.click()
+    description.fill("A revised problem.\nKeep uncertainty explicit.")
+    page.locator(".project-intro").get_by_role("button", name="Save text").click()
+    expect(page.get_by_role("button", name="Edit Plain description")).to_contain_text(
+        "A revised problem"
+    )
+    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
+    settings_button.click()
+    expect(dialog.get_by_role("heading", name="Project Settings", exact=True)).to_be_visible()
+    assert dialog.locator("label").all_text_contents() == [
+        "Research mode",
+        "AI model",
+        "Thinking level",
+    ]
+    dialog.press("Escape")
+    expect(settings_button).to_be_focused()
     constrained = {
         "models": [
             {
@@ -159,25 +179,18 @@ with sync_playwright() as p:
         "message": "Controlled effort restriction fixture",
     }
     page.route("**/api/ai/models", status_handler(constrained))
-    pencil.click()
-    expect(dialog.get_by_label("AI model", exact=True).locator("option")).to_have_count(2)
+    settings_button.click()
     dialog.get_by_label("AI model", exact=True).select_option("gpt-6-luna")
     expect(dialog.get_by_role("alert")).to_contain_text("Choose a supported level explicitly")
     expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_disabled()
     dialog.get_by_label("Thinking level", exact=True).select_option("low")
     expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_enabled()
     dialog.press("Escape")
-    assert state.read_bytes() == before
     page.unroute("**/api/ai/models")
-    pencil.click()
-    dialog.get_by_label("Project name", exact=True).fill("Renamed browser investigation")
-    dialog.get_by_label("Research problem", exact=True).fill(
-        "A revised problem.\nKeep uncertainty explicit."
-    )
+    settings_button.click()
     dialog.get_by_label("Research mode", exact=True).select_option("default")
     dialog.get_by_label("AI model", exact=True).select_option("gpt-6-luna")
     dialog.get_by_label("Thinking level", exact=True).select_option("xhigh")
-    assert state.read_bytes() == before
     page.route(
         "**/api/projects/update",
         lambda route: route.fulfill(
@@ -187,16 +200,9 @@ with sync_playwright() as p:
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_text("Injected save failure")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
-    assert state.read_bytes() == before
     page.unroute("**/api/projects/update")
-    for width in (1672, 390, 320):
-        page.set_viewport_size({"width": width, "height": 941 if width == 1672 else 844})
-        page.screenshot(path=f"/tmp/sigma-a8-edit-{width}.png", full_page=True)
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
-    expect(
-        page.get_by_role("heading", name="Renamed browser investigation", exact=True)
-    ).to_be_visible()
-    expect(pencil).to_be_focused()
+    expect(settings_button).to_be_focused()
     raw = json.loads(state.read_bytes())
     assert (
         raw["id"] == identity
@@ -206,26 +212,22 @@ with sync_playwright() as p:
     assert (
         raw["strategies"][0]["id"] == strategy_id and raw["events"][-1]["kind"] == "project.updated"
     )
-    assert raw["events"][-1]["project_change"]["previous"]["title"] == title
     assert inspect_project(destination).path == str(destination)
     page.reload()
-    expect(
-        page.get_by_role("heading", name="Renamed browser investigation", exact=True)
-    ).to_be_visible()
-    pencil.click()
+    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
+    settings_button.click()
     expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
     dialog.get_by_role("button", name="Cancel", exact=True).click()
-    expect(pencil).to_be_focused()
-    # Saved per-project settings are surfaced in the AI draft flow; no user generation here.
+    expect(settings_button).to_be_focused()
     page.get_by_label("New Strategy options", exact=True).click()
     page.get_by_role("button", name="Generate with AI", exact=True).click()
     expect(dialog.locator(".provider-context")).to_have_text(
         "OpenAI API · billed separately · gpt-6-luna · Extra high"
     )
     dialog.press("Escape")
-    pencil.click()
-    dialog.get_by_label("Project name", exact=True).fill("Unsaved conflicting name")
+    settings_button.click()
+    dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
     latest = inspect_project(destination)
     prior = asdict(project_settings(latest.project))
     update_project(
@@ -234,33 +236,25 @@ with sync_playwright() as p:
     conflict_bytes = state.read_bytes()
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
     expect(dialog.get_by_role("alert")).to_contain_text("changed elsewhere")
-    expect(dialog.get_by_label("Project name", exact=True)).to_have_value(
-        "Unsaved conflicting name"
-    )
+    expect(dialog.get_by_label("Research mode", exact=True)).to_have_value("mathematical")
     assert state.read_bytes() == conflict_bytes
     dialog.press("Escape")
     page.reload()
-    expect(pencil).to_be_visible()
-    # Missing/changed catalog never forces a stored selection to disappear.
+    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
+    expect(settings_button).to_be_visible()
     no_models = {
         "models": [],
         "default_model": "gpt-6.1-sol",
         "default_effort": "high",
         "message": "Provider is offline; stored choices are retained.",
     }
-    page.route(
-        "**/api/ai/models",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json", body=json.dumps(no_models)
-        ),
-    )
-    pencil.click()
+    page.route("**/api/ai/models", status_handler(no_models))
+    settings_button.click()
     expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_text("Provider is offline;", exact=False)).to_be_visible()
     expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_enabled()
-    dialog.get_by_label("Research problem", exact=True).fill("Metadata edited with catalog offline")
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
-    expect(pencil).to_be_focused()
+    expect(settings_button).to_be_focused()
     assert json.loads(state.read_bytes())["ai_model"] == "gpt-6-luna"
     page.unroute("**/api/ai/models")
     # Truthful header alternatives and Retry on both Home/workspace; no status colors alone.
@@ -290,10 +284,10 @@ with sync_playwright() as p:
             status_handler(data),
         )
         page.reload()
-        expect(page.get_by_role("button", name="Edit Project", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()
         expect(
             page.get_by_text(
-                "AI connection check expired" if status == "connected" else label, exact=True
+                "OpenAI API · key billing" if status == "connected" else label, exact=True
             )
         ).to_be_visible()
         page.get_by_label("AI connection settings", exact=True).click()
@@ -305,7 +299,7 @@ with sync_playwright() as p:
     expect(page.get_by_role("button", name="New Project", exact=True)).to_be_visible()
     page.wait_for_timeout(150)
     page.go_back()
-    expect(page.get_by_role("button", name="Edit Project", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()
     assert (
         state.read_bytes() == json.dumps(json.loads(state.read_bytes()), indent=2).encode() + b"\n"
     )

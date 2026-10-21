@@ -68,11 +68,13 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const [selected, setSelected] = useState<TextDisplay>('plain');
   const [editing, setEditing] = useState(false);
+  const [editingFromRendered, setEditingFromRendered] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
   const select = useRef<HTMLSelectElement>(null);
+  const bodyTrigger = useRef<HTMLElement>(null);
   useEffect(() => {
     const controller = new AbortController();
     setData(null); setError(''); setEditing(false);
@@ -88,7 +90,18 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
   const format: TextFormat = selected === 'plain' ? 'plain' : 'markdown';
   const version = data?.[format];
   const current = version?.current ?? false;
-  async function convert() {
+  function beginBodyEdit(fromRendered = false) {
+    if (!version?.current || busy) return;
+    setDraft(version.body); setEditingFromRendered(fromRendered);
+    if (fromRendered) setSelected('markdown');
+    setEditing(true); setError('');
+  }
+  function cancelBodyEdit() {
+    setEditing(false);
+    if (editingFromRendered) setSelected('rendered');
+    requestAnimationFrame(() => bodyTrigger.current?.focus());
+  }
+  async function convert(targetFormat: TextFormat = format) {
     if (!data || busy) return;
     const controller = new AbortController(); abort.current = controller; setBusy(true); setError('');
     try {
@@ -96,10 +109,10 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
       const settings = await settingsResponse.json();
       if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
       const response = await fetch('/api/projects/text/convert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, scope, strategy_id: strategyId, target: format, expected_digest: data.source_digest, expected_binding: settings.binding }) });
+        body: JSON.stringify({ path, scope, strategy_id: strategyId, target: targetFormat, expected_digest: data.source_digest, expected_binding: settings.binding }) });
       const next = await response.json();
       if (!response.ok) throw new Error(next.error ?? 'Conversion failed; source text was kept.');
-      setData(next as TextRepresentations); setDraft(next[format]?.body ?? '');
+      setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? '');
     } catch (cause) { if (!controller.signal.aborted) setError(errorMessage(cause)); }
     finally { if (abort.current === controller) { abort.current = null; setBusy(false); } }
   }
@@ -116,31 +129,28 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}`}>
     <div className="text-view-controls"><label htmlFor={`text-view-${scope}-${strategyId ?? 'project'}`}>View</label>
-      <select ref={select} id={`text-view-${scope}-${strategyId ?? 'project'}`} aria-label={`View ${name}`} value={selected} disabled={editing || busy || (scope === 'project' && current && selected !== 'rendered' && draft !== version?.body)} onChange={event => { const next = event.target.value as TextDisplay; setSelected(next); setDraft(data?.[next === 'plain' ? 'plain' : 'markdown']?.body ?? ''); }}>
+      <select ref={select} id={`text-view-${scope}-${strategyId ?? 'project'}`} aria-label={`View ${name}`} value={selected} disabled={editing || busy} onChange={event => { const next = event.target.value as TextDisplay; const nextFormat = next === 'plain' ? 'plain' : 'markdown'; setSelected(next); setDraft(data?.[nextFormat]?.body ?? ''); if (data && !data[nextFormat]?.current) void convert(nextFormat); }}>
         <option value="plain">Plain</option><option value="markdown">Markdown</option><option value="rendered">Rendered</option>
       </select>
       {data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>{version.current ? 'Edit' : 'Edit previous'} {format === 'plain' ? 'Plain' : 'Markdown'}</button>}
-      {scope === 'project' && selected === 'rendered' && version?.current && <button type="button" className="text-view-edit" onClick={() => { setSelected('markdown'); setDraft(version.body); }}>Edit Markdown</button>}
       {version && !current && <span className="text-view-stale">Out of date</span>}
     </div>
     {editing ? <form className="text-view-editor" onSubmit={save}>
       <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
       <p className="hint">Saving makes this the authoritative text. The other representation becomes out of date until regenerated.</p>
-      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)}/>
-      <div className="form-actions"><button type="submit" disabled={busy}>Save text</button><button type="button" className="text-button" disabled={busy} onClick={() => { setEditing(false); select.current?.focus(); }}>Cancel</button></div>
-    </form> : current && version ? scope === 'project' && selected !== 'rendered' ? <form className="text-view-editor inline-description-editor" onSubmit={save}>
-      <label className="sr-only" htmlFor="project-description-editor">Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
-      <textarea id="project-description-editor" value={draft} maxLength={20000} rows={8} onChange={event => setDraft(event.target.value)} aria-label={`Edit ${format === 'plain' ? 'Plain' : 'Markdown'} source`}/>
-      {draft !== version.body && <div className="form-actions"><button type="submit" disabled={busy || !draft.trim()}>Save text</button><button type="button" className="text-button" onClick={() => setDraft(version.body)}>Discard changes</button></div>}
-    </form> : selected === 'rendered' ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
+      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
+      <div className="form-actions"><button type="submit" disabled={busy}>Save text</button><button type="button" className="text-button" disabled={busy} onClick={cancelBodyEdit}>Cancel</button></div>
+    </form> : current && version ? scope === 'project' ? selected === 'rendered' ? <div ref={bodyTrigger as Ref<HTMLDivElement>} className={`${contentClass} rendered-text text-editable`} role="button" tabIndex={0} aria-label="Edit Markdown description" title="Click or press Enter to edit Markdown source" onClick={() => beginBodyEdit(true)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(true); } }}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
+      : selected === 'markdown' ? <pre ref={bodyTrigger as Ref<HTMLPreElement>} className={`${contentClass} literal-markdown text-editable`} role="button" tabIndex={0} aria-label="Edit Markdown description" title="Click or press Enter to edit" onClick={() => beginBodyEdit()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(); } }}>{version.body}</pre>
+        : <p ref={bodyTrigger as Ref<HTMLParagraphElement>} className={`${contentClass} text-editable`} role="button" tabIndex={0} aria-label="Edit Plain description" title="Click or press Enter to edit" onClick={() => beginBodyEdit()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(); } }}>{version.body}</p>
+      : selected === 'rendered' ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : selected === 'markdown' ? <pre className={`${contentClass} literal-markdown`} aria-label={`Markdown source for ${name}`}>{version.body}</pre>
         : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
         {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
-        <button type="button" className="secondary" disabled={busy} onClick={() => void convert()}>{version ? `Regenerate ${format === 'markdown' ? 'Markdown' : 'Plain'}` : `Generate ${format === 'markdown' ? 'Markdown' : 'Plain'}`}</button>
-        {!version && <button type="button" className="text-view-edit" disabled={busy} onClick={() => { setDraft(''); setEditing(true); setError(''); }}>Write {format === 'markdown' ? 'Markdown' : 'Plain'} manually</button>}
-        <p className="hint">One explicit AI conversion request uses this project's selected model, Thinking and account. AI-generated; review before relying on it. Switch views without a provider call.</p>
+        {error && <button type="button" className="secondary" disabled={busy} onClick={() => void convert()}>Retry conversion</button>}
+        <p className="hint">Selecting a missing or out-of-date format sends one AI conversion using this project's selected model, Thinking and account. AI-generated; review before relying on it. Current cached views switch without a provider call.</p>
       </div>}
     {busy && !editing && <p className="text-view-working" role="status">Converting to {format === 'markdown' ? 'Markdown' : 'Plain'}… <button type="button" className="text-button" onClick={cancelConversion}>Cancel conversion</button></p>}
     {version?.current && version.kind === 'ai_derived' && <p className="text-view-attribution">AI-generated conversion · Review before relying on it.{version.warnings.length ? ` ${version.warnings.join(' ')}` : ''}</p>}
@@ -148,14 +158,44 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
   </div>;
 }
 
+function InlineProjectTitle({ view, onSaved, disabled, titleRef }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean; titleRef?: Ref<HTMLHeadingElement> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(view.project.title);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const trigger = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!editing) setDraft(view.project.title); }, [view.project.title, editing]);
+  useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
+  function cancel() { setDraft(view.project.title); setError(''); setEditing(false); requestAnimationFrame(() => trigger.current?.focus()); }
+  async function save() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const current = settingsOf(view);
+      const next = await post<ProjectView>('update', { path: view.path, ...current, title: draft, expected: current });
+      setEditing(false); onSaved(next); requestAnimationFrame(() => trigger.current?.focus());
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <h1 ref={titleRef} tabIndex={-1} className="current-project" aria-label={view.project.title}>
+      {editing ? <input ref={input} aria-label="Project title" value={draft} maxLength={200} disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancel(); } else if (event.key === 'Enter') { event.preventDefault(); void save(); } }}/>
+        : <button ref={trigger} className="project-title-edit" type="button" onClick={() => setEditing(true)} disabled={disabled} aria-label={`Edit project title: ${view.project.title}`} title="Click or press Enter to edit project title">{view.project.title}</button>}
+    </h1>
+    {editing && <div className="project-title-actions"><button type="button" disabled={busy || !draft.trim()} onClick={() => void save()}>Save</button><button type="button" disabled={busy} onClick={cancel}>Cancel</button></div>}
+    {error && <p role="alert" className="project-title-error">{error}</p>}
+  </>;
+}
+
 function Header({ goHome, close, projectTitle, projectArtwork = false, titleRef, editProject }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean; titleRef?: Ref<HTMLHeadingElement>; editProject?: { action: () => void; disabled: boolean; buttonRef: Ref<HTMLButtonElement> } }) {
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean; titleRef?: Ref<HTMLHeadingElement>; editProject?: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean } }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork ? projectTitle && <div className="project-title-line">
         {close && <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Close project" title="Back to projects"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>}
-        <h1 ref={titleRef} tabIndex={-1} className="current-project" aria-label={projectTitle}>{editProject ? <button ref={editProject.buttonRef} className="project-title-edit" type="button" onClick={editProject.action} disabled={editProject.disabled} aria-label="Edit Project" title="Edit project settings">{projectTitle}</button> : projectTitle}</h1>
+        {editProject ? <InlineProjectTitle {...editProject} titleRef={titleRef}/> : <h1 ref={titleRef} tabIndex={-1} className="current-project">{projectTitle}</h1>}
       </div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
@@ -186,9 +226,15 @@ function focusWorkspace(id: string) {
 
 function WorkspaceFrame({ children, goHome, close, projectTitle, titleRef, editProject }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; titleRef?: Ref<HTMLHeadingElement>; editProject?: { action: () => void; disabled: boolean; buttonRef: Ref<HTMLButtonElement> };
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; titleRef?: Ref<HTMLHeadingElement>; editProject?: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean };
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
+  function toggleSidebar() {
+    setCollapsed(value => {
+      window.localStorage.setItem('sigma.sidebarCollapsed', String(!value));
+      return !value;
+    });
+  }
   return <>
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
@@ -196,7 +242,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, titleRef, editP
     <Header goHome={goHome} close={close} projectTitle={projectTitle} titleRef={titleRef} editProject={editProject} projectArtwork/>
     <div className={`workspace-layout${collapsed ? ' nav-collapsed' : ''}`}>
       <nav className="workspace-nav" aria-label="Project navigation">
-        <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setCollapsed(value => !value)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
+        <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
         <a href="#pool-heading" aria-current="page" aria-label="Strategies" title={collapsed ? 'Strategies' : undefined} onClick={event => {
           event.preventDefault(); focusWorkspace('pool-heading');
         }}><WorkspaceIcon name="Strategies"/><span>Strategies</span></a>
@@ -291,13 +337,13 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Edit Project' : 'New Project'}</h2>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2>
         <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
       </header>
-      <div className="settings-body"><p id="project-settings-help">{initial ? 'Update this investigation. Changes apply when you save; its identity and location stay fixed.' : 'Name an investigation and choose how to explore it.'}</p>
+      <div className="settings-body"><p id="project-settings-help">{initial ? 'Choose how to explore this project. Edit its title and description directly on the project page.' : 'Name an investigation and choose how to explore it.'}</p>
       <fieldset disabled={busy}>
-      <label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
-      <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/>
+      {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
+      <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
       <label htmlFor="project-mode">Research mode</label><select id="project-mode" value={values.research_mode} onChange={event => change('research_mode', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
       <label htmlFor="project-model">AI model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
@@ -442,7 +488,7 @@ function Home({ initialPath, currentPath, onOpen, goHome }: {
     <div className="home-hero">
     {currentProject && <div className="home-current"><p>Current Project</p><button type="button" disabled={reopening} onClick={() => void reopenCurrent()}>{currentProject.project.title}<span aria-hidden="true">→</span></button></div>}
     {currentError && <p role="alert" className="error">{currentError}</p>}
-    <h1 ref={heading} tabIndex={-1}>Open a Project</h1>
+    <h1 ref={heading} tabIndex={-1}>Switch to a new project</h1>
     <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>
     <div className="home-entry-actions">
@@ -883,7 +929,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
   const frame = { goHome, close: { action: close, busy: closing }, projectTitle: view?.project.title, titleRef: heading,
-    editProject: { action: () => setProjectEditing(true), disabled: closing || ordering || !!dragId || editing || generating, buttonRef: editProjectButton } };
+    editProject: view ? { view, onSaved: setView, disabled: closing || ordering || !!dragId || editing || generating } : undefined };
   function cancel() { setEditing(false); requestAnimationFrame(() => newButton.current?.focus()); }
   if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
@@ -924,7 +970,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-      <div className="project-description-line"><p className="project-eyebrow">Project description</p></div>
+      <div className="project-description-line"><p className="project-eyebrow">Project description</p><button ref={editProjectButton} type="button" className="project-settings-link" onClick={() => setProjectEditing(true)} disabled={closing || ordering || !!dragId || editing || generating}>Project Settings</button></div>
       <TextViews path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
