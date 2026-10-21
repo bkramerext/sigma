@@ -1,13 +1,19 @@
 """Check maintenance failure handling without installing or changing dependencies."""
 
+import json
+import os
+import signal
 import subprocess
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest.mock import MagicMock, Mock, patch
 
 from sigma.projects import ROOT
 from sigma.tooling import run_tooling
-from sigma.ui import run_ui, stop_servers
+from sigma.ui import run_shutdown, run_ui, stop_servers
+from sigma.ui_instance import Instance
 
 
 def check_failures() -> None:
@@ -93,16 +99,76 @@ def check_ui() -> None:
     child.wait.assert_called_once_with(timeout=8)
 
 
+
+def check_shutdown_and_suspended() -> None:
+    # Exercise owner verification with a private directory and mocked process
+    # inspection. Never send signals to any real process from tests.
+    with TemporaryDirectory() as directory, patch(
+        "sigma.ui_instance.STATE_ROOT", Path(directory)
+    ):
+        instance = Instance()
+        command = str(ROOT / ".venv" / "bin" / "python") + " " + str(
+            ROOT / ".venv" / "bin" / "sigma"
+        ) + " ui"
+        observed = {
+            "uid": str(os.getuid()),
+            "start": "Wed Oct 21 12:53:00 2026",
+            "stat": "T",
+            "command": command,
+        }
+        instance.owner_path.write_text(
+            json.dumps(
+                {
+                    "identity": instance.identity,
+                    "pid": 123456,
+                    "start": observed["start"],
+                    "command": observed["command"],
+                }
+            )
+        )
+        instance.owner_path.chmod(0o600)
+        with (
+            patch.object(Instance, "_process", return_value=observed),
+            patch("sigma.ui_instance.os.kill") as send,
+        ):
+            assert instance._resume_suspended()
+            send.assert_called_once_with(123456, signal.SIGCONT)
+            send.reset_mock()
+            assert instance._force_stopped()
+            send.assert_called_once_with(123456, signal.SIGKILL)
+            send.reset_mock()
+            observed["stat"] = "S"
+            assert not instance._resume_suspended()
+            assert not instance._force_stopped()
+            send.assert_not_called()
+            observed["stat"] = "T"
+            observed["start"] = "another process"
+            try:
+                instance._resume_suspended()
+            except RuntimeError as exc:
+                assert "identity changed" in str(exc)
+            else:
+                raise AssertionError("Reused PID was signalled")
+            send.assert_not_called()
+
+    owner = MagicMock()
+    with patch("sigma.ui.Instance", return_value=owner) as factory:
+        assert run_shutdown() == 0
+        factory.assert_called_once_with(shutdown_only=True)
+        owner.__enter__.assert_called_once()
+        owner.__exit__.assert_called_once()
+
 def main() -> None:
     output = StringIO()
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
         check_ui()
+        check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()
     assert "FastAPI API server: http://127.0.0.1:8000" in output.getvalue()
     assert "Vite UI server:    http://127.0.0.1:5173" in output.getvalue()
-    print("PASS maintenance failures and UI launch, early exit, interrupt and cleanup")
+    print("PASS maintenance, UI lifecycle, verified suspended-owner recovery and shutdown")
 
 
 if __name__ == "__main__":
