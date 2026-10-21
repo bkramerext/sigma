@@ -1,6 +1,5 @@
 """Check maintenance failure handling without installing or changing dependencies."""
 
-import json
 import os
 import signal
 import subprocess
