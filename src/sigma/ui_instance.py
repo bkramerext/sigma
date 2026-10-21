@@ -165,6 +165,7 @@ class Instance:
         pid, started, command = self.recovering
         owner = self._recoverable_owner()
         if owner is None or owner[0] != pid:
+            self.recovering = None
             return False
         if owner[1]["start"] != started or owner[1]["command"] != command:
             raise RuntimeError("Recovered SIGMA process identity changed; refusing to signal.")
@@ -172,11 +173,13 @@ class Instance:
         try:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
+            self.recovering = None
             return True
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             current = self._recoverable_owner()
             if current is None or current[0] != pid:
+                self.recovering = None
                 return True
             time.sleep(0.1)
         current = self._recoverable_owner()
@@ -188,6 +191,7 @@ class Instance:
                 os.kill(pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+        self.recovering = None
         return True
 
     def _register_owner(self) -> None:
