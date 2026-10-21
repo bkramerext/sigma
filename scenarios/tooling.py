@@ -100,8 +100,8 @@ def check_ui() -> None:
 
 
 def check_shutdown_and_suspended() -> None:
-    # Simulate two old suspended launchers sharing a private checkout lock.
-    # Signal calls are mocked; unrelated processes must never be touched.
+    # SIGKILL verified dormant launchers directly, so they cannot wake
+    # simultaneously and compete to start servers. No real signals are sent.
     with TemporaryDirectory() as directory, patch("sigma.ui_instance.STATE_ROOT", Path(directory)):
         instance = Instance()
         command = (
@@ -127,35 +127,25 @@ def check_shutdown_and_suspended() -> None:
         with (
             patch(
                 "sigma.ui_instance.subprocess.check_output",
-                return_value="p123456\np123457\n",
+                return_value="p123456\\np123457\\n",
             ),
             patch.object(Instance, "_process", side_effect=lambda pid: processes.get(pid)),
             patch("sigma.ui_instance.os.kill") as send,
         ):
             assert len(instance._legacy_lock_owners()) == 2
-            assert instance._resume_suspended()
+            assert instance._terminate_suspended_lock_holders()
             assert send.call_args_list == [
-                call(123456, signal.SIGCONT),
-                call(123457, signal.SIGCONT),
-            ]
-            send.reset_mock()
-            with patch("sigma.ui_instance.time.monotonic", side_effect=[0, 3]):
-                assert instance._force_stopped()
-            assert send.call_args_list == [
-                call(123456, signal.SIGTERM),
-                call(123457, signal.SIGTERM),
                 call(123456, signal.SIGKILL),
                 call(123457, signal.SIGKILL),
             ]
             send.reset_mock()
             processes[123456]["stat"] = "S"
             processes[123457]["stat"] = "S"
-            assert not instance._resume_suspended()
-            assert not instance._force_stopped()
+            assert not instance._terminate_suspended_lock_holders()
             send.assert_not_called()
             processes[123457]["command"] = "/usr/bin/unrelated ui"
             try:
-                instance._resume_suspended()
+                instance._terminate_suspended_lock_holders()
             except RuntimeError as exc:
                 assert "unverified holder" in str(exc)
             else:
