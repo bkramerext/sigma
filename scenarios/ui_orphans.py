@@ -11,15 +11,15 @@ ROOT = Path("/tmp/sigma-fixture-checkout")
 BACKEND = (
     str(os.getuid()),
     "Wed Oct 21 11:00:00 2026",
-    "/tmp/sigma-fixture-checkout/.venv/bin/python -m uvicorn "
-    "sigma.server:create_app --factory --host 127.0.0.1 --port 8000",
+    ("/tmp/sigma-fixture-checkout/.venv/bin/python -m uvicorn "
+    "sigma.server:create_app --factory --host 127.0.0.1 --port 8000"),
     "/tmp/sigma-fixture-checkout",
 )
 FRONTEND = (
     str(os.getuid()),
     "Wed Oct 21 11:00:01 2026",
-    "node /tmp/sigma-fixture-checkout/frontend/node_modules/.bin/vite "
-    "--host 127.0.0.1 --port 5173 --strictPort",
+    ("node /tmp/sigma-fixture-checkout/frontend/node_modules/.bin/vite "
+    "--host 127.0.0.1 --port 5173 --strictPort"),
     "/tmp/sigma-fixture-checkout/frontend",
 )
 
