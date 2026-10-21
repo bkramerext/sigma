@@ -767,3 +767,10 @@ Pyright, frontend typecheck and production build. Real Chrome
 `browser_checks/header.py` passed at 1280, 1100, 700, 390 and 320px, including
 artwork top-left placement, aspect ratio, control interactions and no horizontal
 overflow. Desktop, tablet and mobile screenshots were visually inspected.
+
+The header display now clips only the blank bottom quarter of the artwork. The
+top 75%, including the complete SIGMA lettering and copper/blue wires, remains
+visible. The source/public image files are untouched, and the clipped display
+ends above workspace navigation. `./sigma test` and real Chrome header checks
+passed again at all five viewport widths; desktop and mobile screenshots were
+visually inspected.
