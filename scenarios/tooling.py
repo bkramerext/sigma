@@ -129,7 +129,7 @@ def check_shutdown_and_suspended() -> None:
         with (
             patch(
                 "sigma.ui_instance.subprocess.check_output",
-                return_value="p123456\\np123457\\n",
+                return_value="p123456\np123457\n",
             ),
             patch.object(Instance, "_process", side_effect=lambda pid: processes.get(pid)),
             patch("sigma.ui_instance.os.kill") as send,
