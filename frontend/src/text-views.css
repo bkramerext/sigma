@@ -43,3 +43,27 @@
 .workspace-page .text-view-editor .form-actions { margin-top: 8px; }
 @keyframes text-view-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .workspace-page .text-view-working::before { animation: none; } }
+
+/* Shared text rendering switch: outline sigma = plain; copper sigma = Markdown. */
+.workspace-page .text-views { position: relative; }
+.workspace-page .text-view-controls { justify-content: flex-start; }
+.workspace-page .project-text-views .text-view-controls { order: 0; margin: 0 0 8px; justify-content: flex-start; padding: 0; }
+.workspace-page .text-view-controls .sigma-render-toggle {
+  display: inline-grid; place-items: center;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px;
+  padding: 0; margin: 0;
+  border: 1px solid #9a7957; border-radius: 6px;
+  color: transparent; background: #0b1924;
+  -webkit-text-stroke: 1px #cfaa7a;
+  font: 700 24px/1 Georgia, serif;
+  cursor: pointer;
+}
+.workspace-page .text-view-controls .sigma-render-toggle.sigma-render-active {
+  color: #e8b57d; -webkit-text-stroke: 0;
+  background: linear-gradient(135deg, #f5d4a0 5%, #9c603b 45%, #f1bb7c 65%, #6f402a 95%);
+  background-clip: text; -webkit-background-clip: text;
+  border-color: #c68c56;
+  filter: drop-shadow(0 0 3px #9a542d88);
+}
+.workspace-page .text-view-controls .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.workspace-page .text-view-controls .sigma-render-toggle:disabled { cursor: progress; }
