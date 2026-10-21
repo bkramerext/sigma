@@ -170,10 +170,12 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* ASN-4: fixed approved Home art. Never substitute the split-screen concept image. */
 .home-page { background: #020711; }
-.home-atmosphere { background: #020711 url('/sigma-home-background.png') center top / cover no-repeat; }
+.home-atmosphere { background: #020711 url('/sigma-home-background-copper.png') center top / cover no-repeat; }
 .home-atmosphere::before, .home-atmosphere::after { content: none; }
 .home-content { width: min(100%, 1536px); min-height: 100dvh; padding: 0 clamp(26px, 5.4vw, 90px) 72px; }
-.home-page .home-topline { display: flex; justify-content: space-between; gap: 20px; padding: 26px 0; color: #c8ad84; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+.home-page .home-topline { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; height: 52px; padding: 26px 0; }
+.home-page .home-slogan { position: absolute; z-index: 0; top: 0; left: 0; display: block; width: min(36vw, 520px); height: auto; mix-blend-mode: screen; mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%); mask-composite: intersect; -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%); -webkit-mask-composite: source-in; pointer-events: none; user-select: none; }
+.home-page .home-topline .api-connection { position: relative; z-index: 1; margin-left: auto; }
 .home-page .home-hero { margin-top: clamp(170px, 28vh, 320px); max-width: 560px; animation: none; }
 .home-page .home-hero h1 { color: #dcb783; font-family: Georgia, serif; font-size: clamp(30px, 3.3vw, 49px); font-weight: 400; letter-spacing: -.02em; margin-bottom: 10px; }
 .home-page .intro { font-size: 14px; line-height: 1.7; color: #bcc8d4; margin-bottom: 18px; max-width: 420px; }
@@ -189,8 +191,9 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-atmosphere { z-index: -1; }
 @media (max-width: 700px) {
  .home-page .home-topline { font-size: 9px; letter-spacing: .08em; }
- .home-page .home-topline span:last-child { display: none; }
- .home-atmosphere { background-position: 58% top; }
- .home-page .home-hero { margin-top: clamp(160px, 24vh, 250px); }
+ .home-page .home-topline .api-connection.api-connection { top: 8px; }
+ .home-page .home-slogan { width: min(84vw, 320px); top: -32px; }
+ .home-atmosphere { background-position: 35% top; }
+ .home-page .home-hero { margin-top: clamp(340px, 44vh, 400px); }
  .home-page .open-form { padding: 18px; }
 }

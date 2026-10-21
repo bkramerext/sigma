@@ -274,7 +274,7 @@ function Home({ initialPath, onOpen, goHome }: {
   return <div className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-    <div className="home-topline"><span>STRATEGY INVESTIGATION · GENERATION · MEASUREMENT · ASSESSMENT</span><ConnectionStatus/></div>
+    <div className="home-topline"><img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/><ConnectionStatus/></div>
     <div className="home-hero"><h1 ref={heading} tabIndex={-1}>Open a Project</h1>
     <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>

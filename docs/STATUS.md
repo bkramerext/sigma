@@ -648,3 +648,28 @@ Limits: the verified status remains a bounded non-generating model-catalog
 authentication/reachability check; it does not establish inference entitlement,
 credits, quota or billing. Browser refresh behavior was controlled-clock tested;
 no live provider state or physical mobile device was used.
+
+## Home copper artwork update
+
+Home now uses the approved copper background and static slogan artwork. Vite
+copies both source PNGs byte-for-byte from `assets/` into `frontend/public/`;
+the originals remain unchanged. The slogan is blended with `screen` and feathered
+at its edges so its dark canvas does not form a hard rectangle. Home actions stay
+below the raised Σ/SIGMA mark, and the connection control remains in the upper
+right. The responsive crop keeps the background image's aspect ratio.
+
+Actual verification:
+
+- Real Chrome screenshots at 1440x900, 390x844 and 320x700 were visually
+  inspected (`/tmp/sigma-verified-*.png`). The connection control clears the
+  slogan and Σ at each size, the actions remain below the artwork, and no
+  horizontal overflow was measured. This was browser emulation, not physical
+  mobile hardware.
+- `npm run build` passed TypeScript checking and the Vite production build.
+- `./sigma test` passed lifecycle and project creation scenarios, then stopped
+  in `scenarios/recents.py:204`. Its bad-template check patches
+  `sigma.recents.TEMPLATE`, but `bootstrap_example()` calls `_install(root)` whose
+  default `template=TEMPLATE` was bound when the function was defined, so the
+  fixture patch is not observed and its assertion fails. This failure occurs in
+  existing scenario/application code, unrelated to the Home artwork change; the
+  later checks in that command did not run.
