@@ -24,7 +24,7 @@ from sigma.projects import (
 )
 from sigma.text_views import inspect_text, save_source
 from sigma.tooling import run_tooling
-from sigma.ui import run_ui, run_shutdown
+from sigma.ui import run_shutdown, run_ui
 
 
 def main() -> None:
