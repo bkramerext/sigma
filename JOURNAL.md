@@ -47,3 +47,25 @@ Normal use also exposed a small but instructive defect: after about a minute, th
 The emerging lesson is that removing friction is part of correctness. A technically defensible cache timeout should not become a recurring chore for the person doing research. The human should be spending attention on mathematical questions, not on authentication status housekeeping.
 
 We also considered adding Claude as another provider, and a longer-term idea surfaced: **independent agents using different models to challenge each other's reasoning**. That remains a future research-engine possibility, not current implementation scope. For now, the priority is to build on the working ChatGPT connection and turn SIGMA into a useful engine for mathematical investigation.
+
+## Day 1 — October 21, 2026
+
+- Refined SIGMA's visual identity around the approved copper Σ/SIGMA artwork, dramatic copper slogan, deep navy backgrounds, and complementary blue/copper wire effects.
+- Integrated the Home artwork and the new project-header artwork; worked toward consistent burnished-copper buttons, controls, and project-page branding.
+- Introduced the **Recent Projects / Stock Projects** Home toggle. Stock projects are now directly accessible from the catalog, with the templates protected and excluded from recent-project history.
+- Identified further project workflow questions to resolve, despite a more coherent surface: how stock projects, working projects, recent history, and opening/creation should fit together.
+- Prepared the project-header refinement assignment to position the complete project title beside the logo, remove the redundant header tagline, and share button and AI-status styling with Home.
+
+### Settling the visual language without losing the design
+
+Much of the day's work was learning to keep an approved visual decision stable while refining how it actually appears in the running application. The Home page gained a warmer engraved-copper identity, and the workspace logo was brought into the same family through a dedicated header asset. The copper finish belongs not only to the imagery but also to the controls: a restrained metallic gradient, legible contrast, and consistent interaction states across pages. The human evaluated actual screenshots and repeatedly corrected changes that strayed outside the requested scope.
+
+A remaining mathematical defect is visible in the existing Home artwork: the depicted Riemann zeta zeros are not positioned correctly on the critical line. That issue is **not resolved** by the branding work; it requires a precise correction to the approved source art, without redesigning the surrounding scene.
+
+The broader lesson is that creative judgment and fidelity are complementary. Creativity is welcome when exploration is open or requested; a targeted correction means changing *only* the specified region, not inventing a new composition. The integration must use the approved asset unchanged, and real screenshots remain the standard for confirming layout and fidelity. A polished design cannot compensate for an unreliable handoff.
+
+### Next: agentic research within Generate Strategy
+
+The existing **Generate with AI** flow produces a single, editable strategy proposal. The next direction is a real, bounded agentic research process inside that flow: explore a candidate direction, independently challenge assumptions and likely failure modes, and refine the result before presenting it for human review. The UI should give elegant, truthful progress feedback based on actual completed steps rather than a fictional progress percentage or exposed hidden model reasoning. AI can conduct exploratory work, but it must not silently accept or save a strategy. The user remains responsible for the decision to keep it.
+
+This is direction for the next implementation, **not a claim that the agent runtime or its progress UI exists yet**.
