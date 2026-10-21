@@ -49,6 +49,7 @@ with (
         stale.bind(str(instance.path))
     with Instance(root) as recovered:
         assert recovered.path.exists()
+        assert not recovered.owner_path.exists()  # Only the real UI launcher registers ownership.
     assert not instance.path.exists()
     # A live endpoint with a different handshake never receives shutdown.
     received = []
