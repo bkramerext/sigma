@@ -953,3 +953,21 @@ launchers, and escalates only against verified process identities still holding
 the lock after the grace period. If any holder is unverified, no signals are sent.
 The offline test now includes multiple holders and an unrelated-process negative
 control. This is committed, but it has not been exercised on the user's Mac.
+
+## Verified orphan-server cleanup (2026-10-21, awaiting macOS confirmation)
+
+After suspended-launcher recovery, the UI can still be blocked by an orphaned
+FastAPI or Vite listener on ports 8000/5173. The new `sigma.ui_orphans`
+service examines a listening PID's OS user, process birth/command, working
+directory, expected SIGMA server arguments, and (for FastAPI) its nonempty
+`/api/ui-instance` identity. Only a matching same-checkout listener can be
+stopped, first with SIGTERM and then (after a bounded grace period and
+identity re-verification) SIGKILL. Unknown or unrelated listeners are untouched.
+
+Both `./sigma shutdown` and `./sigma ui` now invoke that cleanup after
+serializing through the private instance lock. The mock-provider-free offline
+`scenarios/ui_orphans.py` regression covers owned servers, unrelated
+listeners, changed process identity and SIGKILL escalation, and runs in
+`./sigma test`. The isolated tests passed in the assistant's Python
+environment, but end-to-end behavior on the user's macOS machine is not yet
+verified.
