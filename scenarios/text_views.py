@@ -429,19 +429,34 @@ async def main_async(root: Path):
         text = json.dumps({"body": "Count $a_n$ for $n \\ge 0$", "warnings": []})
         response_id = "resp-delta-only"
         events = [
-            {"type": "response.created", "sequence_number": 0,
-             "response": {"id": response_id, "status": "in_progress"}},
-            {"type": "response.output_text.delta", "sequence_number": 1,
-             "delta": text[:len(text) // 2]},
-            {"type": "response.output_text.delta", "sequence_number": 2,
-             "delta": text[len(text) // 2:]},
-            {"type": "response.completed", "sequence_number": 3,
-             "response": {"id": response_id, "status": "completed", "model": MODEL,
-                          "output": []}},
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 1,
+                "delta": text[: len(text) // 2],
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 2,
+                "delta": text[len(text) // 2 :],
+            },
+            {
+                "type": "response.completed",
+                "sequence_number": 3,
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                    "model": MODEL,
+                    "output": [],
+                },
+            },
         ]
         content = "".join(
-            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
-            for event in events
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
         )
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
 
@@ -458,9 +473,7 @@ async def main_async(root: Path):
         delta_conversion = await convert_text(str(delta_path), "project", "markdown")
     assert delta_conversion["markdown"]["current"]
     assert delta_conversion["markdown"]["body"] == "Count $a_n$ for $n \\ge 0$"
-    print(
-        "PASS ChatGPT-plan terminal text omission is recovered from complete streamed deltas"
-    )
+    print("PASS ChatGPT-plan terminal text omission is recovered from complete streamed deltas")
     print(
         "PASS strategy approach shares the service and ChatGPT-plan preserves the selected billing path"
     )
