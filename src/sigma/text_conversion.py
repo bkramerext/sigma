@@ -112,7 +112,15 @@ async def _convert_text(
                         "type": "json_schema",
                         "name": "text_conversion",
                         "strict": True,
-                        "schema": Converted.model_json_schema(),
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "body": {"type": "string"},
+                                "warnings": {"type": "array", "items": {"type": "string"}},
+                            },
+                            "required": ["body", "warnings"],
+                            "additionalProperties": False,
+                        },
                     }
                 },
             }
