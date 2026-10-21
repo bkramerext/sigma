@@ -218,7 +218,7 @@ def main():
             replacement, replacementlog = launch()
             ready(replacement, replacementlog)
             until(lambda: suspended.poll() is not None)
-            assert "Resuming suspended SIGMA launcher" in replacementlog.read_text()
+            assert "Cleaning up 1 suspended SIGMA launcher" in replacementlog.read_text()
             assert "Stopping existing SIGMA instance" in replacementlog.read_text()
             # Explicit shutdown uses the same verified control channel.
             command = subprocess.run(
