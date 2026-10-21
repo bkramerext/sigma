@@ -189,6 +189,12 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-hero { margin-top: clamp(170px, 28vh, 320px); max-width: 560px; animation: none; }
 .home-page :is(.home-hero, .home-entry-actions, .home-catalog) { margin-left: clamp(26px, 5.4vw, 90px); }
 .home-page .home-hero h1 { color: #e6af92; font-family: Georgia, serif; font-size: clamp(30px, 3.3vw, 49px); font-weight: 400; letter-spacing: -.02em; margin-bottom: 10px; }
+.home-page .home-current { margin-bottom: 24px; max-width: 560px; }
+.home-page .home-current p { margin: 0 0 7px; color: #e6af92; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+.home-page .home-current button { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; min-height: 45px; padding: 9px 14px; border: 1px solid #9c7048; border-radius: 7px; background: #091824e8; color: #f0d1a9; font: 400 17px/1.4 Georgia, serif; text-align: left; cursor: pointer; }
+.home-page .home-current button:hover { border-color: #dfad76; background: #3d291bdc; color: #fff1dd; }
+.home-page .home-current button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.home-page .home-current button span { flex: 0 0 auto; font: 20px/1 ui-sans-serif, system-ui, sans-serif; }
 .home-page .intro { font-size: 14px; line-height: 1.7; color: #bcc8d4; margin-bottom: 18px; max-width: 420px; }
 .home-page .open-form { background: #07111ec7; border: 1px solid #a67b4e72; border-radius: 10px; padding: 26px; max-width: 560px; box-shadow: 0 24px 80px #0007; animation: none; }
 .home-page .open-form label { color: #cba579; font-size: 10px; letter-spacing: .18em; }

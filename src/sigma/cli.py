@@ -22,6 +22,7 @@ from sigma.projects import (
     reorder_strategies,
     update_project,
 )
+from sigma.text_views import inspect_text, save_source
 from sigma.tooling import run_tooling
 from sigma.ui import run_ui
 
@@ -79,6 +80,17 @@ def main() -> None:
     edit_project.add_argument("path")
     for field in ("title", "problem", "research-mode", "model", "thinking", "expected"):
         edit_project.add_argument("--" + field, required=True)
+    text = commands.add_parser("text", help="Inspect current and cached Plain/Markdown text")
+    text.add_argument("path")
+    text.add_argument("--scope", choices=["project", "strategy"], required=True)
+    text.add_argument("--strategy-id")
+    save_text = commands.add_parser("save-text", help="Save an authored Plain or Markdown source")
+    save_text.add_argument("path")
+    save_text.add_argument("--scope", choices=["project", "strategy"], required=True)
+    save_text.add_argument("--strategy-id")
+    save_text.add_argument("--format", choices=["plain", "markdown"], required=True)
+    save_text.add_argument("--body", required=True)
+    save_text.add_argument("--expected-digest", required=True)
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
@@ -139,6 +151,19 @@ def main() -> None:
             result = asdict(reorder_strategies(args.path, args.order, args.expected_order))
         elif args.command == "strategies":
             result = {"strategies": [asdict(s) for s in list_strategies(args.path)]}
+        elif args.command == "text":
+            result = inspect_text(args.path, args.scope, args.strategy_id)
+        elif args.command == "save-text":
+            result = asdict(
+                save_source(
+                    args.path,
+                    args.scope,
+                    args.body,
+                    args.format,
+                    args.expected_digest,
+                    args.strategy_id,
+                )
+            )
         elif args.command == "events":
             result = {"events": [asdict(e) for e in list_events(args.path)]}
         else:

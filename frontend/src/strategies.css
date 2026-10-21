@@ -10,6 +10,9 @@
 .workspace-page .project-pane-resizer:hover, .workspace-page .project-pane-resizer:focus-visible { border-color: #d5a66c; }
 .workspace-page .project-pane-resizer:hover span, .workspace-page .project-pane-resizer:focus-visible span { background: #d6a66b; border-color: #eac58e; }
 .workspace-page .project-eyebrow { margin: 0 0 12px; text-transform: uppercase; letter-spacing: .25em; font-size: 11px; color: #e4ad67; }
+.workspace-page .project-description-line { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.workspace-page .project-description-line .project-eyebrow { margin: 0; }
+.workspace-page .project-description-line .edit-project-button { flex: 0 0 28px; width: 28px; height: 28px; margin: 0; }
 .workspace-page .project-intro h1 { font-size: clamp(28px, 2.6vw, 42px); }
 .workspace-page .new-strategy-split { position: relative; display: flex; flex: 0 0 auto; z-index: 8; margin-left: auto; }
 .workspace-page .new-strategy-split > button { border-radius: 7px 0 0 7px; min-height: 50px; padding: 14px 20px; font-size: 15px; }

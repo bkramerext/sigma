@@ -70,10 +70,10 @@ with sync_playwright() as p:
         < 2
     )
     divider = page.get_by_role("separator", name="Resize project description")
-    objective_box = page.locator(".objective").bounding_box()
+    controls_box = page.locator(".project-text-views .text-view-controls").bounding_box()
     divider_box = divider.bounding_box()
-    assert objective_box and divider_box
-    assert 0 <= divider_box["y"] - (objective_box["y"] + objective_box["height"]) <= 16
+    assert controls_box and divider_box
+    assert 0 <= divider_box["y"] - (controls_box["y"] + controls_box["height"]) <= 16
     sidebar = page.get_by_role("navigation", name="Project navigation")
     expanded_width = sidebar.bounding_box()["width"]
     page.get_by_role("button", name="Collapse sidebar").click()
@@ -84,21 +84,22 @@ with sync_playwright() as p:
     page.screenshot(path="/tmp/sigma-project-sidebar-collapsed-1672.png", full_page=True)
     page.get_by_role("button", name="Expand sidebar").click()
     assert abs(sidebar.bounding_box()["width"] - expanded_width) < 2
-    page.locator(".objective").evaluate(
-        "e => { e.dataset.original = e.textContent; e.textContent = (e.textContent + ' ').repeat(100); }"
+    description = page.locator(".inline-description-editor textarea")
+    description.evaluate(
+        "e => { e.dataset.original = e.value; e.value = (e.value + ' ').repeat(100); }"
     )
-    assert intro.evaluate("e => e.scrollHeight > e.clientHeight")
+    assert description.evaluate("e => e.scrollHeight > e.clientHeight")
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    intro.evaluate("e => e.scrollTop = e.scrollHeight")
-    assert intro.evaluate("e => e.scrollTop > 0")
+    description.evaluate("e => e.scrollTop = e.scrollHeight")
+    assert description.evaluate("e => e.scrollTop > 0")
     page.screenshot(path="/tmp/sigma-strategies-long-description-1672.png", full_page=True)
     page.set_viewport_size({"width": 390, "height": 844})
-    assert intro.evaluate("e => e.scrollHeight > e.clientHeight")
+    assert description.evaluate("e => e.scrollHeight > e.clientHeight")
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     page.screenshot(path="/tmp/sigma-strategies-long-description-390.png", full_page=True)
     page.set_viewport_size({"width": 1672, "height": 941})
-    page.locator(".objective").evaluate("e => e.textContent = e.dataset.original")
-    intro.evaluate("e => e.scrollTop = 0")
+    description.evaluate("e => e.value = e.dataset.original")
+    description.evaluate("e => e.scrollTop = 0")
     resizer = divider
     resizer.focus()
     original_height = intro.bounding_box()["height"]

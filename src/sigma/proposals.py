@@ -113,12 +113,20 @@ def context_for(path: str, seed: str, view: ProjectView | None = None) -> tuple[
     if not isinstance(seed, str) or len(seed) > 4000:
         raise ProjectError("Starting point must be at most 4000 characters")
     project = (view or inspect_project(path)).project
+    from sigma.text_views import inspect_text
+
     context = json.dumps(
         {
             "research_problem": project.problem,
+            "research_problem_format": inspect_text(path, "project")["source_format"],
             "research_mode": project.research_mode,
             "existing_strategies": [
-                {"title": s.title, "approach": s.approach, "removed": s.removed_at is not None}
+                {
+                    "title": s.title,
+                    "approach": s.approach,
+                    "approach_format": inspect_text(path, "strategy", s.id)["source_format"],
+                    "removed": s.removed_at is not None,
+                }
                 for s in project.strategies
             ],
             "starting_point": seed.strip(),

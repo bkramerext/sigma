@@ -1,6 +1,7 @@
 """Typed project commands shared by every adapter; reads never change history."""
 
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -675,7 +676,14 @@ def remove_strategy(value: str | Path, strategy_id: str) -> ProjectView:
     return _update_project(value, remove)
 
 
-def edit_strategy(value: str | Path, strategy_id: str, title: str, approach: str) -> ProjectView:
+def edit_strategy(
+    value: str | Path,
+    strategy_id: str,
+    title: str,
+    approach: str,
+    text_format: str | None = None,
+    expected_digest: str | None = None,
+) -> ProjectView:
     """Update name/description while preserving identity and earlier text in history."""
     title = _text(title, "Strategy name", 200)
     approach = _text(approach, "Strategy description", 10000)
@@ -686,6 +694,11 @@ def edit_strategy(value: str | Path, strategy_id: str, title: str, approach: str
             raise ProjectError("Strategy not found in this project")
         if strategy.removed_at is not None:
             raise ProjectError("Removed strategies cannot be edited")
+        if (
+            expected_digest is not None
+            and hashlib.sha256(strategy.approach.encode()).hexdigest() != expected_digest
+        ):
+            raise ProjectError("Strategy description changed elsewhere. Reopen it before saving")
         if (title, approach) == (strategy.title, strategy.approach):
             return project
         change = StrategyChange(strategy.title, strategy.approach, title, approach)
@@ -715,7 +728,9 @@ def edit_strategy(value: str | Path, strategy_id: str, title: str, approach: str
             ),
         )
 
-    return _update_project(value, edit)
+    return _update_project(
+        value, edit, (f"strategy:{strategy_id}", text_format) if text_format else None
+    )
 
 
 def _next_timestamp(project: Project) -> str:
@@ -724,7 +739,11 @@ def _next_timestamp(project: Project) -> str:
     )
 
 
-def _update_project(value: str | Path, update: Callable[[Project], Project]) -> ProjectView:
+def _update_project(
+    value: str | Path,
+    update: Callable[[Project], Project],
+    text_edit: tuple[str, str] | None = None,
+) -> ProjectView:
     view = inspect_project(value)
     path = Path(view.path)
     temporary: Path | None = None
@@ -739,6 +758,10 @@ def _update_project(value: str | Path, update: Callable[[Project], Project]) -> 
             before = (path / STATE).read_bytes()
             project = inspect_project(path).project
             updated = update(project)
+            from sigma.text_views import sync_source_changes
+
+            if updated != project or text_edit is not None:
+                sync_source_changes(path, project, updated, text_edit)
             if updated == project:
                 return ProjectView(str(path), project)
             contents = _document(updated)
@@ -933,6 +956,7 @@ def update_project(
     ai_model: str,
     reasoning_effort: str,
     expected: dict[str, Any],
+    text_format: str | None = None,
 ) -> ProjectView:
     wanted = _settings(
         {
@@ -963,7 +987,7 @@ def update_project(
                 raise ProjectError(str(exc)) from exc
         return replace(
             project,
-            schema_version=6,
+            schema_version=max(6, project.schema_version),
             title=wanted.title,
             problem=wanted.problem,
             research_mode=wanted.research_mode,
@@ -980,4 +1004,4 @@ def update_project(
             ),
         )
 
-    return _update_project(value, update)
+    return _update_project(value, update, ("project", text_format) if text_format else None)

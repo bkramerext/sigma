@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent, type Ref } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -7,7 +7,9 @@ import './strategies.css';
 import './project-settings.css';
 import './recents.css';
 import './copper-controls.css';
+import './text-views.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, useAI } from './ai-connection';
+const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
@@ -41,6 +43,11 @@ type ProjectView = {
   };
 };
 
+type TextFormat = 'plain' | 'markdown';
+type TextDisplay = 'plain' | 'markdown' | 'rendered';
+type TextVersion = { body: string; kind: 'authored' | 'ai_derived'; current: boolean; source_digest: string; source_format: TextFormat; created_at: string; provenance: { provider: string; model: string; reasoning_effort: string | null } | null; warnings: string[] };
+type TextRepresentations = { source_format: TextFormat; source_digest: string; plain: TextVersion | null; markdown: TextVersion | null };
+
 async function post<T>(route: string, body: object = {}, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/projects/${route}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -54,18 +61,106 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function Header({ goHome, close, projectTitle, projectArtwork = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean }) {
+function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
+  path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string;
+  contentClass: string; onSaved: (view: ProjectView) => void;
+}) {
+  const [data, setData] = useState<TextRepresentations | null>(null);
+  const [selected, setSelected] = useState<TextDisplay>('plain');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const abort = useRef<AbortController | null>(null);
+  const select = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setData(null); setError(''); setEditing(false);
+    const query = new URLSearchParams({ path, scope, ...(strategyId ? { strategy_id: strategyId } : {}) });
+    fetch(`/api/projects/text?${query}`, { signal: controller.signal }).then(async response => {
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not read text views');
+      return result as TextRepresentations;
+    }).then(result => { setData(result); setSelected(result.markdown?.current ? 'rendered' : 'plain'); setDraft(result.markdown?.current ? result.markdown.body : result.plain?.body ?? ''); })
+      .catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+    return () => { controller.abort(); abort.current?.abort(); };
+  }, [path, scope, strategyId, source]);
+  const format: TextFormat = selected === 'plain' ? 'plain' : 'markdown';
+  const version = data?.[format];
+  const current = version?.current ?? false;
+  async function convert() {
+    if (!data || busy) return;
+    const controller = new AbortController(); abort.current = controller; setBusy(true); setError('');
+    try {
+      const settingsResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal });
+      const settings = await settingsResponse.json();
+      if (!settingsResponse.ok || !settings.available) throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+      const response = await fetch('/api/projects/text/convert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+        body: JSON.stringify({ path, scope, strategy_id: strategyId, target: format, expected_digest: data.source_digest, expected_binding: settings.binding }) });
+      const next = await response.json();
+      if (!response.ok) throw new Error(next.error ?? 'Conversion failed; source text was kept.');
+      setData(next as TextRepresentations); setDraft(next[format]?.body ?? '');
+    } catch (cause) { if (!controller.signal.aborted) setError(errorMessage(cause)); }
+    finally { if (abort.current === controller) { abort.current = null; setBusy(false); } }
+  }
+  async function save(event: FormEvent) {
+    event.preventDefault(); if (!data || busy) return;
+    setBusy(true); setError('');
+    try {
+      const next = await post<ProjectView>('text/source', { path, scope, strategy_id: strategyId, body: draft, format, expected_digest: data.source_digest });
+      setEditing(false); onSaved(next);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  function cancelConversion() { abort.current?.abort(); abort.current = null; setBusy(false); setError('Conversion cancelled locally. Provider usage may already have begun.'); }
+  const name = scope === 'project' ? 'research problem' : 'strategy approach';
+  return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}`}>
+    <div className="text-view-controls"><label htmlFor={`text-view-${scope}-${strategyId ?? 'project'}`}>View</label>
+      <select ref={select} id={`text-view-${scope}-${strategyId ?? 'project'}`} aria-label={`View ${name}`} value={selected} disabled={editing || busy || (scope === 'project' && current && selected !== 'rendered' && draft !== version?.body)} onChange={event => { const next = event.target.value as TextDisplay; setSelected(next); setDraft(data?.[next === 'plain' ? 'plain' : 'markdown']?.body ?? ''); }}>
+        <option value="plain">Plain</option><option value="markdown">Markdown</option><option value="rendered">Rendered</option>
+      </select>
+      {data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>{version.current ? 'Edit' : 'Edit previous'} {format === 'plain' ? 'Plain' : 'Markdown'}</button>}
+      {scope === 'project' && selected === 'rendered' && version?.current && <button type="button" className="text-view-edit" onClick={() => { setSelected('markdown'); setDraft(version.body); }}>Edit Markdown</button>}
+      {version && !current && <span className="text-view-stale">Out of date</span>}
+    </div>
+    {editing ? <form className="text-view-editor" onSubmit={save}>
+      <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
+      <p className="hint">Saving makes this the authoritative text. The other representation becomes out of date until regenerated.</p>
+      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)}/>
+      <div className="form-actions"><button type="submit" disabled={busy}>Save text</button><button type="button" className="text-button" disabled={busy} onClick={() => { setEditing(false); select.current?.focus(); }}>Cancel</button></div>
+    </form> : current && version ? scope === 'project' && selected !== 'rendered' ? <form className="text-view-editor inline-description-editor" onSubmit={save}>
+      <label className="sr-only" htmlFor="project-description-editor">Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
+      <textarea id="project-description-editor" value={draft} maxLength={20000} rows={8} onChange={event => setDraft(event.target.value)} aria-label={`Edit ${format === 'plain' ? 'Plain' : 'Markdown'} source`}/>
+      {draft !== version.body && <div className="form-actions"><button type="submit" disabled={busy || !draft.trim()}>Save text</button><button type="button" className="text-button" onClick={() => setDraft(version.body)}>Discard changes</button></div>}
+    </form> : selected === 'rendered' ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
+      : selected === 'markdown' ? <pre className={`${contentClass} literal-markdown`} aria-label={`Markdown source for ${name}`}>{version.body}</pre>
+        : <p className={contentClass}>{version.body}</p>
+      : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
+        <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
+        {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
+        <button type="button" className="secondary" disabled={busy} onClick={() => void convert()}>{version ? `Regenerate ${format === 'markdown' ? 'Markdown' : 'Plain'}` : `Generate ${format === 'markdown' ? 'Markdown' : 'Plain'}`}</button>
+        {!version && <button type="button" className="text-view-edit" disabled={busy} onClick={() => { setDraft(''); setEditing(true); setError(''); }}>Write {format === 'markdown' ? 'Markdown' : 'Plain'} manually</button>}
+        <p className="hint">One explicit AI conversion request uses this project's selected model, Thinking and account. AI-generated; review before relying on it. Switch views without a provider call.</p>
+      </div>}
+    {busy && !editing && <p className="text-view-working" role="status">Converting to {format === 'markdown' ? 'Markdown' : 'Plain'}… <button type="button" className="text-button" onClick={cancelConversion}>Cancel conversion</button></p>}
+    {version?.current && version.kind === 'ai_derived' && <p className="text-view-attribution">AI-generated conversion · Review before relying on it.{version.warnings.length ? ` ${version.warnings.join(' ')}` : ''}</p>}
+    {error && <p role="alert" className="error">{error} {error.includes('unavailable') || error.includes('Connect') ? 'Use the AI connection control in the header, then retry.' : ''}</p>}
+  </div>;
+}
+
+function Header({ goHome, close, projectTitle, projectArtwork = false, titleRef, editProject }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean; titleRef?: Ref<HTMLHeadingElement>; editProject?: { action: () => void; disabled: boolean; buttonRef: Ref<HTMLButtonElement> } }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? projectTitle && <span className="current-project">{projectTitle}</span>
+      {projectArtwork ? projectTitle && <div className="project-title-line">
+        {close && <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Close project" title="Back to projects"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>}
+        <h1 ref={titleRef} tabIndex={-1} className="current-project" aria-label={projectTitle}>{editProject ? <button ref={editProject.buttonRef} className="project-title-edit" type="button" onClick={editProject.action} disabled={editProject.disabled} aria-label="Edit Project" title="Edit project settings">{projectTitle}</button> : projectTitle}</h1>
+      </div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
-    {close ? <button className="copper-button close-project" onClick={close.action} disabled={close.busy}>
-      Close project
-    </button> : <span className="local">● Local workspace</span>}
+    {!close && <span className="local">● Local workspace</span>}
     <ConnectionStatus/>
     </div>
   </header>;
@@ -89,16 +184,16 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, titleRef, editProject }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; titleRef?: Ref<HTMLHeadingElement>; editProject?: { action: () => void; disabled: boolean; buttonRef: Ref<HTMLButtonElement> };
 }) {
   const [collapsed, setCollapsed] = useState(false);
   return <>
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectArtwork/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} titleRef={titleRef} editProject={editProject} projectArtwork/>
     <div className={`workspace-layout${collapsed ? ' nav-collapsed' : ''}`}>
       <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setCollapsed(value => !value)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -308,15 +403,34 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function Home({ initialPath, onOpen, goHome }: {
-  initialPath: string; onOpen: (view: ProjectView) => void;
+function Home({ initialPath, currentPath, onOpen, goHome }: {
+  initialPath: string; currentPath: string; onOpen: (view: ProjectView) => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
+  const [currentProject, setCurrentProject] = useState<ProjectView | null>(null);
+  const [reopening, setReopening] = useState(false);
+  const [currentError, setCurrentError] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
+  useEffect(() => {
+    if (!currentPath) { setCurrentProject(null); return; }
+    const controller = new AbortController();
+    fetch(`/api/projects/inspect?${new URLSearchParams({ path: currentPath })}`, { signal: controller.signal })
+      .then(async response => response.ok ? await response.json() as ProjectView : null)
+      .then(setCurrentProject)
+      .catch(() => { if (!controller.signal.aborted) setCurrentProject(null); });
+    return () => controller.abort();
+  }, [currentPath]);
+  async function reopenCurrent() {
+    if (!currentProject || reopening) return;
+    setReopening(true); setCurrentError('');
+    try { onOpen(await post<ProjectView>('open', { path: currentProject.path })); }
+    catch (cause) { setCurrentError(errorMessage(cause)); }
+    finally { setReopening(false); }
+  }
   function cancel() {
     const trigger = entry === 'open' ? openButton : newButton;
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
@@ -325,7 +439,10 @@ function Home({ initialPath, onOpen, goHome }: {
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
     <div className="home-topline"><img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/><ConnectionStatus/></div>
-    <div className="home-hero"><h1 ref={heading} tabIndex={-1}>Open a Project</h1>
+    <div className="home-hero">
+    {currentProject && <div className="home-current"><p>Current Project</p><button type="button" disabled={reopening} onClick={() => void reopenCurrent()}>{currentProject.project.title}<span aria-hidden="true">→</span></button></div>}
+    {currentError && <p role="alert" className="error">{currentError}</p>}
+    <h1 ref={heading} tabIndex={-1}>Open a Project</h1>
     <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>
     <div className="home-entry-actions">
@@ -765,7 +882,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing }, projectTitle: view?.project.title };
+  const frame = { goHome, close: { action: close, busy: closing }, projectTitle: view?.project.title, titleRef: heading,
+    editProject: { action: () => setProjectEditing(true), disabled: closing || ordering || !!dragId || editing || generating, buttonRef: editProjectButton } };
   function cancel() { setEditing(false); requestAnimationFrame(() => newButton.current?.focus()); }
   if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
@@ -806,9 +924,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-      <p className="project-eyebrow">Research project</p>
-      <div className="project-name-line"><h1 ref={heading} tabIndex={-1}>{project.title}</h1><button ref={editProjectButton} className="edit-project-button" aria-label="Edit Project" title="Edit Project" disabled={closing || ordering || !!dragId || editing || generating} onClick={() => setProjectEditing(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Z M14 6l4 4"/></svg></button></div>
-      <p className="objective">{project.problem}</p>
+      <div className="project-description-line"><p className="project-eyebrow">Project description</p></div>
+      <TextViews path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -838,7 +955,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
-            <div className="strategy-expanded"><p className="strategy-approach">{strategy.approach}</p>
+            <div className="strategy-expanded"><TextViews path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
               <p className="strategy-byline">{strategy.provenance ? `AI-assisted suggestion · ${strategy.provenance.provider} / ${strategy.provenance.model}${strategy.provenance.reasoning_effort ? ` · ${thinkingLabels[strategy.provenance.reasoning_effort] ?? strategy.provenance.reasoning_effort} thinking` : ''} · Accepted/edited by a human` : 'Human-authored'} · <time dateTime={strategy.created_at}>{dateLabel(strategy.created_at)}</time></p>
               <code className="strategy-identity">{strategy.id}</code>
             </div>
@@ -904,6 +1021,7 @@ function App() {
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
+  const [currentPath, setCurrentPath] = useState(() => window.localStorage.getItem('sigma.currentProject') ?? '');
   useEffect(() => {
     const pop = () => { setOpenedView(null); setLocation(window.location.pathname + window.location.search); };
     window.addEventListener('popstate', pop);
@@ -915,7 +1033,7 @@ function App() {
   const closeProject = useCallback(() => {
     setOpenedView(null);
     const path = new URLSearchParams(window.location.search).get('path');
-    if (path) setLastPath(path);
+    if (path) { setLastPath(path); setCurrentPath(path); window.localStorage.setItem('sigma.currentProject', path); }
     navigate('/');
   }, [navigate]);
   function goHome(event: MouseEvent<HTMLAnchorElement>) {
@@ -925,8 +1043,8 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} goHome={goHome} onOpen={view => {
-      setOpenedView(view); setLastPath(view.path); navigate(projectUrl(view.path));
+    {url.pathname === '/' ? <Home initialPath={lastPath} currentPath={currentPath} goHome={goHome} onOpen={view => {
+      setOpenedView(view); setLastPath(view.path); setCurrentPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
       initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}

@@ -314,3 +314,28 @@ the existing signed acceptance receipt when explicitly saved. This keeps
 generation read-only and separates model review from verified research. The
 cost is that the first slice runs one local generation at a time and rejects
 large corpora rather than searching or summarizing them automatically.
+
+## A15: explicit text representations
+
+Keep the current `project.json` problem and strategy approach fields as the sole
+current authored source consumed by API, CLI, and strategy generation. Store
+format identity, authored revisions, and AI-derived Plain/Markdown revisions in
+an adjacent versioned `text-representations.json`, written with the existing
+project lock and atomic staging. This avoids rewriting v1–v6 or stock fixtures
+when a conversion is first requested. Source revisions are keyed by the exact
+UTF-8 SHA-256 digest; a conversion records source format/digest, time, model,
+provider, thinking level and warnings. Edits promote the saved representation
+to source and leave the counterpart inspectable but stale. The companion is
+published before a source edit so a crash cannot label an old body as a new
+source; a failed project publication can leave an unused future revision in the
+companion, but current reads only match the actual project body digest.
+
+Conversion is one explicit, bounded provider call with the project's selected
+model, thinking level and connected account/billing mode. The service rejects
+concurrent calls, validates the binding again before saving, and rechecks the
+source/model under the project lock. It neither interprets Markdown into Plain
+with string stripping nor asks a model to render Markdown: the latter is a
+local, read-only React Markdown/KaTeX preview. Markdown HTML, external images,
+unsafe links and KaTeX trust are disabled. Validation catches malformed,
+truncated and obvious raw-TeX Plain output, but cannot prove semantic or
+mathematical equivalence; the UI labels AI-derived text for human review.

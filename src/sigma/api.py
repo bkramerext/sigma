@@ -31,6 +31,8 @@ from sigma.projects import (
     update_project,
 )
 from sigma.proposals import accepted_provenance, configuration, generate_proposal
+from sigma.text_conversion import convert_text
+from sigma.text_views import inspect_text, save_source
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
@@ -256,6 +258,67 @@ async def agentic_proposal_view(body: ProposalRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/projects/text")
+def text_view(path: str, scope: str, strategy_id: str | None = None):
+    return inspect_text(path, scope, strategy_id)
+
+
+class TextSourceRequest(OpenRequest):
+    scope: str
+    strategy_id: str | None = None
+    body: str
+    format: str
+    expected_digest: str
+
+
+@app.post("/api/projects/text/source")
+def text_source_view(body: TextSourceRequest):
+    return asdict(
+        save_source(
+            body.path, body.scope, body.body, body.format, body.expected_digest, body.strategy_id
+        )
+    )
+
+
+class TextConversionRequest(OpenRequest):
+    scope: str
+    strategy_id: str | None = None
+    target: str
+    expected_digest: str
+    expected_binding: str | None = None
+
+
+@app.post("/api/projects/text/convert")
+async def text_conversion_view(body: TextConversionRequest, request: Request):
+    async def disconnected():
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+
+    task = asyncio.create_task(
+        convert_text(
+            body.path,
+            body.scope,
+            body.target,
+            body.strategy_id,
+            body.expected_digest,
+            body.expected_binding,
+        )
+    )
+    connection = asyncio.create_task(disconnected())
+    try:
+        done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
+        if connection in done:
+            return JSONResponse(
+                {"error": "Conversion cancelled; source text was kept"}, status_code=499
+            )
+        return await task
+    finally:
+        for pending in (task, connection):
+            if not pending.done():
+                pending.cancel()
+        await asyncio.gather(task, connection, return_exceptions=True)
 
 
 class ProjectSettingsRequest(BaseModel):

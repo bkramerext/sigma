@@ -1,4 +1,4 @@
-"""A13: project header title, shared copper controls and connection disclosure."""
+"""Project header title, back navigation and connection disclosure."""
 
 import os
 from urllib.parse import urlencode
@@ -33,13 +33,10 @@ with sync_playwright() as playwright:
     home_open = page.locator(".home-entry-actions").get_by_role("button", name="Open Project")
     home_new = page.locator(".home-entry-actions").get_by_role("button", name="New Project")
     assert home_open.evaluate(STYLE) == home_new.evaluate(STYLE)
-    home_style = home_open.evaluate(STYLE)
     home_open.evaluate("e => e.disabled = true")
-    home_disabled = home_open.evaluate(STYLE)
     expect(home_open).to_be_disabled()
     home_open.evaluate("e => e.disabled = false")
     home_open.hover()
-    home_hover = home_open.evaluate(STYLE)
     page.mouse.move(0, 0)
     home_pill = page.locator(".home-topline .api-connection > summary")
     expect(home_pill).to_be_visible()
@@ -67,12 +64,13 @@ with sync_playwright() as playwright:
     assert art.get_attribute("src") == "/sigma-project-header.png"
     close = header.get_by_role("button", name="Close project")
     pill = header.locator(".api-connection > summary")
-    assert close.evaluate(STYLE) == home_style
+    assert close.locator("svg").count() == 1
+    assert header.get_by_text("Close project", exact=True).count() == 0
     assert pill.evaluate(PILL) == home_pill_style
     assert pill.locator('[role="status"]').inner_text() == home_label
     assert pill.locator(".connection-dot").get_attribute("class") == home_dot
     close.hover()
-    assert close.evaluate(STYLE) == home_hover
+    assert close.evaluate("e => getComputedStyle(e).cursor") == "pointer"
     page.mouse.move(0, 0)
     pill.hover()
     page.wait_for_timeout(200)
@@ -115,7 +113,7 @@ with sync_playwright() as playwright:
 
     close.evaluate("e => e.disabled = true")
     expect(close).to_be_disabled()
-    assert close.evaluate(STYLE) == home_disabled
+    assert close.evaluate("e => getComputedStyle(e).cursor") == "wait"
     close.evaluate("e => e.disabled = false")
     close.focus()
     page.keyboard.press("Enter")
@@ -124,5 +122,5 @@ with sync_playwright() as playwright:
     assert not errors, errors
     browser.close()
     print(
-        "PASS A13 full header title at 1280/1100/700/390/320px, shared copper button and AI pill styles, disclosure, focus, close, no overflow or page errors"
+        "PASS full header title and back arrow at 1280/1100/700/390/320px, AI pill style, disclosure, focus, close, no overflow or page errors"
     )

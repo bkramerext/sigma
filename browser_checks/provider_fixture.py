@@ -37,6 +37,45 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
+    if body["text"]["format"]["name"] == "text_conversion":
+        await asyncio.sleep(0.25)
+        source = context["text"]
+        if context["target_format"] == "markdown":
+            converted = (
+                source.replace("a_n/F_{n+2}", "@@RATIO@@")
+                .replace("n >= 0", r"$n \ge 0$")
+                .replace("a_12", "$a_{12}$")
+                .replace("a_n", "$a_n$")
+                .replace("F_0", "$F_0$")
+                .replace("F_1", "$F_1$")
+                .replace("@@RATIO@@", r"$\frac{a_n}{F_{n+2}}$")
+            )
+        else:
+            converted = source.replace(r"$\frac{a_n}{F_{n+2}}$", "a_n/F_{n+2}")
+            converted = converted.replace(r"$n \ge 0$", "n >= 0").replace("$a_n$", "a_n")
+            converted = (
+                converted.replace("$a_{12}$", "a_12")
+                .replace("$F_0$", "F_0")
+                .replace("$F_1$", "F_1")
+            )
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": json.dumps({"body": converted, "warnings": []}),
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
     agentic = (
         body["text"]["format"]["name"].startswith("strategy_")
         and body["text"]["format"]["name"] != "strategy_proposal"
