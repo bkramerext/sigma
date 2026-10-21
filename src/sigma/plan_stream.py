@@ -169,14 +169,31 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
             "ChatGPT stream ended without a valid response.completed. No strategy was saved."
         )
     if deltas:
+        # Some streaming adapters provide the complete text only through
+        # response.output_text.delta events and omit it from the terminal
+        # response's output array. Reconstruct that missing field rather than
+        # declaring a successfully completed stream malformed. Never replace
+        # or override conflicting final text.
+        items = terminal.get("output", [])
+        if not isinstance(items, list):
+            raise ValueError("plan_stream:invalid_terminal_output")
         texts = [
             content.get("text", "")
-            for item in terminal.get("output", [])
+            for item in items
+            if isinstance(item, dict) and isinstance(item.get("content", []), list)
             for content in item.get("content", [])
-            if content.get("type") == "output_text"
+            if isinstance(content, dict) and content.get("type") == "output_text"
         ]
-        if texts != [deltas]:
+        if texts and texts != [deltas]:
             raise ValueError(
                 f"plan_stream:delta_text_mismatch(len_texts={len(texts)},len_delta={len(deltas)})"
             )
+        if not texts:
+            terminal = {
+                **terminal,
+                "output": [
+                    *items,
+                    {"type": "message", "content": [{"type": "output_text", "text": deltas}]},
+                ],
+            }
     return terminal
