@@ -1,0 +1,18 @@
+{
+  "schema_version": 6,
+  "id": "ac47cd7a-99be-48d8-83bb-b70b7e046f10",
+  "title": "Counting Constrained Binary Strings",
+  "problem": "For each integer n >= 0, count binary strings of length n containing no two consecutive 1s. The empty string counts for n = 0. Derive and justify a general formula or recurrence for the count, including the necessary initial values. Check the result on small n. Do not assume a particular proof method.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-21T17:00:00+00:00"
+    }
+  ],
+  "strategies": [],
+  "research_mode": "mathematical",
+  "active_order": [],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high"
+}
