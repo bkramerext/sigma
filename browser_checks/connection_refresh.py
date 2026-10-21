@@ -118,13 +118,18 @@ with sync_playwright() as playwright:
     page.wait_for_function("window.__nextTimer() !== undefined")
     expect(status.filter(has_text="ChatGPT connected")).to_be_visible()
     assert page.evaluate("window.__nextTimer().delay") == 48000
+    page.evaluate("window.__fakeNow += 48000; window.__fireTimer()")
+    page.wait_for_function("window.__connectionRequests === 3")
+    expect(status.filter(has_text="ChatGPT connected")).to_be_visible()
+    page.wait_for_function("window.__nextTimer() !== undefined")
+    assert page.evaluate("window.__nextTimer().delay") == 48000
 
     # Hidden time causes no requests; becoming visible after TTL coalesces one check.
     page.evaluate("window.__setVisible(false); window.__fakeNow += 61000")
     assert not page.evaluate("window.__nextTimer()")
-    assert page.evaluate("window.__connectionRequests") == 2
+    assert page.evaluate("window.__connectionRequests") == 3
     page.evaluate("window.__setVisible(true)")
-    page.wait_for_function("window.__connectionRequests === 3")
+    page.wait_for_function("window.__connectionRequests === 4")
     expect(status.filter(has_text="ChatGPT connected")).to_be_visible()
     assert page.evaluate("window.__welcomeAcks") == 1
 
@@ -150,7 +155,7 @@ with sync_playwright() as playwright:
     page.evaluate("window.__holdNext = true")
     popover.get_by_role("button", name="Retry connection", exact=True).click()
     expect(popover.get_by_role("button", name="Checking…", exact=True)).to_be_visible()
-    assert page.evaluate("window.__connectionRequests") == 5
+    assert page.evaluate("window.__connectionRequests") == 6
     assert not status.filter(has_text="Checking AI").count()
     page.evaluate("window.__releaseCheck()")
     expect(status.filter(has_text="ChatGPT connected")).to_be_visible()

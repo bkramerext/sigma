@@ -632,8 +632,8 @@ Actual verification:
   frontend typecheck and production build. The existing non-failing Starlette
   TestClient deprecation notice remains.
 - Real Chrome `browser_checks/connection_refresh.py` passed with a controlled
-  clock and mocked browser fetches: one 48-second refresh, no header flash while
-  background/manual checks are held open, hidden-tab pause and one refresh on
+  clock and mocked browser fetches: repeated 48-second refresh cycles, no header
+  flash while background/manual checks are held open, hidden-tab pause and one refresh on
   return after expiry, transient failure warning and 30-second retry, manual
   recovery, stale successful response rejected after Disconnect, and welcome
   acknowledgment only once across multiple checks and reload. No provider calls.
