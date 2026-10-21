@@ -73,7 +73,7 @@ The human is not merely a person who approves pull requests. I contribute design
 
 ## 2. The multi-agent research engine inside SIGMA
 
-*Design to be developed. Do not describe this as implemented in an application or interview.*
+*Design to be developed. Do not describe this as implemented.*
 
 The more ambitious side of SIGMA is to move from software *built using agents* to software *that coordinates agents*. The motivating research problem is that difficult questions admit competing lines of attack, sometimes with very different mathematical methods. A useful system must preserve distinct hypotheses and the evidence for or against each rather than flatten everything into one persuasive narrative.
 
