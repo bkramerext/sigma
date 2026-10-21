@@ -1,0 +1,108 @@
+{
+  "schema_version": 5,
+  "id": "2b7628b3-9e25-445a-a3b4-54d69239e8bf",
+  "title": "Did Jesus Use Cannabis?",
+  "problem": "Investigate whether the historical Jesus used cannabis, for any purpose. Evaluate direct and indirect evidence from early texts, historical languages, archaeology, and first-century social practices. Distinguish whether cannabis existed in the region, whether it was used by some people, and whether there is credible evidence that Jesus personally used it. Do not assume either answer; identify uncertainty and explain what evidence would change the conclusion.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-21T04:30:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T04:30:00+00:00",
+      "strategy_id": "1a8deae1-7e23-4b92-93ab-8749c4503001"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T04:30:00+00:00",
+      "strategy_id": "1a8deae1-7e23-4b92-93ab-8749c4503002"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T04:30:00+00:00",
+      "strategy_id": "1a8deae1-7e23-4b92-93ab-8749c4503003"
+    },
+    {
+      "sequence": 5,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T04:30:00+00:00",
+      "strategy_id": "1a8deae1-7e23-4b92-93ab-8749c4503004"
+    },
+    {
+      "sequence": 6,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-21T04:30:00+00:00",
+      "strategy_id": "1a8deae1-7e23-4b92-93ab-8749c4503005"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "1a8deae1-7e23-4b92-93ab-8749c4503001",
+      "title": "Textual evidence",
+      "approach": "Examine the earliest Christian writings for descriptions of Jesus using intoxicating plants, medicinal preparations, anointing oils, or incense. Distinguish what a text actually says from later interpretations and later sources. Track approximate composition dates, manuscript transmission, genre, and the difference between silence and negative evidence. A useful result may be that no surviving source directly attests cannabis use.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T04:30:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Examine what the earliest relevant texts actually attest.",
+      "provenance": null
+    },
+    {
+      "id": "1a8deae1-7e23-4b92-93ab-8749c4503002",
+      "title": "Language and translation",
+      "approach": "Investigate claims that Hebrew, Aramaic, Greek, or related ancient terms for fragrant reeds, oils, or medicines refer to cannabis. Compare proposed etymologies against historical dictionaries, cognates, usage in other ancient texts, and mainstream translation alternatives. Especially separate Hebrew Bible terminology from first-century accounts of Jesus. Test whether the cannabis identification survives without assuming the desired conclusion.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T04:30:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Test cannabis-related word identifications against linguistic evidence.",
+      "provenance": null
+    },
+    {
+      "id": "1a8deae1-7e23-4b92-93ab-8749c4503003",
+      "title": "Archaeology and material culture",
+      "approach": "Survey archaeological and archaeobotanical evidence for cannabis in the southern Levant and surrounding regions before and during the first century CE. Evaluate dates, provenience, chemical identification, contamination, and whether evidence from one site or century can support a claim about a specific individual. Distinguish regional availability from personal use.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T04:30:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Assess physical evidence and its chronological and geographic limits.",
+      "provenance": null
+    },
+    {
+      "id": "1a8deae1-7e23-4b92-93ab-8749c4503004",
+      "title": "Historical context and plausibility",
+      "approach": "Reconstruct the religious, medical, trade, and social practices of first-century Galilee and Judea. Ask whether cannabis could have been known or available, and whether there is evidence of its use in comparable communities. Compare anointing, incense, medicine, and intoxication without treating them as interchangeable. Make explicit the inferential distance from general plausibility to an assertion about Jesus.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T04:30:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Separate cultural possibility from evidence about an individual.",
+      "provenance": null
+    },
+    {
+      "id": "1a8deae1-7e23-4b92-93ab-8749c4503005",
+      "title": "Claim genealogy and adversarial review",
+      "approach": "Trace prominent modern claims that Jesus used cannabis to their earliest identifiable sources and examine their citations. Classify each assertion as direct ancient testimony, translation hypothesis, archaeological inference, analogy, or modern speculation. Seek the strongest counterarguments and independent corroboration; avoid counting repeated retellings as multiple sources. End with an evidence-weighted conclusion, including 'not established' if warranted.",
+      "author_kind": "human",
+      "created_at": "2026-10-21T04:30:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Audit modern claims and independently weigh their sources.",
+      "provenance": null
+    }
+  ],
+  "research_mode": "default",
+  "active_order": [
+    "1a8deae1-7e23-4b92-93ab-8749c4503001",
+    "1a8deae1-7e23-4b92-93ab-8749c4503002",
+    "1a8deae1-7e23-4b92-93ab-8749c4503003",
+    "1a8deae1-7e23-4b92-93ab-8749c4503004",
+    "1a8deae1-7e23-4b92-93ab-8749c4503005"
+  ]
+}
