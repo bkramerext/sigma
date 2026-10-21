@@ -942,3 +942,14 @@ period, termination escalates with identity rechecks. It never kills a process
 merely for using ports 8000/5173. An offline regression covers legacy lock
 inspection, suspension recovery and rejection of unrelated processes. The
 change is committed but awaits macOS startup/restart/shutdown testing.
+
+## Multiple suspended launchers (2026-10-21, pending macOS verification)
+
+An initial legacy recovery attempt rejected multiple processes with open file
+descriptors for the checkout's startup lock as "ambiguous", blocking both `ui`
+and `shutdown`. Recovery now enumerates and verifies all reported holders
+for the same checkout and OS user, resumes all verified suspended SIGMA UI
+launchers, and escalates only against verified process identities still holding
+the lock after the grace period. If any holder is unverified, no signals are sent.
+The offline test now includes multiple holders and an unrelated-process negative
+control. This is committed, but it has not been exercised on the user's Mac.
