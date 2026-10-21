@@ -45,6 +45,7 @@ class Instance:
         self.shutdown_only = shutdown_only
         self.register_owner = register_owner
         self.registered = False
+        self.recovering: tuple[int, str, str] | None = None
         self.identity = identity(root)
         # Short Unix socket path, independently private for each OS account and checkout.
         base = STATE_ROOT / f"sigma-ui-{os.getuid()}"
@@ -110,20 +111,83 @@ class Instance:
         except (ValueError, TypeError, KeyError, UnicodeError, OSError) as exc:
             raise RuntimeError("Cannot verify SIGMA owner record; refusing takeover.") from exc
 
+    def _legacy_lock_owner(self) -> tuple[int, dict[str, str]] | None:
+        """Find a pre-owner-record SIGMA process holding this checkout's lock.
+
+        Never infer ownership from a port or a PID file alone. The process must
+        have the lock open, run as this user, and execute this checkout's CLI.
+        """
+        try:
+            output = subprocess.check_output(
+                ["lsof", "-nP", "-F", "p", "--", str(self.directory / "launch.lock")],
+                text=True,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
+        pids = {int(line[1:]) for line in output.splitlines() if line.startswith("p")
+                and line[1:].isdigit()}
+        pids.discard(os.getpid())
+        if not pids:
+            return None
+        if len(pids) != 1:
+            raise RuntimeError("Ambiguous SIGMA startup lock owners; no process was signalled.")
+        pid = next(iter(pids))
+        process = self._process(pid)
+        if process is None:
+            return None
+        entry = str(self.root / ".venv" / "bin" / "sigma")
+        if (
+            process["uid"] != str(os.getuid())
+            or entry not in process["command"].split()
+            or not process["command"].endswith(" ui")
+            or not process["start"]
+        ):
+            raise RuntimeError("Startup lock is held by an unverified process; no signal sent.")
+        return pid, process
+
+    def _recoverable_owner(self) -> tuple[int, dict[str, str]] | None:
+        return self._verified_owner() or self._legacy_lock_owner()
+
     def _resume_suspended(self) -> bool:
-        owner = self._verified_owner()
+        owner = self._recoverable_owner()
         if owner is None or "T" not in owner[1]["stat"].upper():
             return False
+        self.recovering = (owner[0], owner[1]["start"], owner[1]["command"])
         print("Resuming suspended SIGMA launcher for clean shutdown…", flush=True)
         os.kill(owner[0], signal.SIGCONT)
         return True
 
     def _force_stopped(self) -> bool:
-        owner = self._verified_owner()
-        if owner is None or "T" not in owner[1]["stat"].upper():
+        if self.recovering is None:
             return False
-        print("Suspended SIGMA launcher remained unresponsive; terminating it…", flush=True)
-        os.kill(owner[0], signal.SIGKILL)
+        pid, started, command = self.recovering
+        owner = self._recoverable_owner()
+        if owner is None or owner[0] != pid:
+            return False
+        if owner[1]["start"] != started or owner[1]["command"] != command:
+            raise RuntimeError("Recovered SIGMA process identity changed; refusing to signal.")
+        print("Verified SIGMA launcher still holds the lock; terminating it…", flush=True)
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return True
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            current = self._recoverable_owner()
+            if current is None or current[0] != pid:
+                return True
+            time.sleep(0.1)
+        current = self._recoverable_owner()
+        if current is not None and current[0] == pid:
+            if current[1]["start"] != started or current[1]["command"] != command:
+                raise RuntimeError("SIGMA process identity changed; refusing forced shutdown.")
+            print("SIGMA launcher did not terminate; forcing shutdown…", flush=True)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         return True
 
     def _register_owner(self) -> None:
