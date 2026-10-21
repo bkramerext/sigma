@@ -90,7 +90,7 @@ def run_ui() -> int:
     try:
         load_local_config()
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
-        with Instance() as instance:
+        with Instance(register_owner=True) as instance:
             try:
                 wait_for_ports()
                 print("Starting SIGMA backend and frontend…", flush=True)
