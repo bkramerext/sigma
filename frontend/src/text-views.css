@@ -67,3 +67,16 @@
 }
 .workspace-page .text-view-controls .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 .workspace-page .text-view-controls .sigma-render-toggle:disabled { cursor: progress; }
+
+/* Controls occupy the upper-left corner of their own text box. */
+.workspace-page .text-views { padding-top: 38px; }
+.workspace-page .text-views > .text-view-controls,
+.workspace-page .project-text-views > .text-view-controls {
+  position: absolute; top: 0; left: 0; z-index: 2;
+  margin: 0; padding: 0;
+}
+.workspace-page .sigma-render-toggle.sigma-render-active span {
+  background: linear-gradient(130deg, #ffe0ab 2%, #ae6e46 38%, #f3c28b 65%, #8c4c30 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
