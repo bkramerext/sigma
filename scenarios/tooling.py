@@ -71,7 +71,7 @@ def check_ui() -> None:
         with (
             patch("sigma.ui.Instance", return_value=owner),
             patch("sigma.ui.load_local_config"),
-        patch("sigma.ui.recover_orphans"),
+            patch("sigma.ui.recover_orphans"),
             patch("pathlib.Path.is_dir", return_value=True),
             patch("sigma.ui.shutil.which", return_value="npm"),
             patch("sigma.ui.wait_for_ports"),
