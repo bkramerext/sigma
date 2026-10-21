@@ -403,6 +403,8 @@ async def main_async(root: Path):
             json={
                 "error": {
                     "code": "unsupported_text_format",
+                    "type": "invalid_request_error",
+                    "param": "text.format.schema",
                     "message": "private research text must not appear in user errors",
                 }
             },
@@ -423,6 +425,8 @@ async def main_async(root: Path):
         except ProjectError as exc:
             assert "HTTP 400" in str(exc)
             assert "unsupported_text_format" in str(exc)
+            assert "type: invalid_request_error" in str(exc)
+            assert "param: text.format.schema" in str(exc)
             assert "private research text" not in str(exc)
         else:
             raise AssertionError("Rejected ChatGPT request was accepted")
