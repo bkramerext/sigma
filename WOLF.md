@@ -16,30 +16,25 @@ This is a *human-directed agent-assisted engineering workflow*, not a claim that
 
 ```mermaid
 flowchart TB
-    H["Human<br/>Product direction, engineering judgment,<br/>acceptance and real-world testing"]
-    C["ChatGPT Chat<br/>Design, investigation, architecture,<br/>Codex assignments and review"]
-    G[("GitHub repository<br/>Durable handoff and shared truth")]
-    X["Codex<br/>Implementation, tests,<br/>verification and reports"]
-    M(["Markdown working agreements<br/>Product/architecture documents<br/>Human–AI interaction governance"])
-    L["Local SIGMA CLI<br/>./sigma test · ./sigma ui"]
-    U["Running SIGMA UI<br/>Actual project and strategy workflows"]
+    H["Human<br/>Product direction and judgment"]
+    C["ChatGPT Chat<br/>Design and assignment authoring"]
+    G[("GitHub<br/>Shared repository and handoff")]
+    X["Codex<br/>Implementation and verification"]
+    M(["Markdown documents<br/>Architecture, decisions,<br/>human–AI governance"])
+    L["SIGMA CLI<br/>Test and launch"]
+    U["SIGMA UI<br/>Running product"]
 
-    H <-->|"Broad conversation: goals, constraints,<br/>alternatives, decisions"| C
-    H -->|"Small observations: screenshots,<br/>bug reports, acceptance/rejection"| C
-    H <-->|"Co-author, critique and revise<br/>high-level documents"| M
-    C <-->|"Draft, critique and revise<br/>high-level documents"| M
-    M <-->|"Tracked Markdown<br/>and shared project memory"| G
+    H <-->|"Collaborate on design"| C
+    H --> M
+    C --> M
+    M -.->|"Versioned"| G
 
-    C -->|"Large, precise Markdown assignments;<br/>design decisions and documentation"| G
-    G -->|"Assignments, code, constraints,<br/>prior decisions"| X
-    X -->|"Implementation commits, tests,<br/>results and limitations"| G
-    G -->|"Current code and evidence<br/>for inspection/review"| C
+    C <-->|"Specifications and code review"| G
+    G <-->|"Assignments and implementation"| X
 
-    G -->|"Pull implemented code"| H
-    H -->|"Execute locally"| L
-    L -->|"Launch and exercise"| U
-    U -->|"Observed behavior, UX friction,<br/>successes and failures"| H
-    L -->|"Test output, errors"| H
+    G -->|"Checkout"| L
+    H -->|"Run"| L
+    L --> U
 
     classDef participant fill:#17324b,color:#fff,stroke:#6086aa,stroke-width:1.5px;
     classDef artifact fill:#fff7e9,color:#30251a,stroke:#ad8350,stroke-width:1.5px;
@@ -49,7 +44,7 @@ flowchart TB
     class L,U running;
 ```
 
-The arrows are not all equal in scale or form. Some exchanges are substantial architectural conversations and detailed specifications; others are quick corrections after observing the UI. GitHub carries assignments, commits, tests and persistent project knowledge. The local CLI and UI supply something none of the agents can substitute for: evidence of whether the software actually behaves the way I intended on my machine.
+The diagram shows the main responsibilities and durable handoffs, not every individual exchange. Chat and I collaborate on design and governance; GitHub carries the shared documents, Codex assignments, implementation and evidence. I run the code through SIGMA's CLI and UI to see how the system actually behaves. Routine feedback, including test failures and usability corrections, feeds the next design iteration without needing an arrow for each kind of message.
 
 **Markdown is not just an assignment format.** Chat and I also collaborate on the higher-level product description, architecture and rules governing our own interaction. Those documents include explicit guidance on agency, when Chat may commit changes, how to handle a serious mistake, how to report uncertainty, and how to preserve a design once approved. They are versioned alongside the source code rather than being left as fragile conversational agreements. For example, [`docs/HUMAN-AI-INTERACTION.md`](docs/HUMAN-AI-INTERACTION.md) makes our working relationship itself an object of design.
 
