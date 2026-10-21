@@ -198,6 +198,7 @@ def run_ui() -> int:
             signal.signal(signal.SIGINT, prior_int)
             signal.signal(signal.SIGTERM, previous)
 
+
 def run_shutdown() -> int:
     """Stop the verified same-checkout SIGMA UI; never start servers."""
     try:
