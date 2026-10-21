@@ -42,6 +42,9 @@ def main() -> None:
 
     active = {8000: {123}, 5173: {124}}
 
+    def only_backend(port: int) -> set[int]:
+        return {123} if port == 8000 else set()
+
     def listeners(port: int) -> set[int]:
         return active[port].copy()
 
@@ -66,7 +69,7 @@ def main() -> None:
     ]
 
     with (
-        patch("sigma.ui_orphans._listeners", side_effect=lambda port: {123} if port == 8000 else set()),
+        patch("sigma.ui_orphans._listeners", side_effect=only_backend),
         patch("sigma.ui_orphans._process", return_value=BACKEND),
         patch("sigma.ui_orphans._sigma_instance", return_value=None),
         patch("sigma.ui_orphans.os.kill") as sent,
@@ -77,7 +80,7 @@ def main() -> None:
 
     changed = (BACKEND[0], BACKEND[1], BACKEND[2], "/different-checkout")
     with (
-        patch("sigma.ui_orphans._listeners", side_effect=lambda port: {123} if port == 8000 else set()),
+        patch("sigma.ui_orphans._listeners", side_effect=only_backend),
         patch("sigma.ui_orphans._process", side_effect=[BACKEND, changed]),
         patch("sigma.ui_orphans._sigma_instance", return_value="a" * 32),
         patch("sigma.ui_orphans.os.kill") as sent,
@@ -87,7 +90,7 @@ def main() -> None:
         sent.assert_not_called()
 
     with (
-        patch("sigma.ui_orphans._listeners", side_effect=lambda port: {123} if port == 8000 else set()),
+        patch("sigma.ui_orphans._listeners", side_effect=only_backend),
         patch("sigma.ui_orphans._process", return_value=BACKEND),
         patch("sigma.ui_orphans._sigma_instance", return_value="a" * 32),
         patch("sigma.ui_orphans.os.kill") as sent,
@@ -99,7 +102,10 @@ def main() -> None:
         call(123, signal.SIGTERM),
         call(123, signal.SIGKILL),
     ]
-    print("PASS verified SIGMA orphan shutdown, same-checkout checks, PID reuse and unrelated listeners")
+    print(
+        "PASS verified SIGMA orphan shutdown, same-checkout checks, "
+        "PID reuse and unrelated listeners"
+    )
 
 
 if __name__ == "__main__":
