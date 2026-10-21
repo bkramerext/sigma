@@ -231,7 +231,7 @@ class Instance:
                 try:
                     client.sendall(
                         json.dumps({"identity": self.identity, "command": "identify"}).encode()
-                        + b"\\n"
+                        + b"\n"
                     )
                     owned = self.receive(client)
                 except (OSError, TimeoutError):
@@ -246,7 +246,7 @@ class Instance:
                         client.sendall(
                             json.dumps(
                                 {"identity": self.identity, "command": "shutdown"}
-                            ).encode() + b"\\n"
+                            ).encode() + b"\n"
                         )
                         stopped = self.receive(client)
                     except (OSError, TimeoutError):
