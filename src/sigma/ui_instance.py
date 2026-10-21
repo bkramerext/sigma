@@ -5,7 +5,9 @@ import fcntl
 import hashlib
 import json
 import os
+import signal
 import socket
+import subprocess
 import stat
 import time
 from pathlib import Path
@@ -36,7 +38,10 @@ def private_directory(path: Path) -> None:
 
 
 class Instance:
-    def __init__(self, root: Path = ROOT):
+    def __init__(self, root: Path = ROOT, shutdown_only: bool = False):
+        self.root = root.resolve(strict=True)
+        self.shutdown_only = shutdown_only
+        self.registered = False
         self.identity = identity(root)
         # Short Unix socket path, independently private for each OS account and checkout.
         base = STATE_ROOT / f"sigma-ui-{os.getuid()}"
@@ -44,8 +49,100 @@ class Instance:
         self.directory = base / self.identity[:24]
         private_directory(self.directory)
         self.path = self.directory / "control.sock"
+        self.owner_path = self.directory / "owner.json"
         self.lock: int | None = None
         self.listener: socket.socket | None = None
+
+    @staticmethod
+    def _process(pid: int) -> dict[str, str] | None:
+        """Inspect process birth and command so stale PIDs cannot be reused."""
+        if pid <= 1:
+            return None
+        try:
+            def field(name: str) -> str:
+                return subprocess.check_output(
+                    ["ps", "-p", str(pid), "-o", f"{name}="],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                ).strip()
+
+            return {
+                "uid": field("uid"),
+                "start": field("lstart"),
+                "stat": field("stat"),
+                "command": field("command"),
+            }
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return None
+
+    def _verified_owner(self) -> tuple[int, dict[str, str]] | None:
+        """Only signal the exact same-checkout launcher with the same birth time."""
+        try:
+            info = self.owner_path.lstat()
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise RuntimeError("Unsafe SIGMA owner record; refusing to signal.")
+        try:
+            record = json.loads(self.owner_path.read_text(encoding="utf-8"))
+            if record["identity"] != self.identity or type(record["pid"]) is not int:
+                raise ValueError("identity")
+            pid = record["pid"]
+            current = self._process(pid)
+            if current is None:
+                return None
+            command = current["command"]
+            entry = str(self.root / ".venv" / "bin" / "sigma")
+            if (
+                current["uid"] != str(os.getuid())
+                or current["start"] != record["start"]
+                or current["command"] != record["command"]
+                or entry not in command
+                or not command.endswith(" ui")
+            ):
+                raise RuntimeError("SIGMA owner process identity changed; refusing to signal.")
+            return pid, current
+        except (ValueError, TypeError, KeyError, UnicodeError, OSError) as exc:
+            raise RuntimeError("Cannot verify SIGMA owner record; refusing takeover.") from exc
+
+    def _resume_suspended(self) -> bool:
+        owner = self._verified_owner()
+        if owner is None or "T" not in owner[1]["stat"].upper():
+            return False
+        print("Resuming suspended SIGMA launcher for clean shutdown…", flush=True)
+        os.kill(owner[0], signal.SIGCONT)
+        return True
+
+    def _force_stopped(self) -> bool:
+        owner = self._verified_owner()
+        if owner is None or "T" not in owner[1]["stat"].upper():
+            return False
+        print("Suspended SIGMA launcher remained unresponsive; terminating it…", flush=True)
+        os.kill(owner[0], signal.SIGKILL)
+        return True
+
+    def _register_owner(self) -> None:
+        process = self._process(os.getpid())
+        if process is None:
+            raise RuntimeError("Cannot verify current SIGMA launcher.")
+        record = {
+            "identity": self.identity,
+            "pid": os.getpid(),
+            "start": process["start"],
+            "command": process["command"],
+        }
+        if str(self.root / ".venv" / "bin" / "sigma") not in process["command"]:
+            raise RuntimeError("Cannot identify current SIGMA launcher; refusing registration.")
+        temporary = self.directory / f"owner.{os.getpid()}.tmp"
+        fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(record, stream)
+            os.replace(temporary, self.owner_path)
+            self.registered = True
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def __enter__(self) -> Self:
         self.lock = os.open(
@@ -57,22 +154,32 @@ class Instance:
             self.lock = None
             raise RuntimeError("Unsafe SIGMA launch lock; refusing startup.")
         try:
-            deadline = time.monotonic() + 45
+            deadline = time.monotonic() + 12
+            recovered = False
             while True:
                 try:
                     fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
+                    if not recovered and self._resume_suspended():
+                        recovered = True
                     if time.monotonic() >= deadline:
-                        raise RuntimeError(
-                            "Another SIGMA launch is still starting or stopping; retry shortly."
-                        ) from None
+                        if self._force_stopped():
+                            deadline = time.monotonic() + 6
+                        else:
+                            raise RuntimeError(
+                                "Another SIGMA launcher still holds the startup lock. "
+                                "Check its terminal; no unverified process was killed."
+                            ) from None
                     time.sleep(0.1)
+            self._resume_suspended()
             self.replace()
-            self.listener = socket.socket(socket.AF_UNIX)
-            self.listener.bind(str(self.path))
-            self.listener.listen(8)
-            self.listener.settimeout(0.1)
+            if not self.shutdown_only:
+                self.listener = socket.socket(socket.AF_UNIX)
+                self.listener.bind(str(self.path))
+                self.listener.listen(8)
+                self.listener.settimeout(0.1)
+                self._register_owner()
             return self
         except BaseException:
             self.__exit__(None, None, None)
@@ -167,4 +274,7 @@ class Instance:
             self.listener.close()
             self.path.unlink(missing_ok=True)
             self.listener = None
+        if self.registered:
+            self.owner_path.unlink(missing_ok=True)
+            self.registered = False
         self.unlock()
