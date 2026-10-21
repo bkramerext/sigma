@@ -341,6 +341,26 @@ def recent_view():
     return home_projects()
 
 
+@app.get("/api/projects/stock")
+def stock_view():
+    from sigma.stock import stock_projects
+
+    return stock_projects()
+
+
+class StockCopyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    stock_id: str
+    title: str
+
+
+@app.post("/api/projects/stock/copy", status_code=201)
+def stock_copy_view(body: StockCopyRequest):
+    from sigma.stock import create_stock_copy
+
+    return asdict(create_stock_copy(body.stock_id, body.title))
+
+
 class ForgetRecentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project_id: str

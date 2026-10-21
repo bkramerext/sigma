@@ -673,3 +673,33 @@ Actual verification:
   fixture patch is not observed and its assertion fails. This failure occurs in
   existing scenario/application code, unrelated to the Home artwork change; the
   later checks in that command did not run.
+
+## A11 — copper Home controls and stock catalog
+
+Home now offers Stock Projects and Recent Projects tabs, with Stock selected on
+entry per the later UI request. The catalog discovers every valid shipped
+investigation, places the Jesus example last, and asks for a name before creating
+an independent working copy under the configured projects root. Copies get new
+project and strategy UUIDs, preserve the source investigation content, and enter
+the four-item recent list only when actually created/opened. Existing automatic
+stock recent entries are removed from the index on read; project directories and
+research files are left untouched. The Home buttons use matching navy/copper
+resting styles, and both hover with the selected tab's copper gradient. Dialogs,
+lists, connection status and Close Project use coordinated copper styling.
+
+Actual verification:
+
+- `./sigma test` passed all scenarios and API/CLI checks, Ruff check/format,
+  Pyright (zero errors), frontend typecheck, and production build. The existing
+  non-failing Starlette TestClient deprecation notice remains.
+- Real Chrome `browser_checks/recents.py` passed tab keyboard navigation, exact
+  button rest/hover style comparisons, independent stock copies, Recent/Forget and
+  unavailable path behavior, source immutability, no page errors, and 1280px,
+  390px and 320px responsive layout checks. The 1280px Home screenshot was
+  visually inspected; the controls do not cover the approved artwork. The New
+  Project dialog had no internal vertical scroll at 1280x800. Screenshots are
+  under `/tmp/sigma-a11-*.png`.
+
+Limits: browser sizes were Chrome emulation, not physical devices. Stock copying
+preserves the template's historical research events while assigning new document
+and strategy identities; the copy's name and future edits are independent.

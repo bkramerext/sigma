@@ -75,13 +75,12 @@ verify the shared 48-second refresh schedule for a 60-second TTL, stable status
 during background and manual requests, hidden-tab pause/resume, transient failure
 backoff and Retry, and one-time welcome behavior. It makes no provider calls.
 
-## A9 recents and dialog actions
+## A11 Home catalog and recents
 
 Start a fresh `provider_fixture:app` as above, then run
 `uv run --with playwright python browser_checks/recents.py`.
-This check expects a fresh disposable fixture state so it can verify one-time
-Included example labeling. It measures action-button bounds at 1280x720,
-1440x900, 390x844 and 320x700 while scrolling, showing errors and holding a save.
-It also exercises actual sample opening, five UI creations, LRU eviction, reopen,
-missing/corrupt entries and forgetting. Captures are `/tmp/sigma-a9-*.png`.
+This check expects a fresh disposable fixture state. It covers the default
+Recent Projects tab, keyboard tab switching, two independent stock working
+copies, unavailable and forget behavior, source-template immutability, and
+1280x720, 390x844 and 320x700 layouts. Captures are `/tmp/sigma-a11-*.png`.
 `settings.py` remains the shared-form persistence/focus regression.

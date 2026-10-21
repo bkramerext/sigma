@@ -174,7 +174,17 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-atmosphere::before, .home-atmosphere::after { content: none; }
 .home-content { width: min(100%, 1536px); min-height: 100dvh; padding: 0 clamp(26px, 5.4vw, 90px) 72px; }
 .home-page .home-topline { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; height: 52px; padding: 26px 0; }
-.home-page .home-slogan { position: absolute; z-index: 0; top: 0; left: 0; display: block; width: min(36vw, 520px); height: auto; mix-blend-mode: screen; mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%); mask-composite: intersect; -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%); -webkit-mask-composite: source-in; pointer-events: none; user-select: none; }
+.home-page .home-slogan {
+ position: absolute; z-index: 0; top: 0;
+ left: calc(-1 * clamp(26px, 5.4vw, 90px));
+ display: block; width: min(36vw, 520px); height: auto;
+ mix-blend-mode: screen;
+ mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%);
+ mask-composite: intersect;
+ -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%, #000 82%, transparent 100%), linear-gradient(to right, transparent 0%, #000 1%, #000 99%, transparent 100%);
+ -webkit-mask-composite: source-in;
+ pointer-events: none; user-select: none;
+}
 .home-page .home-topline .api-connection { position: relative; z-index: 1; margin-left: auto; }
 .home-page .home-hero { margin-top: clamp(170px, 28vh, 320px); max-width: 560px; animation: none; }
 .home-page .home-hero h1 { color: #dcb783; font-family: Georgia, serif; font-size: clamp(30px, 3.3vw, 49px); font-weight: 400; letter-spacing: -.02em; margin-bottom: 10px; }

@@ -90,8 +90,7 @@ def main() -> None:
     output = StringIO()
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
-        with patch("sigma.recents.bootstrap_example", return_value=""):
-            check_ui()
+        check_ui()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()
     print("PASS maintenance failures and UI launch, early exit, interrupt and cleanup")

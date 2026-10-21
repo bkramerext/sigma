@@ -191,7 +191,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-settings-dialog" aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
+  return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Edit Project' : 'New Project'}</h2>
         <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
@@ -221,18 +221,19 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; research_mode: string | null; included_example: boolean; available: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; research_mode: string | null; strategy_count: number | null; available: boolean; error: string | null };
+type StockProject = { id: string; title: string; problem: string; research_mode: string; strategy_count: number };
+const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
-    setProjects(data.projects); setNotice(data.notice); setLoading(false);
+    setProjects(data.projects); setLoading(false);
   }, []);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } }); return () => controller.abort(); }, [load]);
   async function open(entry: RecentProject) {
@@ -247,15 +248,85 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
-  return <section className="empty home-empty home-recents" aria-labelledby="recents-heading"><h2 id="recents-heading">Recent Projects</h2>
+  return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new investigation.</p>}
     <ul>{projects.map(entry => <li key={entry.id}>
-      <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong><small>{entry.research_mode === 'mathematical' ? 'Mathematical' : entry.research_mode === 'default' ? 'Default' : 'Unavailable'}{entry.included_example ? ' · Included example' : ''}</small><span title={entry.path}>{entry.path}</span></button>
+      <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong><small>{entry.research_mode === 'mathematical' ? 'Mathematical' : entry.research_mode === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small><span title={entry.path}>{entry.path}</span></button>
       <button className="recent-forget" disabled={!!opening} aria-label={`Forget ${entry.title} from Recent Projects`} title="Forget from Recent Projects; keep all research" onClick={() => void forget(entry)}>×</button>
       {entry.error && <p className="recent-unavailable">{entry.error}</p>}
     </li>)}</ul>
-    {notice && <p role="status">{notice}</p>}{error && <p role="alert" className="error">{error}</p>}
-  </section>;
+    {error && <p role="alert" className="error">{error}</p>}
+  </div>;
+}
+
+function StockCopyDialog({ stock, onOpen, onCancel }: { stock: StockProject; onOpen: (view: ProjectView) => void; onCancel: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const first = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const [title, setTitle] = useState(`${stock.title} Copy`);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
+  async function save(event: FormEvent) {
+    event.preventDefault(); if (submitting.current) return;
+    submitting.current = true; setBusy(true); setError('');
+    try { onOpen(await post<ProjectView>('stock/copy', { stock_id: stock.id, title })); }
+    catch (error) { setError(errorMessage(error)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-entry-dialog stock-copy-dialog" aria-labelledby="stock-copy-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <h2 id="stock-copy-heading">Use Stock Project</h2>
+    <p className="entry-help">Create your own working copy of <strong>{stock.title}</strong>. The shipped example stays unchanged.</p>
+    <form onSubmit={save}><fieldset disabled={busy}>
+      <label htmlFor="stock-copy-title">Project name</label>
+      <input ref={first} id="stock-copy-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)} aria-describedby="stock-copy-help"/>
+      <p id="stock-copy-help" className="entry-hint">The name determines a new directory under your configured projects root. Choose a distinct name for each copy.</p>
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="entry-dialog-actions"><button type="submit">{busy ? 'Creating…' : 'Create Working Copy'}</button><button type="button" className="entry-cancel" onClick={onCancel}>Cancel</button></div>
+    </fieldset></form>
+  </dialog>;
+}
+
+function StockProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+  const [projects, setProjects] = useState<StockProject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selected, setSelected] = useState<StockProject | null>(null);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/projects/stock', { signal: controller.signal }).then(async response => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? 'Stock Projects unavailable.');
+      setProjects(data.projects); setLoading(false);
+    }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
+    return () => controller.abort();
+  }, []);
+  function cancel() { setSelected(null); requestAnimationFrame(() => trigger.current?.focus()); }
+  return <div className="empty home-empty home-stock">
+    {loading ? <p role="status">Loading stock projects…</p> : !projects.length && !error && <p>No stock projects are available.</p>}
+    <ul>{projects.map(stock => <li key={stock.id}><button className="stock-open" onClick={event => { trigger.current = event.currentTarget; setSelected(stock); }} aria-label={`Create working copy of ${stock.title}`}><strong>{stock.title}</strong><small>{stock.research_mode === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(stock.strategy_count)}</small></button></li>)}</ul>
+    {error && <p role="alert" className="error">{error}</p>}
+    {selected && <StockCopyDialog stock={selected} onOpen={onOpen} onCancel={cancel}/>}
+  </div>;
+}
+
+function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+  const [tab, setTab] = useState<'recent' | 'stock'>('stock');
+  const recent = useRef<HTMLButtonElement>(null);
+  const stock = useRef<HTMLButtonElement>(null);
+  function switchTab(next: 'recent' | 'stock') { setTab(next); (next === 'recent' ? recent : stock).current?.focus(); }
+  return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'recent' ? 'stock' : 'recent'); }
+    if (event.key === 'Home') { event.preventDefault(); switchTab('stock'); }
+    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
+  }}>
+    <button ref={stock} id="stock-tab" role="tab" aria-controls="stock-panel" aria-selected={tab === 'stock'} tabIndex={tab === 'stock' ? 0 : -1} onClick={() => setTab('stock')}>Stock Projects</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} onClick={() => setTab('recent')}>Recent Projects</button>
+  </div>
+    <div id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
+    <div id="stock-panel" role="tabpanel" aria-labelledby="stock-tab" hidden={tab !== 'stock'}><StockProjects onOpen={onOpen}/></div>
+  </div>;
 }
 
 function Home({ initialPath, onOpen, goHome }: {
@@ -279,10 +350,10 @@ function Home({ initialPath, onOpen, goHome }: {
     <p className="intro">Open an existing project or begin a new investigation.</p>
     </div>
     <div className="home-entry-actions">
-      <button ref={openButton} onClick={() => setEntry('open')}>Open Project <span aria-hidden="true">↗</span></button>
+      <button ref={openButton} onClick={() => setEntry('open')}>Open Project</button>
       <button ref={newButton} className="home-new-project" onClick={() => setEntry('new')}>New Project</button>
     </div>
-    <RecentProjects onOpen={onOpen}/>
+    <HomeCatalog onOpen={onOpen}/>
     {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
     {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
