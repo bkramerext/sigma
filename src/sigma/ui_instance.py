@@ -38,9 +38,12 @@ def private_directory(path: Path) -> None:
 
 
 class Instance:
-    def __init__(self, root: Path = ROOT, shutdown_only: bool = False):
+    def __init__(
+        self, root: Path = ROOT, shutdown_only: bool = False, register_owner: bool = False
+    ):
         self.root = root.resolve(strict=True)
         self.shutdown_only = shutdown_only
+        self.register_owner = register_owner
         self.registered = False
         self.identity = identity(root)
         # Short Unix socket path, independently private for each OS account and checkout.
@@ -179,7 +182,8 @@ class Instance:
                 self.listener.bind(str(self.path))
                 self.listener.listen(8)
                 self.listener.settimeout(0.1)
-                self._register_owner()
+                if self.register_owner:
+                    self._register_owner()
             return self
         except BaseException:
             self.__exit__(None, None, None)
