@@ -86,8 +86,7 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
         if state == "unavailable" and message.startswith("ChatGPT request could not complete"):
             safe_code = (
                 code
-                if isinstance(code, str)
-                and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", code)
+                if isinstance(code, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", code)
                 else "unspecified"
             )
             raise ProjectError(
