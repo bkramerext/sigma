@@ -167,7 +167,17 @@ async def _convert_text(
                     raise ProjectError("Provider declined the conversion; source text was kept")
                 texts = [part["text"] for part in parts if part.get("type") == "output_text"]
                 if len(texts) != 1:
-                    raise ValueError("Invalid conversion output")
+                    # Report shape, never text or credentials. This distinguishes
+                    # an absent provider body from invalid JSON/schema content.
+                    kinds = [
+                        part.get("type", "<missing>")
+                        if isinstance(part, dict) else "<invalid>"
+                        for part in parts
+                    ]
+                    raise ValueError(
+                        f"expected one output_text, got {len(texts)} "
+                        f"(content types: {', '.join(kinds[:8]) or 'none'})"
+                    )
                 result = Converted.model_validate_json(texts[0])
             except ProjectError:
                 raise
