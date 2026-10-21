@@ -1,0 +1,52 @@
+# A9: Four Recent Projects and a seeded mathematical sample
+
+**Status:** Ready for Codex **after A8** is committed and inspected. This assignment is deliberately separate from A8's shared Create/Edit form and provider settings. Do not roll back A8 or redesign approved artwork.
+
+## Intent
+
+Make SIGMA's Home **Recent Projects** genuinely useful: show up to **four** distinct recently created/opened projects, newest first, with working click-to-open actions. Successful creation immediately adds a project; opening an existing project moves it to the front. Closing is navigation only and **must not** mutate recents or the project document.
+
+Also install the deliberately constructed, nontrivial **Nonconsecutive Subset Sums Modulo 3** mathematical example with exactly three initial strategies, and make it visible in Recent Projects on first installation. Preserve exact source template data; never substitute invented project/strategy content. The mathematical example's concrete goal is a rigorously proved recurrence, its n=12 value, and 1/3 asymptotic density; it is known to be solvable and is **not** an open mathematical conjecture.
+
+## Canonical example template
+
+- Repo source: `examples/nonconsecutive-subset-sums/project.json` (in the same commit as this assignment).
+- It is intentionally **outside `projects/`**: live `project.json` files are mutable and ignored by Git. Never commit a live active research document or make normal user research edits dirty the checkout.
+- The template is a complete, strictly versioned **v5** project document with UUID `7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a`, Mathematical mode, three stable strategy UUIDs, three matching `strategy.created` history events, all stages `draft`, and complete approach/summary text. It uses `author_kind: "human"` for backwards compatibility with the current v5 schema, which permits no other value; when improving attribution later, **do not imply runtime AI generation** or falsely invent OpenAI provenance. Treat these as manually provided built-in examples in UI copy. Validate the file against `sigma.projects._decode` or the supported public inspection interface, rather than merely parsing JSON.
+- A8 may have introduced a newer project schema: importing a v5 document must remain compatible under its promised v1–v5 reads. Never overwrite an existing file or auto-migrate/rewrite the example simply by showing it in Home.
+- On initial successful UI setup, install one copy into the **configured** `SIGMA_PROJECTS_ROOT` (default checkout `projects/`) as `nonconsecutive-subset-sums.sigma/project.json` through safe atomic exclusive creation. Verify owner/root, symlink/path safety, valid schema, and conflicts; avoid reinitializing the template through the RH special-case. If the destination exists, inspect it; **never replace or reset** the user's version or create a duplicate just to seed a sample. If a different project occupies this path, report the conflict and don't corrupt it.
+- The example is intentionally unproved: **do not insert a proof or the numerical answer into strategy approaches**, and do not mark investigation stages as completed. The three strategies are different mechanisms and include their own tests/failure obligations.
+
+## Persistent four-item Recent Projects
+
+- Recents are **application-level installation state, not part of any project's JSON**. Projects remain self-contained and portable; the Home index holds only safe metadata such as stable `project.id`, canonical directory path, and last successful UI/CLI access time. On display, refresh title from the actual project so renames are reflected. IDs are already UUIDs; do not manufacture another GUID.
+- Keep state in a clear per-user data directory, e.g. `SIGMA_STATE_DIR` or XDG state directory under `~/.local/state/sigma/`. Document the path and ensure the state index is excluded from Git. Do not put it in `assets/`, `frontend/`, or a live `.sigma/project.json`. Use safe file permissions (index 0600, directory 0700), atomic writes and locking appropriate for a local multiprocess application. Test concurrent writes without losing entries.
+- **Maximum four entries at all times.** Deduplicate by project UUID; re-opening an entry moves it to the top and updates its path; creating a project inserts it first. Evict least recently used entries after the fourth; never delete an evicted project's data. No modification to project content from recording an access. A title edit should reflect immediately in the list without changing its access order.
+- Hook tracking into the **actual successful create/open operations** across UI/API/CLI as appropriate. Do not count a failed attempt, read-only `inspect`, uncommitted new-project form, cancelled dialog, or Close Project as access. Avoid unbounded writes or double counting incidental project-state refreshes. Test creation via Home and successful Open Project, clicking a recent row, duplicate opens and close/reopen. Handle deleted, corrupt, inaccessible and moved project paths without crashing the Home view or resurrecting them through hidden writes.
+- **First-run sample inclusion:** Once successfully installed, show the example as one of the four Recent Projects. Since it has not literally been opened by the human yet, label it honestly as an **Included example** rather than fabricating last-opened history. Its initial inclusion should be one-time; don't endlessly put it back atop the list after the user works on other projects. If recents already has four genuine entries, do not silently evict one to force the sample back. Subsequent user opening of the sample turns it into a normal recent. Prevent example reseeding after the user intentionally removes it (record a small explicit one-time bootstrap fact or equivalent).
+- Source data should drive React: add small trustworthy backend recents list endpoint and operations as needed, and refresh Home list after navigation back. Keep API response minimal; don't fetch every full strategy history into the landing page.
+- Visual: fit the existing accepted cinematic Home composition, with a restrained list of up to four informative links/buttons, title and (when helpful) subdued directory or `Mathematical · Included example` subtitle. Avoid huge cards, fake sample placeholders or additional background decorations. Clicking a recent must open the actual project and show its **three real draft strategies**. Keyboard/focus/mobile styling match A6/A8.
+
+## Mathematical fixture verification
+
+- Independently count small n using a residue/adjacency DP; check the template's nonconsecutive-subset formulation. A reference sanity check is `a_12 = 128`. **This value is for tests, not seeded strategy/proof output**.
+- The recurrence `a_(n+12) = 5 a_(n+9) - 2 a_(n+6) - 5 a_(n+3) - a_n` holds for n>=0. Prove/verify by period-three weighted Fibonacci / root-of-unity analysis rather than only curve fitting; keep the answer outside the active project template. If relying on numerical tests, state their limits honestly.
+- Validate matching strategy UUIDs and creation event chain, timestamps and derived active_order against project's actual schema. Confirm no automatic research, Lean proofs, or AI generation is claimed to have occurred.
+
+## Rendering agent-visible mathematical output: **document only, not implement here**
+
+The human also asked how SIGMA should show intermediate mathematical agent outputs like ChatGPT. Do **not** begin autonomous agent execution in A9. Draft a concise design note (e.g. `docs/agent-output-design.md`) for the later runtime UI:
+- Render agent-visible **Markdown with inline/display LaTeX**, likely `react-markdown` + `remark-math` + `rehype-katex`, with appropriate security/sanitization, accessible copy/select and syntax-highlighted code. Preserve exact source Markdown/LaTeX for export.
+- Plan a **structured, append-only per-run event stream** (user-visible narration, formal claims, tests, tool results, artifact links, warnings, final outcome), persisted and ordered with stable event IDs. SSE for server->browser push is a sensible default; partial streamed Markdown/LaTeX needs buffering to avoid flicker or broken equations. Allow reloading, resuming, folding older steps and opening individual artifacts.
+- **Do not present hidden chain-of-thought as accessible intermediate output**. Display explicit public progress summaries, tool actions, generated drafts and evidence; distinguish them from model-internal reasoning and from mathematically proved results.
+- Scope a first reader/viewer for a *future assignment*, independently of agent scheduling and execution.
+
+## Verification
+
+1. Run the current `./sigma test`, new recents and sample-install scenarios, and frontend production/type checks. Confirm the repo remains clean after opening/editing sample project (no tracked mutable project state).
+2. Test first launch, subsequent launch, creating five or more projects, reopening earlier entries, closing, renaming, corrupt/missing entries, root switching, race conditions, and a bad seed-file/destination collision. Confirm <=4 and stable UUID deduplication.
+3. Test Home desktop, tablet and 390/320px mobile visually against unchanged accepted background. Ensure no invented history timestamps or blocked focus on keyboard navigation.
+4. Protect A8 model/effort settings, shared Create/Edit design, A7 strategy behavior and full project history. Check the legacy v5 seed still opens under the current schema. Never overwrite existing users' project data.
+5. Update `docs/STATUS.md`, usage docs, and design note with **actual** commands/results and remaining limitations. Commit implementation deliberately when checks pass, not before.
+
+**Definition of done:** Home lists no more than four genuine recent project entries; create/open updates them reliably, without writing to project data on close. The Mathematical sample is safely installed and included once, opens with exactly three real Draft strategies, and can evolve independently of its immutable Git template. Mathematical agent transcript rendering is scoped in a design note for later implementation, not falsely marked as working.
