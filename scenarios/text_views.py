@@ -440,7 +440,7 @@ async def main_async(root: Path):
                           "output": []}},
         ]
         content = "".join(
-            f"event: {event['type']}\\ndata: {json.dumps(event)}\\n\\n"
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
             for event in events
         )
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
