@@ -7,8 +7,8 @@ import json
 import os
 import signal
 import socket
-import subprocess
 import stat
+import subprocess
 import time
 from pathlib import Path
 from types import TracebackType
