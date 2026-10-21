@@ -89,8 +89,16 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
                 if isinstance(code, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", code)
                 else "unspecified"
             )
+            details = [f"HTTP {status}", f"code: {safe_code}"]
+            if isinstance(error, dict):
+                for key in ("type", "param"):
+                    value = error.get(key)
+                    if isinstance(value, str) and re.fullmatch(
+                        r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", value
+                    ):
+                        details.append(f"{key}: {value}")
             raise ProjectError(
-                f"ChatGPT rejected the request (HTTP {status}, error code: {safe_code}). "
+                f"ChatGPT rejected the request ({', '.join(details)}). "
                 "Account retained; no automatic billing fallback occurred."
             )
         raise ProjectError(f"{message} No strategy was saved.")
