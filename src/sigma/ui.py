@@ -14,9 +14,9 @@ from urllib.request import urlopen
 from uuid import uuid4
 
 from sigma.local_config import load_local_config
-from sigma.ui_orphans import recover_orphans
 from sigma.projects import ROOT
 from sigma.ui_instance import Instance
+from sigma.ui_orphans import recover_orphans
 
 API_URL = "http://127.0.0.1:8000"
 URL = "http://127.0.0.1:5173"
