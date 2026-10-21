@@ -61,7 +61,7 @@ class Instance:
         try:
             def field(name: str) -> str:
                 return subprocess.check_output(
-                    ["ps", "-p", str(pid), "-o", f"{name}="],
+                    ["ps", "-ww", "-p", str(pid), "-o", f"{name}="],
                     text=True,
                     stderr=subprocess.DEVNULL,
                     timeout=2,
