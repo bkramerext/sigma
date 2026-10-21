@@ -1,12 +1,10 @@
-Wolf.
-
 # SIGMA: Building with agents, then building for agents
 
 *A working account of two related engineering efforts: how SIGMA is being built with AI agents, and how SIGMA may eventually coordinate research agents. The first is operational; the second remains to be designed and implemented.*
 
 ## 1. Building SIGMA with ChatGPT Chat and Codex
 
-The most recent product I've been building with AI is **SIGMA (Strategy Investigation, Generation, Measurement & Assessment)**, a local-first application for maintaining several approaches to a difficult research question without losing track of why an idea was pursued, what was tried, or what failed. It grew out of my experience doing mathematical investigations with ChatGPT, where conversational exploration was productive but hard to make cumulative.
+I'm building **SIGMA (Strategy Investigation, Generation, Measurement & Assessment)**, a local-first application for maintaining several approaches to a difficult research question without losing track of why an idea was pursued, what was tried, or what failed. It grew out of my experience doing mathematical investigations with ChatGPT, where conversational exploration was productive but hard to make cumulative.
 
 I wanted not only to use coding agents to make the software, but to examine how we could organize that work without losing engineering coherence. Our practical arrangement has three participants with deliberately different responsibilities: **I direct and evaluate the work, ChatGPT Chat develops designs and writes engineering assignments, and Codex implements and tests the software.** GitHub is the durable intermediary between Chat and Codex.
 
@@ -96,6 +94,3 @@ There is a useful connection between the two halves: our experience building SIG
 
 *Update this section with actual implementation, tests, failures and outcomes as the internal agent engine develops. Keep future intentions distinct from demonstrated work.*
 
----
-
-**Scope:** The completed work demonstrates **using coding agents to build a real product**. The unfinished work describes the intended multi-agent research direction without claiming it has been delivered.
