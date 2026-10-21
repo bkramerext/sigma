@@ -9,6 +9,7 @@ import './recents.css';
 import './copper-controls.css';
 import './text-views.css';
 import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, useAI } from './ai-connection';
+import { installRequestErrorToasts, RequestErrorToasts } from './request-toast';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
@@ -1097,4 +1098,5 @@ function App() {
   </main>;
 }
 
-createRoot(document.getElementById('root')!).render(<AIProvider><App/></AIProvider>);
+installRequestErrorToasts();
+createRoot(document.getElementById('root')!).render(<AIProvider><App/><RequestErrorToasts/></AIProvider>);
