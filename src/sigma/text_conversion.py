@@ -170,8 +170,7 @@ async def _convert_text(
                     # Report shape, never text or credentials. This distinguishes
                     # an absent provider body from invalid JSON/schema content.
                     kinds = [
-                        part.get("type", "<missing>")
-                        if isinstance(part, dict) else "<invalid>"
+                        part.get("type", "<missing>") if isinstance(part, dict) else "<invalid>"
                         for part in parts
                     ]
                     raise ValueError(
