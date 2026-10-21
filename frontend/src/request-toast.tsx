@@ -5,7 +5,7 @@ type Failure = { id: number; message: string };
 const listeners = new Set<(failure: Failure) => void>();
 let nextId = 0;
 
-function notifyFailure(message: string) {
+export function reportRequestFailure(message: string) {
   const failure = { id: ++nextId, message };
   listeners.forEach(listener => listener(failure));
 }
@@ -50,13 +50,13 @@ export function installRequestErrorToasts() {
     const isApi = new URL(url, window.location.href).pathname.startsWith('/api/');
     try {
       const response = await originalFetch(input, init);
-      if (isApi && !response.ok) notifyFailure(await responseError(response));
+      if (isApi && !response.ok) reportRequestFailure(await responseError(response));
       return response;
     } catch (error) {
       const aborted = init?.signal?.aborted || (input instanceof Request && input.signal.aborted)
         || (error instanceof DOMException && error.name === 'AbortError');
       if (isApi && !aborted) {
-        notifyFailure(error instanceof Error ? error.message : 'Network request failed');
+        reportRequestFailure(error instanceof Error ? error.message : 'Network request failed');
       }
       throw error;
     }
