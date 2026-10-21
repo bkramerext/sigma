@@ -69,3 +69,8 @@ Deferred until agent execution work.
 ## Documentation reconciliation
 
 Implemented storage uses versioned JSON; SQLite remains a future option. See [DECISIONS](DECISIONS.md).
+
+## UI process management and startup diagnostics
+
+- **2026-10-21** — User reports that `./sigma ui` sometimes produces no visible result, even after manually killing listeners on ports 8000 and 5173. Investigate the launcher/instance-replacement path and make startup failures and waits explicit and actionable; do not silently hang. Current launcher intends to replace a verified same-checkout SIGMA instance, so verify and fix that behavior rather than assume it works.
+- **2026-10-21** — Add an explicit `./sigma stop-ui` (or similarly discoverable) command to cleanly stop *only* a verified SIGMA-owned instance and its supervised child servers. Do not kill unrelated services using the same ports. Add real startup/restart/stop/crash scenarios and accurate CLI guidance.
