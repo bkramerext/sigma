@@ -51,6 +51,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "scenarios/tooling.py"],
             [*python, "python", "scenarios/local_config.py"],
             [*python, "python", "scenarios/instance_ownership.py"],
+            [*python, "python", "scenarios/ui_orphans.py"],
             [*python, "ruff", "check", "src", "scenarios", "sigma"],
             [*python, "ruff", "format", "--check", "src", "scenarios", "sigma"],
             [*python, "pyright"],
