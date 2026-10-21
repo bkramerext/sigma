@@ -52,6 +52,29 @@ KNOWN_ERRORS = {
 }
 
 
+
+def safe_error_detail(raw: Any) -> str | None:
+    """Display short provider diagnostics only when they cannot echo private input."""
+    if not isinstance(raw, dict):
+        return None
+    nested = raw.get("error")
+    values = [
+        raw.get("detail"),
+        nested.get("message") if isinstance(nested, dict) else None,
+        raw.get("message"),
+    ]
+    for value in values:
+        if not isinstance(value, str) or not 1 <= len(value) <= 180:
+            continue
+        if (
+            re.fullmatch(r"[A-Za-z0-9 .,:;()/_-]+", value)
+            and not re.search(r"(?i)bearer|token|secret|password|authorization", value)
+            and not re.search(r"[A-Za-z0-9_-]{36,}", value)
+        ):
+            return value
+    return None
+
+
 def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
     error = raw.get("error") if isinstance(raw, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
@@ -104,6 +127,9 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
                 else "unspecified"
             )
             details = [f"HTTP {status}", f"code: {safe_code}", f"shape: {shape}"]
+            explanation = safe_error_detail(raw)
+            if explanation is not None:
+                details.append(f"detail: {explanation}")
             if isinstance(error, dict):
                 for key in ("type", "param"):
                     value = error.get(key)
