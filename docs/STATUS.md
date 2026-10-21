@@ -910,3 +910,23 @@ passed stock/recent Home navigation. Desktop/mobile screenshots were visually in
 horizontal viewport overflow or page errors occurred. The renderer can display
 an AI conversion faithfully but cannot verify mathematical equivalence; users
 must review derived text before relying on it.
+
+
+## UI recovery and explicit shutdown (2026-10-21, awaiting local verification)
+
+The `./sigma ui` launcher now records the exact owner PID, process birth time,
+user, command and checkout identity in a private owner file. Restart recognizes a
+verified suspended launcher, sends SIGCONT so it can serve its control endpoint,
+and requests a clean shutdown. If a verified owner remains suspended while
+holding the startup lock, the launcher escalates after a bounded wait. An
+unresponsive authenticated owner can receive SIGTERM then SIGKILL after a
+bounded grace period. Unrelated port listeners, changed PIDs and unverifiable
+control records are never signalled. Startup reports its stages rather than
+waiting silently.
+
+The new `./sigma shutdown` command uses the same checkout-specific control
+mechanism without starting servers. Offline ownership and CLI-shutdown scenarios
+and opt-in real-process suspended-launcher/shutdown lifecycle checks were added.
+These changes were committed via GitHub and **have not been locally executed or
+verified yet**; run `./sigma test` and the opt-in `scenarios/ui_lifecycle.py`
+before treating the behavior as verified.
