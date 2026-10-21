@@ -69,7 +69,7 @@ def safe_error_detail(raw: Any) -> str | None:
         if (
             re.fullmatch(r"[A-Za-z0-9 .,:;()/_-]+", value)
             and any(
-                word in value.lower().split()
+                word in re.findall(r"[a-z]+", value.lower())
                 for word in (
                     "invalid",
                     "unsupported",
