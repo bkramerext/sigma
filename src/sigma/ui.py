@@ -14,6 +14,7 @@ from urllib.request import urlopen
 from uuid import uuid4
 
 from sigma.local_config import load_local_config
+from sigma.ui_orphans import recover_orphans
 from sigma.projects import ROOT
 from sigma.ui_instance import Instance
 
@@ -92,6 +93,7 @@ def run_ui() -> int:
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:
+                recover_orphans(ROOT)
                 wait_for_ports()
                 print("Starting SIGMA backend and frontend…", flush=True)
                 commands = [
@@ -203,7 +205,7 @@ def run_shutdown() -> int:
     """Stop the verified same-checkout SIGMA UI; never start servers."""
     try:
         with Instance(shutdown_only=True):
-            pass
+            recover_orphans(ROOT)
         print("SIGMA UI shutdown complete.", flush=True)
         return 0
     except (OSError, RuntimeError) as exc:
