@@ -29,6 +29,15 @@ The Home artwork is now visually confirmed. The project workspace and cinematic 
 
 ## Still Day 0 — October 20, 2026
 
+- Persistent research workspace and editable project settings.
+- Strategy management, history, and human-reviewed AI proposals.
+- Recent projects and sample mathematical investigation.
+- ChatGPT sign-in and one-time welcome experience.
+- A8.2.1 connection-status refresh assignment.
+- Exploring independent agents that challenge one another.
+
+### From prototype to working research workspace
+
 The initial sketch has become a working local research application. SIGMA now has a persistent project workspace, editable project settings, human-authored strategies, and a deliberately human-controlled AI proposal flow. The Home page also gained recent projects and an installed sample research problem with three contrasting strategies. The application and its CLI, tests, and documentation have evolved together through versioned assignments handed from Chat to Codex.
 
 A particularly satisfying milestone was **A8.2: Sign in with ChatGPT**. The human tried the implemented connection and reported that it worked smoothly, especially appreciating the one-time welcome toast. This made the collaboration feel tangible: a design discussed with Chat, specified in GitHub, implemented by Codex, and then experienced as a polished working interaction rather than merely a completed checklist.
