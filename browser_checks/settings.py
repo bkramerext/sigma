@@ -60,7 +60,7 @@ with sync_playwright() as p:
     ).to_be_visible()
     page.get_by_role("button", name="New Project", exact=True).click()
     dialog = page.get_by_role("dialog")
-    expect(dialog.get_by_role("heading", name="Create Project", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("heading", name="New Project", exact=True)).to_be_visible()
     expect(dialog.get_by_label("Project name", exact=True)).to_be_focused()
     labels = ["Project name", "Research problem", "Research mode", "AI model", "Thinking level"]
     assert dialog.locator("label").all_text_contents() == labels
@@ -73,7 +73,7 @@ with sync_playwright() as p:
         "Preserve the complete research problem.\nTest assumptions critically."
     )
     dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
-    expect(dialog.get_by_role("button", name="Create Project", exact=True)).to_be_enabled()
+    expect(dialog.get_by_role("button", name="New Project", exact=True)).to_be_enabled()
     destination = Path(dialog.locator(".project-destination code").inner_text())
     assert not destination.exists()
     for width in (1672, 768, 390, 320):
@@ -87,7 +87,7 @@ with sync_playwright() as p:
             status=400, content_type="application/json", body='{"error":"Injected create failure"}'
         ),
     )
-    dialog.get_by_role("button", name="Create Project", exact=True).click()
+    dialog.get_by_role("button", name="New Project", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_text("Injected create failure")
     expect(dialog.get_by_label("Project name", exact=True)).to_have_value(title)
     assert not destination.exists()

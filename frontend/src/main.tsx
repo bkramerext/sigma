@@ -218,7 +218,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     finally { submitting.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className="project-settings-dialog" aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <h2 id="project-settings-heading">{initial ? 'Edit Project' : 'Create Project'}</h2>
+    <h2 id="project-settings-heading">{initial ? 'Edit Project' : 'New Project'}</h2>
     <p id="project-settings-help">{initial ? 'Update this investigation. Changes apply when you save; its identity and location stay fixed.' : 'Name an investigation and choose how to explore it.'}</p>
     <form onSubmit={save}><fieldset disabled={busy}>
       <label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
@@ -240,7 +240,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">A project or file already exists here. Choose another name.</p>}
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'Create Project'}</button><button className="settings-cancel" type="button" onClick={onCancel}>Cancel</button></div>
+      <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'New Project'}</button><button className="settings-cancel" type="button" onClick={onCancel}>Cancel</button></div>
     </fieldset></form>
   </dialog>;
 }
