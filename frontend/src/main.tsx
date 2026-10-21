@@ -259,40 +259,12 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function StockCopyDialog({ stock, onOpen, onCancel }: { stock: StockProject; onOpen: (view: ProjectView) => void; onCancel: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const first = useRef<HTMLInputElement>(null);
-  const submitting = useRef(false);
-  const [title, setTitle] = useState(`${stock.title} Copy`);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
-  async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current) return;
-    submitting.current = true; setBusy(true); setError('');
-    try { onOpen(await post<ProjectView>('stock/copy', { stock_id: stock.id, title })); }
-    catch (error) { setError(errorMessage(error)); }
-    finally { submitting.current = false; setBusy(false); }
-  }
-  return <dialog ref={dialog} className="project-entry-dialog stock-copy-dialog" aria-labelledby="stock-copy-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <h2 id="stock-copy-heading">Use Stock Project</h2>
-    <p className="entry-help">Create your own working copy of <strong>{stock.title}</strong>. The shipped example stays unchanged.</p>
-    <form onSubmit={save}><fieldset disabled={busy}>
-      <label htmlFor="stock-copy-title">Project name</label>
-      <input ref={first} id="stock-copy-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)} aria-describedby="stock-copy-help"/>
-      <p id="stock-copy-help" className="entry-hint">The name determines a new directory under your configured projects root. Choose a distinct name for each copy.</p>
-      {error && <p className="error" role="alert">{error}</p>}
-      <div className="entry-dialog-actions"><button type="submit">{busy ? 'Creating…' : 'Create Working Copy'}</button><button type="button" className="entry-cancel" onClick={onCancel}>Cancel</button></div>
-    </fieldset></form>
-  </dialog>;
-}
-
 function StockProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<StockProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selected, setSelected] = useState<StockProject | null>(null);
-  const trigger = useRef<HTMLButtonElement | null>(null);
+  const [opening, setOpening] = useState('');
+  const pending = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     void fetch('/api/projects/stock', { signal: controller.signal }).then(async response => {
@@ -302,12 +274,16 @@ function StockProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
     return () => controller.abort();
   }, []);
-  function cancel() { setSelected(null); requestAnimationFrame(() => trigger.current?.focus()); }
+  async function open(stock: StockProject) {
+    if (pending.current) return; pending.current = true; setOpening(stock.id); setError('');
+    try { onOpen(await post<ProjectView>('stock/open', { stock_id: stock.id })); }
+    catch (error) { setError(errorMessage(error)); }
+    finally { pending.current = false; setOpening(''); }
+  }
   return <div className="empty home-empty home-stock">
     {loading ? <p role="status">Loading stock projects…</p> : !projects.length && !error && <p>No stock projects are available.</p>}
-    <ul>{projects.map(stock => <li key={stock.id}><button className="stock-open" onClick={event => { trigger.current = event.currentTarget; setSelected(stock); }} aria-label={`Create working copy of ${stock.title}`}><strong>{stock.title}</strong><small>{stock.research_mode === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(stock.strategy_count)}</small></button></li>)}</ul>
+    <ul>{projects.map(stock => <li key={stock.id}><button className="stock-open" disabled={!!opening} onClick={() => void open(stock)} aria-label={`Open ${stock.title}`}><strong>{stock.title}</strong><small>{stock.research_mode === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(stock.strategy_count)}</small></button></li>)}</ul>
     {error && <p role="alert" className="error">{error}</p>}
-    {selected && <StockCopyDialog stock={selected} onOpen={onOpen} onCancel={cancel}/>}
   </div>;
 }
 

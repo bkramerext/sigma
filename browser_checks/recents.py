@@ -1,4 +1,4 @@
-"""A11 real Chrome: Home tabs, isolated stock copies and responsive copper controls."""
+"""A11 real Chrome: Home tabs, direct stock opens and responsive copper controls."""
 
 import os
 from pathlib import Path
@@ -66,13 +66,15 @@ with sync_playwright() as playwright:
     assert stock_panel.get_by_text("Shipped template").count() == 0
     stock_panel.locator(".stock-open").first.hover()
     assert stock_panel.locator(".stock-open").first.evaluate("e=>getComputedStyle(e).backgroundColor") != "rgba(0, 0, 0, 0)"
-    stock_panel.get_by_role("button", name="Create working copy of Nonconsecutive Subset Sums Modulo 3").click()
-    dialog = page.get_by_role("dialog", name="Use Stock Project")
-    expect(dialog.get_by_label("Project name")).to_be_focused()
-    dialog.get_by_label("Project name").fill("Browser stock copy one")
-    dialog.get_by_role("button", name="Create Working Copy").click()
+    stock_panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
     expect(page.get_by_role("heading", name="Strategies", exact=True)).to_be_visible()
+    assert page.get_by_role("dialog").count() == 0
     expect(page.locator(".strategy-row")).to_have_count(3)
+    stock_path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    assert stock_path.endswith("/nonconsecutive-subset-sums.sigma")
+    assert Path(stock_path, "project.json").read_bytes() == original
+    saved = page.request.post("http://127.0.0.1:8001/api/projects/strategies", data={"path": stock_path, "title": "Browser stock addition", "approach": "Keep this strategy"})
+    assert saved.status == 201
     close_button = page.get_by_role("button", name="Close project")
     assert close_button.evaluate("e=>getComputedStyle(e).borderRadius") == "999px"
     base_close = close_button.evaluate("e=>getComputedStyle(e).backgroundColor")
@@ -83,22 +85,26 @@ with sync_playwright() as playwright:
     expect(stock_tab).to_have_attribute("aria-selected", "true")
     recent_tab.click()
     recent_panel = page.get_by_role("tabpanel", name="Recent Projects")
-    expect(recent_panel.get_by_text("Browser stock copy one")).to_be_visible()
-    expect(recent_panel.locator(".recent-open small").first).to_contain_text("3 strategies")
-    assert recent_panel.locator(".recent-open small").first.evaluate("e=>getComputedStyle(e).fontWeight") == "400"
-    first = page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"][0]
-    assert first["included_example"] is False
-    assert Path(first["path"]).joinpath("project.json").is_file()
+    expect(recent_panel.get_by_text("No recent projects yet.", exact=False)).to_be_visible()
+    assert page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"] == []
 
     stock_tab.click()
-    stock_panel.get_by_role("button", name="Create working copy of Nonconsecutive Subset Sums Modulo 3").click()
-    dialog.get_by_label("Project name").fill("Browser stock copy two")
-    dialog.get_by_role("button", name="Create Working Copy").click()
+    expect(stock_panel.get_by_text("4 strategies")).to_be_visible()
+    stock_panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
     expect(page.get_by_role("heading", name="Strategies", exact=True)).to_be_visible()
+    expect(page.locator(".strategy-row")).to_have_count(4)
+    assert page.evaluate("new URL(location.href).searchParams.get('path')") == stock_path
     page.get_by_role("button", name="Close project").click()
+    assert page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"] == []
+
+    created = page.request.post("http://127.0.0.1:8001/api/projects/create", data={"title": "Browser recent", "problem": "Own research"})
+    assert created.status == 201
     listing = page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"]
-    assert len(listing) == 2 and listing[0]["id"] != listing[1]["id"]
-    assert all(item["included_example"] is False for item in listing)
+    assert len(listing) == 1 and listing[0]["id"] == created.json()["project"]["id"]
+    page.goto("http://127.0.0.1:5173/")
+    recent_tab.click()
+    expect(recent_panel.get_by_text("Browser recent")).to_be_visible()
+    assert recent_panel.locator(".recent-open small").first.evaluate("e=>getComputedStyle(e).fontWeight") == "400"
 
     # Losing the project path must preserve an actionable unavailable recent.
     missing = Path(listing[0]["path"])
@@ -109,7 +115,7 @@ with sync_playwright() as playwright:
     expect(recent_panel.get_by_text("Unavailable or changed identity.", exact=False)).to_be_visible()
     expect(recent_panel.locator(".recent-open").first).to_be_disabled()
     recent_panel.locator(".recent-forget").first.click()
-    expect(recent_panel.locator(".recent-open")).to_have_count(1)
+    expect(recent_panel.locator(".recent-open")).to_have_count(0)
 
     for width, height in ((1280, 720), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
@@ -117,11 +123,12 @@ with sync_playwright() as playwright:
         expect(stock_panel.get_by_text("Did Jesus Use Cannabis?")).to_be_visible()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.screenshot(path=f"/tmp/sigma-a11-stock-{width}.png", full_page=True)
-        stock_panel.get_by_role("button", name="Create working copy of Did Jesus Use Cannabis?").click()
-        expect(dialog).to_be_visible()
+        stock_panel.get_by_role("button", name="Open Did Jesus Use Cannabis?").click()
+        expect(page.get_by_role("heading", name="Strategies", exact=True)).to_be_visible()
+        assert page.get_by_role("dialog").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-        page.screenshot(path=f"/tmp/sigma-a11-dialog-{width}.png", full_page=True)
-        dialog.get_by_role("button", name="Cancel").click()
+        page.screenshot(path=f"/tmp/sigma-a11-workspace-{width}.png", full_page=True)
+        page.get_by_role("button", name="Close project").click()
         expect(stock_panel).to_be_visible()
     assert SOURCE.read_bytes() == original
     page.set_viewport_size({"width": 1280, "height": 800})
@@ -133,4 +140,4 @@ with sync_playwright() as playwright:
     new_dialog.get_by_role("button", name="Cancel").click()
     assert not errors, errors
     browser.close()
-    print("PASS Chrome Home tabs, keyboard, two independent stock copies, recents/forget/unavailable, responsive layout, source immutability and no page errors")
+    print("PASS Chrome Home tabs, keyboard, stable direct stock opens with retained edits and no dialog/recents, responsive layout, source immutability and no page errors")

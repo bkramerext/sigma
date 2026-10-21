@@ -678,10 +678,10 @@ Actual verification:
 
 Home now offers Stock Projects and Recent Projects tabs, with Stock selected on
 entry per the later UI request. The catalog discovers every valid shipped
-investigation, places the Jesus example last, and asks for a name before creating
-an independent working copy under the configured projects root. Copies get new
-project and strategy UUIDs, preserve the source investigation content, and enter
-the four-item recent list only when actually created/opened. Existing automatic
+investigation and places the Jesus example last. Selecting a Stock row opens the
+project directly with no dialog. On first use it is installed at a stable path
+under the configured projects root with its original identity and bytes. Later
+opens preserve edits, and stock identities stay out of Recents. Existing automatic
 stock recent entries are removed from the index on read; project directories and
 research files are left untouched. The Home buttons use matching navy/copper
 resting styles, and both hover with the selected tab's copper gradient. Dialogs,
@@ -693,19 +693,25 @@ Actual verification:
   Pyright (zero errors), frontend typecheck, and production build. The existing
   non-failing Starlette TestClient deprecation notice remains.
 - Real Chrome `browser_checks/recents.py` passed tab keyboard navigation, exact
-  button rest/hover style comparisons, independent stock copies, Recent/Forget and
+  button rest/hover style comparisons, stable direct stock opens, Recent/Forget and
   unavailable path behavior, source immutability, no page errors, and 1280px,
   390px and 320px responsive layout checks. The 1280px Home screenshot was
   visually inspected; the controls do not cover the approved artwork. The New
   Project dialog had no internal vertical scroll at 1280x800. Screenshots are
   under `/tmp/sigma-a11-*.png`.
 
-Limits: browser sizes were Chrome emulation, not physical devices. Stock copying
-preserves the template's historical research events while assigning new document
-and strategy identities; the copy's name and future edits are independent.
+Limits: browser sizes were Chrome emulation, not physical devices. The first
+selection creates one managed installation because the checked-in catalog paths
+are not `.sigma` packages; this is a stable project, not a new copy on each open.
 
 Follow-up: the "Open a Project" heading retained a gold color from the older Home
 stylesheet. It now uses the exact resting copper text color of Open/New Project.
 Real Chrome checked the heading against both buttons' computed colors and the
 desktop screenshot was visually inspected. `./sigma test` and the full A11 Chrome
 check passed again after the change.
+
+The direct-open correction removed the working-copy dialog and endpoint. Real
+Chrome verified immediate opens, the same project path on repeat selections,
+retained edits, exclusion from Recents, source-file immutability, and desktop and
+mobile layouts. `./sigma test` passed the updated scenarios, API/CLI, Ruff,
+Pyright, frontend typecheck and production build after the correction.

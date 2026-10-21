@@ -80,7 +80,8 @@ backoff and Retry, and one-time welcome behavior. It makes no provider calls.
 Start a fresh `provider_fixture:app` as above, then run
 `uv run --with playwright python browser_checks/recents.py`.
 This check expects a fresh disposable fixture state. It covers the default
-Recent Projects tab, keyboard tab switching, two independent stock working
-copies, unavailable and forget behavior, source-template immutability, and
-1280x720, 390x844 and 320x700 layouts. Captures are `/tmp/sigma-a11-*.png`.
+Stock Projects tab, keyboard tab switching, direct stable stock opens without a
+dialog, retained edits, exclusion from Recents, unavailable and forget behavior,
+source-file immutability, and 1280x720, 390x844 and 320x700 layouts. Captures
+are `/tmp/sigma-a11-*.png`.
 `settings.py` remains the shared-form persistence/focus regression.

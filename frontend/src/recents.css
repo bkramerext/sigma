@@ -16,7 +16,6 @@
 .home-page .home-content { -webkit-user-select: none; user-select: none; }
 .home-page input, .home-page textarea { -webkit-user-select: text; user-select: text; }
 .home-page .home-hero h1:focus, .home-page .home-hero h1:focus-visible { outline: none; }
-.home-page .stock-copy-dialog .entry-dialog-actions button[type="submit"],
 .home-page .project-entry-dialog .entry-dialog-actions button[type="submit"],
 .home-page .project-settings-dialog .settings-actions button[type="submit"] {
   color: #fff2e9; background: var(--copper-gradient); border: 1px solid #ba7658;

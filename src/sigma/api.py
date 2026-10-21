@@ -348,17 +348,16 @@ def stock_view():
     return stock_projects()
 
 
-class StockCopyRequest(BaseModel):
+class StockOpenRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     stock_id: str
-    title: str
 
 
-@app.post("/api/projects/stock/copy", status_code=201)
-def stock_copy_view(body: StockCopyRequest):
-    from sigma.stock import create_stock_copy
+@app.post("/api/projects/stock/open")
+def stock_open_view(body: StockOpenRequest):
+    from sigma.stock import open_stock_project
 
-    return asdict(create_stock_copy(body.stock_id, body.title))
+    return asdict(open_stock_project(body.stock_id))
 
 
 class ForgetRecentRequest(BaseModel):

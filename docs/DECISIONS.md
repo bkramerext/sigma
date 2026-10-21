@@ -276,21 +276,22 @@ Home/workspace artwork and strategy layouts remain unchanged. Independent DP,
 exact transfer identities and an analytic recurrence/density derivation live
 outside the unproved example. Mathematical transcript rendering is design-only.
 
-## A11: stock catalog and independent working copies
+## A11: stock catalog and persistent projects
 
 Discover shipped `examples/*/project.json` documents as a read-only catalog. A stock
-selection asks for a project name, reserves a new directory under the configured
-projects root, remaps the project and strategy UUIDs throughout the document, and
-validates and publishes the copy without replacing existing files. This retains
-the stock investigation's content and history while giving each working copy an
-independent identity. Source templates remain in the checkout; working copies
-belong in normal project storage. A catalog directory with invalid project data
-is reported unavailable instead of being silently omitted.
+selection opens the project directly with no dialog. The application installs it
+once at a stable `<catalog-name>.sigma` path under the configured projects root,
+preserving its project and strategy identities and original bytes. Later
+selections reopen that same path, including any user edits. This keeps the
+source-controlled file intact while allowing the stock project to be run and
+edited as a regular project. Existing same-identity installations are reused;
+different occupants, symlinks and corrupt files are never overwritten or reset.
+A catalog directory with invalid project data is reported unavailable.
 
-Recents records actual user creates/opens, including working copies. The old
+Recents records actual user creates/opens, excluding stock project identities. The old
 four-entry index and access ordering remain; reads migrate out legacy automatic
 example entries and canonical stock identities without touching project files.
-The catalog lists all discoverable templates, with the Jesus example placed last
+The catalog lists all discoverable shipped projects, with the Jesus example placed last
 as a presentation choice. Home selects Stock by default per the later UI request.
 The existing index schema retains its dormant bootstrap metadata for backwards
 compatibility; no startup bootstrap or automatic example installation runs.
