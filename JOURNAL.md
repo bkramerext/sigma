@@ -26,3 +26,15 @@ We established **“facepalm”** as an escalation signal: a serious assistant e
 The collaboration principle emerging from this experience is **independent judgment in service of durable direction**: explore freely while decisions are open; treat enthusiastic validation as a strong signal that exploration has ended; preserve approved artifacts exactly through execution; verify at each handoff; and own recovery when reality diverges from intent. The goal is not merely to communicate better, but to **land things together** without requiring the human to repeatedly reassert settled decisions or debug preventable mistakes.
 
 The Home artwork is now visually confirmed. The project workspace and cinematic entrance remain separate implementation work; the latter is on hold.
+
+## Still Day 0 — October 20, 2026
+
+The initial sketch has become a working local research application. SIGMA now has a persistent project workspace, editable project settings, human-authored strategies, and a deliberately human-controlled AI proposal flow. The Home page also gained recent projects and an installed sample research problem with three contrasting strategies. The application and its CLI, tests, and documentation have evolved together through versioned assignments handed from Chat to Codex.
+
+A particularly satisfying milestone was **A8.2: Sign in with ChatGPT**. The human tried the implemented connection and reported that it worked smoothly, especially appreciating the one-time welcome toast. This made the collaboration feel tangible: a design discussed with Chat, specified in GitHub, implemented by Codex, and then experienced as a polished working interaction rather than merely a completed checklist.
+
+Normal use also exposed a small but instructive defect: after about a minute, the AI status changed to **“AI connection check expired”**, although the ChatGPT authorization had not necessarily expired. Code inspection traced this to a 60-second connection-health cache and a browser timer that marked the display stale without refreshing it. We wrote **A8.2.1** for Codex to refresh health quietly while the app is visible, preserve truthful failure states, and avoid interrupting the user. **The assignment is committed; the fix is not yet implemented.**
+
+The emerging lesson is that removing friction is part of correctness. A technically defensible cache timeout should not become a recurring chore for the person doing research. The human should be spending attention on mathematical questions, not on authentication status housekeeping.
+
+We also considered adding Claude as another provider, and a longer-term idea surfaced: **independent agents using different models to challenge each other's reasoning**. That remains a future research-engine possibility, not current implementation scope. For now, the priority is to build on the working ChatGPT connection and turn SIGMA into a useful engine for mathematical investigation.
