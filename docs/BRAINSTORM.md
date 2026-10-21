@@ -78,3 +78,7 @@ Implemented storage uses versioned JSON; SQLite remains a future option. See [DE
 ## Test suite organization (deferred)
 
 - **2026-10-21** — Rename `scenarios/` to `tests/` as a separate cleanup after current Markdown conversion debugging. Update `./sigma test` command paths, imports, documentation, CI/tooling references, Ruff/Pyright scope and any browser-check references; ensure no behavior changes and the full suite passes. Do not mix this rename into active bug fixes.
+
+## Network failure UX and state consistency (deferred)
+
+- **2026-10-21** — Treat every network-bound operation as fallible (provider inference, conversions, API requests, saves, status/discovery). On failure, show an accessible, non-disruptive toast with an actionable, accurate explanation; never silently fail or falsely indicate success. Pair the toast with the appropriate UI state transition: retain the last valid persisted content and prior view, preserve unsaved edits where applicable, clear loading states, and do **not** switch into Markdown/Rendered when Markdown generation fails. On successful conversion, transition only after durable save is confirmed. Test HTTP failures, timeouts, disconnects, cancellation, and stale responses without unintended view changes or duplicate requests.
