@@ -62,6 +62,7 @@ class Instance:
         if pid <= 1:
             return None
         try:
+
             def field(name: str) -> str:
                 return subprocess.check_output(
                     ["ps", "-ww", "-p", str(pid), "-o", f"{name}="],
@@ -248,18 +249,15 @@ class Instance:
                     print("Stopping existing SIGMA instance…", flush=True)
                     try:
                         client.sendall(
-                            json.dumps(
-                                {"identity": self.identity, "command": "shutdown"}
-                            ).encode() + b"\n"
+                            json.dumps({"identity": self.identity, "command": "shutdown"}).encode()
+                            + b"\n"
                         )
                         stopped = self.receive(client)
                     except (OSError, TimeoutError):
                         self._terminate_unresponsive_owner()
                     else:
                         if stopped != {"identity": self.identity, "status": "stopped"}:
-                            raise RuntimeError(
-                                "Previous SIGMA instance did not confirm cleanup."
-                            )
+                            raise RuntimeError("Previous SIGMA instance did not confirm cleanup.")
         # Only while holding the launch lock, after confirmed or forced cleanup.
         self.path.unlink(missing_ok=True)
 
