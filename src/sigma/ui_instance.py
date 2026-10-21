@@ -165,11 +165,7 @@ class Instance:
         terminated directly. Their pipe guardians clean up any child servers.
         """
         owners = self._recoverable_owners()
-        suspended = [
-            (pid, process)
-            for pid, process in owners
-            if "T" in process["stat"].upper()
-        ]
+        suspended = [(pid, process) for pid, process in owners if "T" in process["stat"].upper()]
         if not suspended:
             return False
         # Validate every identity before signalling any of them.
