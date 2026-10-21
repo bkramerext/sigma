@@ -2,7 +2,7 @@ Wolf.
 
 # SIGMA: Building with agents, then building for agents
 
-*Working answer to the Onebrief question about the last feature, product, or workflow I built using AI. The first half describes actual engineering practice; the second is intentionally a placeholder for a multi-agent research engine not yet implemented.*
+*A working account of two related engineering efforts: how SIGMA is being built with AI agents, and how SIGMA may eventually coordinate research agents. The first is operational; the second remains to be designed and implemented.*
 
 ## 1. Building SIGMA with ChatGPT Chat and Codex
 
@@ -99,8 +99,8 @@ We still need to determine **which agents exist, what they are allowed to do, ho
 
 There is a useful connection between the two halves: our experience building SIGMA has already shown the value of persistent artifacts, bounded assignments, human judgment, feedback loops and honest verification. Those lessons may inform the research engine, but they are **not yet proof that the same structure is right for autonomous mathematical investigation**.
 
-*Before this becomes a final application answer, update this section with actual implementation, tests, failures and outcomes from the internal agent engine. Do not make future intentions sound like past experience.*
+*Update this section with actual implementation, tests, failures and outcomes as the internal agent engine develops. Keep future intentions distinct from demonstrated work.*
 
 ---
 
-**Interview framing:** The completed work supports an answer about **using coding agents to build a real product**. The unfinished work explains why I am exploring multi-agent systems, without claiming to have delivered one. The response begins with **Wolf** as requested by the application prompt.
+**Scope:** The completed work demonstrates **using coding agents to build a real product**. The unfinished work describes the intended multi-agent research direction without claiming it has been delivered.
