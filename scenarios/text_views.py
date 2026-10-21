@@ -380,6 +380,45 @@ async def main_async(root: Path):
     initialize_project(plan_path, "Plan", "Count a_n for n >= 0")
     plan_binding = {"identity": "plan-fixture", "mode": "chatgpt", "token": "fixture-token"}
 
+    # Connected model discovery does not prove a generation request can succeed.
+    # Unknown ChatGPT inference failures must expose only safe status/code metadata.
+    rejected_path = root / "rejected-plan.sigma"
+    initialize_project(rejected_path, "Rejected plan", "Count a_n for n >= 0")
+
+    def rejected_handler(request):
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": "unsupported_text_format",
+                    "message": "private research text must not appear in user errors",
+                }
+            },
+        )
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(rejected_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(rejected_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "HTTP 400" in str(exc)
+            assert "unsupported_text_format" in str(exc)
+            assert "private research text" not in str(exc)
+        else:
+            raise AssertionError("Rejected ChatGPT request was accepted")
+    assert not (rejected_path / "text-representations.json").exists()
+    print("PASS ChatGPT HTTP rejection preserves source and exposes safe diagnostic code")
+
     def plan_handler(request):
         payload = json.loads(request.content)
         assert payload["stream"] is True and "max_output_tokens" not in payload
