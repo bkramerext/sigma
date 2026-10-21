@@ -4,10 +4,10 @@ import json
 import os
 import signal
 import subprocess
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, Mock, patch
 
 from sigma.projects import ROOT
