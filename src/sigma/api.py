@@ -1,15 +1,17 @@
 """Local browser adapter. Launch on 127.0.0.1; never bind to a public interface."""
 
 import asyncio
+import json
 import os
 from dataclasses import asdict
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma import chatgpt_auth
+from sigma.agentic import agentic_events
 from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
@@ -239,6 +241,21 @@ async def proposal_view(body: ProposalRequest, request: Request):
             if not pending.done():
                 pending.cancel()
         await asyncio.gather(task, connection, return_exceptions=True)
+
+
+@app.post("/api/projects/proposals/agentic")
+async def agentic_proposal_view(body: ProposalRequest):
+    async def stream():
+        async for event in agentic_events(
+            body.path, body.seed, body.expected_binding, body.expected_project_id
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 class ProjectSettingsRequest(BaseModel):

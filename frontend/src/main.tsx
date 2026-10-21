@@ -93,18 +93,20 @@ function WorkspaceFrame({ children, goHome, close, projectTitle }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
   return <>
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
     <Header goHome={goHome} close={close} projectTitle={projectTitle} projectArtwork/>
-    <div className="workspace-layout">
+    <div className={`workspace-layout${collapsed ? ' nav-collapsed' : ''}`}>
       <nav className="workspace-nav" aria-label="Project navigation">
-        <a href="#pool-heading" aria-current="page" onClick={event => {
+        <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={() => setCollapsed(value => !value)}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
+        <a href="#pool-heading" aria-current="page" aria-label="Strategies" title={collapsed ? 'Strategies' : undefined} onClick={event => {
           event.preventDefault(); focusWorkspace('pool-heading');
         }}><WorkspaceIcon name="Strategies"/><span>Strategies</span></a>
         {['Renders', 'Analysis', 'References', 'Notes', 'Settings'].map(name =>
-          <button key={name} disabled title="Not available yet" aria-describedby="workspace-nav-help">
+          <button key={name} disabled title={collapsed ? `${name} · later` : 'Not available yet'} aria-label={name} aria-describedby="workspace-nav-help">
             <WorkspaceIcon name={name}/><span>{name}</span><small>Later</small>
           </button>)}
         <p id="workspace-nav-help">Other destinations are not available yet.</p>
@@ -520,6 +522,68 @@ function SplitStrategyAction({ buttonRef, disabled, onManual, onAI }: {
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
+type AgenticEvent = { type: 'run.started' | 'activity.started' | 'activity.completed' | 'decision' | 'run.completed' | 'run.stopped' | 'run.failed'; sequence: number; run_id: string; kind?: 'explore' | 'challenge' | 'revise'; attempt?: number; summary?: string; outcome?: 'revise' | 'retry' | 'present' | 'stop'; max_calls?: number; draft?: ProposalResult['draft']; receipt?: string; provenance?: ProposalResult['provenance']; assessment?: 'distinct' | 'overlapping' | 'unconvincing'; objections?: string[]; missing_obligations?: string; mechanism_comparison?: string };
+function agenticEvent(value: unknown, previous: number, runId: string | null): AgenticEvent {
+  if (!value || typeof value !== 'object') throw new Error('Invalid progress event from local server.');
+  const event = value as AgenticEvent;
+  if (!['run.started', 'activity.started', 'activity.completed', 'decision', 'run.completed', 'run.stopped', 'run.failed'].includes(event.type)
+    || event.sequence !== previous + 1 || typeof event.run_id !== 'string' || !/^[a-f0-9]{32}$/.test(event.run_id)
+    || (runId !== null && event.run_id !== runId)
+    || (event.summary !== undefined && (typeof event.summary !== 'string' || event.summary.length > 500))) throw new Error('Invalid progress event from local server.');
+  if (event.type.startsWith('activity.') && (!['explore', 'challenge', 'revise'].includes(event.kind ?? '') || ![1, 2].includes(event.attempt ?? 0))) throw new Error('Invalid activity event from local server.');
+  if (event.type === 'activity.completed' && event.kind === 'challenge' && (!['distinct', 'overlapping', 'unconvincing'].includes(event.assessment ?? '') || !Array.isArray(event.objections) || !event.objections.length || event.objections.length > 5 || event.objections.some(item => typeof item !== 'string' || item.length > 500) || typeof event.missing_obligations !== 'string' || typeof event.mechanism_comparison !== 'string')) throw new Error('Invalid reviewer event from local server.');
+  if (event.type === 'decision' && (!['revise', 'retry', 'present', 'stop'].includes(event.outcome ?? '') || !event.summary)) throw new Error('Invalid decision event from local server.');
+  if (['run.failed', 'run.stopped'].includes(event.type) && !event.summary) throw new Error('Invalid terminal event from local server.');
+  if (event.type === 'run.completed' && (!event.draft || !event.receipt || !event.provenance || !['title', 'summary', 'approach', 'first_tests', 'assumptions', 'failure_modes'].every(key => typeof event.draft?.[key as keyof ProposalResult['draft']] === 'string'))) throw new Error('Invalid completed draft from local server.');
+  return event;
+}
+async function readAgenticStream(response: Response, onEvent: (event: AgenticEvent) => void): Promise<void> {
+  if (!response.ok) throw new Error(`Local generation request failed (HTTP ${response.status}).`);
+  if (!response.headers.get('content-type')?.startsWith('text/event-stream') || !response.body) throw new Error('Local server did not return a progress stream.');
+  const reader = response.body.getReader(); const decoder = new TextDecoder();
+  let buffer = ''; let sequence = 0; let runId: string | null = null; let terminal: AgenticEvent | null = null;
+  let active: { kind: string; attempt: number } | null = null;
+  let decision: AgenticEvent['outcome'] | null = null;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      if (buffer.length > 65536) throw new Error('Progress stream exceeded its limit.');
+      let boundary: number;
+      while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+        const frame = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+        const lines = frame.split('\n');
+        if (lines.length !== 1 || !lines[0].startsWith('data: ')) throw new Error('Invalid progress stream frame.');
+        let parsed: unknown;
+        try { parsed = JSON.parse(lines[0].slice(6)); } catch { throw new Error('Invalid progress event JSON.'); }
+        const event = agenticEvent(parsed, sequence, runId);
+        if (terminal) throw new Error('Progress arrived after the run ended.');
+        if (sequence === 0 && event.type !== 'run.started' && event.type !== 'run.failed') throw new Error('Progress stream did not start correctly.');
+        if (event.type === 'run.started' && (sequence !== 0 || event.max_calls !== 6)) throw new Error('Invalid run start event.');
+        if (event.type === 'activity.started') {
+          if (active || decision === 'present' || decision === 'stop') throw new Error('Invalid activity order.');
+          active = { kind: event.kind!, attempt: event.attempt! };
+        }
+        if (event.type === 'activity.completed') {
+          if (!active || active.kind !== event.kind || active.attempt !== event.attempt || !event.summary) throw new Error('Invalid activity completion.');
+          active = null;
+        }
+        if (event.type === 'decision') {
+          if (active) throw new Error('Decision arrived before activity completed.');
+          decision = event.outcome!;
+        }
+        if ((event.type === 'run.completed' && decision !== 'present') || (event.type === 'run.stopped' && decision !== 'stop')) throw new Error('Invalid run outcome.');
+        sequence = event.sequence; runId = event.run_id;
+        if (['run.completed', 'run.stopped', 'run.failed'].includes(event.type)) terminal = event;
+        else onEvent(event);
+        if (sequence > 32) throw new Error('Progress stream exceeded its event limit.');
+      }
+    }
+    if (buffer.trim() || !terminal) throw new Error('Generation stream ended before a final result. Nothing was saved.');
+    onEvent(terminal);
+  } finally { reader.releaseLock(); }
+}
 function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   path: string; projectId: string; onManual: (draft: { title: string; approach: string }) => void; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
@@ -537,6 +601,9 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState<AgenticEvent[]>([]);
+  const [currentActivity, setCurrentActivity] = useState('');
+  const [stopped, setStopped] = useState('');
   useEffect(() => {
     dialog.current?.showModal(); dialog.current?.querySelector('textarea')?.focus();
     const controller = new AbortController();
@@ -549,10 +616,10 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
     return () => controller.abort();
   }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
   const needsConnection = ai.info?.mode !== 'api_key' && ['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected');
-  function cancel() { if (saving) return; lifetime.current.abort(); request.current?.abort(); onCancel(); }
+  function cancel() { if (saving) return; if (busy) { request.current?.abort(); setCurrentActivity(''); setStopped('Request cancelled locally. Provider computation or billing may already have begun.'); setBusy(false); submitting.current = false; return; } lifetime.current.abort(); onCancel(); }
   async function generate() {
     if (submitting.current) return; submitting.current = true;
-    const controller = new AbortController(); request.current = controller; setBusy(true); setError('');
+    const controller = new AbortController(); request.current = controller; setBusy(true); setError(''); setStopped(''); setProgress([]); setCurrentActivity('');
     try {
       if (needsConnection) {
         const connected = await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted', signal: lifetime.current.signal });
@@ -564,12 +631,22 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
       if (latest.project_id !== projectId) throw new Error('Project identity changed during sign-in. Reopen it before generating; your text is retained.');
       if (!latest.available) throw new Error(latest.message);
       if (lifetime.current.signal.aborted) return;
-      const next = await post<ProposalResult>('proposals', { path, seed, expected_binding: latest.binding, expected_project_id: projectId }, controller.signal);
-      setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary);
-      setApproach(`${next.draft.approach}\n\nFirst tests\n${next.draft.first_tests}\n\nAssumptions\n${next.draft.assumptions}\n\nWays this could fail\n${next.draft.failure_modes}`);
-      requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
+      const stream = await fetch('/api/projects/proposals/agentic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, seed, expected_binding: latest.binding, expected_project_id: projectId }), signal: controller.signal });
+      await readAgenticStream(stream, event => {
+        setProgress(previous => [...previous, event]);
+        if (event.type === 'activity.started') setCurrentActivity(event.summary ?? 'Working');
+        if (event.type === 'activity.completed' || event.type === 'decision') setCurrentActivity('');
+        if (event.type === 'run.stopped') setStopped(event.summary ?? 'No viable proposal emerged.');
+        if (event.type === 'run.failed') setError(event.summary ?? 'Generation failed.');
+        if (event.type === 'run.completed' && event.draft && event.receipt && event.provenance) {
+          const next = { draft: event.draft, receipt: event.receipt, provenance: event.provenance };
+          setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary);
+          setApproach(`${next.draft.approach}\n\nFirst tests\n${next.draft.first_tests}\n\nAssumptions\n${next.draft.assumptions}\n\nWays this could fail\n${next.draft.failure_modes}`);
+          requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
+        }
+      });
     } catch (error) { if (!controller.signal.aborted) setError(errorMessage(error)); }
-    finally { submitting.current = false; setBusy(false); }
+    finally { if (request.current === controller) { submitting.current = false; setBusy(false); request.current = null; setCurrentActivity(''); } }
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current || !result) return; submitting.current = true; setSaving(true); setError('');
@@ -579,22 +656,27 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   }
   return <dialog ref={dialog} className="strategy-dialog proposal-dialog" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onCancel={event => { event.preventDefault(); cancel(); }}>
     <h2 id="proposal-heading">Generate a strategy</h2>
-    <p id="proposal-help" className="hint">Propose one distinct research direction. Review and edit the draft before saving. Nothing runs or saves automatically.</p>
+    <p id="proposal-help" className="hint">Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof.</p>
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
     <label htmlFor="proposal-seed">Starting point <span className="hint">(optional)</span></label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
     <p id="seed-help" className="hint">A hunch, question, technique, observation or constraint—not an assumption to endorse. Leave empty for an independent direction.</p>
-    <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. One proposal per click, with a 60-second deadline. Cancelling stops the local request; provider usage may already count toward the selected plan or billing mode.</p>
+    <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Up to 6 model calls, 2 candidate attempts and 2 minutes per run. Cancelling stops local work; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
+    {(busy || progress.length > 0) && <section className="agentic-activity" aria-label="Generation activity">
+      {busy && <div className="agentic-filament" aria-hidden="true"/>}
+      <p className="agentic-current" role="status" aria-live="polite">{currentActivity || (busy ? 'Preparing the next research step' : stopped || (error ? 'Run failed' : 'Review the draft below'))}</p>
+      <ol>{progress.filter(event => event.type === 'activity.completed' || event.type === 'decision').map(event => <li key={event.sequence}>{event.summary}{event.kind === 'challenge' && event.assessment && <div className="agentic-review"><strong>Reviewer: {event.assessment}</strong><p>{event.mechanism_comparison}</p><ul>{event.objections?.map((objection, index) => <li key={index}>{objection}</li>)}</ul><p>Still to establish: {event.missing_obligations}</p></div>}</li>)}</ol>
+    </section>}
     <PlanWelcome/>
     <button type="button" className={needsConnection ? 'chatgpt-sign-in' : 'secondary'} disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : 'Generating…' : needsConnection ? <><img src="/chatgpt-logo-black.svg" alt="" width="20" height="20"/>Continue with ChatGPT</> : result ? 'Regenerate · new request' : 'Generate draft'}</button>
     {ai.connecting && <button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button>}
     {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
     {ai.error && <p role="alert" className="error">{ai.error}</p>}
     <button type="button" className="text-button" disabled={busy || saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>
-    <p role="status" className="sr-only">{busy ? 'Generating a draft. No strategy is being saved.' : result ? 'Editable draft ready for review.' : ''}</p>
+    {stopped && <p role="status" className="hint">{stopped}</p>}
     {error && <p role="alert" className="error">{error}</p>}
     <form onSubmit={save}>
       {result && <fieldset disabled={busy || saving} className="proposal-review">
@@ -633,6 +715,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [focusStrategy, setFocusStrategy] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
+  const introPane = useRef<HTMLDivElement>(null);
+  const resizeStart = useRef<{ pointer: number; y: number; height: number } | null>(null);
+  const [introHeight, setIntroHeight] = useState<number | null>(null);
+  useEffect(() => {
+    setIntroHeight(null);
+    const frame = requestAnimationFrame(() => { if (introPane.current) setIntroHeight(Math.round(introPane.current.getBoundingClientRect().height)); });
+    return () => cancelAnimationFrame(frame);
+  }, [view?.project.id, view?.project.title, view?.project.problem]);
   useEffect(() => {
     if (initialView) return;
     const controller = new AbortController();
@@ -682,6 +772,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <p>Close this project to choose another directory.</p>
   </> : <p className="intro">Opening project…</p>}</div></WorkspaceFrame>;
   const project = view.project;
+  const introMaximum = Math.max(160, Math.min(Math.round(window.innerHeight * .75), 800));
+  const clampIntro = (height: number) => Math.max(120, Math.min(introMaximum, Math.round(height)));
   const byId = new Map(project.strategies.map(strategy => [strategy.id, strategy]));
   const strategies = (previewOrder ?? project.active_order).map(id => byId.get(id)!);
   function pickup(id: string, pointer: number | null) {
@@ -713,11 +805,17 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
   return <WorkspaceFrame {...frame}>
-    <div className="project-intro">
+    <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
       <p className="project-eyebrow">Research project</p>
       <div className="project-name-line"><h1 ref={heading} tabIndex={-1}>{project.title}</h1><button ref={editProjectButton} className="edit-project-button" aria-label="Edit Project" title="Edit Project" disabled={closing || ordering || !!dragId || editing || generating} onClick={() => setProjectEditing(true)}><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m4 16-1 5 5-1L20 8l-4-4L4 16Z M14 6l4 4"/></svg></button></div>
       <p className="objective">{project.problem}</p>
     </div>
+    <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
+      onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
+      onPointerMove={event => { const start = resizeStart.current; if (start?.pointer === event.pointerId) setIntroHeight(clampIntro(start.height + event.clientY - start.y)); }}
+      onPointerUp={event => { if (resizeStart.current?.pointer === event.pointerId) resizeStart.current = null; }}
+      onPointerCancel={event => { if (resizeStart.current?.pointer === event.pointerId) resizeStart.current = null; }}
+      onKeyDown={event => { const current = introPane.current?.getBoundingClientRect().height ?? 120; if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); setIntroHeight(clampIntro(current + (event.key === 'ArrowDown' ? 24 : -24))); } else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); setIntroHeight(event.key === 'Home' ? 120 : introMaximum); } }}><span aria-hidden="true"/></div>
     {error && <p role="alert" className="error">{error}</p>}
     <section className="pool" aria-labelledby="pool-heading">
       <div className="pool-heading">

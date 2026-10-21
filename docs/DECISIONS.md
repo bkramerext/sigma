@@ -295,3 +295,22 @@ The catalog lists all discoverable shipped projects, with the Jesus example plac
 as a presentation choice. Home selects Stock by default per the later UI request.
 The existing index schema retains its dormant bootstrap metadata for backwards
 compatibility; no startup bootstrap or automatic example installation runs.
+
+## A14: bounded role-isolated strategy generation
+
+Keep the prior single-call proposal API for compatibility, but route the browser's
+Generate with AI action through a shared Python coordinator and an SSE endpoint.
+The coordinator invokes exploration and skeptical review separately with the
+project-selected model and thinking level, then branches on the review. It can
+revise once per candidate or try a second candidate; six calls, two candidates,
+per-call deadlines and a two-minute overall deadline cap the work. A global
+single-run gate avoids overlapping local generation. Project content is bounded
+and passed whole, including removed strategies; overflow fails before omission.
+No code, literature, proof or external research tool is executed.
+
+The browser validates event order and waits for a terminal stream event before
+showing a successful draft. It retains a human-editable unsaved draft and uses
+the existing signed acceptance receipt when explicitly saved. This keeps
+generation read-only and separates model review from verified research. The
+cost is that the first slice runs one local generation at a time and rejects
+large corpora rather than searching or summarizing them automatically.

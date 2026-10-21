@@ -37,11 +37,17 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
-    seed = context["starting_point"]
+    agentic = (
+        body["text"]["format"]["name"].startswith("strategy_")
+        and body["text"]["format"]["name"] != "strategy_proposal"
+    )
+    seed = (context["project"] if agentic else context)["starting_point"]
     if seed == "timeout-fixture":
-        await asyncio.sleep(20)
+        await asyncio.sleep(2)
     if seed == "error-fixture":
         return httpx.Response(500)
+    if agentic:
+        await asyncio.sleep(0.15)
     draft = {
         "title": "Moment matrix obstruction",
         "summary": "Check finite moment matrices for a necessary positivity obstruction.",
@@ -50,11 +56,65 @@ async def handler(request):
         "assumptions": "Justify convergence and distinguish finite checks from a universal bound.",
         "failure_modes": "Necessary inequalities may be too weak; sampled positivity does not prove the conjecture.",
     }
+    counting = agentic and context["project"]["research_problem"].startswith(
+        "For each integer n >= 0"
+    )
+    previous = context["project"]["existing_strategies"] if counting else []
+    if counting:
+        if previous:
+            draft = {
+                "title": "Position-shift subset count",
+                "summary": "Count strings by a bijection from nonadjacent one positions to subsets.",
+                "approach": "Fix k ones at increasing positions i_1,...,i_k. Shift position i_j to i_j-(j-1), yielding a k-subset of {1,...,n-k+1}; sum the resulting binomial counts over k.",
+                "first_tests": "Enumerate n=0,1,2,5,10 and compare to 1,2,3,13,144; finite agreement is not a proof.",
+                "assumptions": "Positions are one-indexed and k ranges from zero through the largest feasible count.",
+                "failure_modes": "An incorrect inverse or boundary range would overcount strings.",
+            }
+        else:
+            draft = {
+                "title": "Terminal-symbol recurrence",
+                "summary": "Partition valid strings by their final symbol to derive a recurrence.",
+                "approach": "Separate length-n valid strings ending in 0 from those ending in 1. An ending 1 forces a preceding 0, relating the two disjoint classes to shorter strings.",
+                "first_tests": "Enumerate n=0,1,2,5,10 and compare to 1,2,3,13,144; finite agreement is not a proof.",
+                "assumptions": "The empty string counts and n below two needs explicit initial conditions.",
+                "failure_modes": "Missing the forced predecessor or mishandling n=0 invalidates the recurrence.",
+            }
+    if agentic and body["text"]["format"]["name"] == "strategy_challenge":
+        draft = {
+            "assessment": "distinct",
+            "public_summary": "The proposed mechanism is distinct; its proof obligations remain open.",
+            "mechanism_comparison": "The candidate uses a different counting mechanism from prior strategies."
+            if counting and previous
+            else "No earlier strategy uses this mechanism."
+            if counting
+            else "The candidate uses moment constraints rather than an existing strategy mechanism.",
+            "objections": [
+                "Prove the mapping and all boundary cases."
+                if counting
+                else "Finite positivity is necessary, not a proof of the full claim."
+            ],
+            "missing_obligations": "Prove the partition or bijection is reversible and exhaustive."
+            if counting
+            else "Justify convergence and show exactly what the necessary inequalities imply.",
+            "revision_needed": False,
+        }
+    elif agentic:
+        draft = {
+            **draft,
+            "mechanism": "A position-shift bijection converts the spacing condition into an ordinary subset count."
+            if counting and previous
+            else "A disjoint terminal-symbol partition maps both classes to shorter valid strings."
+            if counting
+            else "A parameterized moment matrix yields necessary positivity constraints that might expose an obstruction.",
+            "evidence_boundary": "A proof of the bijection or recurrence remains necessary; finite counts are only checks."
+            if counting
+            else "Finite minor computations are checks only; the general inequality remains unproved.",
+        }
     return httpx.Response(
         200,
         json={
             "status": "completed",
-            "model": "gpt-4.1-TEST-FIXTURE",
+            "model": body["model"] if agentic else "gpt-4.1-TEST-FIXTURE",
             "output": [
                 {"type": "message", "content": [{"type": "output_text", "text": json.dumps(draft)}]}
             ],

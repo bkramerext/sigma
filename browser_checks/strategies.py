@@ -60,8 +60,33 @@ with sync_playwright() as p:
     assert heading_box and button_box and intro_box and content_box
     assert button_box["y"] >= intro_box["y"] + intro_box["height"]
     assert abs(button_box["y"] - heading_box["y"]) < 20
-    assert abs(button_box["x"] + button_box["width"] + 44 - (content_box["x"] + content_box["width"] - 40)) < 2
-    page.locator(".objective").evaluate("e => { e.dataset.original = e.textContent; e.textContent = (e.textContent + ' ').repeat(100); }")
+    assert (
+        abs(
+            button_box["x"]
+            + button_box["width"]
+            + 44
+            - (content_box["x"] + content_box["width"] - 40)
+        )
+        < 2
+    )
+    divider = page.get_by_role("separator", name="Resize project description")
+    objective_box = page.locator(".objective").bounding_box()
+    divider_box = divider.bounding_box()
+    assert objective_box and divider_box
+    assert 0 <= divider_box["y"] - (objective_box["y"] + objective_box["height"]) <= 16
+    sidebar = page.get_by_role("navigation", name="Project navigation")
+    expanded_width = sidebar.bounding_box()["width"]
+    page.get_by_role("button", name="Collapse sidebar").click()
+    expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
+    assert sidebar.bounding_box()["width"] < expanded_width / 2
+    assert page.get_by_role("link", name="Strategies").is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.screenshot(path="/tmp/sigma-project-sidebar-collapsed-1672.png", full_page=True)
+    page.get_by_role("button", name="Expand sidebar").click()
+    assert abs(sidebar.bounding_box()["width"] - expanded_width) < 2
+    page.locator(".objective").evaluate(
+        "e => { e.dataset.original = e.textContent; e.textContent = (e.textContent + ' ').repeat(100); }"
+    )
     assert intro.evaluate("e => e.scrollHeight > e.clientHeight")
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     intro.evaluate("e => e.scrollTop = e.scrollHeight")
@@ -74,6 +99,25 @@ with sync_playwright() as p:
     page.set_viewport_size({"width": 1672, "height": 941})
     page.locator(".objective").evaluate("e => e.textContent = e.dataset.original")
     intro.evaluate("e => e.scrollTop = 0")
+    resizer = divider
+    resizer.focus()
+    original_height = intro.bounding_box()["height"]
+    resizer.press("ArrowDown")
+    assert intro.bounding_box()["height"] >= original_height + 20
+    resizer.press("Home")
+    assert abs(intro.bounding_box()["height"] - 120) < 2
+    grip = resizer.bounding_box()
+    page.mouse.move(grip["x"] + grip["width"] / 2, grip["y"] + grip["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(grip["x"] + grip["width"] / 2, grip["y"] + grip["height"] / 2 + 80)
+    page.mouse.up()
+    assert intro.bounding_box()["height"] >= 195
+    resizer.press("End")
+    assert int(resizer.get_attribute("aria-valuenow")) == int(
+        resizer.get_attribute("aria-valuemax")
+    )
+    page.reload()
+    expect(page.get_by_role("heading", name="Research directions", exact=True)).to_be_visible()
     assert page.get_by_text("Strategy pool", exact=True).count() == 0
     assert page.get_by_role("button", name="Promote", exact=True).count() == 0
     assert page.get_by_role("button", name="Demote", exact=True).count() == 0
@@ -116,7 +160,10 @@ with sync_playwright() as p:
     expect(rows.first.locator(".stage-label")).to_have_text("Ready to explore")
     rows.first.locator(".strategy-detail > summary").click()
     expect(rows.first.locator(".strategy-approach")).to_contain_text("boundary terms")
-    assert rows.first.locator(".strategy-expand-arrow").evaluate("e => getComputedStyle(e).transform") != "none"
+    assert (
+        rows.first.locator(".strategy-expand-arrow").evaluate("e => getComputedStyle(e).transform")
+        != "none"
+    )
     page.screenshot(path="/tmp/sigma-a7-detail-1672.png", full_page=True)
     rows.first.locator(".strategy-detail > summary").click()
     # Keyboard preview, cancel and persist; storage stays unchanged before drop.
@@ -239,6 +286,8 @@ with sync_playwright() as p:
     dialog.get_by_role("textbox", name="Starting point (optional)", exact=True).fill("")
     dialog.get_by_role("button", name="Generate draft", exact=True).click()
     expect(dialog.get_by_label("Title", exact=True)).to_have_value("Moment matrix obstruction")
+    expect(dialog.locator(".agentic-activity")).to_contain_text("Candidate proposed")
+    expect(dialog.locator(".agentic-activity")).to_contain_text("distinct")
     assert state.read_bytes() == before
     for w in [1672, 390, 320]:
         page.set_viewport_size({"width": w, "height": 941 if w == 1672 else 844})
@@ -265,7 +314,7 @@ with sync_playwright() as p:
     raw = json.loads(state.read_bytes())
     assert raw["strategies"][-1]["provenance"] == {
         "provider": "openai",
-        "model": "gpt-4.1-TEST-FIXTURE",
+        "model": "gpt-6.1-sol",
         "reasoning_effort": "high",
     }
     assert raw["strategies"][-1]["stage"] == "draft"
@@ -279,6 +328,11 @@ with sync_playwright() as p:
     dialog.get_by_role("button", name="Generate draft", exact=True).click()
     expect(dialog.get_by_role("button", name="Generating…", exact=True)).to_be_disabled()
     dialog.get_by_role("button", name="Cancel request", exact=True).click()
+    expect(dialog).to_contain_text("Request cancelled locally")
+    expect(
+        dialog.get_by_role("textbox", name="Starting point (optional)", exact=True)
+    ).to_have_value("timeout-fixture")
+    dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(page.get_by_role("button", name="New Strategy", exact=True)).to_be_focused()
     assert state.read_bytes() == before
     page.emulate_media(reduced_motion="reduce")

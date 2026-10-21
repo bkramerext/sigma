@@ -94,3 +94,17 @@ project name and header reflow at 1280, 1100, 700, 390 and 320px, the absence of
 the workspace tagline, shared Home/Close button states, identical Home/workspace
 connection pill styling and live label, disclosure/focus behavior, and keyboard
 Close. Screenshots are `/tmp/sigma-a13-header-*.png`.
+
+## A14 agentic strategy and project layout
+
+Start a fresh `provider_fixture:app` on port 8001 and keep the normal UI on
+5173, then run `uv run --with playwright python browser_checks/agentic.py`.
+The fixture state must be fresh because this check opens and saves in the stable
+stock project. It verifies the empty counting project, ordered live progress,
+unsaved cancellation, explicit acceptance/reopen, a distinct second mechanism,
+and immutable source data. The provider is entirely mocked. Review captures are
+`/tmp/sigma-a14-review-1440.png` and `-390.png`.
+
+`uv run --with playwright python browser_checks/strategies.py` also checks the
+collapsible sidebar, compact and draggable project-description divider, and
+existing strategy interactions at desktop and narrow widths.

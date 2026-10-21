@@ -806,3 +806,48 @@ Home's content wrapper now has no left padding, so approved artwork starts at
 the viewport edge. The Open Project heading, action buttons and stock/recent
 catalog share a deliberate left inset. Real Chrome checks at 1280px and 390px
 confirmed their positions and no horizontal overflow; screenshots were inspected.
+
+## A14 — bounded agentic Generate Strategy (2026-10-21)
+
+Generate with AI now uses a streamed, role-isolated Explore → Challenge → Decide
+coordinator. A skeptical review can trigger targeted revision, a second
+mechanism, or a no-viable-strategy stop. Each run is limited to six model calls,
+two candidate attempts and 120 seconds; each provider call has a 35-second
+deadline. The selected project model, thinking level and connected billing mode
+remain bound throughout. Full active and removed strategy approaches are sent;
+oversized context stops the run rather than truncating it. Progress events are
+typed, sequential public summaries, and the browser rejects malformed or
+unterminated streams. The draft stays editable and unsaved until Save strategy
+records human acceptance and signed model provenance. No research tools or
+literature searches run in this slice.
+
+The project sidebar now collapses to an accessible icon rail on desktop. The
+description/Strategies divider can be dragged or adjusted by keyboard, and its
+default position sits close below the description. The project description
+retains bounded vertical scrolling for long text; narrow layouts retain the
+horizontal navigation row. Home and approved raster artwork were unchanged.
+
+Actual verification on 2026-10-21:
+
+- `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright (zero
+  errors), frontend typecheck and production build. `scenarios/agentic.py`
+  covers stock zero-pool generation, explicit acceptance/reopen, later-strategy
+  context, duplicate retry, skeptical revision, no-proposal and six-call stops,
+  malformed/refused output, binding changes, timeouts, duplicate-run guard,
+  cancellation, ChatGPT-plan streaming and ASGI disconnect, all with mocked
+  transport and no paid calls.
+- Real Chrome `browser_checks/agentic.py` passed against a fresh isolated
+  provider fixture: zero strategy rows, chronological progress and critique,
+  unsaved cancellation, explicit save/reopen, a second distinct mechanism,
+  in-flight cancellation and source immutability. Desktop and 390px review
+  screenshots were visually inspected; the dialog fits and scrolls.
+- Real Chrome `browser_checks/strategies.py` passed sidebar collapse/expand,
+  divider placement and drag/keyboard resizing, long-description scrolling,
+  320px/390px layouts and strategy create/edit/remove/reorder/AI regressions.
+  The collapsed desktop screenshot was visually inspected; no JavaScript errors
+  or page-level horizontal overflow occurred.
+
+The browser fixture's provider output is deterministic and does not demonstrate
+live-model research quality, entitlement or account usage. Playwright's API
+proxy can outlive a locally aborted request briefly; the direct ASGI disconnect
+scenario verifies server-side cancellation and run-gate release.

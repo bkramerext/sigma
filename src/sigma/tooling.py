@@ -43,6 +43,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "scenarios/chatgpt_restart.py"],
             [*python, "python", "scenarios/strategy_tracking.py"],
             [*python, "python", "scenarios/proposals.py"],
+            [*python, "python", "scenarios/agentic.py"],
             [*python, "python", "scenarios/strategies.py"],
             [*python, "python", "scenarios/strategy_changes.py"],
             [*python, "python", "scenarios/cli_smoke.py"],
