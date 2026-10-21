@@ -45,6 +45,7 @@ def check_ui() -> None:
     with (
         patch("sigma.ui.Instance", return_value=MagicMock()),
         patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans"),
         patch("pathlib.Path.is_dir", return_value=True),
         patch("sigma.ui.shutil.which", return_value="npm"),
         patch("sigma.ui.wait_for_ports", side_effect=RuntimeError("port occupied")),
@@ -71,6 +72,7 @@ def check_ui() -> None:
         with (
             patch("sigma.ui.Instance", return_value=owner),
             patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans"),
             patch("pathlib.Path.is_dir", return_value=True),
             patch("sigma.ui.shutil.which", return_value="npm"),
             patch("sigma.ui.wait_for_ports"),
@@ -153,9 +155,13 @@ def check_shutdown_and_suspended() -> None:
             send.assert_not_called()
 
     owner = MagicMock()
-    with patch("sigma.ui.Instance", return_value=owner) as factory:
+    with (
+        patch("sigma.ui.Instance", return_value=owner) as factory,
+        patch("sigma.ui.recover_orphans") as cleanup,
+    ):
         assert run_shutdown() == 0
         factory.assert_called_once_with(shutdown_only=True)
+        cleanup.assert_called_once_with(ROOT)
         owner.__enter__.assert_called_once()
         owner.__exit__.assert_called_once()
 
