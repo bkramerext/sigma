@@ -62,9 +62,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, onEditingChange }: {
+function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; onEditingChange?: (editing: boolean) => void;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -80,7 +80,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const bodyTrigger = useRef<HTMLElement>(null);
   useEffect(() => {
     const controller = new AbortController();
-    setData(null); setError(''); setEditing(false); onEditingChange?.(false);
+    setData(null); setError(''); setEditing(false);
     const query = new URLSearchParams({ path, scope, ...(strategyId ? { strategy_id: strategyId } : {}) });
     fetch(`/api/projects/text?${query}`, { signal: controller.signal }).then(async response => {
       const result = await response.json();
@@ -101,10 +101,10 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     if (!version?.current || busy) return;
     setDraft(version.body); setEditingFromRendered(fromRendered);
     if (fromRendered) chooseView('rendered');
-    setEditing(true); onEditingChange?.(true); setError('');
+    setEditing(true); setError('');
   }
   function cancelBodyEdit() {
-    setEditing(false); onEditingChange?.(false);
+    setEditing(false);
     if (editingFromRendered) chooseView('rendered');
     requestAnimationFrame(() => bodyTrigger.current?.focus());
   }
@@ -128,7 +128,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     setBusy(true); setError('');
     try {
       const next = await post<ProjectView>('text/source', { path, scope, strategy_id: strategyId, body: draft, format, expected_digest: data.source_digest });
-      setEditing(false); onEditingChange?.(false); onSaved(next);
+      setEditing(false); onSaved(next);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
@@ -811,7 +811,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [projectDescriptionEditing, setProjectDescriptionEditing] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const editProjectButton = useRef<HTMLButtonElement>(null);
@@ -917,7 +916,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
       <div className="project-description-line"><h2 className="investigation-heading">Project description</h2></div>
-      <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView} onEditingChange={setProjectDescriptionEditing} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton}/>
+      <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -929,8 +928,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <section className="pool" aria-labelledby="pool-heading">
       <div className="pool-heading">
         <h2 id="pool-heading" tabIndex={-1}>Strategies</h2>
-        {!projectDescriptionEditing && <StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>}
       </div>
+      <div className="pool-actions"><StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/></div>
       <p className="hint strategies-intro">Independent avenues of investigation. Stages are manually tracked.</p>
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {

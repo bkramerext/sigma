@@ -211,7 +211,7 @@
   font-size: 17px;
 }
 
-/* Compact strategy creation links alongside the section title. */
+/* Compact strategy creation links below the section title, like project controls. */
 .workspace-page .strategy-heading-actions { display: inline-flex; align-items: baseline; gap: 16px; }
 .workspace-page .strategy-heading-actions .text-view-link {
   width: auto; min-width: 0; min-height: 0; padding: 2px 0; margin: 0;
@@ -222,9 +222,9 @@
 .workspace-page .strategy-heading-actions .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .strategy-heading-actions .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
-/* Keep New and Generate immediately beside Strategies, not at the far edge. */
 .workspace-page .pool-heading { justify-content: flex-start; gap: 18px; }
-.workspace-page .pool-heading .strategy-heading-actions { margin-left: 0; margin-right: 0; }
+.workspace-page .pool-actions { display: flex; align-items: center; justify-content: flex-start; margin: 8px 0 9px; }
+.workspace-page .pool-actions .strategy-heading-actions { margin: 0; }
 
 /* Override global strategy form submit-button styling for the header Save link. */
 .workspace-page .strategy-form .new-strategy-heading-actions button[type="submit"].text-view-link {

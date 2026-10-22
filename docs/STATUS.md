@@ -1150,11 +1150,11 @@ settings instead of a manual-continuation path.
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
 
-## Project description edit and Strategies actions (2026-10-21)
+## Strategies action placement (2026-10-21)
 
-The Strategies header actions (New and Generate) are hidden while the project
-description editor is active and return when the edit is saved or cancelled.
-The description action row continues to show Save and Cancel without Settings.
+New and Generate now render in their own action row directly below the
+Strategies heading, matching the project description heading and controls.
+Project description editing still shows Save and Cancel without Settings.
 
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
