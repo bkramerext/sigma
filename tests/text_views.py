@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
 import httpx
+from fastapi.testclient import TestClient
 
 from sigma.api import app
 from sigma.projects import (
@@ -295,6 +296,33 @@ async def main_async(root: Path):
             raise AssertionError("Changed account conversion was persisted")
     assert (failure_path / "project.json").read_bytes() == before
     assert not (failure_path / "text-representations.json").exists()
+
+    timeout_path = root / "timeout.sigma"
+    initialize_project(timeout_path, "Timeout", "Count t_n for n >= 0")
+
+    async def timeout_handler(request):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json=provider_output("Count $t_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch("sigma.text_conversion.CALL_SECONDS", 0.01),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(timeout_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(timeout_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "timed out" in str(exc)
+        else:
+            raise AssertionError("Timed-out conversion was accepted")
+    assert (timeout_path / "project.json").is_file()
+    assert not (timeout_path / "text-representations.json").exists()
     malformed = provider_output("unused")
     malformed["output"][0]["content"][0]["text"] = "{"
     with (
@@ -484,6 +512,197 @@ async def main_async(root: Path):
     ):
         plan = await convert_text(str(plan_path), "project", "markdown")
     assert plan["markdown"]["current"] and plan["markdown"]["provenance"]["model"] == MODEL
+
+    # A connected plan bridge was observed to omit Content-Type on a response.
+    # If its body is SSE, dispatch by framing and still require the normal
+    # response identity, sequence and terminal-completion checks.
+    untyped_path = root / "untyped-plan-stream.sigma"
+    initialize_project(untyped_path, "Untyped plan stream", "Count u_n for n >= 0")
+
+    def untyped_plan_handler(request):
+        assert request.headers.get("accept") == "text/event-stream"
+        text = json.dumps({"body": "Count $u_n$ for $n \\ge 0$", "warnings": []})
+        response_id = "resp-untyped-plan"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {"type": "response.output_text.delta", "sequence_number": 1, "delta": text},
+            {
+                "type": "response.completed",
+                "sequence_number": 2,
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                    "model": MODEL,
+                    "output": [],
+                },
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(untyped_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        untyped_plan = await convert_text(str(untyped_path), "project", "markdown")
+    assert untyped_plan["markdown"]["current"]
+    assert untyped_plan["markdown"]["body"] == "Count $u_n$ for $n \\ge 0$"
+
+    partial_path = root / "partial-plan-stream.sigma"
+    initialize_project(partial_path, "Partial plan stream", "Count p_n for n >= 0")
+
+    def partial_plan_handler(request):
+        response_id = "resp-partial-plan"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {"type": "response.output_text.delta", "sequence_number": 1, "delta": "partial"},
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(partial_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(partial_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "without a valid response.completed" in str(exc)
+        else:
+            raise AssertionError("Partial plan stream was accepted")
+    assert not (partial_path / "text-representations.json").exists()
+
+    missing_output_path = root / "missing-output-text.sigma"
+    initialize_project(missing_output_path, "Missing output text", "Count o_n for n >= 0")
+
+    def missing_output_handler(request):
+        response_id = "resp-missing-output"
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {
+                "type": "response.completed",
+                "sequence_number": 1,
+                "response": {
+                    "id": response_id,
+                    "status": "completed",
+                    "model": MODEL,
+                    "output": [],
+                },
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(missing_output_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(missing_output_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "malformed conversion output" in str(exc)
+        else:
+            raise AssertionError("Completed plan stream without output_text was accepted")
+    assert not (missing_output_path / "text-representations.json").exists()
+    print(
+        "PASS ChatGPT plan untyped SSE recovery, partial/missing-text rejection, and malformed-body classification"
+    )
+
+    # The reported sanitized shape `other-object` came from replacing a
+    # non-JSON body with `{}` before classifying it as provider rejection.
+    # Malformed bodies now stay parse errors and cannot publish a conversion.
+    malformed_plan_path = root / "malformed-plan-envelope.sigma"
+    initialize_project(malformed_plan_path, "Malformed plan envelope", "Count m_n for n >= 0")
+    malformed_source = (malformed_plan_path / "project.json").read_bytes()
+
+    def malformed_plan_handler(request):
+        return httpx.Response(200, content=b"<redacted non-JSON provider body>")
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(malformed_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(malformed_plan_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "malformed conversion output" in str(exc)
+            assert "ChatGPT rejected the request" not in str(exc)
+        else:
+            raise AssertionError("Malformed HTTP 200 body was classified as a completion")
+    assert (malformed_plan_path / "project.json").read_bytes() == malformed_source
+    assert not (malformed_plan_path / "text-representations.json").exists()
+
+    # The API reports that parser failure once as a local 400 and leaves the
+    # source and companion store untouched. Known provider errors remain errors.
+    api_failure_path = root / "api-malformed-plan.sigma"
+    initialize_project(api_failure_path, "API malformed plan", "Count q_n for n >= 0")
+    api_source = (api_failure_path / "project.json").read_bytes()
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(malformed_plan_handler), **kwargs
+            ),
+        ),
+        TestClient(app) as api,
+    ):
+        api_response = api.post(
+            "/api/projects/text/convert",
+            json={
+                "path": str(api_failure_path),
+                "scope": "project",
+                "target": "markdown",
+                "expected_digest": digest("Count q_n for n >= 0"),
+            },
+        )
+    assert api_response.status_code == 400
+    assert "malformed conversion output" in api_response.json()["error"]
+    assert (api_failure_path / "project.json").read_bytes() == api_source
+    assert not (api_failure_path / "text-representations.json").exists()
 
     # If the plan bridge answers with JSON rather than SSE, accept a complete
     # result and surface a structured provider error without leaking input.

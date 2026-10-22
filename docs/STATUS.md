@@ -2,6 +2,40 @@
 
 Updated: 2026-10-21
 
+## A14.2 ChatGPT-plan Markdown conversion recovery
+
+Reproduced the reported case against the connected ChatGPT-plan transport using
+a disposable copy of the empty-pool Mathematical stock example. The provider
+returned HTTP 200 without a `Content-Type`; the previous conversion code tried
+to parse the untyped body only as JSON, replaced the parse failure with `{}`,
+then described that placeholder as a ChatGPT `other-object` rejection. The
+local conversion endpoint returned HTTP 400, and the source and companion store
+were unchanged. With the repair, an untyped but correctly framed SSE response
+is passed to the shared strict Responses stream validator. Bounded JSON remains
+supported, recognized provider errors keep their actionable diagnosis, and
+malformed/unknown envelopes are reported as malformed output rather than as a
+provider rejection. No API-key fallback or model change occurs.
+
+The Σ control switches to rendered Markdown only after the conversion has been
+validated and stored; on failure it remains on the plain source, with one
+dismissible request toast and an explicit retry by selecting Σ again. Its hover
+title is “Convert to markdown.”
+
+Actual verification: one post-fix live ChatGPT-plan request to the disposable
+copy returned provider HTTP 200 with no content type and local API HTTP 200;
+the Markdown representation was current and nonempty, while the copied
+`project.json` stayed byte-for-byte unchanged. Two earlier diagnostic requests
+in the same investigation reproduced the failure and may count against plan/app
+usage; all temporary project copies were removed. No live requests are used by
+automated tests. `tests/text_views.py`
+passed untyped SSE, completed JSON, provider rejection, malformed/partial SSE,
+missing `output_text`, structured-output validation, timeout, cancellation,
+source/account binding and API error preservation. Real Chrome
+`browser_checks/a142.py` passed the one-toast failure, retained source/no saved
+artifact, exact tooltip and explicit successful retry using a mock provider.
+`./sigma test`, Ruff, Pyright, frontend typecheck/build also passed. The
+existing Starlette TestClient/httpx deprecation notice remains non-failing.
+
 ## Stock project test stabilization
 
 Updated the stock catalog scenario to cover the current behavior: each open

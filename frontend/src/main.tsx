@@ -137,7 +137,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     <div className="text-view-controls">
       {mathematical && <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
         aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
-        aria-pressed={selected === 'rendered' || rendering} title={selected === 'rendered' ? 'Show plain text' : 'Render Markdown'}
+        aria-pressed={selected === 'rendered' || rendering} title={selected === 'rendered' ? 'Show plain text' : 'Convert to markdown'}
         disabled={editing || busy} onClick={() => {
           if (selected === 'rendered') { chooseView('plain'); setError(''); }
           else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }

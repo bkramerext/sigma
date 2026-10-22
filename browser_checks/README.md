@@ -120,3 +120,14 @@ in-place title/description edits and stale retries,
 cache reuse without conversion requests, desktop/mobile overflow and source
 fixture immutability. It uses no paid provider call. Restart the fixture before
 rerunning, since the script intentionally edits its managed stock copy.
+
+## A14.2 ChatGPT-plan Markdown conversion regression
+
+Keep the normal UI running on `127.0.0.1:5173`. Start a fresh isolated mock
+provider with `uv run uvicorn browser_checks.provider_fixture:app --host
+127.0.0.1 --port 8002`, then run
+`uv run --with playwright python browser_checks/a142.py`. The browser check
+verifies the Σ tooltip, one dismissible failed-request toast, retained Plain
+source with no artifact, and explicit successful retry. It makes no live
+provider call; the first local conversion response is deliberately failed and
+the retry goes through the fixture.

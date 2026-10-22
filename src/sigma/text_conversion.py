@@ -38,6 +38,15 @@ INSTRUCTIONS = (
 )
 
 
+def _looks_like_sse(data: bytes) -> bool:
+    """Recognize event-stream framing when a ChatGPT bridge omits its media type."""
+    try:
+        prefix = data[:4096].decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return False
+    return any(line.startswith(("data:", "event:")) for line in prefix.splitlines()[:32])
+
+
 async def convert_text(
     path: str,
     scope: str,
@@ -152,21 +161,40 @@ async def _convert_text(
                             # The shared plan adapter checks final SSE sequence and response identity.
                             raw = await completed(response, guard)
                         else:
-                            # Some plan routes return a bounded JSON error (or a
-                            # completed JSON response) even when streaming was
-                            # requested. Preserve useful diagnostics instead of
-                            # reporting the parser's internal content-type error.
+                            # Some plan bridges omit Content-Type on an SSE body,
+                            # while others return JSON despite stream=true. Read
+                            # once, bounded, then dispatch by media type/framing.
                             data = bytearray()
                             async for chunk in response.aiter_bytes():
                                 data.extend(chunk)
                                 if len(data) > MAX_RESPONSE:
                                     raise ProjectError("Conversion response exceeded the limit")
-                            try:
-                                raw = json.loads(data)
-                            except ValueError:
-                                raw = {}
-                            if not isinstance(raw, dict) or raw.get("status") != "completed":
-                                failure(200, raw, binding["mode"], guard)
+                            if not content_type and _looks_like_sse(bytes(data)):
+                                buffered = httpx.Response(
+                                    response.status_code,
+                                    headers=response.headers,
+                                    content=bytes(data),
+                                )
+                                raw = await completed(buffered, guard)
+                            elif content_type in {"", "application/json"}:
+                                try:
+                                    raw = json.loads(data)
+                                except (ValueError, UnicodeDecodeError) as exc:
+                                    raise ValueError("chatgpt_response:invalid_json") from exc
+                                if not isinstance(raw, dict):
+                                    raise ValueError("chatgpt_response:expected_object")
+                                if raw.get("status") != "completed":
+                                    error = raw.get("error")
+                                    is_provider_error = (
+                                        isinstance(error, (dict, str))
+                                        or isinstance(raw.get("detail"), str)
+                                        or raw.get("type") == "error"
+                                    )
+                                    if is_provider_error:
+                                        failure(200, raw, binding["mode"], guard)
+                                    raise ValueError("chatgpt_response:unknown_envelope")
+                            else:
+                                raise ValueError("chatgpt_response:unexpected_content_type")
                     else:
                         data = bytearray()
                         async for chunk in response.aiter_bytes():
