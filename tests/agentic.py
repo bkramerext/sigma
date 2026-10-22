@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from sigma import agentic, chatgpt_auth
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.agentic_evidence import save as save_evidence
-from sigma.api import agentic_runs_view, app
+from sigma.api import agentic_runs_view, export_project_view, app
 from sigma.projects import ProjectError, create_strategy, inspect_project
 from sigma.proposals import accepted_provenance
 from sigma.samples import open_sample_project, sample_projects
@@ -140,6 +140,12 @@ async def main_async(root: Path):
     assert get_run(path, events[-1]["run_id"])["steps"] == evidence["steps"]
     assert agentic_runs_view(path)["runs"][0]["run_id"] == events[-1]["run_id"]
     assert agentic_runs_view(path, events[-1]["run_id"])["final_candidate"] == CANDIDATE
+    export = export_project_view(path)
+    assert export["export_version"] == 1
+    assert export["project"]["id"] == view.project.id
+    assert export["project"]["strategies"] == []
+    assert any(run["run_id"] == events[-1]["run_id"] for run in export["agentic_runs"])
+    assert any(run["steps"][0]["output"] == CANDIDATE for run in export["agentic_runs"])
     assert any(event["type"] == "activity.started" for event in events)
     assert any(event["type"] == "decision" and event["outcome"] == "present" for event in events)
     assert inspect_project(path).project.strategies == ()
