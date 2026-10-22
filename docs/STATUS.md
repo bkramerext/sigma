@@ -1153,3 +1153,12 @@ check and format, Pyright, frontend typecheck and production build.
 Chrome against the isolated mock provider, including generation, failure,
 cancellation, save/reopen, and mobile overflow checks. No live provider call was
 made.
+
+## Project description edit actions (2026-10-21)
+
+While the project description is being edited, its text action row now shows
+Save and Cancel without Settings. Settings returns after the edit is saved or
+cancelled.
+
+Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
+check and format, Pyright, frontend typecheck and production build.

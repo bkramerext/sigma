@@ -152,7 +152,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
         <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
         <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
       </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
-      {onSettings && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
+      {onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
     </div>
     {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
