@@ -143,7 +143,7 @@ async def main_async(root: Path):
     export = export_project_view(path)
     assert export["export_version"] == 1
     assert export["project"]["id"] == view.project.id
-    assert export["project"]["strategies"] == []
+    assert not export["project"]["strategies"]  # asdict preserves the dataclass tuple; HTTP JSON uses [].
     assert any(run["run_id"] == events[-1]["run_id"] for run in export["agentic_runs"])
     assert any(run["steps"][0]["output"] == CANDIDATE for run in export["agentic_runs"])
     assert any(event["type"] == "activity.started" for event in events)
