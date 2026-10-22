@@ -94,7 +94,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; pause: () => void; playDisabled: boolean; pauseDisabled: boolean; playLabel: string };
+type ProcessControls = { play: () => void; pause: () => void; playDisabled: boolean; pauseDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -315,12 +315,12 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
-      play, pause,
+      play, pause, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       playDisabled: busy || !!readError || !eligible.length || confirmStart || (!!activeSession && (activeSession.status !== 'paused' || interruptedActive)),
       pauseDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, interruptedActive, onControlsChange, pause, play, playLabel, readError]);
+  }, [activeSession, busy, confirmStart, eligible.length, interruptedActive, onControlsChange, pause, play, playLabel, readError, sessions]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -332,13 +332,6 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    {confirmStart && config && <div className="research-consent" role="group" aria-label="Confirm research session">
-      <p><strong>{displayStrategyTitle(eligible.find(item => item.id === pendingStrategyId))}</strong></p><p>{config.model} · {thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort} thinking · {config.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
-      {limits && <p>Limits: {limits.research_rounds} research rounds · {limits.model_calls} model calls · {limits.session_duration_minutes} minutes elapsed time (pause time counts) · {limits.output_tokens_per_call.toLocaleString()} output tokens per call{config.mode === 'api_key' ? ` · ${limits.maximum_estimated_cost_usd === null ? 'no estimated cost cap' : `estimated cost cap $${limits.maximum_estimated_cost_usd.toFixed(2)}`}` : ' · ChatGPT subscription has no dollar accounting'}.</p>}
-      <p>Usage may accrue. Provider limits may restrict output below the selected token limit. Findings are unverified research notes.</p>
-      <p>An already-sent provider request may continue to consume allowance if paused or stopped.</p>
-      <div className="research-session-actions"><button type="button" className="primary-action" disabled={busy} onClick={() => void start()}>Confirm and start</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStart(false)}>Cancel</button></div>
-    </div>}
     <div className="session-table">
       <div className="session-columns" aria-hidden="true"><span>Session</span><span>Status</span></div>
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
@@ -1213,12 +1206,17 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
+      {controls.confirming ? <>
+        <button type="button" className="text-view-link" disabled={disabled || controls.playDisabled && !controls.start} onClick={controls.start}>Start session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link" disabled={disabled} onClick={controls.cancel}>Cancel</button>
+      </> : <>
       <button type="button" className="text-view-link text-view-icon process-control" aria-label={controls.playLabel} title={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
       </button>
       <button type="button" className="text-view-link text-view-icon process-control" aria-label="Pause research session" title="Pause research session" disabled={controls.pauseDisabled || disabled} onClick={controls.pause}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 4h3.2v12H5.5zM11.3 4h3.2v12h-3.2z"/></svg>
       </button>
+      </>}
   </span>;
 }
 
