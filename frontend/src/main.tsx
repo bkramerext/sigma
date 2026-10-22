@@ -125,7 +125,7 @@ function TooltipWrap({ children }: { children: React.ReactNode }) {
   return <span className={`sigma-render-tooltip-wrap${dismissed ? ' tooltip-dismissed' : ''}`}
     onClickCapture={() => setDismissed(true)}
     onMouseLeave={() => setDismissed(false)}
-    onBlur={() => setDismissed(false)}>
+    onBlur={event => { if (!event.currentTarget.matches(':hover')) setDismissed(false); }}>
     {children}
   </span>;
 }
