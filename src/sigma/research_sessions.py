@@ -479,7 +479,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             start = datetime.fromisoformat(record["started_at"])
             end = (
                 datetime.fromisoformat(record["updated_at"])
-                if record.get("status") in {"completed", "stopped", "failed"}
+                if record.get("status") in {"completed", "ended", "failed"}
                 else datetime.now(UTC)
             )
             result["elapsed_seconds"] = max(0, int((end - start).total_seconds()))
@@ -538,7 +538,7 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
         if record.get("updated_at") != expected_updated_at:
             raise ProjectError("Session changed; refresh its status before removing it")
         if record.get("status") not in {"completed", "stopped", "failed"}:
-            raise ProjectError("Only completed, stopped, or failed sessions can be removed")
+            raise ProjectError("Only ended, stopped, or failed sessions can be removed")
         task = _tasks.get(session_id)
         if task is not None and not task.done():
             raise ProjectError(
@@ -700,9 +700,10 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         raise ProjectError("Unknown research session action")
     record = _recover(_read(path, session_id))
     if action == "stop":
-        if record["status"] in {"stopped", "completed", "failed"}:
+        if record["status"] in {"stopped", "completed", "ended", "failed"}:
             return _public(record)
         record["status"] = "stopped"
+        record["stopped_at"] = _now()
         record["message"] = (
             "Stopped by user. A dispatched provider request may still consume allowance."
         )
@@ -719,7 +720,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             await asyncio.gather(task, return_exceptions=True)
         return _public(record)
     if action == "pause":
-        if record["status"] in {"paused", "stopped", "completed", "failed"}:
+        if record["status"] in {"paused", "stopped", "completed", "ended", "failed"}:
             return _public(record)
         record["status"] = "paused"
         record["message"] = (
@@ -737,14 +738,18 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         return _public(record)
-    if record["status"] != "paused":
+    if record["status"] not in {"paused", "stopped"}:
         return _public(record)
-    if record.get("steps") and record["steps"][-1].get("status") == "interrupted":
+    if record["status"] == "paused" and record.get("steps") and record["steps"][-1].get("status") == "interrupted":
         raise ProjectError(
             "This session has an interrupted provider call with ambiguous completion and possible usage. It cannot be resumed safely; stop it and start a new session instead."
         )
+    if record.get("stopped_at"):
+        stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
+        record["deadline_at"] = (datetime.fromisoformat(record["deadline_at"]) + stopped_for).isoformat()
+        record.pop("stopped_at", None)
     if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
-        record["status"] = "completed"
+        record["status"] = "ended"
         record["message"] = (
             "Configured session duration reached. Existing notes are preserved and remain unverified."
         )
@@ -776,7 +781,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         _save(record["project_path"], record)
         return _public(record)
     if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
-        record["status"] = "completed"
+        record["status"] = "ended"
         record["message"] = (
             "Call limit reached; no further provider calls were made. Results remain unverified research notes."
         )
@@ -785,7 +790,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
     async with _manager_lock:
         with _project_manager_lock(path):
             record = _read(path, session_id)
-            if record["status"] != "paused":
+            if record["status"] not in {"paused", "stopped"}:
                 return _public(record)
             others = [
                 _recover(item)
@@ -803,7 +808,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                 )
             record["status"] = "queued"
             record["updated_at"] = _now()
-            record["message"] = "Research resumed by user."
+            record["message"] = "Research resumed by user. Previous artifacts and remaining call budget retained."
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])
             _save(record["project_path"], record)
@@ -960,7 +965,7 @@ async def _worker(session_id: str, path: str) -> None:
     try:
         while True:
             record = _read(path, session_id)
-            if record["status"] == "stopped":
+            if record["status"] in {"stopped", "ended", "completed"}:
                 return
             record["status"] = "running"
             record["updated_at"] = _now()
@@ -1201,7 +1206,7 @@ async def _worker(session_id: str, path: str) -> None:
                     f"Cycle {cycle_num} saved; coordinator selected the next question."
                 )
             record["outcome"] = _outcome(record)
-            if record["status"] == "completed":
+            if record["status"] == "ended":
                 record["terminal_reason"] = decision
             _save(path, record)
             if record["status"] == "completed":
