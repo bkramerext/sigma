@@ -19,11 +19,11 @@ KNOWN_ERRORS = {
     ),
     "subscription_sharing_user_not_eligible": (
         "forbidden",
-        "ChatGPT plan use is unavailable for this account/workspace/policy. Continue manually or intentionally choose another billing mode.",
+        "ChatGPT plan use is unavailable for this account/workspace/policy. Choose another billing mode or reconnect an eligible account.",
     ),
     "subscription_sharing_unsupported_capability": (
         "forbidden",
-        "This ChatGPT-plan route does not support the requested model/structured-output/reasoning capability. Change settings explicitly or continue manually; no retry or fallback occurred.",
+        "This ChatGPT-plan route does not support the requested model/structured-output/reasoning capability. Change settings explicitly; no retry or fallback occurred.",
     ),
     "subscription_sharing_route_not_supported": (
         "forbidden",

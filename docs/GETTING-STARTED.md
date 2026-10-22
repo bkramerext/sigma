@@ -139,8 +139,8 @@ welcome explains this; it never blocks generation or repeats after presentation.
 
 You can instead open Generate, type a Starting point, and continue sign-in there.
 Successful sign-in resumes that one pending request with its seed preserved.
-Cancel/decline/failure retains your text; Continue manually transfers it to the
-manual composer. Header-only sign-in never generates. Account/project changes,
+Cancel/decline/failure retains your starting point in the generation dialog.
+Header-only sign-in never generates. Account/project changes,
 unmounts, cancelled attempts and stale callbacks cannot authorize duplicate work.
 
 The advanced **Use API key · billed separately** action explicitly selects the

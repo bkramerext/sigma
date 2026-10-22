@@ -1136,3 +1136,20 @@ browser_checks/a142.py` passed in real Chrome, including the initial gray state,
 in-progress state, conversion failure and retry, and the rendered-state
 tooltip. `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright,
 frontend typecheck and production build.
+
+## Generate Strategy controls and manual fallback removal (2026-10-21)
+
+Removed “Continue manually” from the Generate Strategy flow. Its starting point
+and generated draft remain in that dialog through cancellation, sign-in decline,
+and generation errors; users can still separately choose New to create a manual
+strategy or fork an existing strategy. Moved Generate/Regenerate into the
+dialog heading as an underlined action immediately before Cancel, and updated
+authentication and provider guidance to point to retry or explicit billing
+settings instead of a manual-continuation path.
+
+Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
+check and format, Pyright, frontend typecheck and production build.
+`uv run --with playwright python browser_checks/a15_generate.py` passed in real
+Chrome against the isolated mock provider, including generation, failure,
+cancellation, save/reopen, and mobile overflow checks. No live provider call was
+made.

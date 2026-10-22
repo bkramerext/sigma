@@ -376,7 +376,9 @@ async def callback(
             accepted = True
             if "error" in query:
                 finish(
-                    attempt, "declined", "ChatGPT sign-in was declined. Retry or continue manually."
+                    attempt,
+                    "declined",
+                    "ChatGPT sign-in was declined. Retry sign-in or choose another billing mode.",
                 )
             else:
                 client_id = query.get("client_id", [attempt.client_id])[0]
@@ -442,7 +444,7 @@ async def callback(
                     "connected" if permitted else "plan_not_permitted",
                     "ChatGPT connected. Return to SIGMA."
                     if permitted
-                    else "Signed in; ChatGPT plan permission was not granted. Enable plan use or continue manually.",
+                    else "Signed in; ChatGPT plan permission was not granted. Enable plan use or choose another billing mode.",
                 )
     except asyncio.CancelledError:
         if accepted:

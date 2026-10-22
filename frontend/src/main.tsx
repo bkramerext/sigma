@@ -711,8 +711,8 @@ function StrategyCreationActions({ buttonRef, disabled, onManual, onAI }: {
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
-function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
-  path: string; projectId: string; onManual: (draft: { title: string; approach: string }) => void; onSaved: (view: ProjectView) => void; onCancel: () => void;
+function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
+  path: string; projectId: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const composer = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -771,7 +771,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
     finally { submitting.current = false; setSaving(false); }
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2>{!busy && <button type="button" className="text-view-link proposal-heading-manual" disabled={saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
     {!busy && <p id="proposal-help" className="hint">Generate one proposed direction and review the editable, unsaved draft before saving. Model suggestions are not independently reviewed or verified.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
@@ -783,7 +783,6 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
     </details>
     {busy && <p className="agentic-current" role="status" aria-live="polite"><span aria-hidden="true">⌛</span> Generating one strategy…</p>}
     <PlanWelcome/>
-    <button type="button" className={`${needsConnection ? 'chatgpt-sign-in' : 'secondary'}${busy && !ai.connecting ? ' generating-action' : ''}`} disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : <><span className="generating-hourglass" aria-hidden="true">⌛</span> Generating…</> : needsConnection ? <><img src="/chatgpt-logo-black.svg" alt="" width="20" height="20"/>Continue with ChatGPT</> : result ? 'Regenerate · new request' : 'Generate'}</button>
     {ai.connecting && <button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button>}
     {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
     {ai.error && <p role="alert" className="error">{ai.error}</p>}
@@ -938,7 +937,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         setView(next); setEditing(false); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
       }}/>}
-      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onManual={draft => { setManualDraft(draft); setGenerating(false); setEditing(true); }} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
+      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
         const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
