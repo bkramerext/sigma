@@ -198,3 +198,12 @@
 }
 .workspace-page .proposal-heading-row .proposal-heading-cancel:disabled { opacity: .5; cursor: default; }
 .workspace-page .proposal-heading-row .proposal-heading-cancel:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+.workspace-page .proposal-dialog .generating-status {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: #cd9270;
+}
+.workspace-page .proposal-dialog .generating-status > span {
+  color: #d8a575;
+  font-size: 17px;
+}
