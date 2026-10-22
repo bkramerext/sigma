@@ -818,7 +818,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
     finally { submitting.current = false; setSaving(false); }
   }
   return <dialog ref={dialog} className="strategy-dialog proposal-dialog" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onCancel={event => { event.preventDefault(); cancel(); }}>
-    <h2 id="proposal-heading">Generate a strategy</h2>
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
     <p id="proposal-help" className="hint">Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof.</p>
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
@@ -851,7 +851,6 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
       </fieldset>}
       <div className="form-actions">
         {result && <button type="submit" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}
-        <button type="button" className="text-button" disabled={saving} onClick={cancel}>{busy ? 'Cancel request' : 'Cancel'}</button>
       </div>
     </form>
   </dialog>;
