@@ -25,7 +25,7 @@ class StockProject:
     id: str
     title: str
     problem: str
-    research_mode: str
+    investigation_type: str
     strategy_count: int
 
 
@@ -58,7 +58,7 @@ def _load(identifier: str) -> tuple[bytes, dict[str, Any], StockProject]:
             identifier,
             project.title,
             project.problem,
-            project.research_mode.value,
+            project.investigation_type.value,
             len(project.active_order),
         ),
     )
@@ -84,7 +84,7 @@ def stock_projects() -> dict[str, list[dict[str, Any]]]:
                         name,
                         view.project.title,
                         view.project.problem,
-                        view.project.research_mode.value,
+                        view.project.investigation_type.value,
                         len(view.project.active_order),
                     )
             except ProjectError:
