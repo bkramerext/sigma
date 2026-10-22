@@ -1153,9 +1153,9 @@ check and format, Pyright, frontend typecheck and production build.
 ## Project and Strategies heading controls (2026-10-21)
 
 The project heading is simply **Project**. Its text and Settings controls share
-the heading row, with controls aligned to the right. New and Generate are back
-beside Strategies on its heading row. Project description editing shows Save
-and Cancel without Settings.
+the heading row, with controls immediately after the heading. New and Generate
+are beside Strategies on its heading row. Project description editing shows
+Save and Cancel without Settings.
 
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
