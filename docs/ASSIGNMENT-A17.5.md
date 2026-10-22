@@ -16,6 +16,15 @@ Read `docs/HUMAN-AI-INTERACTION.md` and current `docs/STATUS.md` before implemen
 - Create downloads the chosen audit or report using the derived filename. If the checkbox is checked, also open a viewable representation in a new browser tab; avoid popup blockers by opening during the initiating gesture and handle blocked tabs gracefully. Verify JSON/text/HTML/LaTeX behavior in a real browser. Handle object URL cleanup.
 - Keep modal visuals consistent with existing SIGMA dialogs, including narrow screens, Escape, focus management, Cancel, and error recovery.
 
+## Strategy assessments and strategy enable/disable
+
+- In each session's expanded details, show a compact **Strategy Assessments** table mapping each strategy involved in that session to its assessment. Use the exact theme term **Assessment** (not “evaluation” or “rating”). Include the strategy title and a concise assessment label, with a brief rationale when available. Make it clear this is the assessment for that strategy's contribution in this session, not the overall session outcome. If no assessment was produced, say “Not assessed” rather than implying a negative assessment. Handle long strategy names and narrow layouts without breaking the session details.
+- Keep execution status, session outcome, and strategy assessment distinct. A completed session can have a positive outcome while one or more strategies are assessed as unproductive for the project's objective. Assessments must be grounded in recorded evidence and the project's stated objective; do not infer “not productive” solely because no next step remains.
+- In the Strategies list, add an underlined **Disable** / **Enable** action immediately to the left of **Fork**. Preserve the existing title-row action styling and hover descriptions. Disabled strategies remain visible and may still be edited, forked, or removed.
+- Disabled strategies must not be selectable for starting a session or otherwise launched by Play/Start flows. Enforce this in both UI and backend/API validation, not just by hiding a control. If a currently selected strategy becomes disabled, prevent starting a session and explain why.
+- Show an unobtrusive, clear disabled state on the strategy row. Enabling restores eligibility for new sessions without changing the strategy content or its existing session history. Disabling a strategy must not silently stop or mutate sessions already running from it.
+- Persist the enabled/disabled state across reloads and restarts, with safe defaults for existing project data (legacy strategies default to enabled). Add regression coverage for persistence, action placement/order, disabled-strategy session rejection through direct API calls, and edit/fork/remove remaining available while disabled.
+
 ## Stabilization: assistant direct edits after A17.4
 
 The assistant committed the following directly to `main`, **without local build/browser verification**. Codex owns integration review, correction and regression coverage. Inspect Git history/current tree rather than blindly applying this list; work may have changed concurrently.
