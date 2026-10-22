@@ -135,7 +135,7 @@ def main():
             log = base / f"launch-{len(processes)}.log"
             stream = log.open("w")
             command = (
-                [str(root / ".venv/bin/sigma"), "ui"] if direct else [str(checkout / "sigma"), "ui"]
+                [str(root / ".venv/bin/sigma"), "start"] if direct else [str(checkout / "sigma"), "start"]
             )
             proc = subprocess.Popen(
                 command, cwd=base, env=env, stdout=stream, stderr=stream, start_new_session=True
@@ -207,7 +207,7 @@ def main():
             until(lambda: gone(children2))
             check_ports()
             print(
-                "PASS fresh-shell ./sigma ui, quoted export dotenv reload, verified fixture status/proxy/origin, Chrome, old owner/groups gone and Ctrl+C cleanup"
+                "PASS fresh-shell ./sigma start, quoted export dotenv reload, verified fixture status/proxy/origin, Chrome, old owner/groups gone and Ctrl+C cleanup"
             )
 
             # A launcher suspended with Ctrl+Z/SIGSTOP must be resumed and
