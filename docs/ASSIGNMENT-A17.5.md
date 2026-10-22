@@ -1,4 +1,4 @@
-# A17.5 — Project report and regression stabilization
+# A17.5 — Report Artifact and regression stabilization
 
 Status: **complete; implementation and verification are recorded in `docs/STATUS.md`.**
 
@@ -6,8 +6,8 @@ Read `docs/HUMAN-AI-INTERACTION.md` and current `docs/STATUS.md` before implemen
 
 ## Feature: combined Project export dialog
 
-- Replace the existing Project Download control and the proposed separate Report control with **one Export Project icon button** (file-down icon) in the Project title actions beside Settings. Provide accessible label, keyboard focus and native hover title.
-- The **Export Project** dialog offers **Export type** radio buttons: **Project Audit** (selected by default) and **Research Report**. Project Audit must preserve the existing JSON audit export content and semantics.
+- Replace the existing Project Download control and the proposed separate Report control with **one Report Artifact icon button** in the Project title actions beside Settings. Provide accessible label, keyboard focus and native hover title. Use a document/text icon (for example, file-text) rather than a download icon: the action creates an artifact that may be downloaded or opened in a browser, so a document better represents both behaviors.
+- The **Report Artifact** dialog offers **Export type** radio buttons: **Project Audit** (selected by default) and **Research Report**. Project Audit must preserve the existing JSON audit export content and semantics.
 - Show a **Format** dropdown at all times, with a compact width appropriate to its short options rather than stretching across the dialog. For **Project Audit**, the dropdown displays **JSON (.json)** and is disabled/non-changeable. When **Research Report** is selected, enable the dropdown with **Text (.txt)**, **HTML (.html)** and **LaTeX (.tex)**; default Text. (Markdown is intentionally not offered.)
 - Display an **editable filename stem** initialized safely from the project name. Keep the extension separate and automatically determined: **.json** for Project Audit, and **.txt / .html / .tex** for the selected Research Report format. Switching export type or report format must **preserve the user's edited stem** and change only the extension. Validate/sanitize unsafe filename characters and empty stems, and never allow a manually entered extension to override the selected format. Ensure the filename control uses available dialog width so the stem is not awkwardly truncated; keep the extension fully visible beside it. The input and extension must remain usable at narrow viewport widths.
 - Provide an **Open in browser tab** checkbox (not a radio button), default unchecked. The dialog header contains the title only, with **no Create/Download action at the top**. Place the primary **Download** button and **Cancel** at the bottom of the dialog, using the standard dialog button styling.
