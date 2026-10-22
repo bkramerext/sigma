@@ -851,7 +851,7 @@ def _title_registry_lock(root: Path):
     descriptor = os.open(root / ".names.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         info = os.fstat(descriptor)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077):
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o077:
             raise ProjectError("Project naming lock is unsafe")
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         yield

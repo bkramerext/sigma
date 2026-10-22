@@ -89,7 +89,6 @@ class StockCopyTests(unittest.TestCase):
         self.assertEqual(inspect_project(existing).project.id, self.template_id)
         self.assertEqual(recents.home_projects()["projects"][0]["id"], copy.project.id)
 
-
     def rename(self, view, title):
         settings = project_settings(view.project)
         return update_project(

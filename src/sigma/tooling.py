@@ -36,6 +36,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/lifecycle.py"],
             [*python, "python", "tests/project_creation.py"],
             [*python, "python", "tests/recents.py"],
+            [*python, "python", "tests/test_stock_copies.py"],
             [*python, "python", "tests/example_math.py"],
             [*python, "python", "tests/project_settings.py"],
             [*python, "python", "tests/model_connection.py"],

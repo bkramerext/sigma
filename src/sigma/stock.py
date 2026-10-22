@@ -14,9 +14,9 @@ from sigma.projects import (
     ProjectView,
     _decode,
     _occupied_titles,
+    _stage,
     _title_key,
     _title_registry_lock,
-    _stage,
     inspect_project,
     projects_root,
 )

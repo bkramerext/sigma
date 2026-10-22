@@ -2,6 +2,19 @@
 
 Updated: 2026-10-21
 
+## Stock project test stabilization
+
+Updated the stock catalog scenario to cover the current behavior: each open
+creates an independent copy with a distinct identity, copied projects enter
+Recents, existing research is preserved, and shipped examples remain unchanged.
+Added the dedicated stock-copy unit tests to `./sigma test` and updated the
+agentic stock scenario to check the same copy semantics. Corrected Ruff import
+ordering and formatting issues exposed by the complete run.
+
+Verification on 2026-10-21: `./sigma test` passed all scenarios and unit tests,
+Ruff, Pyright, frontend typecheck, and production build. Starlette emitted its
+existing non-failing TestClient/httpx deprecation notice.
+
 ## Test suite directory migration
 
 Renamed the source-controlled executable checks from `scenarios/` to `tests/`.

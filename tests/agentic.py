@@ -107,7 +107,9 @@ async def main_async(root: Path):
     assert not view.project.strategies and not view.project.active_order
     path = view.path
     before = (Path(path) / "project.json").read_bytes()
-    assert before == source_before
+    assert before != source_before
+    assert view.project.id != "counting-constrained-binary-strings"
+    assert view.project.title.endswith(" (copy)")
 
     events, calls = await exercise(path, [CANDIDATE, DISTINCT], before)
     assert [call["role"] for call in calls] == ["strategy_explore", "strategy_challenge"]
@@ -127,7 +129,9 @@ async def main_async(root: Path):
     assert (
         len(saved.project.strategies) == 1 and saved.project.strategies[0].provenance == provenance
     )
-    assert len(open_stock_project("counting-constrained-binary-strings").project.strategies) == 1
+    independent = open_stock_project("counting-constrained-binary-strings")
+    assert independent.project.id != view.project.id
+    assert not independent.project.strategies
     assert SOURCE.read_bytes() == source_before
     print(
         "PASS stock zero-pool, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source"
