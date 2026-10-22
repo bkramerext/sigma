@@ -62,9 +62,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical }: {
+function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical, editSignal }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; editSignal?: number;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -103,6 +103,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
+  useEffect(() => { if (editSignal && scope === 'project' && data?.plain?.current && !busy) beginBodyEdit(selected === 'rendered'); }, [editSignal]);
   function cancelBodyEdit() {
     setEditing(false);
     if (editingFromRendered) chooseView('rendered');
@@ -146,7 +147,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
       {editing ? <>
         <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
         <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
-      </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
+      </> : scope !== 'project' && data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
     </div>
     {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
@@ -341,14 +342,14 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Project Settings' : 'New Project'}</h2>
-        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save Changes' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2>
+        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
       </header>
       <div className="settings-body"><p id="project-settings-help">{initial ? 'Choose how to explore this project. Edit its title and description directly on the project page.' : 'Name an investigation and choose how to explore it.'}</p>
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
-      <label htmlFor="project-mode">Research mode</label><select id="project-mode" value={values.research_mode} onChange={event => change('research_mode', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
+      <label htmlFor="project-mode">Investigation type</label><select id="project-mode" value={values.research_mode} onChange={event => change('research_mode', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
       <label htmlFor="project-model">AI model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
@@ -854,6 +855,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
+  const [investigationEditSignal, setInvestigationEditSignal] = useState(0);
   const editProjectButton = useRef<HTMLButtonElement>(null);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
@@ -956,8 +958,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-      <div className="project-description-line"><p className="project-eyebrow">Project description</p><button ref={editProjectButton} type="button" className="project-settings-link" onClick={() => setProjectEditing(true)} disabled={closing || ordering || !!dragId || editing || generating}>Project Settings</button></div>
-      <TextViews mathematical={project.research_mode === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
+      <div className="project-description-line"><h2 className="investigation-heading">Investigation</h2><div className="investigation-heading-actions"><button type="button" className="text-view-link" onClick={() => setInvestigationEditSignal(value => value + 1)} disabled={closing || ordering || !!dragId || editing || generating}>Edit</button><button ref={editProjectButton} type="button" className="text-view-link" onClick={() => setProjectEditing(true)} disabled={closing || ordering || !!dragId || editing || generating}>Settings</button></div></div>
+      <TextViews editSignal={investigationEditSignal} mathematical={project.research_mode === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -1026,12 +1028,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       }}/>}
     <details className="project-details">
       <summary>Project details &amp; history</summary>
-      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research mode</dt><dd>{project.research_mode === 'mathematical' ? 'Mathematical' : 'Default'}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
+      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Investigation type</dt><dd>{project.research_mode === 'mathematical' ? 'Mathematical' : 'Default'}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
       <h3>Event history</h3>
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
-          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', research_mode: 'Research mode', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {event.project_change!.previous[key]}<br/>After: {event.project_change!.current[key]}</dd></div>)}</dl></details>}
+          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', research_mode: 'Investigation type', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {event.project_change!.previous[key]}<br/>After: {event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
           {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>
