@@ -954,6 +954,39 @@ async def _call(
         raise ProjectError("Research provider returned malformed research output") from exc
 
 
+def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:
+    """Deterministic, durable role context; no dependence on provider conversation state."""
+    artifacts = record["artifacts"]
+    # All outstanding objections/obligations are carried forward, even when older
+    # full artifacts must be excluded from the bounded model input.
+    obligations: list[str] = []
+    for artifact in artifacts:
+        for item in artifact.get("open_obligations", []):
+            if isinstance(item, str) and item not in obligations:
+                obligations.append(item)
+    context: dict[str, Any] = {
+        "problem": record["problem"],
+        "strategy": {
+            "id": record["strategy_id"],
+            "title": record["strategy_title"],
+            "approach": record["strategy_text"],
+        },
+        "cycle": cycle,
+        "question": record["current_question"],
+        "prior_artifacts": artifacts[-2:],
+        "outstanding_obligations": obligations,
+        "context_artifact_ids": [a["id"] for a in artifacts],
+    }
+    if role == "skeptic":
+        context["investigator_output"] = record["pending_investigation"]
+    # Fail explicitly rather than silently losing mathematically critical history.
+    if len(json.dumps(context, ensure_ascii=False)) > 48000:
+        raise ProjectError(
+            "Research context exceeds the safe input limit; no critical objections were discarded"
+        )
+    return context
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _directory(path) / f"{session_id}.worker.lock"
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -980,32 +1013,7 @@ async def _worker(session_id: str, path: str) -> None:
                 return
             cycle_num = len(record["artifacts"]) + 1
             role = "investigator" if record.get("pending_investigation") is None else "skeptic"
-            if role == "investigator":
-                question = record["current_question"]
-                context = {
-                    "problem": record["problem"],
-                    "strategy": {
-                        "id": record["strategy_id"],
-                        "title": record["strategy_title"],
-                        "approach": record["strategy_text"],
-                    },
-                    "cycle": cycle_num,
-                    "question": question,
-                    "prior_artifacts": record["artifacts"],
-                }
-            else:
-                context = {
-                    "problem": record["problem"],
-                    "strategy": {
-                        "id": record["strategy_id"],
-                        "title": record["strategy_title"],
-                        "approach": record["strategy_text"],
-                    },
-                    "cycle": cycle_num,
-                    "question": record["current_question"],
-                    "investigator_output": record["pending_investigation"],
-                    "prior_artifacts": record["artifacts"],
-                }
+            context = _agent_context(record, role, cycle_num)
             record["status"] = "queued"
             record["cycle"] = cycle_num
             record["message"] = (
