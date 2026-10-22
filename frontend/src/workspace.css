@@ -226,3 +226,6 @@
 }
 .workspace-page .project-title-actions button:hover:not(:disabled) { color: #f3cd9e; }
 .workspace-page .project-title-actions button:disabled { opacity: .5; cursor: default; }
+
+/* Prospective sidebar is feature-gated in WorkspaceFrame. */
+.workspace-page .workspace-layout.sidebar-disabled { grid-template-columns: minmax(0, 1fr); }
