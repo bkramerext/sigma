@@ -75,6 +75,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const [editingFromRendered, setEditingFromRendered] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
   const bodyTrigger = useRef<HTMLElement>(null);
@@ -135,6 +136,27 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   const renderTooltip = rendering ? 'Converting to markdown' : selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
   const renderTooltipId = `sigma-render-tooltip-${scope}-${strategyId ?? 'project'}`;
+  async function exportProject() {
+    if (exporting) return;
+    setExporting(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/export?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
+      }
+      const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[] };
+      if (result.export_version !== 1 || !result.project || !Array.isArray(result.agentic_runs)) throw new Error('Invalid project export response');
+      const filename = (result.project.title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 80) || 'project';
+      const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2) + '\n'], { type: 'application/json' }));
+      try {
+        const link = document.createElement('a');
+        link.href = url; link.download = `sigma-${filename}.json`;
+        document.body.appendChild(link); link.click(); link.remove();
+      } finally { URL.revokeObjectURL(url); }
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setExporting(false); }
+  }
   const viewActions = <>
     {mathematical && <span className="sigma-render-tooltip-wrap">
       <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
@@ -147,6 +169,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
       }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
       <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
     </span>}
+    {scope === 'project' && !editing && <button type="button" className="text-view-link" disabled={exporting} onClick={() => void exportProject()}>{exporting ? 'Exporting…' : 'Export'}</button>}
     {editing ? <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
       <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
@@ -815,12 +838,12 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
     finally { submitting.current = false; setSaving(false); }
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}<button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
     {!busy && <p id="proposal-help" className="hint">Generate one candidate solution and review the editable, unsaved draft before saving. Its viability has not been evaluated.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
-    <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
-    <label htmlFor="proposal-seed">Starting point <span className="hint">(optional)</span></label>
+    <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point (optional)</summary>
+    <label htmlFor="proposal-seed" className="sr-only">Starting point (optional)</label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
     <p id="seed-help" className="hint">An optional idea or proposed mechanism, not an assumption to accept uncritically. Leave empty for an independent solution.</p>
     <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI in one request. Cancelling stops local work; provider usage may already count toward the selected plan or billing mode.</p>
@@ -831,7 +854,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
     {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
     {ai.error && <p role="alert" className="error">{ai.error}</p>}
     {error && <p role="alert" className="error">{error}</p>}
-    <form onSubmit={save}>
+    <form id="proposal-save-form" onSubmit={save}>
       {result && <fieldset disabled={busy || saving} className="proposal-review">
         <legend>Unsaved draft · Review before accepting</legend>
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
@@ -839,9 +862,6 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
         <label htmlFor="proposal-approach">Proposed solution</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
         <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; it does not establish viability.</p>
       </fieldset>}
-      <div className="form-actions">
-        {result && <button type="submit" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}
-      </div>
     </form>
   </div>;
 }
