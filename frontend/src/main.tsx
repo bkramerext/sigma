@@ -149,7 +149,6 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
       </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
     </div>
     {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
-      <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
     </form> : current && version ? selected === 'rendered'
       ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
