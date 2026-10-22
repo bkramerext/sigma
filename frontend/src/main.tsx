@@ -1062,7 +1062,6 @@ function App() {
   const [location, setLocation] = useState(() => window.location.pathname + window.location.search);
   const [lastPath, setLastPath] = useState(() =>
     new URLSearchParams(window.location.search).get('path') || 'projects/rh.sigma');
-  const [currentPath, setCurrentPath] = useState(() => window.localStorage.getItem('sigma.currentProject') ?? '');
   useEffect(() => {
     const pop = () => { setOpenedView(null); setLocation(window.location.pathname + window.location.search); };
     window.addEventListener('popstate', pop);
@@ -1074,7 +1073,7 @@ function App() {
   const closeProject = useCallback(() => {
     setOpenedView(null);
     const path = new URLSearchParams(window.location.search).get('path');
-    if (path) { setLastPath(path); setCurrentPath(path); window.localStorage.setItem('sigma.currentProject', path); }
+    if (path) { setLastPath(path); window.localStorage.setItem('sigma.currentProject', path); }
     navigate('/');
   }, [navigate]);
   function goHome(event: MouseEvent<HTMLAnchorElement>) {
@@ -1085,7 +1084,7 @@ function App() {
   const url = new URL(location, window.location.origin);
   return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
     {url.pathname === '/' ? <Home initialPath={lastPath} onOpen={view => {
-      setOpenedView(view); setLastPath(view.path); setCurrentPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path));
+      setOpenedView(view); setLastPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
       initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
       : <><Header goHome={goHome}/><h1>Page not found</h1><a href="/" onClick={goHome}>Return Home</a></>}
