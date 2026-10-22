@@ -13,6 +13,9 @@ from sigma.projects import (
     ProjectError,
     ProjectView,
     _decode,
+    _occupied_titles,
+    _title_key,
+    _title_registry_lock,
     _stage,
     inspect_project,
     projects_root,
@@ -73,51 +76,54 @@ def stock_project_ids() -> set[str]:
 
 
 def open_stock_project(identifier: str) -> ProjectView:
-    """Create a fresh, independently identified copy and add it to Recent Projects.
-
-    Never reopen or modify a prior copy, including copies created by older releases
-    with the stock template's original identity.
-    """
+    """Create an independent copy named 'Title (copy)', then '(copy 1)', etc."""
     raw, _ = _load(identifier)
     root = projects_root()
     if root.is_relative_to(EXAMPLES):
         raise ProjectError("Stock projects cannot be installed inside the source catalog.")
 
-    # A stock template may be opened repeatedly. Allocate a new directory with
-    # exclusive mkdir, so neither existing research nor a concurrent open is replaced.
-    destination: Path | None = None
-    for number in range(1, 10001):
-        suffix = "" if number == 1 else f"-{number}"
-        candidate = root / f"{identifier}{suffix}.sigma"
-        try:
-            candidate.mkdir(mode=0o700)
-            destination = candidate
-            break
-        except FileExistsError:
-            continue
-        except OSError as exc:
-            raise ProjectError(f"Cannot create stock project copy: {exc}") from exc
-    if destination is None:
-        raise ProjectError("Too many copies of this stock project.")
+    with _title_registry_lock(root):
+        occupied = _occupied_titles(root)
+        destination: Path | None = None
+        copied_title = ""
+        for number in range(10000):
+            suffix = " (copy)" if number == 0 else f" (copy {number})"
+            title = raw["title"][: 200 - len(suffix)].rstrip() + suffix
+            if _title_key(title) in occupied:
+                continue
+            # Keep existing directory conventions, but never reuse a prior copy.
+            directory_suffix = "" if number == 0 else f"-{number + 1}"
+            candidate = root / f"{identifier}{directory_suffix}.sigma"
+            try:
+                candidate.mkdir(mode=0o700)
+                destination = candidate
+                copied_title = title
+                break
+            except FileExistsError:
+                continue
+            except OSError as exc:
+                raise ProjectError(f"Cannot create stock project copy: {exc}") from exc
+        if destination is None:
+            raise ProjectError("Too many copies of this stock project.")
 
-    staged: Path | None = None
-    try:
-        copied = {**raw, "id": str(uuid4())}
-        # The project document contains its strategies and event history.
-        # Retain those contents, changing only the enclosing project's identity.
-        _decode(copied)
-        staged = _stage(destination, (json.dumps(copied, indent=2) + "\n").encode("utf-8"))
-        os.link(staged, destination / STATE)
-        view = inspect_project(destination)
-    except OSError as exc:
-        raise ProjectError(f"Cannot open stock project copy: {exc}") from exc
-    finally:
-        if staged is not None:
-            staged.unlink(missing_ok=True)
+        staged: Path | None = None
         try:
-            destination.rmdir()  # Only removes the directory if publication failed.
-        except OSError:
-            pass
+            copied = {**raw, "id": str(uuid4()), "title": copied_title}
+            # Keep the strategies and their history, but give this project
+            # its own identity and a distinct display name.
+            _decode(copied)
+            staged = _stage(destination, (json.dumps(copied, indent=2) + "\n").encode("utf-8"))
+            os.link(staged, destination / STATE)
+            view = inspect_project(destination)
+        except OSError as exc:
+            raise ProjectError(f"Cannot open stock project copy: {exc}") from exc
+        finally:
+            if staged is not None:
+                staged.unlink(missing_ok=True)
+            try:
+                destination.rmdir()  # Only removes an unpublished, empty directory.
+            except OSError:
+                pass
 
     from sigma.recents import record_access
 
