@@ -9,6 +9,7 @@ import stat
 import tempfile
 import unicodedata
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
@@ -844,13 +845,60 @@ def _project_name(title: str) -> tuple[str, str]:
     return title, slug + ".sigma"
 
 
+@contextmanager
+def _title_registry_lock(root: Path):
+    """Serialize naming changes across copies, creates and renames."""
+    descriptor = os.open(root / ".names.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
+            raise ProjectError("Project naming lock is unsafe")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def _title_key(title: str) -> str:
+    return unicodedata.normalize("NFKC", title).strip().casefold()
+
+
+def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
+    """Include stock, recent (even outside the root), and local saved projects."""
+    from sigma.recents import recent_projects
+    from sigma.stock import stock_projects
+
+    names = {_title_key(item["title"]) for item in stock_projects()["projects"]}
+    for item in recent_projects()["projects"]:
+        if item["available"] and item["id"] != exclude_id:
+            names.add(_title_key(item["title"]))
+    for directory in root.iterdir():
+        if directory.suffix != ".sigma" or directory.is_symlink() or not directory.is_dir():
+            continue
+        try:
+            view = inspect_project(directory)
+        except ProjectError:
+            continue
+        if view.project.id != exclude_id:
+            names.add(_title_key(view.project.title))
+    return names
+
+
+def _require_available_title(title: str, root: Path, exclude_id: str | None = None) -> None:
+    if _title_key(title) in _occupied_titles(root, exclude_id):
+        raise ProjectError(
+            "A stock, recent, or saved project already uses that name. Choose another name."
+        )
+
+
 def project_destination(title: str = "") -> ProjectDestination:
     root = projects_root()
     if not title:
         return ProjectDestination(str(root), None, False)
     _, name = _project_name(title)
     path = root / name
-    return ProjectDestination(str(root), str(path), os.path.lexists(path))
+    taken = os.path.lexists(path) or _title_key(title) in _occupied_titles(root)
+    return ProjectDestination(str(root), str(path), taken)
 
 
 def create_project(
@@ -860,33 +908,35 @@ def create_project(
     ai_model: str | None = None,
     reasoning_effort: str = "high",
 ) -> ProjectView:
-    """Reserve a name beneath the configured root; never reuse an existing directory."""
+    """Reserve a unique project name beneath the configured root."""
     title, name = _project_name(title)
     problem = _text(problem, "Research problem", 20000)
     mode = _research_mode(research_mode)
     root = projects_root()
     destination = root / name
     reserved = False
-    try:
-        destination.mkdir(mode=0o700)  # Exclusive reservation also rejects files/broken symlinks.
-        reserved = True
-        view = initialize_project(destination, title, problem, mode, ai_model, reasoning_effort)
-        from sigma.recents import record_access
+    with _title_registry_lock(root):
+        _require_available_title(title, root)
+        try:
+            destination.mkdir(mode=0o700)  # Never overwrite files or existing research.
+            reserved = True
+            view = initialize_project(destination, title, problem, mode, ai_model, reasoning_effort)
+            from sigma.recents import record_access
 
-        record_access(view)
-        return view
-    except FileExistsError as exc:
-        raise ProjectError(
-            f"A project or file already exists at {destination}; choose another name"
-        ) from exc
-    except OSError as exc:
-        raise ProjectError(f"Cannot create project: {exc}") from exc
-    finally:
-        if reserved:
-            try:
-                destination.rmdir()  # Remove only this attempt's still-empty directory on failure.
-            except OSError:
-                pass
+            record_access(view)
+            return view
+        except FileExistsError as exc:
+            raise ProjectError(
+                f"A project or file already exists at {destination}; choose another name"
+            ) from exc
+        except OSError as exc:
+            raise ProjectError(f"Cannot create project: {exc}") from exc
+        finally:
+            if reserved:
+                try:
+                    destination.rmdir()
+                except OSError:
+                    pass
 
 
 def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
@@ -998,6 +1048,8 @@ def update_project(
             )
         if current == wanted:
             return project
+        if wanted.title != current.title:
+            _require_available_title(wanted.title, projects_root(), exclude_id=project.id)
         if (wanted.ai_model, wanted.reasoning_effort) != (
             current.ai_model,
             current.reasoning_effort,
@@ -1025,4 +1077,8 @@ def update_project(
             ),
         )
 
-    return _update_project(value, update, ("project", text_format) if text_format else None)
+    edit = ("project", text_format) if text_format else None
+    if wanted.title != prior.title:
+        with _title_registry_lock(projects_root()):
+            return _update_project(value, update, edit)
+    return _update_project(value, update, edit)
