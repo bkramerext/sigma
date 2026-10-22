@@ -57,6 +57,19 @@ def _digest(value: bytes | str) -> str:
     return hashlib.sha256(value if isinstance(value, bytes) else value.encode()).hexdigest()
 
 
+def _event(record: dict[str, Any], kind: str, message: str, role: str | None = None) -> None:
+    events = record.setdefault("events", [])
+    events.append(
+        {
+            "sequence": len(events) + 1,
+            "timestamp": _now(),
+            "kind": kind,
+            "role": role,
+            "message": message,
+        }
+    )
+
+
 def _directory(path: str | Path) -> Path:
     target = project_path(path)
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
@@ -159,6 +172,8 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         if record.get("current_step"):
             record["steps"][-1]["status"] = "interrupted"
             record["current_step"] = None
+        record["current_action"] = "Paused after backend restart"
+        _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
     return record
 
@@ -226,6 +241,8 @@ async def start_session(
         record = {
             "schema_version": 1,
             "id": str(uuid4()),
+            "session_number": max((item.get("session_number", 0) for item in records), default=0)
+            + 1,
             "project_path": view.path,
             "project_id": view.project.id,
             "strategy_id": strategy.id,
@@ -253,7 +270,10 @@ async def start_session(
             "steps": [],
             "artifacts": [],
             "message": "Research is queued.",
+            "current_action": "Queued",
+            "events": [],
         }
+        _event(record, "queued", record["message"])
         _save(view.path, record)
         event = asyncio.Event()
         _control[record["id"]] = event
@@ -273,6 +293,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["message"] = (
             "Stopped by user. A dispatched provider request may still consume allowance."
         )
+        record["current_action"] = "Stopped"
+        _event(record, "stopped", record["message"])
         record["updated_at"] = _now()
         _save(record["project_path"], record)
         event = _control.get(session_id)
@@ -290,6 +312,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["message"] = (
             "Paused by user. A dispatched provider request may still consume allowance."
         )
+        record["current_action"] = "Paused"
+        _event(record, "paused", record["message"])
         record["updated_at"] = _now()
         _save(record["project_path"], record)
         event = _control.get(session_id)
@@ -351,6 +375,8 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["status"] = "queued"
         record["updated_at"] = _now()
         record["message"] = "Research resumed by user."
+        record["current_action"] = "Resuming"
+        _event(record, "resumed", record["message"])
         _save(record["project_path"], record)
         event = asyncio.Event()
         _control[session_id] = event
@@ -533,9 +559,12 @@ async def _worker(session_id: str, path: str) -> None:
                     "prior_artifacts": record["artifacts"],
                 }
             record["status"] = "queued"
+            record["cycle"] = cycle_num
             record["message"] = (
                 f"Cycle {cycle_num}: waiting to run the {role}; no provider call is currently in flight."
             )
+            record["current_action"] = f"Waiting for {role.title()}"
+            _event(record, "role.queued", record["message"], role)
             record["updated_at"] = _now()
             _save(path, record)
             gates = await _acquire_gates()
@@ -582,9 +611,11 @@ async def _worker(session_id: str, path: str) -> None:
                 record["calls_used"] += 1
                 record["current_step"] = str(uuid4())
                 record["status"] = "running"
+                record["current_action"] = role.title()
                 record["message"] = (
                     f"Cycle {cycle_num}: {role.title()} provider call {record['calls_used']}/{CALL_LIMIT} in progress."
                 )
+                _event(record, "call.started", record["message"], role)
                 step = {
                     "id": record["current_step"],
                     "cycle": cycle_num,
@@ -607,14 +638,27 @@ async def _worker(session_id: str, path: str) -> None:
             step.update({"status": "completed", "finished_at": _now(), "output": output})
             record["current_step"] = None
             record["updated_at"] = _now()
+            _event(
+                record,
+                "call.completed",
+                f"Cycle {cycle_num}: {role.title()} output validated and saved.",
+                role,
+            )
             if role == "investigator":
                 record["pending_investigation"] = output
+                record["current_action"] = "Skeptic"
                 record["message"] = (
                     f"Cycle {cycle_num}: investigator note saved; skeptic review is next."
                 )
                 _save(path, record)
                 continue
             investigation = record.pop("pending_investigation")
+            record["current_action"] = "Coordinator"
+            _event(
+                record,
+                "coordinator.started",
+                f"Cycle {cycle_num}: coordinator is applying the skeptic decision.",
+            )
             assessment = output["assessment"]
             if assessment == "stop":
                 decision = "stop"
@@ -662,20 +706,24 @@ async def _worker(session_id: str, path: str) -> None:
                 "note": "Unverified research note. No computational or formal tool was run.",
             }
             record["artifacts"].append(artifact)
+            _event(record, "artifact.saved", f"Cycle {cycle_num} research artifact committed.")
             record["cycle"] = cycle_num
             record["current_question"] = next_question
             if decision == "stop":
                 record["status"] = "completed"
+                record["current_action"] = "Completed"
                 record["message"] = (
                     "Skeptic recommended stopping. Notes are unverified; no claim was established."
                 )
             elif cycle_num >= 3 or record["calls_used"] >= CALL_LIMIT:
                 record["status"] = "completed"
+                record["current_action"] = "Completed · budget exhausted"
                 record["message"] = (
                     "Three-cycle call limit reached. Findings are unverified research notes."
                 )
             else:
                 record["status"] = "running"
+                record["current_action"] = "Investigator"
                 record["message"] = (
                     f"Cycle {cycle_num} saved; coordinator selected the next question."
                 )
@@ -690,10 +738,18 @@ async def _worker(session_id: str, path: str) -> None:
                 record["message"] = (
                     "Provider step interrupted. It counts against the six-call limit and will not be retried automatically."
                 )
+                record["current_action"] = "Paused after interrupted step"
+                _event(record, "interrupted", record["message"])
             if record.get("current_step") and record["steps"]:
                 record["steps"][-1]["status"] = "interrupted"
                 record["steps"][-1]["finished_at"] = _now()
                 record["current_step"] = None
+                _event(
+                    record,
+                    "call.interrupted",
+                    "The local request was cancelled; provider usage may still accrue.",
+                    record["steps"][-1]["role"],
+                )
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):
@@ -718,12 +774,25 @@ async def _worker(session_id: str, path: str) -> None:
                     if storage_failure
                     else str(exc)[:1000]
                 )
+                record["current_action"] = (
+                    "Paused · storage limit"
+                    if storage_failure
+                    else "Paused"
+                    if guard_failure
+                    else "Failed"
+                )
+                _event(
+                    record,
+                    "paused" if record["status"] == "paused" else "failed",
+                    record["message"],
+                )
             if record.get("current_step") and record["steps"]:
                 record["steps"][-1]["status"] = (
                     "interrupted" if record["status"] == "paused" else "failed"
                 )
                 record["steps"][-1]["finished_at"] = _now()
                 record["current_step"] = None
+                _event(record, "call.failed", record["message"], record["steps"][-1]["role"])
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):

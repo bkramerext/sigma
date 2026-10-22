@@ -1307,9 +1307,12 @@ temporary projects and removed with the test directory; a real run is saved at
 
 ## A17: persistent research sessions (2026-10-22)
 
-An expanded, saved strategy now has an explicit **Investigate** action. Before
-starting, SIGMA shows the selected model, account billing mode, six-call/three-
-cycle cap, and usage disclosure. A background worker runs one structured
+The project workspace now has three panes: independently collapsible Project and
+Strategies panes around an always-visible Research session pane. Research sessions
+are numbered and selectable from history, with live role activity, current action,
+call/cycle budget, and inspectable artifacts. Each session selects a saved strategy.
+An explicit **Investigate** flow shows the selected model, account billing mode,
+six-call/three-cycle cap, and usage disclosure before starting. A background worker runs one structured
 Investigator and one independent Skeptic call per cycle. Python uses each
 Skeptic decision to continue, revise the next question, or stop. Each completed
 cycle is a durable, ordered artifact labeled as unverified model research; no
@@ -1333,8 +1336,10 @@ branch, six-call cap, strategy nonmutation, pause/stop and gate release,
 explicit resume with remaining budget, malformed output, streamed ChatGPT
 Responses, idempotency and restart recovery. Ruff check/format, Pyright,
 frontend typecheck and production build passed. Real Chrome
-`uv run --with playwright python browser_checks/a17_research.py` passed against
-the isolated mock provider at desktop and mobile sizes, including consent,
-artifact inspection, navigation/reopen, stop, and failure-toast recovery. No
+`uv run --with playwright python browser_checks/a17_research.py` passed in real
+Chrome at desktop and mobile sizes, including pane order and independent collapse,
+unsaved drafts retained across collapse, consent, session numbering/history, live
+activity and artifact inspection, navigation/reopen, pause/resume/stop, and
+failure-toast recovery. No
 live or paid provider call was made. The worker runs only while the local API
 process is alive; research notes remain unverified.

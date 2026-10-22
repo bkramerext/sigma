@@ -1,4 +1,4 @@
-"""Real Chrome A17 session workflow against the isolated provider fixture."""
+"""Real Chrome A17 three-pane workspace against the isolated provider fixture."""
 
 import os
 import re
@@ -36,75 +36,147 @@ with sync_playwright() as playwright:
             "heading", name=re.compile("Counting Constrained Binary Strings - Working")
         )
     ).to_be_visible()
-    expect(page.locator(".strategy-row")).to_have_count(0)
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    project_file = Path(path) / "project.json"
     result = page.evaluate(
         """async path => {
-      const response = await fetch('/api/projects/strategies', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({path, title:'Saved research approach', approach:'Derive a recurrence and inspect boundary cases.', summary:'Use a terminal decomposition.'}) });
-      return {status: response.status, body: await response.json()};
+      const response = await fetch('/api/projects/strategies', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path, title:'Saved research approach', approach:'Derive a recurrence and inspect boundary cases.', summary:'Use a terminal decomposition.'}) });
+      return {status:response.status, body:await response.json()};
     }""",
         path,
     )
     assert result["status"] == 201, result
     page.reload()
-    expect(page.locator(".strategy-row")).to_have_count(1)
-    page.locator(".strategy-detail > summary").click()
-    page.get_by_role("button", name="Investigate", exact=True).click()
-    consent = page.get_by_role("group", name="Confirm research session")
-    expect(consent).to_contain_text("Up to 3 cycles and 6 provider calls")
-    expect(consent).to_contain_text("Usage may accrue")
-    consent.get_by_role("button", name="Start investigation").click()
-    panel = page.locator(".research-session")
-    expect(panel).to_contain_text("Investigation · completed", timeout=15000)
-    expect(panel).to_contain_text("6/6 calls · 3/3 cycles")
-    expect(panel.locator(".research-artifacts li")).to_have_count(3)
-    expect(panel).to_contain_text("Independent fixture review for cycle 1")
-    expect(panel).to_contain_text("Unverified research note")
-    project_file = Path(path) / "project.json"
-    before = project_file.read_bytes()
-    session_id = page.evaluate(
-        "async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions[0].id",
+
+    panes = page.locator(".project-pane, .research-workspace, .strategies-pane")
+    expect(panes).to_have_count(3)
+    assert panes.evaluate_all("nodes => nodes.map(node => node.className)") == [
+        "workspace-pane project-pane",
+        "research-workspace",
+        "pool workspace-pane strategies-pane",
+    ]
+    project_before = project_file.read_bytes()
+
+    # Collapse does not unmount the editor or discard its unsaved draft.
+    page.get_by_role("button", name="Edit research problem").click()
+    description = page.locator("#text-editor-project-project")
+    description.fill("unsaved project description draft")
+    page.get_by_role("button", name="Project", exact=True).click()
+    assert description.input_value() == "unsaved project description draft"
+    expect(page.locator(".research-workspace")).to_be_visible()
+    page.get_by_role("button", name="Project", exact=True).click()
+    page.get_by_role("button", name="Cancel", exact=True).click()
+
+    # The Strategies pane is independently collapsible and keeps its open draft mounted.
+    page.locator(".strategies-pane-heading").get_by_role("button", name="New", exact=True).click()
+    new_form = page.locator("#strategy-composer form.strategy-form")
+    page.locator("#strategy-title").fill("Unfinished strategy draft")
+    page.get_by_role("button", name="Strategies", exact=True).click()
+    expect(new_form).to_be_attached()
+    assert page.locator("#strategy-title").input_value() == "Unfinished strategy draft"
+    page.get_by_role("button", name="Strategies", exact=True).click()
+    new_form.get_by_role("button", name="Cancel", exact=True).click()
+
+    research = page.locator(".research-workspace")
+    expect(research.get_by_role("heading", name="Research session")).to_be_visible()
+    research.get_by_label("Strategy to investigate").select_option(label="Saved research approach")
+    research.get_by_role("button", name="Start investigation", exact=True).click()
+    expect(research.locator(".research-consent")).to_contain_text("API key billing")
+    expect(research.locator(".research-consent")).to_contain_text(
+        "Up to 3 cycles and 6 provider calls"
+    )
+    expect(research.locator(".research-consent")).to_contain_text("Usage may accrue")
+    research.get_by_role("button", name="Confirm and start", exact=True).click()
+    expect(research.get_by_role("heading", name="Research session #1")).to_be_visible(timeout=15000)
+    expect(research).to_contain_text("completed")
+    expect(research).to_contain_text("Cycle 3 of 3")
+    expect(research).to_contain_text("6 of 6 calls used (0 remaining)")
+    expect(research).to_contain_text("Completed · budget exhausted")
+    artifacts = research.get_by_label("Research artifacts")
+    expect(artifacts.locator("li")).to_have_count(3)
+    expect(artifacts).to_contain_text("Independent fixture review for cycle 1")
+    expect(artifacts).to_contain_text("Unverified research note")
+    events = research.get_by_label("Recent session activity")
+    expect(events.locator("li").last).to_contain_text("artifact committed")
+    research.get_by_role("button", name="View strategy", exact=True).click()
+    expect(
+        page.locator("#strategy-" + result["body"]["project"]["strategies"][0]["id"])
+    ).to_be_focused()
+    assert project_file.read_bytes() == project_before
+
+    session_one = page.evaluate(
+        "async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions[0]",
         path,
     )
     page.goto("http://127.0.0.1:5173")
     page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
-    page.locator(".strategy-detail > summary").click()
-    expect(page.locator(".research-session")).to_contain_text("Investigation · completed")
+    expect(
+        page.locator(".research-workspace").get_by_role("heading", name="Research session #1")
+    ).to_be_visible()
+    expect(page.locator(".research-artifacts li")).to_have_count(3)
     restored = page.evaluate(
-        "async ({path, id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()",
-        {"path": path, "id": session_id},
+        "async ({path,id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()",
+        {"path": path, "id": session_one["id"]},
     )
-    assert len(restored["artifacts"]) == 3
-    assert project_file.read_bytes() == before
+    assert len(restored["artifacts"]) == 3 and restored["session_number"] == 1
 
-    async_add = """async ({path, title}) => {
-      const response = await fetch('/api/projects/strategies', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path, title, approach:'A separate bounded fixture strategy.', summary:'Exercise session controls.'}) });
-      return response.status;
-    }"""
-    assert page.evaluate(async_add, {"path": path, "title": "Stop fixture strategy"}) == 201
+    # Exercise Pause, Resume, and terminal Stop while a local provider request is delayed.
+    page.evaluate(
+        """async path => fetch('/api/projects/strategies', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,title:'Pause and stop fixture strategy',approach:'Exercise session controls.',summary:'Bounded fixture strategy.'})})""",
+        path,
+    )
     page.reload()
-    page.locator(".strategy-detail > summary").nth(1).click()
-    page.locator(".research-session").nth(1).get_by_role("button", name="Investigate", exact=True).click()
-    page.locator(".research-session").nth(1).get_by_role("button", name="Start investigation").click()
-    stop_panel = page.locator(".research-session").nth(1)
-    expect(stop_panel).to_contain_text("Investigation · running", timeout=5000)
-    stop_panel.get_by_role("button", name="Stop", exact=True).click()
-    expect(stop_panel).to_contain_text("Investigation · stopped")
+    research = page.locator(".research-workspace")
+    research.get_by_role("button", name="New session", exact=True).click()
+    research.get_by_label("Strategy to investigate").select_option(
+        label="Pause and stop fixture strategy"
+    )
+    research.get_by_role("button", name="Start investigation", exact=True).click()
+    research.get_by_role("button", name="Confirm and start", exact=True).click()
+    expect(research.locator(".research-session-subtitle")).to_contain_text("running", timeout=10000)
+    research.get_by_role("button", name="Pause", exact=True).click()
+    expect(research.locator(".research-session-subtitle")).to_contain_text("paused", timeout=5000)
+    research.get_by_role("button", name="Resume", exact=True).click()
+    expect(research.locator(".research-session-subtitle")).to_contain_text("running", timeout=5000)
+    research.get_by_role("button", name="Stop", exact=True).click()
+    confirm_stop = research.get_by_role("group", name="Confirm stop session")
+    confirm_stop.get_by_role("button", name="Confirm stop", exact=True).click()
+    expect(research.locator(".research-session-subtitle")).to_contain_text("stopped", timeout=5000)
 
-    assert page.evaluate(async_add, {"path": path, "title": "Failure fixture strategy"}) == 201
+    # A background provider failure is reconciled into the history and a toast.
+    page.evaluate(
+        """async path => fetch('/api/projects/strategies', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,title:'Failure fixture strategy',approach:'Exercise failure recovery.',summary:'Bounded failure fixture.'})})""",
+        path,
+    )
     page.reload()
-    page.locator(".strategy-detail > summary").nth(2).click()
-    failed_panel = page.locator(".research-session").nth(2)
-    failed_panel.get_by_role("button", name="Investigate", exact=True).click()
-    failed_panel.get_by_role("button", name="Start investigation").click()
-    expect(failed_panel).to_contain_text("Investigation · failed", timeout=10000)
+    research = page.locator(".research-workspace")
+    expect(research.get_by_label("Research session history")).to_contain_text(
+        "#2 · Pause and stop fixture strategy · stopped"
+    )
+    research.get_by_role("button", name="New session", exact=True).click()
+    research.get_by_label("Strategy to investigate").select_option(label="Failure fixture strategy")
+    research.get_by_role("button", name="Start investigation", exact=True).click()
+    research.get_by_role("button", name="Confirm and start", exact=True).click()
+    expect(research.locator(".research-session-subtitle")).to_contain_text("failed", timeout=10000)
     expect(page.locator(".request-toast")).to_have_count(1)
     page.get_by_role("button", name="Dismiss request error").click()
+    expect(research.get_by_label("Research session history")).to_contain_text(
+        "#3 · Failure fixture strategy · failed"
+    )
+
+    # Pane collapse is independent; the research session remains available.
+    page.get_by_role("button", name="Project", exact=True).click()
+    expect(page.locator("#project-pane-content")).to_be_hidden()
+    expect(research).to_be_visible()
+    expect(page.locator("#strategies-pane-content")).to_be_visible()
+    page.get_by_role("button", name="Strategies", exact=True).click()
+    expect(page.locator("#strategies-pane-content")).to_be_hidden()
+    expect(research).to_be_visible()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert not errors, errors
     print(
-        "PASS real Chrome A17: explicit consent, three-cycle research, artifacts/reopen, stop, provider failure toast/recovery, mobile overflow and unchanged strategy"
+        "PASS real Chrome A17: three-pane navigation, independent collapses with unsaved drafts retained, session start/history/numbering, live roles/events, artifacts, pause/resume/stop, reopen, failure-toast recovery, mobile overflow"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

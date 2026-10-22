@@ -106,3 +106,11 @@
 .project-settings-dialog.export-project-dialog .settings-body label { margin-top: 0; }
 .project-settings-dialog.export-project-dialog .settings-body .error { margin-top: 12px; }
 .project-settings-dialog.export-project-dialog .settings-actions { justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon {
+  display: grid; place-items: center; width: 36px; height: 36px; min-width: 36px; min-height: 36px;
+  padding: 0; border: 1px solid #dfb476; border-radius: 6px; color: #edc38d;
+  background: #142431; text-decoration: none;
+}
+.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon svg { width: 18px; height: 18px; }
+.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon:hover:not(:disabled) { color: #f3cd9e; background: #203747; }
+.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon:disabled { opacity: .5; cursor: default; }

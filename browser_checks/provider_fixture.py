@@ -41,7 +41,7 @@ async def handler(request):
         strategy_title = context.get("strategy", {}).get("title")
         if strategy_title == "Failure fixture strategy":
             return httpx.Response(500)
-        if strategy_title == "Stop fixture strategy":
+        if strategy_title == "Pause and stop fixture strategy":
             await asyncio.sleep(2)
         cycle = context["cycle"]
         if body["text"]["format"]["name"] == "research_investigator":

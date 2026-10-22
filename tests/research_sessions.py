@@ -116,6 +116,7 @@ async def test_three_cycles_and_idempotency(path: Path):
             ),
         )
         assert concurrent_duplicate["id"] == started["id"]
+        assert started["session_number"] == concurrent_duplicate["session_number"] == 1
         finished = await wait_for(path, started["id"])
         duplicate = await research_sessions.start_session(
             str(path), strategy.id, key, view.project.id, credential["identity"]
@@ -145,6 +146,10 @@ async def test_three_cycles_and_idempotency(path: Path):
         finished
     )
     assert len(research_sessions.list_sessions(str(path))) == 1
+    assert [event["sequence"] for event in finished["events"]] == list(
+        range(1, len(finished["events"]) + 1)
+    )
+    assert any(event["kind"] == "coordinator.started" for event in finished["events"])
 
 
 async def test_pause_counts_interrupted_call(path: Path):
@@ -222,6 +227,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         stopped_start = await research_sessions.start_session(
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
+        assert stopped_start["session_number"] == 2
         await asyncio.wait_for(started_call.wait(), 2)
         await research_sessions.control_session(str(path), stopped_start["id"], "stop")
         await asyncio.sleep(0.02)

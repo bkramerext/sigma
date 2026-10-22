@@ -305,17 +305,51 @@
 }
 .workspace-page .strategy-rename-form .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .strategy-detail > summary:hover .strategy-rename-form { text-decoration: none; }
-.research-session {
-  margin: 1rem 0 0;
-  padding-top: .75rem;
-  border-top: 1px solid var(--line, rgba(180, 145, 110, .3));
+.workspace-page .workspace-pane { margin: 0 0 18px; }
+.workspace-page .workspace-pane-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; padding: 16px 0; border-bottom: 1px solid var(--workspace-line); }
+.workspace-page .workspace-pane-heading h2 { margin: 0; flex: 0 0 auto; color: #e7be8d; font-size: 23px; line-height: 1.3; }
+.workspace-page .workspace-pane-heading h2 button { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.workspace-page .workspace-pane-heading h2 button:hover:not(:disabled) { color: #f4d2a6; text-decoration: underline; text-underline-offset: 4px; }
+.workspace-page .workspace-pane-heading p { min-width: 0; flex: 1 1 250px; margin: 0; color: var(--workspace-muted); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.workspace-page #project-pane-content { padding-top: 4px; }
+.workspace-page .project-pane .project-intro { padding-top: 16px; }
+.workspace-page .strategies-pane-heading { justify-content: flex-start; }
+.workspace-page .strategies-pane-heading .pool-buttons { margin-left: auto; }
+.workspace-page .research-workspace { margin: 22px 0 28px; padding: 24px 26px; border: 1px solid #735635; border-radius: 10px; background: linear-gradient(135deg, #101e29, #08131d 70%); box-shadow: 0 12px 34px #0003; }
+.workspace-page .research-workspace-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 28px; padding-bottom: 16px; border-bottom: 1px solid var(--workspace-line); }
+.workspace-page .research-workspace-header h2 { margin: 0; color: #f0c48e; font: 500 clamp(23px, 2.2vw, 30px)/1.25 Inter, ui-sans-serif, system-ui, sans-serif; }
+.workspace-page .research-workspace-header .research-session-subtitle { margin: 6px 0 0; color: #bdcad5; font-size: 14px; }
+.workspace-page .research-history-control { display: grid; gap: 6px; min-width: min(290px, 100%); font-size: 12px; color: #c6d1db; }
+.workspace-page .research-history-control select, .workspace-page .research-start-form select { min-width: 0; width: 100%; padding: 9px 11px; border: 1px solid #5b6b78; border-radius: 5px; background: #050e16; color: #e6edf3; font: inherit; }
+.workspace-page .research-session-body { padding-top: 14px; }
+.workspace-page .research-session-facts { display: flex; flex-wrap: wrap; gap: 4px 24px; color: #c4d0da; }
+.workspace-page .research-session-facts p { margin: 3px 0; }
+.workspace-page .research-session-message { color: #e7c08d; }
+.workspace-page .research-session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 14px 0; }
+.workspace-page .research-start-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; max-width: 650px; padding-top: 16px; }
+.workspace-page .research-consent, .workspace-page .research-stop-confirm { margin: 8px 0; padding: 14px 16px; border: 1px solid #66533d; border-radius: 6px; background: #101820; color: #d5dfe7; line-height: 1.6; }
+.workspace-page .research-consent p, .workspace-page .research-stop-confirm p { margin: 5px 0 10px; }
+.workspace-page .research-active-notice { padding: 10px 13px; border-left: 3px solid #d4a16a; background: #101a22; color: #e1e7ec; }
+.workspace-page .research-incomplete-step { margin: 14px 0; padding: 12px 14px; border-left: 3px solid #c08b54; background: #111b24; }
+.workspace-page .research-incomplete-step p { margin: 5px 0 0; color: #c0ccd6; }
+.workspace-page .research-activity, .workspace-page .research-artifacts { margin-top: 18px; }
+.workspace-page .research-activity h3, .workspace-page .research-artifacts h3 { margin: 0 0 8px; color: #e4be91; font-size: 16px; }
+.workspace-page .research-activity ol, .workspace-page .research-artifacts > ol { margin: 0; padding-left: 22px; }
+.workspace-page .research-activity li { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 8px 14px; padding: 5px 0; color: #c4d0da; font-size: 12px; }
+.workspace-page .research-activity time { color: #aebdca; }
+.workspace-page .research-artifacts > ol > li { margin: 7px 0; }
+.workspace-page .research-artifacts details { border: 1px solid #344754; border-radius: 5px; background: #09141e; }
+.workspace-page .research-artifacts summary { padding: 11px 13px; color: #e4c39c; cursor: pointer; overflow-wrap: anywhere; }
+.workspace-page .research-artifacts summary span { display: block; padding-top: 5px; color: #bac8d3; font-size: 12px; }
+.workspace-page .research-artifact-content { padding: 0 14px 14px; color: #c4d0da; line-height: 1.55; overflow-wrap: anywhere; }
+.workspace-page .research-artifact-content h4 { margin: 12px 0 5px; color: #e2bf91; text-transform: capitalize; }
+.workspace-page .research-artifact-content small { color: #aebdca; }
+.workspace-page .research-workspace [role="status"] { color: #d2b58e; }
+@media (max-width: 700px) {
+  .workspace-page .workspace-pane-heading { gap: 8px 12px; }
+  .workspace-page .workspace-pane-heading p { flex-basis: 100%; }
+  .workspace-page .strategies-pane-heading .pool-buttons { margin-left: 0; }
+  .workspace-page .research-workspace { padding: 18px 15px; }
+  .workspace-page .research-history-control { min-width: 100%; }
+  .workspace-page .research-activity li { grid-template-columns: 1fr; gap: 2px; }
 }
-.research-consent, .research-session-body { max-width: 58rem; }
-.research-consent p, .research-session-body p { margin: .45rem 0; }
-.research-session-actions { display: flex; gap: .75rem; }
-.research-session-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
-.research-session-heading span { color: var(--muted, #8e8a84); font-size: .9em; }
-.research-artifacts { margin: .75rem 0; padding-left: 1.3rem; }
-.research-artifacts li { padding: .6rem 0; }
-.research-artifacts h4 { margin: 0 0 .35rem; }
-.research-artifacts small { color: var(--muted, #8e8a84); }
