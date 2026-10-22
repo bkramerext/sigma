@@ -133,7 +133,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     finally { setBusy(false); }
   }
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
-  const renderTooltip = selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
+  const renderTooltip = rendering ? 'Converting to markdown' : selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
   const renderTooltipId = `sigma-render-tooltip-${scope}-${strategyId ?? 'project'}`;
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     <div className="text-view-controls">

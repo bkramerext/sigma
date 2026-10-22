@@ -15,6 +15,12 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     page_errors = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.add_init_script("""
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => String(input).includes('/api/projects/proposals/config')
+        ? new Promise(resolve => setTimeout(() => resolve(originalFetch(input, init)), 700))
+        : originalFetch(input, init);
+    """)
 
     def api_route(route):
         global conversion_calls
@@ -59,6 +65,9 @@ with sync_playwright() as playwright:
     assert before["source_format"] == "plain" and before["markdown"] is None
 
     render.click()
+    expect(render).to_have_attribute("title", "Converting to markdown")
+    expect(tooltip).to_have_text("Converting to markdown")
+    expect(tooltip).to_be_visible()
     toast = page.locator(".request-toast")
     expect(toast).to_have_count(1)
     expect(toast).to_contain_text("ChatGPT-plan response was not valid JSON or SSE")
