@@ -1149,6 +1149,15 @@ settings instead of a manual-continuation path.
 
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
+
+## Project description edit and Strategies actions (2026-10-21)
+
+The Strategies header actions (New and Generate) are hidden while the project
+description editor is active and return when the edit is saved or cancelled.
+The description action row continues to show Save and Cancel without Settings.
+
+Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
+check and format, Pyright, frontend typecheck and production build.
 `uv run --with playwright python browser_checks/a15_generate.py` passed in real
 Chrome against the isolated mock provider, including generation, failure,
 cancellation, save/reopen, and mobile overflow checks. No live provider call was
