@@ -221,3 +221,7 @@
 }
 .workspace-page .strategy-heading-actions .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .strategy-heading-actions .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+/* Keep New and Generate immediately beside Strategies, not at the far edge. */
+.workspace-page .pool-heading { justify-content: flex-start; gap: 18px; }
+.workspace-page .pool-heading .strategy-heading-actions { margin-left: 0; margin-right: 0; }
