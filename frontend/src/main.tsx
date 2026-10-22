@@ -807,7 +807,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
     <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2>{!busy && <button type="button" className="text-view-link proposal-heading-manual" disabled={saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
-    <p id="proposal-help" className="hint">{busy && !ai.connecting ? <span className="generating-status" role="status"><span aria-hidden="true">⌛</span> Generating strategy…</span> : "Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof."}</p>
+    {!busy && <p id="proposal-help" className="hint">Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
@@ -818,7 +818,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
     </details>
     {(busy || progress.length > 0) && <section className="agentic-activity" aria-label="Generation activity">
       {busy && <div className="agentic-filament" aria-hidden="true"/>}
-      <p className="agentic-current" role="status" aria-live="polite">{currentActivity || (busy ? 'Preparing the next research step' : stopped || (error ? 'Run failed' : 'Review the draft below'))}</p>
+      <p className="agentic-current" role="status" aria-live="polite">{busy ? <><span aria-hidden="true">⌛</span> Generating strategy…</> : currentActivity || (stopped || (error ? 'Run failed' : 'Review the draft below'))}</p>
       <ol>{progress.filter(event => event.type === 'activity.completed' || event.type === 'decision').map(event => <li key={event.sequence}>{event.summary}{event.kind === 'challenge' && event.assessment && <div className="agentic-review"><strong>Reviewer: {event.assessment}</strong><p>{event.mechanism_comparison}</p><ul>{event.objections?.map((objection, index) => <li key={index}>{objection}</li>)}</ul><p>Still to establish: {event.missing_obligations}</p></div>}</li>)}</ol>
     </section>}
     <PlanWelcome/>
