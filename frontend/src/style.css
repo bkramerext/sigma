@@ -265,6 +265,8 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   flex-wrap: wrap;
   gap: 6px 16px;
 }
+.home-page .home-projects-heading h1:focus,
+.home-page .home-projects-heading h1:focus-visible { outline: none; }
 .home-page .home-projects-heading h1 {
   margin: 0;
   color: #e6af92;
