@@ -214,3 +214,24 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
  .home-page .home-hero { margin-top: clamp(340px, 44vh, 400px); }
  .home-page .open-form { padding: 18px; }
 }
+
+/* Home return-to-investigation mirrors the workspace title/back-arrow pair. */
+.home-page .home-current button {
+  display: inline-flex; justify-content: flex-start; align-items: center;
+  width: auto; max-width: 100%; min-height: 0; padding: 0;
+  gap: 10px; border: 0; border-radius: 0; background: transparent;
+  box-shadow: none; color: #e6bd88;
+  font: 400 clamp(17px, 1.5vw, 22px)/1.35 Georgia, serif;
+}
+.home-page .home-current button:hover:not(:disabled) {
+  background: transparent; border-color: transparent; color: #f3d0a4;
+}
+.home-page .home-current .home-current-title { font: inherit; min-width: 0; overflow-wrap: anywhere; }
+.home-page .home-current .home-current-arrow {
+  flex: 0 0 32px; width: 32px; height: 32px; display: grid; place-items: center;
+  border: 1px solid #8b6745; border-radius: 50%; background: #0b1a27e8;
+  color: #e6bd88;
+}
+.home-page .home-current button:hover:not(:disabled) .home-current-arrow {
+  border-color: #d6a76e; background: #4b311c; color: #fff0d9;
+}
