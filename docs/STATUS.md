@@ -1236,3 +1236,12 @@ cancelled.
 
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
+
+## Pulled test stabilization verification (2026-10-21)
+
+Pulled `b2153f5` from `origin/main` as a clean fast-forward. Re-ran
+`./sigma test`: all source-controlled scenarios passed, including proposal and
+agentic cancellation/retry coverage; Ruff check and format, Pyright, frontend
+typecheck, and the production build also passed. No stabilization fixes were
+needed. FastAPI's TestClient emitted the existing Starlette deprecation warning
+about `httpx`; it did not affect the results.
