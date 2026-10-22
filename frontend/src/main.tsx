@@ -495,7 +495,7 @@ function Home({ initialPath, currentPath, onOpen, goHome }: {
   return <div className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-    <div className="home-topline"><img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/><ConnectionStatus/></div>
+    <div className="home-topline"><ConnectionStatus/></div>
     <div className="home-hero">
     {currentProject && <div className="home-current"><p>Current Project</p><button type="button" disabled={reopening} onClick={() => void reopenCurrent()}><span className="home-current-title">{currentProject.project.title}</span><span className="home-current-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m10 5 7 7-7 7M17 12H4"/></svg></span></button></div>}
     {currentError && <p role="alert" className="error">{currentError}</p>}
@@ -507,6 +507,7 @@ function Home({ initialPath, currentPath, onOpen, goHome }: {
       <button ref={newButton} className="copper-button" onClick={() => setEntry('new')}>New Project</button>
     </div>
     <HomeCatalog onOpen={onOpen}/>
+    <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
     {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
     {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
