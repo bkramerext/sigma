@@ -1343,3 +1343,34 @@ activity and artifact inspection, navigation/reopen, pause/resume/stop, and
 failure-toast recovery. No
 live or paid provider call was made. The worker runs only while the local API
 process is alive; research notes remain unverified.
+
+## A17.1: project and strategy titles, disclosure, and research controls (2026-10-22)
+
+The Project pane now uses a `Project: <title>` disclosure heading with a separate
+title pencil; the truncated description was removed from the heading, while the
+full editable problem remains in the pane. Strategy rows use independent
+`Strategy: <title>` disclosures and separate title editors. Title edits retain
+the existing IDs, descriptions, revision history and research snapshots. Missing
+legacy titles display a deterministic first-line fallback without modifying the
+stored project. Proposal generation now requests a concise 2–12 word title and
+rejects multiline or overlong titles.
+
+Compact Play/Pause controls now live in the Strategies header. Play deterministically
+chooses the first eligible saved strategy in existing strategy order when no
+session is active; it resumes the bound strategy when a session is paused. The
+strategy is never changed within an active session. Existing confirmation,
+identity/binding checks, six-call/three-cycle cap, idempotency and stop/error
+reconciliation remain in force. Session headings use `Session #N` once a session
+exists. No automatic chaining or live provider calls were added.
+
+Actual verification: `./sigma test` passed all scenarios, including proposal
+title validation, with Ruff check/format, Pyright, frontend typecheck and Vite
+production build passing. Real Chrome
+`uv run --with playwright python browser_checks/a17_research.py` passed at
+1440px desktop and 390px mobile; it covered title editing/reload, blank-title
+feedback, generated-title acceptance, non-destructive legacy fallback, pencil
+and disclosure isolation, independent pane collapse, deterministic bounded
+Play, session completion/history/artifacts, pause/resume/stop, failure recovery,
+and no horizontal mobile overflow. Visual captures were inspected at
+`/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`. No paid provider
+calls were made.

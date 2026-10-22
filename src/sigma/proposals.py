@@ -66,7 +66,11 @@ async def cancel_request(request_id: str) -> bool:
 
 class Proposal(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(
+        min_length=1,
+        max_length=80,
+        description="A concise 2–12 word title for this bounded investigation.",
+    )
     summary: str = Field(min_length=1, max_length=300)
     approach: str = Field(min_length=1, max_length=6000)
     first_tests: str = Field(min_length=1, max_length=1000)
@@ -211,6 +215,8 @@ async def generate_proposal(
             "reasoning": {"effort": config["reasoning_effort"]},
             "instructions": (
                 "Propose exactly one distinct, concrete candidate SOLUTION to the research problem. "
+                "Give it a concise, specific title of 2–12 words describing this bounded investigation; "
+                "avoid generic labels and full-sentence titles. "
                 "The approach field must STATE THE SOLUTION ITSELF, not a plan to investigate, "
                 "develop, assess, or stress-test possible solutions. For a practical problem, "
                 "describe the proposed course of action: who does what, in what order, by what "
@@ -328,6 +334,9 @@ async def generate_proposal(
         proposal = Proposal.model_validate_json(texts[0])
         if (
             any(not text.strip() for text in proposal.model_dump().values())
+            or "\n" in proposal.title
+            or "\r" in proposal.title
+            or len(proposal.title.split()) > 12
             or "\n" in proposal.summary
             or "\r" in proposal.summary
         ):

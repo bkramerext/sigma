@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent, type Ref } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -49,14 +49,22 @@ type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?:
 type ResearchStep = { id: string; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; output?: Record<string, unknown> };
 type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string };
 
-function ResearchWorkspace({ path, projectId, strategies, onViewStrategy }: { path: string; projectId: string; strategies: Strategy[]; onViewStrategy: (id: string) => void }) {
-  const eligible = strategies.filter(strategy => !strategy.removed_at);
+function displayStrategyTitle(strategy: Strategy | undefined): string {
+  if (!strategy) return 'Strategy';
+  if (typeof strategy.title === 'string' && strategy.title.trim()) return strategy.title;
+  const firstLine = typeof strategy.approach === 'string' ? strategy.approach.split(/\r?\n/, 1)[0].trim() : '';
+  return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
+}
+
+type ProcessControls = { play: () => void; pause: () => void; playDisabled: boolean; pauseDisabled: boolean; playLabel: string };
+
+function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; onViewStrategy: (id: string) => void; onControlsChange: (controls: ProcessControls) => void }) {
+  const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [session, setSession] = useState<ResearchSession | null>(null);
   const selectedSessionId = useRef('');
-  const [strategyId, setStrategyId] = useState(eligible[0]?.id ?? '');
+  const [pendingStrategyId, setPendingStrategyId] = useState('');
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
-  const [createMode, setCreateMode] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -68,6 +76,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy }: { pa
   const idempotencyKey = useRef<string | null>(null);
   const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused');
   const active = session && (session.status === 'queued' || session.status === 'running');
+  const nextStrategyId = eligible[0]?.id ?? '';
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -135,57 +144,73 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy }: { pa
   }
 
   async function start() {
-    if (!config || !strategyId) return;
+    if (!config || !pendingStrategyId) return;
     setBusy(true); setError('');
     try {
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
-      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: strategyId, expected_project_id: projectId, expected_binding: config.binding, idempotency_key: idempotencyKey.current });
+      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyId, expected_project_id: projectId, expected_binding: config.binding, idempotency_key: idempotencyKey.current });
       idempotencyKey.current = null;
-      setCreateMode(false); setConfirmStart(false); selectedSessionId.current = next.id;
+      setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
       await load(next.id);
     } catch (cause) { await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
   }
 
-  async function control(action: 'pause' | 'resume' | 'stop') {
-    if (!session) return;
+  async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = session) {
+    if (!target) return;
     setBusy(true); setError(''); setConfirmStop(false);
-    try { await post<ResearchSession>(`research-sessions/${session.id}/control`, { path, action }); await load(session.id); }
-    catch (cause) { await load(session.id).catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    try { await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action }); await load(target.id); }
+    catch (cause) { await load(target.id).catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
   }
 
-  const terminal = session && ['completed', 'stopped', 'failed'].includes(session.status);
+  const playLabel = activeSession?.status === 'paused' ? 'Resume research session' : 'Start research session';
+  const play = useCallback(() => {
+    if (busy || readError) return;
+    if (activeSession?.status === 'paused') { void control('resume', activeSession); return; }
+    if (activeSession || !eligible.length) return;
+    setPendingStrategyId(nextStrategyId);
+    setConfirmStart(false);
+    void begin();
+  }, [activeSession, busy, nextStrategyId, eligible.length, readError]);
+  const pause = useCallback(() => {
+    if (activeSession?.status === 'running' && !busy && !readError) void control('pause', activeSession);
+  }, [activeSession, busy, readError]);
+  useEffect(() => {
+    onControlsChange({
+      play, pause,
+      playDisabled: busy || !!readError || !eligible.length || confirmStart || (!!activeSession && activeSession.status !== 'paused'),
+      pauseDisabled: busy || !!readError || activeSession?.status !== 'running',
+      playLabel,
+    });
+  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, pause, play, playLabel, readError]);
+
   const lastActivity = session?.events.at(-1);
   const statusLabel = readError && active ? `State unknown · last confirmed ${session.status}` : session?.status;
 
   return <section className="research-workspace" aria-labelledby="research-session-heading">
-    <header className="research-workspace-header"><div><h2 id="research-session-heading">{session ? `Research session #${session.session_number}` : 'Research session'}</h2>
+    <header className="research-workspace-header"><div><h2 id="research-session-heading">{session ? `Session #${session.session_number}` : 'Research session'}</h2>
       {session && <p className="research-session-subtitle">{session.strategy_title} · {statusLabel}</p>}</div>
-      {sessions.length > 0 && <label className="research-history-control">Session history<select aria-label="Research session history" value={session?.id ?? ''} onChange={event => { selectedSessionId.current = event.target.value; setCreateMode(false); void load(event.target.value); }}>
+      {sessions.length > 0 && <label className="research-history-control">Session history<select aria-label="Research session history" value={session?.id ?? ''} onChange={event => { selectedSessionId.current = event.target.value; void load(event.target.value); }}>
         {sessions.map(item => <option key={item.id} value={item.id}>#{item.session_number} · {item.strategy_title} · {item.status}</option>)}
       </select></label>}
     </header>
 
     {activeSession && session?.id !== activeSession.id && <p className="research-active-notice" role="status">Session #{activeSession.session_number} is {activeSession.status} for {activeSession.strategy_title}. <button type="button" className="text-view-link" onClick={() => { selectedSessionId.current = activeSession.id; void load(activeSession.id); }}>View active session</button></p>}
 
-    {(!session || createMode) && !activeSession && <div className="research-start-form">
-      {eligible.length ? <><label htmlFor="research-strategy-choice">Strategy to investigate</label><select id="research-strategy-choice" value={strategyId} onChange={event => setStrategyId(event.target.value)}>{eligible.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select>
-        {!confirmStart ? <button type="button" className="primary-action" disabled={busy} onClick={() => void begin()}>{busy ? 'Checking AI…' : 'Start investigation'}</button>
-          : config && <div className="research-consent" role="group" aria-label="Confirm research session">
-            <p><strong>{eligible.find(item => item.id === strategyId)?.title}</strong></p><p>{config.model} · {thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort} thinking · {config.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
-            <p>Up to 3 cycles and 6 provider calls. Usage may accrue. Six calls is a request limit, not a cost guarantee. Findings are unverified research notes.</p>
-            <p>An already-sent provider request may continue to consume allowance if paused or stopped.</p>
-            <button type="button" className="primary-action" disabled={busy} onClick={() => void start()}>Confirm and start</button>
-            <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStart(false)}>Cancel</button>
-          </div>}
-        {session && <button type="button" className="text-view-link" onClick={() => { setCreateMode(false); setConfirmStart(false); }}>Cancel new session</button>}
-      </> : <div><p>No eligible saved strategies yet. Create or accept a strategy before starting research.</p><button type="button" className="text-view-link" onClick={() => onViewStrategy('')}>Expand Strategies</button></div>}
+    {!session && !confirmStart && (eligible.length
+      ? <p className="research-empty">No research session yet.</p>
+      : <p className="research-empty">Create or accept a strategy before starting research. <button type="button" className="text-view-link" onClick={() => onViewStrategy('')}>Show Strategies</button></p>)}
+    {confirmStart && config && <div className="research-consent" role="group" aria-label="Confirm research session">
+      <p><strong>{displayStrategyTitle(eligible.find(item => item.id === pendingStrategyId))}</strong></p><p>{config.model} · {thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort} thinking · {config.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
+      <p>Up to 3 cycles and 6 provider calls. Usage may accrue. Six calls is a request limit, not a cost guarantee. Findings are unverified research notes.</p>
+      <p>An already-sent provider request may continue to consume allowance if paused or stopped.</p>
+      <div className="research-session-actions"><button type="button" className="primary-action" disabled={busy} onClick={() => void start()}>Confirm and start</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStart(false)}>Cancel</button></div>
     </div>}
 
-    {session && !createMode && <div className="research-session-body">
+    {session && <div className="research-session-body">
       <div className="research-session-facts"><p><strong>Model:</strong> {session.model} · {thinkingLabels[session.reasoning_effort] ?? session.reasoning_effort} thinking · {session.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
         <p><strong>Progress:</strong> Cycle {session.cycle} of 3 · {session.calls_used} of {session.call_limit} calls used ({Math.max(0, session.call_limit - session.calls_used)} remaining)</p>
         <p><strong>Current action:</strong> {session.current_action}</p>
@@ -194,9 +219,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy }: { pa
       <p className="research-session-message">{session.message}</p>
       {!!session.current_question && <p><strong>Current question:</strong> {session.current_question}</p>}
       <div className="research-session-actions">
-        {active && <><button type="button" className="text-view-link" disabled={busy} onClick={() => void control('pause')}>Pause</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(true)}>Stop</button></>}
-        {session.status === 'paused' && <><button type="button" className="primary-action" disabled={busy} onClick={() => void control('resume')}>Resume</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(true)}>Stop</button></>}
-        {terminal && !activeSession && <button type="button" className="primary-action" onClick={() => { setCreateMode(true); setConfirmStart(false); setStrategyId(eligible[0]?.id ?? ''); }}>New session</button>}
+        {(active || session.status === 'paused') && <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(true)}>Stop</button>}
         <button type="button" className="text-view-link" onClick={() => onViewStrategy(session.strategy_id)}>View strategy</button>
       </div>
       {confirmStop && <div className="research-stop-confirm" role="group" aria-label="Confirm stop session"><p>Stop session #{session.session_number}? Stopping is terminal and prevents further calls.</p><button type="button" className="text-view-link" disabled={busy} onClick={() => void control('stop')}>Confirm stop</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session</button></div>}
@@ -425,7 +448,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   </div>;
 }
 
-function InlineProjectTitle({ view, onSaved, disabled, titleRef }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean; titleRef?: Ref<HTMLHeadingElement> }) {
+function ProjectPaneTitle({ view, onSaved, expanded, onToggle, disabled, headingRef }: { view: ProjectView; onSaved: (view: ProjectView) => void; expanded: boolean; onToggle: () => void; disabled: boolean; headingRef?: Ref<HTMLHeadingElement> }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(view.project.title);
   const [busy, setBusy] = useState(false);
@@ -435,35 +458,42 @@ function InlineProjectTitle({ view, onSaved, disabled, titleRef }: { view: Proje
   useEffect(() => { if (!editing) setDraft(view.project.title); }, [view.project.title, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
   function cancel() { setDraft(view.project.title); setError(''); setEditing(false); requestAnimationFrame(() => trigger.current?.focus()); }
-  async function save() {
+  async function save(event: FormEvent) {
+    event.preventDefault();
     if (busy) return;
+    if (!draft.trim()) { setError('Enter a project title.'); input.current?.focus(); return; }
     setBusy(true); setError('');
     try {
       const current = settingsOf(view);
       const next = await post<ProjectView>('update', { path: view.path, ...current, title: draft, expected: current });
       setEditing(false); onSaved(next); requestAnimationFrame(() => trigger.current?.focus());
-    } catch (cause) { setError(errorMessage(cause)); }
+    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
   }
   return <>
-    <h1 ref={titleRef} tabIndex={-1} className="current-project" aria-label={view.project.title}>
-      {editing ? <input ref={input} aria-label="Project title" value={draft} maxLength={200} disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancel(); } else if (event.key === 'Enter') { event.preventDefault(); void save(); } }}/>
-        : <button ref={trigger} className="project-title-edit" type="button" onClick={() => setEditing(true)} disabled={disabled} aria-label={`Edit project title: ${view.project.title}`} title="Click or press Enter to edit project title">{view.project.title}</button>}
-    </h1>
-    {editing && <div className="project-title-actions"><button type="button" disabled={busy || !draft.trim()} onClick={() => void save()}>Save</button><button type="button" disabled={busy} onClick={cancel}>Cancel</button></div>}
-    {error && <p role="alert" className="project-title-error">{error}</p>}
+    <div className="project-pane-title-line">
+      <h1 id="project-pane-heading" ref={headingRef} tabIndex={-1} className="current-project">
+        <button type="button" className="project-pane-disclosure" aria-expanded={expanded} aria-controls="project-pane-content" onClick={onToggle}><span>Project: {view.project.title}</span><svg className={`project-pane-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 19 12 7 20Z"/></svg></button>
+      </h1>
+      <button ref={trigger} type="button" className="text-view-link text-view-icon project-title-pencil" aria-label={`Edit project title: ${view.project.title}`} title="Edit project title" disabled={disabled || editing} onClick={() => setEditing(true)}>
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
+      </button>
+    </div>
+    {editing && <form className="project-title-edit-form" onSubmit={save}>
+      <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
+      <input ref={input} id="project-pane-title-input" aria-label="Project title" value={draft} maxLength={200} required disabled={busy} onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
+      <button type="submit" className="text-view-link" disabled={busy}>Save</button><button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
+      {error && <p role="alert" className="project-title-error">{error}</p>}
+    </form>}
   </>;
 }
 
-function Header({ goHome, close, projectTitle, projectArtwork = false, titleRef, editProject }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean; titleRef?: Ref<HTMLHeadingElement>; editProject?: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean } }) {
+function Header({ goHome, close, projectArtwork = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectArtwork?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? projectTitle && <div className="project-title-line">
-        {close && <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Close project" title="Back to projects"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>}
-        {editProject ? <InlineProjectTitle {...editProject} titleRef={titleRef}/> : <h1 ref={titleRef} tabIndex={-1} className="current-project">{projectTitle}</h1>}
-      </div>
+      {projectArtwork ? close && <div className="project-title-line"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Close project" title="Back to projects"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button></div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -491,9 +521,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, titleRef, editProject }: {
+function WorkspaceFrame({ children, goHome, close }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; titleRef?: Ref<HTMLHeadingElement>; editProject?: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean };
+  close?: { action: () => void; busy: boolean };
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -506,7 +536,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, titleRef, editP
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} titleRef={titleRef} editProject={editProject} projectArtwork/>
+    <Header goHome={goHome} close={close} projectArtwork/>
     <div className={`workspace-layout${collapsed ? ' nav-collapsed' : ''}`}>
       <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -789,20 +819,22 @@ function StrategyTitleEditor({ strategy, path, onSaved }: {
   strategy: Strategy; path: string; onSaved: (view: ProjectView) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(strategy.title);
+  const shownTitle = displayStrategyTitle(strategy);
+  const [draft, setDraft] = useState(shownTitle);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const trigger = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (!editing) setDraft(strategy.title); }, [strategy.title, editing]);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (!editing) setDraft(shownTitle); }, [shownTitle, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
   function cancel() {
-    setEditing(false); setDraft(strategy.title); setError('');
+    setEditing(false); setDraft(shownTitle); setError('');
     requestAnimationFrame(() => trigger.current?.focus());
   }
   async function save(event: FormEvent) {
     event.preventDefault(); event.stopPropagation();
-    if (busy || !draft.trim()) return;
+    if (busy) return;
+    if (!draft.trim()) { setError('Enter a strategy title.'); input.current?.focus(); return; }
     setBusy(true); setError('');
     try {
       const next = await post<ProjectView>('strategies/edit', {
@@ -810,20 +842,19 @@ function StrategyTitleEditor({ strategy, path, onSaved }: {
       });
       setEditing(false); onSaved(next);
       requestAnimationFrame(() => trigger.current?.focus());
-    } catch (cause) { setError(errorMessage(cause)); }
+    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
   }
-  return <div className={`strategy-title-editor${editing ? ' is-renaming' : ''}`}
-    onClick={event => { event.stopPropagation(); }}
-    onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape' && editing && !busy) { event.preventDefault(); cancel(); } }}>
+  return <div className={`strategy-title-editor${editing ? ' is-renaming' : ''}`}>
     {editing ? <form onSubmit={save} className="strategy-rename-form">
-      <input ref={input} aria-label="Strategy name" value={draft} maxLength={200} disabled={busy}
-        required onChange={event => setDraft(event.target.value)}/>
-      <button type="submit" className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
+      <label className="sr-only" htmlFor={`strategy-title-${strategy.id}`}>Strategy title</label>
+      <input ref={input} id={`strategy-title-${strategy.id}`} aria-label="Strategy title" value={draft} maxLength={200} disabled={busy}
+        required onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
+      <button type="submit" className="text-view-link" disabled={busy}>Save</button>
       <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
-    </form> : <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>
-      <button type="button" ref={trigger} className="strategy-title-edit" aria-label={`Rename strategy: ${strategy.title}`}
-        onClick={() => setEditing(true)}>{strategy.title}</button>
+    </form> : <h3>
+      <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`}
+        onClick={() => setEditing(true)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
     </h3>}
     {error && <p className="error" role="alert">{error}</p>}
   </div>;
@@ -967,12 +998,20 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   </form>;
 }
 
-function StrategyCreationActions({ buttonRef, disabled, onManual, onAI }: {
-  buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; onManual: () => void; onAI: () => void;
+function StrategyCreationActions({ buttonRef, disabled, onManual, onAI, processControls }: {
+  buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; onManual: () => void; onAI: () => void; processControls: ProcessControls;
 }) {
   return <div className="strategy-heading-actions">
     <button type="button" className="text-view-link" ref={buttonRef} disabled={disabled} onClick={onManual}>New</button>
     <button type="button" className="text-view-link" disabled={disabled} onClick={onAI}>Generate</button>
+    <span className="strategy-process-controls" aria-label="Research process controls">
+      <button type="button" className="text-view-link text-view-icon process-control" aria-label={processControls.playLabel} title={processControls.playLabel} disabled={processControls.playDisabled || disabled} onClick={processControls.play}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
+      </button>
+      <button type="button" className="text-view-link text-view-icon process-control" aria-label="Pause research session" title="Pause research session" disabled={processControls.pauseDisabled || disabled} onClick={processControls.pause}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 4h3.2v12H5.5zM11.3 4h3.2v12h-3.2z"/></svg>
+      </button>
+    </span>
   </div>;
 }
 
@@ -1160,6 +1199,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [focusStrategy, setFocusStrategy] = useState('');
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
+  const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, pause: () => {}, playDisabled: true, pauseDisabled: true, playLabel: 'Start research session' });
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const introPane = useRef<HTMLDivElement>(null);
@@ -1216,8 +1256,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing }, projectTitle: view?.project.title, titleRef: heading,
-    editProject: view ? { view, onSaved: setView, disabled: closing || ordering || !!dragId || editing || generating } : undefined };
+  const frame = { goHome, close: { action: close, busy: closing } };
   function toggleProjectPane() {
     setProjectExpanded(open => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!open)); return !open; });
   }
@@ -1271,7 +1310,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading"><button type="button" aria-expanded={projectExpanded} aria-controls="project-pane-content" onClick={toggleProjectPane}>Project</button></h2><p>{project.title} · {project.problem.replace(/\s+/g, ' ').slice(0, 180)}{project.problem.length > 180 ? '…' : ''}</p></header>
+      <header className="workspace-pane-heading project-pane-heading"><ProjectPaneTitle view={view} onSaved={setView} expanded={projectExpanded} onToggle={toggleProjectPane} disabled={closing || ordering || !!dragId} headingRef={heading}/></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
         <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
           <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton} hideProjectHeading/>
@@ -1285,15 +1324,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </div>
     </section>
     {error && <p role="alert" className="error">{error}</p>}
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy}/>
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     <section className="pool workspace-pane strategies-pane" aria-labelledby="pool-heading">
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}>Strategies</button></h2>
-        <p>{strategies.length} active strateg{strategies.length === 1 ? 'y' : 'ies'} · Stages are manually tracked</p>
-        <StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
+        <p>{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
+        <StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)} processControls={processControls}/>
       </header>
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
-      <p className="hint strategies-intro">Independent avenues of investigation. Stages are manually tracked.</p>
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
         const strategy = next.project.strategies[next.project.strategies.length - 1];
@@ -1307,15 +1345,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <div className="strategy-columns" aria-hidden="true"><span>Strategy</span><span>Stage</span></div>
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
-          <details className="strategy-detail">
-            <summary title="Expand or collapse the full approach"><div className="strategy-title-line"><StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/><svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></div>
-              <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
-              
-            </summary>
-            <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
-              
-            </div>
-          </details>
+          <div className="strategy-row-main">
+            <details className="strategy-detail">
+              <summary id={`strategy-${strategy.id}`} title="Expand or collapse this strategy"><span>Strategy: {displayStrategyTitle(strategy)}</span><svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></summary>
+              <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/></div>
+            </details>
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/>
+          </div>
           <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
           <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => { if (ordering || dragId || editing || generating || projectEditing) return; if (mode === 'fork') { setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
@@ -1327,10 +1363,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 if (event.key === 'ArrowUp' || event.key === 'ArrowDown') moveTo(drag.current.order.indexOf(strategy.id) + (event.key === 'ArrowUp' ? -1 : 1)); else void drop();
               } }}><svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" aria-hidden="true">{[3,7,11].flatMap(y => [3,7].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1"/>))}</svg></button>
         </li>)}
-      </ol></div> : !editing && <div className="pool-empty">
-        <h3>Start with an idea worth investigating.</h3>
-        <p>Use New strategy to write a hypothesis or approach. Your ideas will be preserved here as you explore them.</p>
-      </div>}
+      </ol></div> : !editing && <p className="pool-empty">No strategies yet.</p>}
       {(dragId || ordering) && <p className="reorder-feedback">{ordering ? 'Saving order…' : 'Moving strategy · Release or press Enter to save · Escape cancels'}</p>}
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>

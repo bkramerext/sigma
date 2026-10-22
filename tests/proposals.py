@@ -73,6 +73,7 @@ async def check(path):
         # Generation must propose a candidate answer, leaving viability assessment for later.
         instructions = payload["instructions"]
         assert "candidate SOLUTION" in instructions
+        assert "concise, specific title of 2–12 words" in instructions
         assert "not a plan to investigate" in instructions
         assert "independent agents to assess its viability later" in instructions
         assert "other required JSON fields separate" in instructions
@@ -167,6 +168,16 @@ async def check(path):
         httpx.Response(200, json={"status": "incomplete"}),
         httpx.Response(200, text="not JSON"),
         httpx.Response(200, json=response({**DRAFT, "title": ""})),
+        httpx.Response(200, json=response({**DRAFT, "title": "one\ntwo"})),
+        httpx.Response(
+            200,
+            json=response(
+                {
+                    **DRAFT,
+                    "title": "one two three four five six seven eight nine ten eleven twelve thirteen",
+                }
+            ),
+        ),
         httpx.Response(200, json=response({**DRAFT, "summary": "two\nlines"})),
         httpx.Response(
             200,
