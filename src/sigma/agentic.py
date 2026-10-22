@@ -119,7 +119,7 @@ def _complete_summary(value: str) -> str:
     # Near the schema limit, the model sometimes stops mid-sentence.
     # Retain only complete sentences, without inventing missing text.
     if len(value) >= 280:
-        endings = list(re.finditer(r"[.!?](?=\\s|$)", value))
+        endings = list(re.finditer(r"[.!?](?=\s|$)", value))
         if endings:
             return value[: endings[-1].end()].strip()
     raise ValueError("Incomplete summary")
