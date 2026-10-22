@@ -443,51 +443,31 @@ function StockProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
 }
 
 function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
-  const [tab, setTab] = useState<'recent' | 'stock'>('stock');
+  const [tab, setTab] = useState<'recent' | 'stock'>('recent');
   const recent = useRef<HTMLButtonElement>(null);
   const stock = useRef<HTMLButtonElement>(null);
   function switchTab(next: 'recent' | 'stock') { setTab(next); (next === 'recent' ? recent : stock).current?.focus(); }
   return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'recent' ? 'stock' : 'recent'); }
-    if (event.key === 'Home') { event.preventDefault(); switchTab('stock'); }
-    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
+    if (event.key === 'Home') { event.preventDefault(); switchTab('recent'); }
+    if (event.key === 'End') { event.preventDefault(); switchTab('stock'); }
   }}>
-    <button ref={stock} id="stock-tab" role="tab" aria-controls="stock-panel" aria-selected={tab === 'stock'} tabIndex={tab === 'stock' ? 0 : -1} onClick={() => setTab('stock')}>Stock Projects</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} onClick={() => setTab('recent')}>Recent Projects</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} onClick={() => setTab('recent')}>Recent</button>
+    <button ref={stock} id="stock-tab" role="tab" aria-controls="stock-panel" aria-selected={tab === 'stock'} tabIndex={tab === 'stock' ? 0 : -1} onClick={() => setTab('stock')}>Stock</button>
   </div>
     <div id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
     <div id="stock-panel" role="tabpanel" aria-labelledby="stock-tab" hidden={tab !== 'stock'}><StockProjects onOpen={onOpen}/></div>
   </div>;
 }
 
-function Home({ initialPath, currentPath, onOpen, goHome }: {
-  initialPath: string; currentPath: string; onOpen: (view: ProjectView) => void;
-  goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+function Home({ initialPath, onOpen }: {
+  initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
-  const [currentProject, setCurrentProject] = useState<ProjectView | null>(null);
-  const [reopening, setReopening] = useState(false);
-  const [currentError, setCurrentError] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
-  useEffect(() => {
-    if (!currentPath) { setCurrentProject(null); return; }
-    const controller = new AbortController();
-    fetch(`/api/projects/inspect?${new URLSearchParams({ path: currentPath })}`, { signal: controller.signal })
-      .then(async response => response.ok ? await response.json() as ProjectView : null)
-      .then(setCurrentProject)
-      .catch(() => { if (!controller.signal.aborted) setCurrentProject(null); });
-    return () => controller.abort();
-  }, [currentPath]);
-  async function reopenCurrent() {
-    if (!currentProject || reopening) return;
-    setReopening(true); setCurrentError('');
-    try { onOpen(await post<ProjectView>('open', { path: currentProject.path })); }
-    catch (cause) { setCurrentError(errorMessage(cause)); }
-    finally { setReopening(false); }
-  }
   function cancel() {
     const trigger = entry === 'open' ? openButton : newButton;
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
@@ -495,21 +475,18 @@ function Home({ initialPath, currentPath, onOpen, goHome }: {
   return <div className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-    <div className="home-topline"><ConnectionStatus/></div>
-    <div className="home-hero">
-    {currentProject && <div className="home-current"><p>Current Project</p><button type="button" disabled={reopening} onClick={() => void reopenCurrent()}><span className="home-current-title">{currentProject.project.title}</span><span className="home-current-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m10 5 7 7-7 7M17 12H4"/></svg></span></button></div>}
-    {currentError && <p role="alert" className="error">{currentError}</p>}
-    <h1 ref={heading} tabIndex={-1}>Switch to a new project</h1>
-    <p className="intro">Open an existing project or begin a new investigation.</p>
-    </div>
-    <div className="home-entry-actions">
-      <button ref={openButton} className="copper-button" onClick={() => setEntry('open')}>Open Project</button>
-      <button ref={newButton} className="copper-button" onClick={() => setEntry('new')}>New Project</button>
-    </div>
-    <HomeCatalog onOpen={onOpen}/>
-    <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-    {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
-    {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
+      <div className="home-topline"><ConnectionStatus/></div>
+      <section className="home-projects" aria-labelledby="home-projects-heading">
+        <div className="home-projects-heading">
+          <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
+          <button type="button" ref={openButton} className="home-project-action" onClick={() => setEntry('open')}>Open</button>
+          <button type="button" ref={newButton} className="home-project-action" onClick={() => setEntry('new')}>New</button>
+        </div>
+        <HomeCatalog onOpen={onOpen}/>
+      </section>
+      <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
+      {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
+      {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
   </div>;
 }
@@ -1107,7 +1084,7 @@ function App() {
   }
   const url = new URL(location, window.location.origin);
   return <main className={url.pathname === '/' ? 'home-page' : 'workspace-page'}>
-    {url.pathname === '/' ? <Home initialPath={lastPath} currentPath={currentPath} goHome={goHome} onOpen={view => {
+    {url.pathname === '/' ? <Home initialPath={lastPath} onOpen={view => {
       setOpenedView(view); setLastPath(view.path); setCurrentPath(view.path); window.localStorage.setItem('sigma.currentProject', view.path); navigate(projectUrl(view.path));
     }}/> : url.pathname === '/project' ? <ProjectScreen key={location}
       initialView={openedView?.path === url.searchParams.get('path') ? openedView : undefined} path={url.searchParams.get('path') ?? ''} onClose={closeProject} goHome={goHome}/>
