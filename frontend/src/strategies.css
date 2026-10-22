@@ -175,3 +175,14 @@
   line-height: 1.75;
 }
 .workspace-page .strategy-expanded .text-view-editor textarea { width: 100%; font-size: 16px; line-height: 1.75; }
+
+/* In-flight generation remains inert, but retains the copper action treatment. */
+.workspace-page .proposal-dialog button.generating-action:disabled {
+  color: #cd9270;
+  border: 1px solid #a96548;
+  background: #07111ee8;
+  box-shadow: inset 0 1px 0 #cd92702b;
+  cursor: default;
+  opacity: 1;
+}
+.workspace-page .generating-hourglass { display: inline-block; margin-right: 5px; color: #d8a575; }
