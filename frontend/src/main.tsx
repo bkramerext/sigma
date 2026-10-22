@@ -364,7 +364,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       {pairError && <p className="error" role="alert">{pairError}</p>}
       <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
       {locationError && <p className="error" role="alert">{locationError}</p>}
-      {destination?.exists && <p className="error" role="alert">A project or file already exists here. Choose another name.</p>}
+      {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></div></form>
   </dialog>;
