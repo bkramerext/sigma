@@ -1,5 +1,34 @@
 # SIGMA status
 
+## Candidate-solution generation and Sample return behavior (2026-10-21)
+
+Generate Strategy now asks the selected model for **one concrete proposed
+solution**, rather than a plan to investigate or evaluate possible solutions.
+The proposed approach must describe the substantive mechanism or course of
+action. The unsaved draft editor and saved strategy contain **only the
+`approach` field**; existing auxiliary `first_tests`, `assumptions`, and
+`failure_modes` response fields remain in the transport schema for compatibility,
+but are no longer appended to the accepted strategy. Their eventual placement
+in evaluation/rubric artifacts is a separate data-model decision. No generated
+claim is represented as independently tested.
+
+The deferred agentic Explore/Revise prompt contracts were aligned with the
+solution-first requirement; the evaluator's challenge and decision logic was
+not redesigned. The existing receipt, selected-account/model binding,
+human-edited explicit save, and failure/cancellation guards are unchanged.
+
+Opening a Sample creates a working project copy. On a successful open, Home's
+persisted catalog preference now switches to **Recent** before navigating into
+the copy; returning from the project displays Recent. Failed Sample opens
+do not change that preference. Ordinary manually selected tabs remain sticky.
+
+Updated `tests/proposals.py`, `tests/agentic.py`,
+`browser_checks/a15_generate.py`, and `browser_checks/recents.py` with
+regression assertions covering generation instructions, solution-only draft
+persistence, and Sample-to-Recent navigation. Source and test contents were
+reviewed in the repository, but **these tests and the full suite have not been
+executed in this session**.
+
 ## Strategy preview and Home tab persistence (2026-10-21)
 
 The collapsed strategy summary remains a one-line teaser. Expanding a strategy
