@@ -100,15 +100,21 @@ function DownloadProjectDialog({ path, title, onCancel }: { path: string; title:
     } catch (cause) { setError(errorMessage(cause)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-label="Download project"
+  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-labelledby="export-project-heading"
     onCancel={event => { event.preventDefault(); cancel(); }}>
     <form onSubmit={exportFile}>
+      <header className="settings-header">
+        <h2 id="export-project-heading">Export</h2>
+        <div className="settings-actions">
+          <button type="submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button>
+          <button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button>
+        </div>
+      </header>
       <div className="settings-body">
         <label className="sr-only" htmlFor="export-project-filename">Proposed filename</label>
         <input ref={input} id="export-project-filename" value={filename} maxLength={180} required disabled={busy} spellCheck={false}
           onChange={event => { setFilename(event.target.value); setError(''); }}/>
         {error && <p className="error" role="alert">{error}</p>}
-        <div className="settings-actions"><button type="submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
       </div>
     </form>
   </dialog>;
