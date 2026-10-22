@@ -1,6 +1,6 @@
 # A17.5 — Project report and regression stabilization
 
-Status: **assigned to Codex; not yet implemented or verified.**
+Status: **complete; implementation and verification are recorded in `docs/STATUS.md`.**
 
 Read `docs/HUMAN-AI-INTERACTION.md` and current `docs/STATUS.md` before implementation. Inspect current code; do not assume A17.4 documentation still describes the current UI.
 

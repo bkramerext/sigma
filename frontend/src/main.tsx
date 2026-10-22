@@ -128,7 +128,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
     <p className="research-session-message">{session.message}</p>
     {!!session.current_question && <p><strong>Current focus:</strong> {session.current_question}</p>}
     <div className="research-session-actions">
-      <a className="text-view-link" href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>
+      <a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>
     </div>
     {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. {lastStep.status === 'running' ? 'No result has been committed yet.' : lastStep.status === 'interrupted' ? 'This attempt is not a completed research artifact. The provider may have completed it or charged usage; SIGMA will not repeat it automatically because completion is ambiguous.' : 'This attempt failed and is not a completed research artifact.'}</p></section>}
     {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><h3>Research artifacts</h3><ol>{session.artifacts.map(artifact => <li key={artifact.id}><details>
@@ -141,7 +141,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
       </div>
     </details></li>)}</ol></section>}
     {!!session.events.length && <section className="research-activity" aria-label="Recent session activity">
-      <h3><button type="button" aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h3>
+      <h3><button type="button" title={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h3>
       <ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol>
     </section>}
   </div>;
@@ -166,6 +166,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
+  const submittingStart = useRef(false);
   const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused');
   const nextStrategyId = eligible[0]?.id ?? '';
 
@@ -245,7 +246,8 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   }
 
   async function start() {
-    if (!config || !pendingStrategyId) return;
+    if (submittingStart.current || !config || !pendingStrategyId) return;
+    submittingStart.current = true;
     setBusy(true); setError('');
     try {
       idempotencyKey.current ??= crypto.randomUUID();
@@ -257,7 +259,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
       await load(next.id);
       revealSession(next.id);
     } catch (cause) { await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
-    finally { setBusy(false); }
+    finally { submittingStart.current = false; setBusy(false); }
   }
 
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
@@ -324,7 +326,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
   return <section className="sessions-pane workspace-pane" aria-labelledby="sessions-heading">
     <header className="workspace-pane-heading sessions-pane-heading">
-      <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
+      <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
 
@@ -337,10 +339,10 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
           const sessionExpanded = expandedSessionIds.has(item.id);
           return <li className="session-row" key={item.id} data-session-id={item.id}>
             <div className="session-row-heading">
-              <div className="session-heading-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>{['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}{(item.status === 'stopped' || item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted') && <button type="button" className="text-view-link session-remove-link" disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}{['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}</div><small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{item.outcome.label}{item.outcome.provisional ? " · provisional" : ""}</span></small>
-              {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removeSession(item)}>Confirm remove</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Keep session</button></div></div>}
+              <div className="session-heading-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>{['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}{(item.status === 'stopped' || item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}{['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}</div><small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{item.outcome.label}{item.outcome.provisional ? " · provisional" : ""}</span></small>
+              {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm remove</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Keep session</button></div></div>}
             </div>
-            <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
+            <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onViewStrategy={onViewStrategy}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
@@ -374,12 +376,15 @@ function formatDuration(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function DownloadProjectDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
+function ProjectExportDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const defaultName = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 80) || 'project'}.json`;
-  const [filename, setFilename] = useState(defaultName);
+  const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 26) || 'project'}`;
+  const [exportType, setExportType] = useState<'audit' | 'report'>('audit');
+  const [reportFormat, setReportFormat] = useState<'txt' | 'html' | 'tex'>('txt');
+  const [filename, setFilename] = useState(defaultStem);
+  const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { dialog.current?.showModal(); input.current?.focus(); input.current?.select(); }, []);
@@ -388,46 +393,76 @@ function DownloadProjectDialog({ path, title, onCancel }: { path: string; title:
     event.preventDefault();
     if (submitting.current) return;
     const chosen = filename.trim();
-    if (!chosen || chosen === '.' || chosen === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(chosen)) {
-      setError('Enter a valid filename without path separators or reserved characters.');
+    const stem = chosen.replace(/\.(json|txt|html|tex)$/i, '');
+    if (!stem || stem === '.' || stem === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(stem)) {
+      setError('Enter a filename stem without path separators or reserved characters.');
       return;
     }
-    const downloadName = /\.json$/i.test(chosen) ? chosen : `${chosen}.json`;
+    const extension = exportType === 'audit' ? 'json' : reportFormat;
+    const downloadName = `${stem}.${extension}`;
+    const opened = openInTab ? window.open('about:blank', '_blank') : null;
+    if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const response = await fetch(`/api/projects/export?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const route = exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report';
+      const query = new URLSearchParams({ path, ...(exportType === 'report' ? { format: reportFormat } : {}) });
+      const response = await fetch(`${route}?${query}`, { cache: 'no-store' });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
       }
-      const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[]; research_sessions: ResearchSession[] };
-      if (result.export_version !== 2 || !result.project || !Array.isArray(result.agentic_runs) || !Array.isArray(result.research_sessions)) throw new Error('Invalid project export response');
-      const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2) + '\n'], { type: 'application/json' }));
-      try {
-        const link = document.createElement('a');
-        link.href = url; link.download = downloadName;
-        document.body.appendChild(link); link.click(); link.remove();
-      } finally { URL.revokeObjectURL(url); }
-      onCancel();
-    } catch (cause) { setError(errorMessage(cause)); }
+      let content: string;
+      if (exportType === 'audit') {
+        const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[]; research_sessions: ResearchSession[] };
+        if (result.export_version !== 2 || !result.project || !Array.isArray(result.agentic_runs) || !Array.isArray(result.research_sessions)) throw new Error('Invalid project export response');
+        content = `${JSON.stringify(result, null, 2)}\n`;
+      } else content = await response.text();
+      if (opened && !opened.closed) {
+        if (exportType === 'report' && reportFormat === 'html') opened.document.open(), opened.document.write(content), opened.document.close();
+        else {
+          opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : 'Research Report'}`;
+          const pre = opened.document.createElement('pre');
+          pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;padding:1rem';
+          pre.textContent = content;
+          opened.document.body.replaceChildren(pre);
+        }
+      }
+      const url = URL.createObjectURL(new Blob([content], { type: exportType === 'audit' ? 'application/json;charset=utf-8' : reportFormat === 'html' ? 'text/html;charset=utf-8' : reportFormat === 'tex' ? 'application/x-tex;charset=utf-8' : 'text/plain;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = downloadName;
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (openInTab && (!opened || opened.closed)) {
+        setError('The browser blocked or closed the new tab. The file was still downloaded.');
+      } else onCancel();
+    } catch (cause) { if (opened && !opened.closed) opened.close(); setError(errorMessage(cause)); }
     finally { submitting.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-labelledby="export-project-heading"
     onCancel={event => { event.preventDefault(); cancel(); }}>
     <form onSubmit={exportFile}>
       <header className="settings-header">
-        <h2 id="export-project-heading">Export</h2>
+        <h2 id="export-project-heading">Export Project</h2>
         <div className="settings-actions">
-          <button type="submit" className="export-download-icon" aria-label={busy ? 'Downloading project' : 'Download project'} disabled={busy || !filename.trim()}>
-            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <button type="button" className="settings-cancel" disabled={busy} onClick={() => cancel()}>Cancel</button>
+          <button type="submit" className="settings-submit" title="Create the selected project export" disabled={busy}>{busy ? 'Creating…' : 'Create'}</button>
+          <button type="button" className="settings-cancel" title="Close without creating an export" disabled={busy} onClick={() => cancel()}>Cancel</button>
         </div>
       </header>
       <div className="settings-body">
-        <label className="sr-only" htmlFor="export-project-filename">Proposed filename</label>
-        <input ref={input} id="export-project-filename" value={filename} maxLength={180} required disabled={busy} spellCheck={false}
-          onChange={event => { setFilename(event.target.value); setError(''); }}/>
+        <fieldset className="export-type-options" disabled={busy}>
+          <legend>Export type</legend>
+          <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
+          <label><input type="radio" name="export-type" value="report" checked={exportType === 'report'} onChange={() => setExportType('report')}/> Research Report</label>
+        </fieldset>
+        <label htmlFor="export-project-format">Format</label>
+        <select id="export-project-format" value={reportFormat} disabled={busy || exportType === 'audit'} onChange={event => setReportFormat(event.target.value as 'txt' | 'html' | 'tex')}>
+          <option value="txt">Text (.txt)</option><option value="html">HTML (.html)</option><option value="tex">LaTeX (.tex)</option>
+        </select>
+        <label htmlFor="export-project-filename">Filename</label>
+        <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={180} disabled={busy} spellCheck={false}
+          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex)$/i, '')); setError(''); }}/>
+          <span aria-hidden="true">.{exportType === 'audit' ? 'json' : reportFormat}</span></div>
+        <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>
         {error && <p className="error" role="alert">{error}</p>}
       </div>
     </form>
@@ -544,20 +579,20 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
+      }} title={renderTooltip}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
       <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
     </TooltipWrap>}
 
     {editing ? <>
-      <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
-      <button type="button" className="text-view-link" disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
-      </> : data && version && <TooltipWrap><button type="button" className="text-view-link text-view-icon" aria-label={`Edit ${name}`} aria-describedby={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} className="sigma-render-tooltip" role="tooltip">{`Edit ${name}`}</span></TooltipWrap>}
+      <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" title={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
+      <button type="button" className="text-view-link" title={`Cancel editing ${name}`} disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
+      </> : data && version && <TooltipWrap><button type="button" className="text-view-link text-view-icon" aria-label={`Edit ${name}`} title={`Edit ${name}`} aria-describedby={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} className="sigma-render-tooltip" role="tooltip">{`Edit ${name}`}</span></TooltipWrap>}
 
-    {!hideProjectActions && scope === 'project' && !editing && <TooltipWrap><button ref={exportTrigger} type="button" className="copper-button project-download-trigger" aria-label="Download project" aria-describedby="download-project-tooltip" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><span id="download-project-tooltip" className="sigma-render-tooltip" role="tooltip">Download project</span></TooltipWrap>}
+    {!hideProjectActions && scope === 'project' && !editing && <TooltipWrap><button ref={exportTrigger} type="button" className="copper-button project-export-trigger" aria-label="Export project" title="Export project" aria-describedby="export-project-tooltip" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><span id="export-project-tooltip" className="sigma-render-tooltip" role="tooltip">Export project</span></TooltipWrap>}
     {!hideProjectActions && onSettings && !editing && <TooltipWrap><button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon" aria-label="Project settings" aria-describedby="project-settings-tooltip" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button><span id="project-settings-tooltip" className="sigma-render-tooltip" role="tooltip">Project settings</span></TooltipWrap>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
-    {scope === 'project' && exportOpen && <DownloadProjectDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
+    {scope === 'project' && exportOpen && <ProjectExportDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && !hideProjectHeading && <h2 className="investigation-heading">Project</h2>}
       {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
@@ -610,7 +645,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
     {editing ? <form ref={form} className="project-title-edit-form" onSubmit={save}>
       <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
       <input ref={input} id="project-pane-title-input" aria-label="Project title" value={draft} maxLength={200} required disabled={busy} onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
-      <button type="submit" className="text-view-link" disabled={busy}>Save</button><button type="button" className="text-view-link" disabled={busy} onClick={() => cancel()}>Cancel</button>
+      <button type="submit" className="text-view-link" title="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" title="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
       <button type="button" ref={trigger} className="text-view-link text-view-icon project-title-pencil" aria-label={`Edit project title: ${view.project.title}`} title="Edit project title" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) setEditing(true); }}>
@@ -1026,10 +1061,10 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
       <label className="sr-only" htmlFor={`strategy-title-${strategy.id}`}>Strategy title</label>
       <input ref={input} id={`strategy-title-${strategy.id}`} aria-label="Strategy title" value={draft} maxLength={200} disabled={busy}
         required onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
-      <button type="submit" className="text-view-link" disabled={busy}>Save</button>
-      <button type="button" className="text-view-link" disabled={busy} onClick={() => cancel()}>Cancel</button>
+      <button type="submit" className="text-view-link" title="Save strategy title" disabled={busy}>Save</button>
+      <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
-      <button type="button" id={`strategy-${strategy.id}`} className="strategy-row-disclosure" aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
+      <button type="button" id={`strategy-${strategy.id}`} className="strategy-row-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
       <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} title={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) setEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
       {commands}
@@ -1097,8 +1132,8 @@ function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
         </>}
         {error && <p role="alert" className="error">{error}</p>}
         <div className="form-actions">
-          <button type="submit" className="secondary">{busy ? 'Saving…' : mode === 'remove' ? 'Remove strategy' : 'Save changes'}</button>
-          <button type="button" className="text-button" ref={cancelButton} onClick={onCancel}>Cancel</button>
+          <button type="submit" className="secondary" title={mode === 'remove' ? `Remove strategy ${strategy.title}` : 'Save strategy changes'}>{busy ? 'Saving…' : mode === 'remove' ? 'Remove strategy' : 'Save changes'}</button>
+          <button type="button" className="text-button" title="Cancel and close this dialog" ref={cancelButton} onClick={onCancel}>Cancel</button>
         </div>
       </fieldset>
     </form>
@@ -1141,16 +1176,16 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
   buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; hideNew?: boolean; onManual: () => void; onAI: () => void;
 }) {
   return <div className="strategy-heading-actions">
-    {!hideNew && <button type="button" className="text-view-link" ref={buttonRef} disabled={disabled} onClick={onManual}>New</button>}
-    <button type="button" className="text-view-link" disabled={disabled} onClick={onAI}>Generate</button>
+    {!hideNew && <button type="button" className="text-view-link" ref={buttonRef} title="Create a new strategy" disabled={disabled} onClick={onManual}>New</button>}
+    <button type="button" className="text-view-link" title="Generate a strategy with AI" disabled={disabled} onClick={onAI}>Generate</button>
   </div>;
 }
 
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        <button type="button" className="text-view-link session-start-link" disabled={disabled} onClick={controls.start}>Start session #{controls.nextSessionNumber}</button>
-        <button type="button" className="text-view-link session-start-link" disabled={disabled} onClick={controls.cancel}>Cancel</button>
+        <button type="button" className="text-view-link session-start-link" title={`Confirm start Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button type="button" className="text-view-link text-view-icon process-control" aria-label={controls.playLabel} title={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
@@ -1343,7 +1378,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
-  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -1360,7 +1395,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [dragId, setDragId] = useState<string | null>(null);
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
-  const [command, setCommand] = useState<{ mode: 'remove' | 'stage'; strategy: Strategy } | null>(null);
+  const [command, setCommand] = useState<{ mode: 'edit' | 'remove'; strategy: Strategy } | null>(null);
   const [focusStrategy, setFocusStrategy] = useState('');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
@@ -1483,7 +1518,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Download project" title="Download project" disabled={closing || ordering || !!dragId} onClick={() => setDownloadOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}/>
       <div className="project-pane-content">
@@ -1502,7 +1537,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {error && <p role="alert" className="error">{error}</p>}
     <section className="pool workspace-pane strategies-pane" aria-labelledby="pool-heading">
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
-        <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
+        <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
           <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
@@ -1543,7 +1578,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    {downloadOpen && <DownloadProjectDialog path={view.path} title={project.title} onCancel={() => { setDownloadOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Download project"]')?.focus()); }}/>}
+    {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>}
     {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
       onCancel={() => {
         const id = command.strategy.id;

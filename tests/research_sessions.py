@@ -536,7 +536,7 @@ async def test_remove_terminal_and_monotonic_number(path: Path):
     ):
         first = await start()
         finished = await wait_for(path, first["id"])
-        assert finished["session_number"] == 1 and finished["status"] == "completed"
+        assert finished["session_number"] == 1 and finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
         try:
             research_sessions.remove_session(str(path), first["id"], "stale-revision")

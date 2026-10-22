@@ -107,20 +107,24 @@
   cursor: default;
 }
 
-/* The download dialog contains only the proposed filename and its two actions. */
+/* The Project Audit / Research Report export dialog. */
 .project-settings-dialog.export-project-dialog { width: min(440px, calc(100vw - 40px)); }
 .project-settings-dialog.export-project-dialog .settings-body { padding-top: 22px; }
 .project-settings-dialog.export-project-dialog .settings-body label { margin-top: 0; }
+.project-settings-dialog.export-project-dialog .settings-body > label { margin-top: 16px; margin-bottom: 7px; }
+.project-settings-dialog.export-project-dialog .export-type-options { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; border: 0; }
+.project-settings-dialog.export-project-dialog .export-type-options legend { color: #e2c49e; font-size: 12px; margin-bottom: 9px; }
+.project-settings-dialog.export-project-dialog .export-type-options label,
+.project-settings-dialog.export-project-dialog .export-open-tab { display: flex; align-items: center; gap: 8px; margin: 0; color: #dce7f0; font-size: 13px; }
+.project-settings-dialog.export-project-dialog .export-type-options input,
+.project-settings-dialog.export-project-dialog .export-open-tab input { display: inline-block; width: auto; margin: 0; accent-color: #d9a66c; }
+.project-settings-dialog.export-project-dialog .export-filename-field { display: flex; align-items: center; gap: 8px; }
+.project-settings-dialog.export-project-dialog .export-filename-field input { min-width: 0; }
+.project-settings-dialog.export-project-dialog .export-filename-field span { flex: 0 0 auto; color: #adbac7; font: 13px ui-monospace, monospace; }
+.project-settings-dialog.export-project-dialog .export-open-tab { margin-top: 18px; }
+.project-settings-dialog.export-project-dialog .settings-header .settings-actions .settings-submit { color: #d9b17e; }
 .project-settings-dialog.export-project-dialog .settings-body .error { margin-top: 12px; }
 .project-settings-dialog.export-project-dialog .settings-actions { justify-content: flex-end; gap: 10px; margin-top: 18px; }
-.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon {
-  display: grid; place-items: center; width: 36px; height: 36px; min-width: 36px; min-height: 36px;
-  padding: 0; border: 1px solid #dfb476; border-radius: 6px; color: #edc38d;
-  background: #142431; text-decoration: none;
-}
-.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon svg { width: 18px; height: 18px; }
-.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon:hover:not(:disabled) { color: #f3cd9e; background: #203747; }
-.project-settings-dialog.export-project-dialog .settings-actions .export-download-icon:disabled { opacity: .5; cursor: default; }
 
 /* Align the Settings tab labels with the header title and form fields.
    Keep the separator full width while insetting the interactive tabs. */

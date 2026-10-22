@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -211,6 +211,19 @@ def export_project_view(path: str):
         "agentic_runs": runs,
         "research_sessions": sessions,
     }
+
+
+@app.get("/api/projects/export/report")
+def export_project_report_view(path: str, format: str = "txt"):
+    """Create a deterministic, escaped report from the same evidence as the JSON audit."""
+    from sigma.project_reports import render_report
+
+    data = export_project_view(path)
+    try:
+        body, media_type = render_report(data, format)
+    except ValueError as exc:
+        raise ProjectError(str(exc)) from exc
+    return Response(body, media_type=media_type, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/projects/events")

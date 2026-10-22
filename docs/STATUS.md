@@ -1,5 +1,52 @@
 # SIGMA status
 
+## A17.5 Project export and stabilization (2026-10-22)
+
+Replaced the Project-page download icon with a single **Export project** control.
+Its dialog creates either the existing v2 Project Audit JSON or a deterministic
+Research Report in UTF-8 text, standalone escaped HTML, or XeLaTeX-compatible
+LaTeX. The report includes project/problem details, all strategies and approaches,
+chronological sessions and artifacts, lifecycle state distinct from outcome,
+agentic run evidence, decisions, objections, caveats, and open obligations. It
+labels agent-generated findings as provisional unless independently verified.
+No model requests are used. The report API reads the same export snapshot as the
+existing audit endpoint; Project Audit content and version semantics are intact.
+
+The filename is an editable, sanitized stem with a separate extension derived
+from export type/format. Changing type or format preserves the stem, and manual
+extensions cannot override the selected type. The checkbox opens a safe view in a
+new tab during the initiating gesture while still downloading the file; blocked
+tabs leave the download available and report the condition. The dialog supports
+Escape, focus restoration, narrow viewports and recoverable empty-name errors.
+
+Reviewed and stabilized the post-A17.4 direct UI changes: natural sessions end
+as `ended`, stopped sessions remain resumable, numbering comes from the durable
+sequence counter after deletions, interrupted calls are not automatically
+replayed, and bounded context continues from durable evidence. Removed stale
+stage/kebab expectations in browser checks, verified inline Fork/Remove and
+session controls, and added a synchronous duplicate-start guard. Restored
+meaningful native hover titles across actionable Project, Strategy and Session
+controls.
+
+Verification on 2026-10-22:
+
+- `./sigma test` passed all scenarios, including the new report/escaping/API
+  checks, Ruff check/format, Pyright (zero errors), frontend typecheck and Vite
+  production build. Starlette emitted its existing non-failing TestClient/httpx
+  deprecation warning.
+- `uv run --with playwright python browser_checks/a17_research.py` passed in
+  real Chrome against the isolated mock provider. It verified all four export
+  types, derived filenames and stem retention, unsafe/empty filename handling,
+  checkbox defaults, HTML new-tab plus download, blocked-popup recovery,
+  Escape/focus restoration,
+  desktop/mobile dialog bounds, button hover titles, strategy actions, inline
+  session controls, ended/outcome distinction, removal and monotonic numbering.
+- Visually inspected `/tmp/sigma-a175-export-desktop.png` and
+  `/tmp/sigma-a175-export-mobile.png`; both dialogs fit and remain legible.
+  No live provider calls were made. No TeX engine (XeLaTeX, LuaLaTeX or pdfLaTeX)
+  is installed here, so the escaped XeLaTeX-targeted output was checked by tests
+  but not compiled to PDF.
+
 ## A16 agentic Generate Strategy notebook (2026-10-22)
 
 Connected the project-page Generate Strategy composer to the existing bounded

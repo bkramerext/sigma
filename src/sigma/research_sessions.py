@@ -740,13 +740,19 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         return _public(record)
     if record["status"] not in {"paused", "stopped"}:
         return _public(record)
-    if record["status"] == "paused" and record.get("steps") and record["steps"][-1].get("status") == "interrupted":
+    if (
+        record["status"] == "paused"
+        and record.get("steps")
+        and record["steps"][-1].get("status") == "interrupted"
+    ):
         raise ProjectError(
             "This session has an interrupted provider call with ambiguous completion and possible usage. It cannot be resumed safely; stop it and start a new session instead."
         )
     if record.get("stopped_at"):
         stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
-        record["deadline_at"] = (datetime.fromisoformat(record["deadline_at"]) + stopped_for).isoformat()
+        record["deadline_at"] = (
+            datetime.fromisoformat(record["deadline_at"]) + stopped_for
+        ).isoformat()
         record.pop("stopped_at", None)
     if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
         record["status"] = "ended"
@@ -808,7 +814,9 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                 )
             record["status"] = "queued"
             record["updated_at"] = _now()
-            record["message"] = "Research resumed by user. Previous artifacts and remaining call budget retained."
+            record["message"] = (
+                "Research resumed by user. Previous artifacts and remaining call budget retained."
+            )
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])
             _save(record["project_path"], record)

@@ -51,12 +51,31 @@ with sync_playwright() as playwright:
     page.wait_for_url("**/project?*")
     expect(page.get_by_role("heading", name="Project")).to_be_visible()
     expect(page.get_by_role("button", name="Back to Home", exact=True)).to_be_visible()
+    untitled_controls = page.locator(
+        ".project-pane button, .strategies-pane button, .sessions-pane button"
+    ).evaluate_all(
+        "buttons => buttons.filter(button => !button.disabled && !button.title.trim()).map(button => `${button.textContent.trim()} [${button.getAttribute('aria-label') || button.className}]`)"
+    )
+    assert not untitled_controls, (
+        f"Actionable workspace buttons need native hover titles: {untitled_controls}"
+    )
     project_header = page.locator(".project-pane-heading")
     project_disclosure = project_header.get_by_role("button", name="Project", exact=True)
     project_disclosure.click()
     expect(page.locator("#project-pane-content")).to_be_hidden()
-    project_header.get_by_role("button", name="Download project", exact=True).click()
-    expect(page.get_by_role("dialog", name="Export")).to_be_visible()
+    project_header.get_by_role("button", name="Export project", exact=True).click()
+    first_export = page.get_by_role("dialog", name="Export Project")
+    expect(first_export).to_be_visible()
+    expect(first_export.get_by_role("radio", name="Project Audit")).to_be_checked()
+    expect(first_export.get_by_label("Format")).to_be_disabled()
+    expect(first_export.get_by_label("Open in browser tab")).not_to_be_checked()
+    expect(first_export.get_by_label("Filename")).to_be_focused()
+    page.screenshot(path="/tmp/sigma-a175-export-desktop.png")
+    page.keyboard.press("Escape")
+    expect(first_export).to_be_hidden()
+    expect(project_header.get_by_role("button", name="Export project", exact=True)).to_be_focused()
+    project_header.get_by_role("button", name="Export project", exact=True).click()
+    first_export = page.get_by_role("dialog", name="Export Project")
     page.get_by_role("button", name="Cancel", exact=True).click()
     expect(page.locator("#project-pane-content")).to_be_hidden()
     page.get_by_role("button", name="Project settings", exact=True).click()
@@ -273,27 +292,19 @@ with sync_playwright() as playwright:
     expect(first_row.locator(".strategy-title-line h3")).to_have_text("Saved research approach")
     expect(first_row.locator(".strategy-expanded")).to_be_visible()
     expect(first_row.locator("details.strategy-detail")).to_have_count(0)
-    more = first_row.get_by_role(
-        "button", name="More actions for Saved research approach", exact=True
+    expect(first_row.get_by_role("menu")).to_have_count(0)
+    expect(first_row.get_by_role("button", name="More actions", exact=False)).to_have_count(0)
+    expect(first_row.get_by_role("button", name="Fork", exact=True)).to_have_attribute(
+        "title", "Fork strategy"
     )
-    more.click()
-    expect(more).to_have_attribute("aria-expanded", "true")
-    menu = first_row.get_by_role("menu")
-    expect(menu.locator("[role=menuitem]")).to_have_count(5)
-    assert menu.locator("[role=menuitem]").all_text_contents() == [
-        "Schedule",
-        "Fork",
-        "Report artifact",
-        "Change stage",
-        "Remove",
-    ]
-    expect(menu.get_by_role("menuitem", name="Schedule")).to_be_disabled()
-    menu.get_by_role("menuitem", name="Fork").focus()
-    page.keyboard.press("ArrowDown")
-    expect(menu.get_by_role("menuitem", name="Change stage")).to_be_focused()
-    page.keyboard.press("Escape")
-    expect(more).to_be_focused()
-    expect(more).to_have_attribute("aria-expanded", "false")
+    expect(first_row.get_by_role("button", name="Remove", exact=True)).to_have_attribute(
+        "title", "Remove strategy"
+    )
+    assert page.locator(".strategy-columns span").all_text_contents() == ["Strategy"]
+    expect(first_row).not_to_contain_text("Change stage")
+    title_bounds = first_row.locator(".strategy-title-line h3").bounding_box()
+    grip_bounds = first_row.locator(".drag-grip").bounding_box()
+    assert title_bounds and grip_bounds and grip_bounds["x"] < title_bounds["x"]
     page.get_by_role(
         "button", name="Edit strategy title: Saved research approach", exact=True
     ).click()
@@ -345,15 +356,16 @@ with sync_playwright() as playwright:
     play = page.get_by_role("button", name="Start research session", exact=True)
     expect(play).to_be_enabled()
     play.click()
-    expect(research.locator(".research-consent")).to_contain_text("API key billing")
-    expect(research.locator(".research-consent")).to_contain_text("3 research rounds")
-    expect(research.locator(".research-consent")).to_contain_text("6 model calls")
-    expect(research.locator(".research-consent")).to_contain_text("Usage may accrue")
-    research.get_by_role("button", name="Confirm and start", exact=True).dblclick(delay=5)
+    start_first = page.get_by_role("button", name="Start session #1", exact=True)
+    expect(start_first).to_be_visible()
+    expect(page.get_by_role("button", name="Cancel", exact=True)).to_have_attribute(
+        "title", "Cancel starting a research session"
+    )
+    start_first.dblclick(delay=5)
     first_session = research.locator("li[data-session-id]")
     expect(first_session).to_have_count(1, timeout=15000)
     expect(first_session.locator(".session-row-title")).to_have_text("Session #1")
-    expect(first_session.locator(".session-status")).to_contain_text("completed")
+    expect(first_session.locator(".session-status")).to_have_text("ended")
     page.wait_for_function(
         """id => { const row = document.querySelector(`[data-session-id="${CSS.escape(id)}"]`); if (!row) return false; const rect = row.getBoundingClientRect(); return rect.top < innerHeight && rect.bottom > 0; }""",
         arg=first_session.get_attribute("data-session-id"),
@@ -362,10 +374,10 @@ with sync_playwright() as playwright:
     expect(page.locator(".api-connection .connection-dot")).not_to_have_class(
         re.compile("connection-active")
     )
-    expect(first_session).to_contain_text("completed")
+    expect(first_session.locator(".session-outcome-inline")).to_contain_text("Mixed")
     expect(research).to_contain_text("Cycle 3 of 3")
     expect(research).to_contain_text("6 of 6 calls used (0 remaining)")
-    expect(research).to_contain_text("Completed · budget exhausted")
+    expect(first_session.locator(".session-status")).to_have_text("ended")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     artifacts = research.get_by_label("Research artifacts")
     expect(artifacts.locator("li")).to_have_count(3)
@@ -415,7 +427,7 @@ with sync_playwright() as playwright:
     page.reload()
     research = page.locator(".sessions-pane")
     page.get_by_role("button", name="Start research session", exact=True).click()
-    research.get_by_role("button", name="Confirm and start", exact=True).click()
+    page.get_by_role("button", name="Start session #2", exact=True).click()
     pause_row = research.locator("li[data-session-id]").filter(has_text="Session #2")
     expect(pause_row.locator(".session-status")).to_contain_text("running", timeout=10000)
     expect(pause_row.locator(".session-row-content")).to_be_visible()
@@ -433,15 +445,13 @@ with sync_playwright() as playwright:
     expect(dot).to_have_css("animation-name", "connection-dot-pulse")
     page.get_by_role("button", name="Pause research session", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("paused", timeout=5000)
-    expect(pause_row.get_by_role("button", name="Remove session", exact=True)).to_have_count(0)
+    expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_have_count(0)
     resume = page.get_by_role("button", name=re.compile("Resume unavailable"))
     expect(resume).to_be_disabled()
     expect(pause_row).to_contain_text("completion is ambiguous")
     pause_row.get_by_role("button", name="Stop", exact=True).click()
-    confirm_stop = research.get_by_role("group", name="Confirm stop session")
-    confirm_stop.get_by_role("button", name="Confirm stop", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
-    expect(pause_row.get_by_role("button", name="Remove session", exact=True)).to_be_visible()
+    expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_be_visible()
 
     # A background provider failure is reconciled into the history and a toast.
     page.get_by_role(
@@ -462,7 +472,7 @@ with sync_playwright() as playwright:
     expect(research).to_contain_text("Pause and stop fixture strategy")
     expect(research.locator(".section-count")).to_have_text("2 sessions, 0 running")
     page.get_by_role("button", name="Start research session", exact=True).click()
-    research.get_by_role("button", name="Confirm and start", exact=True).click()
+    page.get_by_role("button", name="Start session #3", exact=True).click()
     failure_row = research.locator("li[data-session-id]").filter(has_text="Session #3")
     expect(failure_row.locator(".session-status")).to_contain_text("failed", timeout=10000)
     expect(page.locator(".request-toast")).to_have_count(1)
@@ -515,7 +525,7 @@ with sync_playwright() as playwright:
     expect(first_strategy_row.locator(".strategy-expanded")).to_be_visible()
     stopped_session = research.locator("li[data-session-id]").filter(has_text="Session #2")
     expect(stopped_session.locator(".session-row-content")).to_be_hidden()
-    stopped_session.get_by_role("button", name="Remove session", exact=True).click()
+    stopped_session.get_by_role("button", name="Remove", exact=True).click()
     confirm_remove = stopped_session.get_by_role("group", name="Confirm remove Session 2")
     confirm_remove.get_by_role("button", name="Confirm remove", exact=True).click()
     expect(research.locator("li[data-session-id]")).to_have_count(2)
@@ -526,12 +536,21 @@ with sync_playwright() as playwright:
     assert sorted(remaining) == [1, 3], remaining
     page.get_by_role("button", name="Project", exact=True).click()
     expect(page.locator("#project-pane-content")).to_be_hidden()
-    page.get_by_role("button", name="Download project", exact=True).click()
-    export_dialog = page.get_by_role("dialog", name="Export")
+    page.get_by_role("button", name="Export project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
     expect(export_dialog).to_be_visible()
+    filename_field = export_dialog.get_by_label("Filename")
+    filename_field.fill("")
+    export_dialog.get_by_role("button", name="Create", exact=True).click()
+    expect(export_dialog.get_by_role("alert")).to_have_text(
+        "Enter a filename stem without path separators or reserved characters."
+    )
+    filename_field.fill("a17-audit.json")
+    expect(filename_field).to_have_value("a17-audit")
     with page.expect_download() as download_info:
-        export_dialog.get_by_role("button", name="Download project", exact=True).click()
+        export_dialog.get_by_role("button", name="Create", exact=True).click()
     export_data = json.loads(Path(download_info.value.path()).read_text(encoding="utf-8"))
+    assert download_info.value.suggested_filename == "a17-audit.json"
     assert export_data["export_version"] == 2
     assert [session["session_number"] for session in export_data["research_sessions"]] == [1, 3]
     assert export_data["research_sessions"][0]["artifacts"]
@@ -539,6 +558,75 @@ with sync_playwright() as playwright:
     assert "fixture-token" not in json.dumps(export_data)
     expect(export_dialog).to_be_hidden()
     expect(page.locator("#project-pane-content")).to_be_hidden()
+
+    page.get_by_role("button", name="Export project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
+    filename_field = export_dialog.get_by_label("Filename")
+    filename_field.fill("a17 unsafe/report.html")
+    expect(filename_field).to_have_value("a17 unsafe-report")
+    export_dialog.get_by_role("radio", name="Research Report").check()
+    format_select = export_dialog.get_by_label("Format")
+    expect(format_select).to_be_enabled()
+    expect(format_select).to_have_value("txt")
+    expect(filename_field).to_have_value("a17 unsafe-report")
+    expect(export_dialog.locator(".export-filename-field span")).to_have_text(".txt")
+    format_select.select_option("html")
+    expect(filename_field).to_have_value("a17 unsafe-report")
+    expect(export_dialog.locator(".export-filename-field span")).to_have_text(".html")
+    format_select.select_option("txt")
+    expect(export_dialog.get_by_label("Open in browser tab")).not_to_be_checked()
+    with page.expect_download() as report_download:
+        export_dialog.get_by_role("button", name="Create", exact=True).click()
+    assert report_download.value.suggested_filename == "a17 unsafe-report.txt"
+    text_report = Path(report_download.value.path()).read_text(encoding="utf-8")
+    assert "Research sessions" in text_report and "Session #1" in text_report
+    expect(export_dialog).to_be_hidden()
+
+    page.get_by_role("button", name="Export project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
+    export_dialog.get_by_role("radio", name="Research Report").check()
+    export_dialog.get_by_label("Filename").fill("a17-html")
+    export_dialog.get_by_label("Format").select_option("html")
+    export_dialog.get_by_label("Open in browser tab").check()
+    with page.expect_popup() as report_tab, page.expect_download() as html_download:
+        export_dialog.get_by_role("button", name="Create", exact=True).click()
+    popup = report_tab.value
+    popup.wait_for_load_state("domcontentloaded")
+    assert "a17-html.html" == html_download.value.suggested_filename
+    html_report = Path(html_download.value.path()).read_text(encoding="utf-8")
+    assert "<!doctype html>" in html_report.lower() and "Research Report" in html_report
+    expect(popup.locator("body")).to_contain_text("Research sessions")
+    popup.close()
+    expect(export_dialog).to_be_hidden()
+
+    page.get_by_role("button", name="Export project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
+    export_dialog.get_by_role("radio", name="Research Report").check()
+    export_dialog.get_by_label("Filename").fill("a17-blocked-tab")
+    export_dialog.get_by_label("Open in browser tab").check()
+    page.evaluate("() => { window.__originalOpen = window.open; window.open = () => null; }")
+    with page.expect_download() as blocked_download:
+        export_dialog.get_by_role("button", name="Create", exact=True).click()
+    page.evaluate("() => { window.open = window.__originalOpen; delete window.__originalOpen; }")
+    assert blocked_download.value.suggested_filename == "a17-blocked-tab.txt"
+    expect(export_dialog).to_be_visible()
+    expect(export_dialog.get_by_role("alert")).to_have_text(
+        "The browser blocked or closed the new tab. The file was still downloaded."
+    )
+    export_dialog.get_by_role("button", name="Cancel", exact=True).click()
+
+    page.get_by_role("button", name="Export project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
+    export_dialog.get_by_role("radio", name="Research Report").check()
+    export_dialog.get_by_label("Filename").fill("a17-latex")
+    export_dialog.get_by_label("Format").select_option("tex")
+    with page.expect_download() as tex_download:
+        export_dialog.get_by_role("button", name="Create", exact=True).click()
+    assert tex_download.value.suggested_filename == "a17-latex.tex"
+    tex_report = Path(tex_download.value.path()).read_text(encoding="utf-8")
+    assert "\\documentclass" in tex_report and "\\begin{document}" in tex_report
+    assert "Research sessions" in tex_report
+    expect(export_dialog).to_be_hidden()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert (
@@ -548,6 +636,15 @@ with sync_playwright() as playwright:
         == "0px"
     )
     expect(page.get_by_role("button", name="Back to Home", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Export project", exact=True).click()
+    mobile_export = page.get_by_role("dialog", name="Export Project")
+    mobile_box = mobile_export.bounding_box()
+    assert mobile_box and mobile_box["x"] >= 0 and mobile_box["y"] >= 0
+    assert mobile_box["x"] + mobile_box["width"] <= 390
+    assert mobile_box["y"] + mobile_box["height"] <= 844
+    page.screenshot(path="/tmp/sigma-a175-export-mobile.png")
+    page.keyboard.press("Escape")
+    expect(mobile_export).to_be_hidden()
     connection.locator("summary").click()
     mobile_dialog = page.get_by_role("dialog", name="AI connection settings")
     expect(mobile_dialog).to_be_visible()
@@ -561,7 +658,7 @@ with sync_playwright() as playwright:
     assert not errors, errors
     assert len(starts) == 3, starts
     print(
-        "PASS real Chrome A17.4: stable Settings frame, Project actions while collapsed, keyboard menu, project/strategy/session disclosures, launch scroll, outcome/artifact visibility, activity collapse, confirmed deletion, export round-trip and mobile overflow"
+        "PASS real Chrome A17.5: direct strategy actions and hover titles, lifecycle/outcome distinction, inline start/stop, all export formats and names, HTML tab and blocked-popup recovery, dialog keyboard/mobile layout, artifact visibility, deletion and mobile overflow"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()
