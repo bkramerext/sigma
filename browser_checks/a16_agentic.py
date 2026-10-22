@@ -38,6 +38,16 @@ with sync_playwright() as playwright:
         page.get_by_role("heading", name=re.compile(r"Maximum Regions Formed by Lines - Working"))
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(1)
+    expect(page.get_by_role("button", name="Download project")).to_be_visible()
+    page.get_by_role("button", name="Download project").click()
+    download_dialog = page.get_by_role("dialog", name="Download project")
+    expect(download_dialog.get_by_label("Proposed filename")).to_have_value(re.compile(r"\.json$"))
+    assert download_dialog.get_by_role("button").count() == 2
+    assert download_dialog.locator(".settings-header, .export-project-help").count() == 0
+    expect(download_dialog.get_by_role("button", name="Download", exact=True)).to_be_visible()
+    expect(download_dialog.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
+    download_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(download_dialog).not_to_be_visible()
     maximum_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     maximum_state = Path(maximum_path) / "project.json"
     maximum_before = maximum_state.read_bytes()

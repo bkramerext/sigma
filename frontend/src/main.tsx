@@ -62,7 +62,7 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function ExportProjectDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
+function DownloadProjectDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -100,18 +100,15 @@ function ExportProjectDialog({ path, title, onCancel }: { path: string; title: s
     } catch (cause) { setError(errorMessage(cause)); }
     finally { submitting.current = false; setBusy(false); }
   }
-  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-labelledby="export-project-heading" aria-describedby="export-project-help"
+  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-label="Download project"
     onCancel={event => { event.preventDefault(); cancel(); }}>
     <form onSubmit={exportFile}>
-      <header className="settings-header"><h2 id="export-project-heading">Export</h2>
-        <div className="settings-actions"><button type="submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
-      </header>
       <div className="settings-body">
-        <p id="export-project-help" className="export-project-help">Download the project and its retained agentic run evidence as JSON.</p>
-        <label htmlFor="export-project-filename">Filename</label>
+        <label className="sr-only" htmlFor="export-project-filename">Proposed filename</label>
         <input ref={input} id="export-project-filename" value={filename} maxLength={180} required disabled={busy} spellCheck={false}
           onChange={event => { setFilename(event.target.value); setError(''); }}/>
         {error && <p className="error" role="alert">{error}</p>}
+        <div className="settings-actions"><button type="submit" disabled={busy || !filename.trim()}>{busy ? 'Downloading…' : 'Download'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
       </div>
     </form>
   </dialog>;
@@ -208,7 +205,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
       <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
     </span>}
-    {scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="text-view-link" onClick={() => setExportOpen(true)}>Export</button>}
+    {scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-download-trigger" aria-label="Download project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg><span>Download</span></button>}
     {editing ? <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
       <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
@@ -216,7 +213,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
   </>;
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
-    {scope === 'project' && exportOpen && <ExportProjectDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
+    {scope === 'project' && exportOpen && <DownloadProjectDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && <h2 className="investigation-heading">Project</h2>}
       {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
