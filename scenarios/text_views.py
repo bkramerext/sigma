@@ -133,14 +133,15 @@ async def main_async(root: Path):
         raw = json.loads((legacy / "project.json").read_bytes())
         raw["schema_version"] = version
         if version < 6:
-            raw.pop("ai_model")
-            raw.pop("reasoning_effort")
+            raw.pop("ai_model", None)
+            raw.pop("reasoning_effort", None)
         if version < 5:
-            raw.pop("active_order")
+            raw.pop("active_order", None)
         if version < 4:
-            raw.pop("research_mode")
+            raw.pop("research_mode", None)
+            raw.pop("investigation_type", None)
         if version < 2:
-            raw.pop("strategies")
+            raw.pop("strategies", None)
         (legacy / "project.json").write_text(json.dumps(raw))
         before = (legacy / "project.json").read_bytes()
         snapshot = inspect_text(legacy, "project")
@@ -469,7 +470,7 @@ async def main_async(root: Path):
         content = "".join(
             f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
         )
-        return httpx.Response(200, headers={}, content=content)
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
 
     with (
         patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
@@ -483,6 +484,63 @@ async def main_async(root: Path):
     ):
         plan = await convert_text(str(plan_path), "project", "markdown")
     assert plan["markdown"]["current"] and plan["markdown"]["provenance"]["model"] == MODEL
+
+    # If the plan bridge answers with JSON rather than SSE, accept a complete
+    # result and surface a structured provider error without leaking input.
+    json_plan_path = root / "json-plan.sigma"
+    initialize_project(json_plan_path, "JSON plan", "Count j_n for n >= 0")
+
+    def json_plan_handler(request):
+        assert request.headers.get("accept") == "text/event-stream"
+        assert json.loads(request.content)["stream"] is True
+        return httpx.Response(200, json=provider_output("Count $j_n$ for $n \\ge 0$"))
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(json_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        json_plan = await convert_text(str(json_plan_path), "project", "markdown")
+    assert json_plan["markdown"]["current"]
+    assert json_plan["markdown"]["body"] == "Count $j_n$ for $n \\ge 0$"
+
+    json_error_path = root / "json-plan-error.sigma"
+    initialize_project(json_error_path, "JSON plan error", "Count k_n for n >= 0")
+
+    def json_error_handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "error": {
+                    "code": "subscription_sharing_unsupported_capability",
+                    "message": "private source text must stay hidden",
+                }
+            },
+        )
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(json_error_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(json_error_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "does not support" in str(exc)
+            assert "private source text" not in str(exc)
+        else:
+            raise AssertionError("JSON ChatGPT plan error was treated as converted text")
+    assert not (json_error_path / "text-representations.json").exists()
 
     # A streaming adapter can omit the assembled text from response.completed,
     # even when all text deltas arrived and the final status is completed.

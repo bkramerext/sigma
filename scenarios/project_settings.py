@@ -34,7 +34,9 @@ def rejects(action):
 
 
 def edit(path, values, prior):
-    return update_project(path, **values, expected=prior)
+    normalized = dict(values)
+    normalized["research_mode"] = normalized.pop("investigation_type")
+    return update_project(path, **normalized, expected=prior)
 
 
 def main():
@@ -55,7 +57,8 @@ def main():
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
             if version < 4:
-                del raw["research_mode"]
+                raw.pop("research_mode", None)
+                raw.pop("investigation_type", None)
             if version == 1:
                 del raw["strategies"]
             if version < 5:
@@ -80,7 +83,7 @@ def main():
                 **prior,
                 "title": "Renamed",
                 "problem": "New question",
-                "research_mode": "mathematical",
+                "investigation_type": "mathematical",
                 "ai_model": "gpt-6-luna",
                 "reasoning_effort": "xhigh",
             }
@@ -99,7 +102,7 @@ def main():
             }
             assert inspect_project(path) == result
             # Reverse mode as an actual single transaction.
-            back = edit(path, {**values, "research_mode": "default"}, values)
+            back = edit(path, {**values, "investigation_type": "default"}, values)
             assert back.project.id == view.project.id
         print(
             "PASS v1-v5 no-write/default/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen"
@@ -119,7 +122,7 @@ def main():
             ("problem", ""),
             ("title", "x" * 201),
             ("problem", "x" * 20001),
-            ("research_mode", "alien"),
+            ("investigation_type", "alien"),
             ("ai_model", "text-embedding-3-small"),
             ("reasoning_effort", "none"),
         ):

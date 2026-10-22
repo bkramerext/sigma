@@ -52,7 +52,6 @@ KNOWN_ERRORS = {
 }
 
 
-
 def safe_error_detail(raw: Any) -> str | None:
     """Display short provider diagnostics only when they cannot echo private input."""
     if not isinstance(raw, dict):

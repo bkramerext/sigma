@@ -80,7 +80,9 @@ class OpenRequest(BaseModel):
 class InitRequest(OpenRequest):
     title: str
     problem: str
-    investigation_type: str = Field(default="default", validation_alias=AliasChoices("investigation_type", "research_mode"))
+    investigation_type: str = Field(
+        default="default", validation_alias=AliasChoices("investigation_type", "research_mode")
+    )
     ai_model: str | None = None
     reasoning_effort: str = "high"
 
@@ -165,7 +167,9 @@ class CreateProjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
-    investigation_type: str = Field(default="default", validation_alias=AliasChoices("investigation_type", "research_mode"))
+    investigation_type: str = Field(
+        default="default", validation_alias=AliasChoices("investigation_type", "research_mode")
+    )
     ai_model: str | None = None
     reasoning_effort: str = "high"
 
@@ -325,7 +329,9 @@ class ProjectSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
-    investigation_type: str = Field(validation_alias=AliasChoices("investigation_type", "research_mode"))
+    investigation_type: str = Field(
+        validation_alias=AliasChoices("investigation_type", "research_mode")
+    )
     ai_model: str
     reasoning_effort: str
 

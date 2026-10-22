@@ -145,8 +145,28 @@ async def _convert_text(
                     ) as response,
                 ):
                     if binding["mode"] == "chatgpt" and response.status_code == 200:
-                        # The existing plan adapter checks final SSE sequence and response identity.
-                        raw = await completed(response, guard)
+                        content_type = (
+                            response.headers.get("content-type", "").split(";")[0].strip().lower()
+                        )
+                        if content_type == "text/event-stream":
+                            # The shared plan adapter checks final SSE sequence and response identity.
+                            raw = await completed(response, guard)
+                        else:
+                            # Some plan routes return a bounded JSON error (or a
+                            # completed JSON response) even when streaming was
+                            # requested. Preserve useful diagnostics instead of
+                            # reporting the parser's internal content-type error.
+                            data = bytearray()
+                            async for chunk in response.aiter_bytes():
+                                data.extend(chunk)
+                                if len(data) > MAX_RESPONSE:
+                                    raise ProjectError("Conversion response exceeded the limit")
+                            try:
+                                raw = json.loads(data)
+                            except ValueError:
+                                raw = {}
+                            if not isinstance(raw, dict) or raw.get("status") != "completed":
+                                failure(200, raw, binding["mode"], guard)
                     else:
                         data = bytearray()
                         async for chunk in response.aiter_bytes():

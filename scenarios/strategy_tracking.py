@@ -50,7 +50,8 @@ def main():
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
             if version < 4:
-                del raw["research_mode"]
+                raw.pop("research_mode", None)
+                raw.pop("investigation_type", None)
             if version == 1:
                 del raw["strategies"]
             if version == 2:

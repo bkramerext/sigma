@@ -34,7 +34,8 @@ def fixture(path: Path):
     initialize_project(path, "Research", "Preserve the project and earlier text")
     raw = json.loads((path / STATE).read_bytes())
     raw["schema_version"] = 2
-    del raw["research_mode"]
+    raw.pop("research_mode", None)
+    raw.pop("investigation_type", None)
     for key in ("ai_model", "reasoning_effort", "active_order"):
         raw.pop(key, None)
     (path / STATE).write_text(json.dumps(raw))

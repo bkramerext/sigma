@@ -34,7 +34,8 @@ def legacy(path: Path) -> bytes:
     raw = json.loads((path / STATE).read_bytes())
     raw["schema_version"] = 1
     del raw["strategies"]
-    del raw["research_mode"]
+    raw.pop("research_mode", None)
+    raw.pop("investigation_type", None)
     for key in ("ai_model", "reasoning_effort", "active_order"):
         raw.pop(key, None)
     contents = (json.dumps(raw, indent=2) + "\n").encode()

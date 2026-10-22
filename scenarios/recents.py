@@ -30,7 +30,7 @@ def check(root: Path, base: Path) -> None:
         "Nonconsecutive Subset Sums Modulo 3",
         "Did Jesus Use Cannabis?",
     }
-    assert {entry["research_mode"] for entry in catalog} >= {"default", "mathematical"}
+    assert {entry["investigation_type"] for entry in catalog} >= {"default", "mathematical"}
     assert catalog[-1]["title"] == "Did Jesus Use Cannabis?"
     assert home_projects()["projects"] == [] and not list(root.iterdir())
 
@@ -44,7 +44,7 @@ def check(root: Path, base: Path) -> None:
         assert len(stock_projects()["projects"]) == 6
     assert not list(root.iterdir())
 
-    selected = next(item for item in catalog if item["research_mode"] == "mathematical")
+    selected = next(item for item in catalog if item["investigation_type"] == "mathematical")
     source_path = ROOT / "examples" / selected["id"] / "project.json"
     first = open_stock_project(selected["id"])
     assert first.path == str(root / f"{selected['id']}.sigma")
@@ -85,18 +85,18 @@ def check(root: Path, base: Path) -> None:
     assert open_stock_project(selected["id"]).project == edited.project
 
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
-    assert [entry["id"] for entry in recent_projects()["projects"]] == [
-        view.project.id for view in reversed(created[-4:])
-    ]
+    actual = [entry["id"] for entry in recent_projects()["projects"]]
+    expected = [view.project.id for view in reversed(created)] + [impostor.project.id]
+    assert actual == expected, (actual, expected)
     open_project(created[0].path)
     assert recent_projects()["projects"][0]["id"] == created[0].project.id
-    assert len(recent_projects()["projects"]) == 4
+    assert len(recent_projects()["projects"]) == 6
     open_project(first.path)
     assert all(entry["id"] != first.project.id for entry in recent_projects()["projects"])
 
     with TestClient(app) as api:
         before = (state_directory() / "recents.json").read_bytes()
-        assert len(api.get("/api/projects/recent").json()["projects"]) == 4
+        assert len(api.get("/api/projects/recent").json()["projects"]) == 6
         assert (state_directory() / "recents.json").read_bytes() == before
         assert api.get("/api/projects/stock").json()["projects"] == stock_projects()["projects"]
         response = api.post("/api/projects/stock/open", json={"stock_id": selected["id"]})
@@ -135,7 +135,7 @@ def check(root: Path, base: Path) -> None:
     assert inspect_project(first.path).project == edited.project
     assert all(path.read_bytes() == original for path, original in sources.items())
     print(
-        "PASS unlimited stock discovery, stable direct opens and retained edits, collision safety, source immutability, no stock recents, API/CLI and four-item LRU"
+        "PASS unlimited stock discovery, stable direct opens and retained edits, collision safety, source immutability, no stock recents, API/CLI and six-item LRU"
     )
 
 

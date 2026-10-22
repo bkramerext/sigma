@@ -1,6 +1,20 @@
 # SIGMA status
 
-Updated: 2026-10-20
+Updated: 2026-10-21
+
+## Text conversion response stabilization
+
+The ChatGPT plan conversion path now accepts either a bounded completed JSON
+response or the existing validated event stream. When a plan route returns a
+JSON error with HTTP 200, SIGMA reports its sanitized provider diagnostic
+instead of surfacing an internal `plan_stream:content_type` parsing failure;
+the source remains unchanged. The conversion scenario covers JSON success,
+sanitized JSON error, and the explicit SSE content type.
+
+Verification on 2026-10-21: `./sigma test` passed all scenarios, Ruff, Pyright
+(zero errors), frontend typecheck, and production build. Several scenarios were
+updated to match the current `investigation_type` serialization and six-entry
+Recent Projects limit; these were stale test expectations, not runtime changes.
 
 ## Implemented
 

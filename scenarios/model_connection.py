@@ -196,9 +196,13 @@ async def checks():
             )
             await asyncio.wait_for(request_started.wait(), 2)
             prior = asdict(project_settings(initial.project))
+            settings_update = {
+                key: value for key, value in prior.items() if key != "investigation_type"
+            }
+            settings_update["research_mode"] = prior["investigation_type"]
             update_project(
                 path,
-                **{**prior, "ai_model": "gpt-6-astra", "reasoning_effort": "low"},
+                **{**settings_update, "ai_model": "gpt-6-astra", "reasoning_effort": "low"},
                 expected=prior,
             )
             release.set()
@@ -235,7 +239,13 @@ async def checks():
         # Catalog removal never erases settings or forces metadata edits to make network calls.
         with patch.dict(CATALOG, {}, clear=True):
             prior = asdict(project_settings(inspect_project(path).project))
-            edited = update_project(path, **{**prior, "title": "Still editable"}, expected=prior)
+            settings_update = {
+                key: value for key, value in prior.items() if key != "investigation_type"
+            }
+            settings_update["research_mode"] = prior["investigation_type"]
+            edited = update_project(
+                path, **{**settings_update, "title": "Still editable"}, expected=prior
+            )
             assert edited.project.ai_model == "gpt-6-astra"
     print(
         "PASS per-project model/actual effort request, immutable concurrent generation metadata, signed acceptance, unavailable choice/no fallback and offline metadata edits"

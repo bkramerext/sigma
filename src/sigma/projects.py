@@ -71,7 +71,6 @@ class ProjectSettings:
     ai_model: str
     reasoning_effort: str
 
-
     @property
     def research_mode(self) -> ResearchMode:
         """Compatibility alias for existing integrations."""
@@ -146,7 +145,6 @@ class Project:
     active_order: tuple[str, ...] = ()
     ai_model: str = "gpt-6.1-sol"
     reasoning_effort: str = "high"
-
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -411,7 +409,13 @@ def _decode(raw: Any) -> Project:
                 raise ProjectError("Invalid project edit event")
             next_change = ProjectChange(_settings(change["previous"]), _settings(change["current"]))
             # Normalize legacy event keys before checking their canonical contents.
-            normalized_change = {key: {("investigation_type" if field == "research_mode" else field): val for field, val in value.items()} for key, value in change.items()}
+            normalized_change = {
+                key: {
+                    ("investigation_type" if field == "research_mode" else field): val
+                    for field, val in value.items()
+                }
+                for key, value in change.items()
+            }
             if asdict(next_change) != normalized_change:
                 raise ProjectError("Project change text must be canonical")
             if next_change.previous == next_change.current or (

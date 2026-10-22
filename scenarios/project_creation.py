@@ -53,7 +53,7 @@ def main() -> None:
                 assert created.project.schema_version == 6
                 assert created.project.research_mode == mode
                 raw = json.loads((Path(created.path) / STATE).read_bytes())
-                assert raw["research_mode"] == mode.value
+                assert raw["investigation_type"] == mode.value
                 assert open_project(created.path) == created
                 assert project_destination(title).exists
                 # Strategy mutations retain mode and v4 without a downgrade.
@@ -157,7 +157,7 @@ def main() -> None:
                 }
                 response = client.post("/api/projects/create", json=body)
                 assert response.status_code == 201, response.text
-                assert response.json()["project"]["research_mode"] == "mathematical"
+                assert response.json()["project"]["investigation_type"] == "mathematical"
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(
@@ -202,7 +202,7 @@ def main() -> None:
                 )
                 assert result.returncode == 0, result.stderr
                 data = json.loads(result.stdout)
-                assert data["project"]["research_mode"] == mode.value
+                assert data["project"]["investigation_type"] == mode.value
                 assert inspect_project(data["path"]).project.research_mode == mode
             print("PASS API create/preview/errors and both CLI research modes")
 
@@ -223,7 +223,8 @@ def main() -> None:
                     item.pop(key, None)
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
-            del raw["research_mode"]
+            raw.pop("research_mode", None)
+            raw.pop("investigation_type", None)
             if version == 1:
                 del raw["strategies"]
             elif version == 2:
