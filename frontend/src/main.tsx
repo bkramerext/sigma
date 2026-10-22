@@ -142,18 +142,17 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
           if (selected === 'rendered') { chooseView('plain'); setError(''); }
           else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
           else { void convert('markdown'); }
-        }}><span aria-hidden="true">Σ</span></button>}
+        }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>}
       {editing ? <>
         <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
         <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
-      </> : data && version && scope === 'strategy' && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
+      </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
     </div>
     {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
-    </form> : current && version ? scope === 'project' ? selected === 'rendered' ? <div ref={bodyTrigger as Ref<HTMLDivElement>} className={`${contentClass} rendered-text text-editable`} role="button" tabIndex={0} aria-label="Edit Markdown description" title="Click or press Enter to edit Markdown source" onClick={() => beginBodyEdit(true)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(true); } }}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
-      : <p ref={bodyTrigger as Ref<HTMLParagraphElement>} className={`${contentClass} text-editable`} role="button" tabIndex={0} aria-label="Edit Plain description" title="Click or press Enter to edit" onClick={() => beginBodyEdit()} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); beginBodyEdit(); } }}>{version.body}</p>
-      : selected === 'rendered' ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
+    </form> : current && version ? selected === 'rendered'
+      ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
