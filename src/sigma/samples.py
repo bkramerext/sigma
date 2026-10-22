@@ -21,7 +21,7 @@ from sigma.projects import (
     projects_root,
 )
 
-EXAMPLES = ROOT / "examples"
+SAMPLES = ROOT / "samples"
 
 
 @dataclass(frozen=True)
@@ -34,12 +34,12 @@ class SampleProject:
 
 
 def _projects() -> list[tuple[str, Path]]:
-    if not EXAMPLES.is_dir() or EXAMPLES.is_symlink():
+    if not SAMPLES.is_dir() or SAMPLES.is_symlink():
         raise ProjectError("Samples catalog is unavailable.")
     return [
         (directory.name, directory / STATE)
         for directory in sorted(
-            EXAMPLES.iterdir(), key=lambda path: (path.name == "jesus-cannabis", path.name)
+            SAMPLES.iterdir(), key=lambda path: (path.name == "jesus-cannabis", path.name)
         )
         if directory.is_dir() and not directory.is_symlink() and (directory / STATE).is_file()
     ]
@@ -79,7 +79,7 @@ def open_sample_project(identifier: str) -> ProjectView:
     """Create an independent copy named 'Title (copy)', then '(copy 1)', etc."""
     raw, _ = _load(identifier)
     root = projects_root()
-    if root.is_relative_to(EXAMPLES):
+    if root.is_relative_to(SAMPLES):
         raise ProjectError("Sample projects cannot be installed inside the source catalog.")
 
     with _title_registry_lock(root):

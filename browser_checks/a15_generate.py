@@ -7,7 +7,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-source = Path("examples/counting-constrained-binary-strings/project.json")
+source = Path("samples/counting-constrained-binary-strings/project.json")
 original = source.read_bytes()
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(

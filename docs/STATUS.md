@@ -1104,20 +1104,22 @@ listeners, changed process identity and SIGKILL escalation, and runs in
 environment, but end-to-end behavior on the user's macOS machine is not yet
 verified.
 
-## Samples terminology rename (2026-10-21)
+## Samples terminology and source directory rename (2026-10-21)
 
 The Home catalog now calls the shipped examples **Samples**. Samples is the
 first tab and remains selected by default; Recent follows it. The Python
 catalog module and public handlers were renamed to `sigma.samples` and
 `/api/projects/samples`, including the open route and request field. The Home
 component, CSS classes, browser checks, scenario filenames and documentation
-use the same terminology. Source example directory names and project files
-remain unchanged, so existing project identities and artwork paths are stable.
+use the same terminology. The checked-in project JSON and identities remain
+unchanged; their containing directory moved from `examples/` to `samples/`.
+Runtime discovery now reads `samples/` through the `SAMPLES` path constant.
 
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff,
 Pyright, frontend typecheck and production build. Real Chrome
 `browser_checks/recents.py`, `browser_checks/a15_generate.py` and
-`browser_checks/a142.py` passed. `browser_checks/text_views.py` reached the
+`browser_checks/a142.py` passed, including real Chrome checks after the
+directory move. `browser_checks/text_views.py` reached the
 opened sample project, then stopped at a stale `.project-eyebrow` selector;
 the current project page uses the “Project description” heading. It needs a
 separate refresh of its project-page assertions.

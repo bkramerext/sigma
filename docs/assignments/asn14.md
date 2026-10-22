@@ -62,7 +62,7 @@ Events must be ordered, schema-validated and escaped as plain content in the UI.
 ## A14 happy-path sample project (committed fixture)
 
 **The required no-strategies testing project is already checked in at**
-`examples/counting-constrained-binary-strings/project.json`.
+`samples/counting-constrained-binary-strings/project.json`.
 
 - **Title:** Counting Constrained Binary Strings
 - **Research mode:** Mathematical

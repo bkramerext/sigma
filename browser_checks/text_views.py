@@ -6,7 +6,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-source = Path("examples/nonconsecutive-subset-sums/project.json")
+source = Path("samples/nonconsecutive-subset-sums/project.json")
 original = source.read_bytes()
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(

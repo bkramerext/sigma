@@ -27,13 +27,13 @@ class SampleCopyTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         base = Path(self.temporary.name)
-        self.examples = base / "examples"
+        self.samples = base / "samples"
         self.projects = base / "projects"
         self.state = base / "state"
-        for directory in (self.examples, self.projects, self.state):
+        for directory in (self.samples, self.projects, self.state):
             directory.mkdir(mode=0o700)
-        self.example = self.examples / "sample"
-        self.example.mkdir()
+        self.sample = self.samples / "sample"
+        self.sample.mkdir()
         self.template_id = str(uuid4())
         self.template = {
             "schema_version": 1,
@@ -48,9 +48,9 @@ class SampleCopyTests(unittest.TestCase):
                 }
             ],
         }
-        (self.example / STATE).write_text(json.dumps(self.template), encoding="utf-8")
+        (self.sample / STATE).write_text(json.dumps(self.template), encoding="utf-8")
         for target, attribute, value in (
-            (samples, "EXAMPLES", self.examples),
+            (samples, "SAMPLES", self.samples),
             (samples, "projects_root", lambda: self.projects),
             (projects, "projects_root", lambda: self.projects),
             (recents, "state_directory", lambda: self.state),
@@ -71,7 +71,7 @@ class SampleCopyTests(unittest.TestCase):
         self.assertEqual(second.project.title, "Sample Investigation (copy 1)")
         self.assertEqual(second.project.events, first.project.events)
         self.assertEqual(inspect_project(first.path).project.id, first.project.id)
-        self.assertEqual(json.loads((self.example / STATE).read_text()), self.template)
+        self.assertEqual(json.loads((self.sample / STATE).read_text()), self.template)
 
         recent = recents.home_projects()["projects"]
         self.assertEqual([item["id"] for item in recent], [second.project.id, first.project.id])

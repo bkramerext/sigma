@@ -23,7 +23,7 @@ from sigma.samples import open_sample_project, sample_projects
 
 
 def check(root: Path, base: Path) -> None:
-    sources = {path: path.read_bytes() for path in (ROOT / "examples").glob("*/project.json")}
+    sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
     assert len(catalog) >= 2
     assert {entry["title"] for entry in catalog} >= {
@@ -34,18 +34,18 @@ def check(root: Path, base: Path) -> None:
     assert catalog[-1]["title"] == "Did Jesus Use Cannabis?"
     assert home_projects()["projects"] == [] and not list(root.iterdir())
 
-    expanded = base / "extra-examples"
+    expanded = base / "extra-samples"
     expanded.mkdir()
     for number in range(6):
         location = expanded / f"sample-{number}"
         location.mkdir()
         (location / "project.json").write_bytes(next(iter(sources.values())))
-    with patch("sigma.samples.EXAMPLES", expanded):
+    with patch("sigma.samples.SAMPLES", expanded):
         assert len(sample_projects()["projects"]) == 6
     assert not list(root.iterdir())
 
     selected = next(item for item in catalog if item["investigation_type"] == "mathematical")
-    source_path = ROOT / "examples" / selected["id"] / "project.json"
+    source_path = ROOT / "samples" / selected["id"] / "project.json"
     first = open_sample_project(selected["id"])
     assert first.path == str(root / f"{selected['id']}.sigma")
     assert first.project.id != json.loads(sources[source_path])["id"]

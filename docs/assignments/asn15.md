@@ -22,7 +22,7 @@ Read the current implementation, existing tests, `docs/STATUS.md`, and `docs/HUM
 
 ## Acceptance test
 
-Use `examples/counting-constrained-binary-strings/project.json` without changing the canonical fixture.
+Use `samples/counting-constrained-binary-strings/project.json` without changing the canonical fixture.
 
 - Open a managed copy and confirm it starts with **zero strategies**.
 - Choose Generate with AI with **no starting point**. Verify one actual bounded generation request yields an editable **unsaved** candidate with a substantive mathematical approach.

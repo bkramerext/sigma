@@ -20,7 +20,7 @@ Also install the deliberately constructed, nontrivial **Nonconsecutive Subset Su
 
 ## Canonical example template
 
-- Repo source: `examples/nonconsecutive-subset-sums/project.json` (in the same commit as this assignment).
+- Repo source: `samples/nonconsecutive-subset-sums/project.json` (in the same commit as this assignment).
 - It is intentionally **outside `projects/`**: live `project.json` files are mutable and ignored by Git. Never commit a live active research document or make normal user research edits dirty the checkout.
 - The template is a complete, strictly versioned **v5** project document with UUID `7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a`, Mathematical mode, three stable strategy UUIDs, three matching `strategy.created` history events, all stages `draft`, and complete approach/summary text. It uses `author_kind: "human"` for backwards compatibility with the current v5 schema, which permits no other value; when improving attribution later, **do not imply runtime AI generation** or falsely invent OpenAI provenance. Treat these as manually provided built-in examples in UI copy. Validate the file against `sigma.projects._decode` or the supported public inspection interface, rather than merely parsing JSON.
 - A8 may have introduced a newer project schema: importing a v5 document must remain compatible under its promised v1–v5 reads. Never overwrite an existing file or auto-migrate/rewrite the example simply by showing it in Home.

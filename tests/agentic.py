@@ -17,7 +17,7 @@ from sigma.proposals import accepted_provenance
 from sigma.samples import open_sample_project, sample_projects
 
 MODEL = "gpt-6.1-sol"
-SOURCE = Path("examples/counting-constrained-binary-strings/project.json")
+SOURCE = Path("samples/counting-constrained-binary-strings/project.json")
 CANDIDATE = {
     "title": "Recurrence from the final symbol",
     "summary": "Partition valid strings by the last symbol and justify a recurrence.",

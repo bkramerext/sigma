@@ -28,7 +28,7 @@ Refine the existing SIGMA Home screen without changing its approved copper artwo
 - Clearly distinguish sample templates from user work. Selecting a sample project must **create/open an independent working copy** through the normal project creation/opening workflow, without modifying the sample template or its canonical source. Repeated use must be possible, with distinct destination names/IDs and no silent overwrite.
 - Present helpful titles and research-mode labels, with accessible actions and useful empty/error states.
 - A sample project's presence in the catalog must not make it appear in Recents. Only the user's created/opened working copy belongs there.
-- If a destination is needed, use an existing appropriate local-project workflow or ask for it in UI; don't silently write into the checked-in examples directory.
+- If a destination is needed, use an existing appropriate local-project workflow or ask for it in UI; don't silently write into the checked-in samples directory.
 
 ## Engineering expectations
 

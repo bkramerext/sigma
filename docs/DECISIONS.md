@@ -278,7 +278,7 @@ outside the unproved example. Mathematical transcript rendering is design-only.
 
 ## A11: sample catalog and persistent projects
 
-Discover shipped `examples/*/project.json` documents as a read-only catalog. A sample
+Discover shipped `samples/*/project.json` documents as a read-only catalog. A sample
 selection opens directly with no dialog by creating an independent working copy
 under the configured projects root. Each copy receives its own project identity
 and a distinct path/name, while retaining the sample's strategies and event

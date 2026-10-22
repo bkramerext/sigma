@@ -365,7 +365,7 @@ JSON. Index failure warns without reporting a successful research save as failed
 The Home list then reports the state problem; Open/New Project remain available.
 
 The first successful UI launch/Home setup copies the immutable v5 source
-`examples/nonconsecutive-subset-sums/project.json` into the configured projects
+`samples/nonconsecutive-subset-sums/project.json` into the configured projects
 root as `nonconsecutive-subset-sums.sigma/project.json`, with exclusive publication.
 The provided Mathematical exercise opens with exactly three real Draft
 strategies. It is initially labeled Included example, with no invented human

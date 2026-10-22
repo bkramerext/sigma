@@ -88,7 +88,7 @@ def main():
         base = Path(temporary)
         root = base / "checkout"
         root.mkdir()
-        for name in ("src", "frontend", "assets", "examples"):
+        for name in ("src", "frontend", "assets", "samples"):
             shutil.copytree(
                 ROOT / name,
                 root / name,
