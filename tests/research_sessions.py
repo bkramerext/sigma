@@ -55,7 +55,7 @@ async def wait_for(path, session_id, terminal=True):
     for _ in range(300):
         current = research_sessions.get_session(str(path), session_id)
         if (
-            (current["status"] in {"completed", "failed", "stopped", "paused"})
+            (current["status"] in {"completed", "ended", "failed", "stopped", "paused"})
             if terminal
             else current["calls_used"]
         ):
@@ -131,7 +131,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         )
         assert duplicate["id"] == started["id"]
 
-    assert finished["status"] == "completed" and finished["calls_used"] == 6
+    assert finished["status"] == "ended" and finished["calls_used"] == 6
     assert len(finished["artifacts"]) == 3 and [a["sequence"] for a in finished["artifacts"]] == [
         1,
         2,
@@ -261,7 +261,7 @@ async def test_pause_counts_interrupted_call(path: Path):
     assert stopped["steps"][-1]["status"] == "interrupted"
     with patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)):
         rejected = await research_sessions.control_session(str(path), stopped_start["id"], "resume")
-    assert rejected["status"] == "stopped"
+    assert rejected["status"] == "stopped"  # unavailable configuration leaves it stopped
 
 
 async def test_malformed_output_and_restart(path: Path):
