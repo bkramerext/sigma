@@ -798,7 +798,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
       if (controller.signal.aborted) return;
       if (!next?.draft || !next.receipt || !next.provenance || !['title', 'summary', 'approach', 'first_tests', 'assumptions', 'failure_modes'].every(key => typeof next.draft[key as keyof ProposalResult['draft']] === 'string')) throw new Error('The local server returned an incomplete strategy draft. Nothing was saved.');
       setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary);
-      setApproach(`${next.draft.approach}\n\nFirst tests\n${next.draft.first_tests}\n\nAssumptions\n${next.draft.assumptions}\n\nWays this could fail\n${next.draft.failure_modes}`);
+      setApproach(next.draft.approach);
       requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
     } catch (error) { if (!controller.signal.aborted) setError(errorMessage(error)); }
     finally { if (request.current === controller) {
@@ -816,13 +816,13 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
     <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
-    {!busy && <p id="proposal-help" className="hint">Generate one proposed direction and review the editable, unsaved draft before saving. Model suggestions are not independently reviewed or verified.</p>}
+    {!busy && <p id="proposal-help" className="hint">Generate one candidate solution and review the editable, unsaved draft before saving. Its viability has not been evaluated.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
     <label htmlFor="proposal-seed">Starting point <span className="hint">(optional)</span></label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
-    <p id="seed-help" className="hint">A hunch, question, technique, observation or constraint—not an assumption to endorse. Leave empty for an independent direction.</p>
+    <p id="seed-help" className="hint">An optional idea or proposed mechanism, not an assumption to accept uncritically. Leave empty for an independent solution.</p>
     <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI in one request. Cancelling stops local work; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
     <p className="sr-only" role="status" aria-live="polite">{busy ? 'Generating one strategy…' : ''}</p>
@@ -836,8 +836,8 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
         <legend>Unsaved draft · Review before accepting</legend>
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
         <label htmlFor="proposal-summary">One-line preview</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
-        <label htmlFor="proposal-approach">Proposed approach, first tests, assumptions and failure modes</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
-        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; it does not validate the research.</p>
+        <label htmlFor="proposal-approach">Proposed solution</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
+        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; it does not establish viability.</p>
       </fieldset>}
       <div className="form-actions">
         {result && <button type="submit" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}
