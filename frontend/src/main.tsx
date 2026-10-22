@@ -47,7 +47,8 @@ type ProjectView = {
 type ResearchArtifact = { id: string; sequence: number; claim_or_question: string; method: string; assumptions: string[]; evidence_status: string; skeptic_response: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; note: string; investigator_output: Record<string, unknown>; skeptic_output: Record<string, unknown> };
 type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?: string | null; message: string };
 type ResearchStep = { id: string; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; output?: Record<string, unknown> };
-type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string };
+type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string };
+type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 
 function displayStrategyTitle(strategy: Strategy | undefined): string {
   if (!strategy) return 'Strategy';
@@ -66,8 +67,11 @@ function ResearchSessionContents({ session, busy, confirmStop, setConfirmStop, o
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
   return <div className="session-row-content">
+    <div className="session-status-row"><span className={`session-status session-${session.status}`}><i aria-hidden="true"/>{session.status}</span></div>
     <div className="research-session-facts"><p><strong>Model:</strong> {session.model} · {thinkingLabels[session.reasoning_effort] ?? session.reasoning_effort} thinking · {session.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
-      <p><strong>Progress:</strong> Cycle {session.cycle} of 3 · {session.calls_used} of {session.call_limit} calls used ({Math.max(0, session.call_limit - session.calls_used)} remaining)</p>
+      <p><strong>Progress:</strong> Cycle {session.cycle} of {session.cycle_limit ?? 3} · {session.calls_used} of {session.call_limit} calls used ({Math.max(0, session.call_limit - session.calls_used)} remaining)</p>
+      <p><strong>Elapsed:</strong> {formatDuration(session.elapsed_seconds ?? 0)} · <strong>Output limit:</strong> {session.output_token_limit ?? 4000} tokens per call</p>
+      {session.mode === 'api_key' && <p><strong>Estimated API spend:</strong> {session.cost_status === 'available' && typeof session.estimated_cost_usd === 'number' ? `$${session.estimated_cost_usd.toFixed(6)} (estimate)` : 'Unavailable; cost limit cannot be verified'}</p>}
       <p><strong>Current action:</strong> {session.current_action}</p>
       {lastActivity && <p><strong>Last activity:</strong> <time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time></p>}
     </div>
@@ -75,10 +79,10 @@ function ResearchSessionContents({ session, busy, confirmStop, setConfirmStop, o
     {!!session.current_question && <p><strong>Current question:</strong> {session.current_question}</p>}
     <div className="research-session-actions">
       {(active || session.status === 'paused') && <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(true)}>Stop</button>}
-      <button type="button" className="text-view-link" onClick={() => onViewStrategy(session.strategy_id)}>View strategy</button>
+      <a className="text-view-link" href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to {session.strategy_title}</a>
     </div>
     {confirmStop && <div className="research-stop-confirm" role="group" aria-label="Confirm stop session"><p>Stop session #{session.session_number}? Stopping is terminal and prevents further calls.</p><button type="button" className="text-view-link" disabled={busy} onClick={() => onControl('stop', session)}>Confirm stop</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session</button></div>}
-    {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. {lastStep.status === 'running' ? 'No result has been committed yet.' : 'This attempt is not a completed research artifact.'}</p></section>}
+    {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. {lastStep.status === 'running' ? 'No result has been committed yet.' : lastStep.status === 'interrupted' ? 'This attempt is not a completed research artifact. The provider may have completed it or charged usage; SIGMA will not repeat it automatically because completion is ambiguous.' : 'This attempt failed and is not a completed research artifact.'}</p></section>}
     {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h3>Recent activity</h3><ol>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
     {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><h3>Research artifacts</h3><ol>{session.artifacts.map(artifact => <li key={artifact.id}><details>
       <summary>Cycle {artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
@@ -99,12 +103,14 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const sessionsLoaded = useRef(false);
   const [pendingStrategyId, setPendingStrategyId] = useState('');
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
+  const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
   const [confirmStopId, setConfirmStopId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [announcement, setAnnouncement] = useState('');
+  const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
@@ -171,7 +177,10 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
       const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
       const current = await response.json();
       if (!response.ok) throw new Error(current.error ?? 'Could not read AI configuration');
-      setConfig(current);
+      const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
+      const currentLimits = await limitResponse.json();
+      if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
+      setConfig(current); setLimits(currentLimits);
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       setConfirmStart(true);
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
@@ -184,7 +193,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     try {
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
-      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyId, expected_project_id: projectId, expected_binding: config.binding, idempotency_key: idempotencyKey.current });
+      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyId, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
@@ -201,38 +210,42 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     finally { setBusy(false); }
   }
 
-  const playLabel = activeSession?.status === 'paused' ? 'Resume research session' : 'Start research session';
+  const interruptedActive = activeSession?.status === 'paused' && activeSession.steps.at(-1)?.status === 'interrupted';
+  const playLabel = activeSession?.status === 'paused' ? interruptedActive ? 'Resume unavailable · prior call completion is ambiguous' : 'Resume research session' : 'Start research session';
   const play = useCallback(() => {
     if (busy || readError) return;
-    if (activeSession?.status === 'paused') { void control('resume', activeSession); return; }
+    if (activeSession?.status === 'paused') { if (!interruptedActive) void control('resume', activeSession); return; }
     if (activeSession || !eligible.length) return;
     setPendingStrategyId(nextStrategyId);
     setConfirmStart(false);
     void begin();
-  }, [activeSession, busy, nextStrategyId, eligible.length, readError]);
+  }, [activeSession, busy, nextStrategyId, eligible.length, interruptedActive, readError]);
   const pause = useCallback(() => {
     if (activeSession?.status === 'running' && !busy && !readError) void control('pause', activeSession);
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
       play, pause,
-      playDisabled: busy || !!readError || !eligible.length || confirmStart || (!!activeSession && activeSession.status !== 'paused'),
+      playDisabled: busy || !!readError || !eligible.length || confirmStart || (!!activeSession && (activeSession.status !== 'paused' || interruptedActive)),
       pauseDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, pause, play, playLabel, readError]);
+  }, [activeSession, busy, confirmStart, eligible.length, interruptedActive, onControlsChange, pause, play, playLabel, readError]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
+  const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
   return <section className="sessions-pane workspace-pane" aria-labelledby="sessions-heading">
     <header className="workspace-pane-heading sessions-pane-heading">
-      <h2 id="sessions-heading" tabIndex={-1}>Sessions</h2>
-      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}</p>
+      <h2 id="sessions-heading" tabIndex={-1}><button type="button" aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}>Sessions</button></h2>
+      <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
 
+    <div id="sessions-pane-content" hidden={!expanded}>
     {confirmStart && config && <div className="research-consent" role="group" aria-label="Confirm research session">
       <p><strong>{displayStrategyTitle(eligible.find(item => item.id === pendingStrategyId))}</strong></p><p>{config.model} · {thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort} thinking · {config.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
-      <p>Up to 3 cycles and 6 provider calls. Usage may accrue. Six calls is a request limit, not a cost guarantee. Findings are unverified research notes.</p>
+      {limits && <p>Limits: {limits.research_rounds} research rounds · {limits.model_calls} model calls · {limits.session_duration_minutes} minutes elapsed time (pause time counts) · {limits.output_tokens_per_call.toLocaleString()} output tokens per call{config.mode === 'api_key' ? ` · ${limits.maximum_estimated_cost_usd === null ? 'no estimated cost cap' : `estimated cost cap $${limits.maximum_estimated_cost_usd.toFixed(2)}`}` : ' · ChatGPT subscription has no dollar accounting'}.</p>}
+      <p>Usage may accrue. Provider limits may restrict output below the selected token limit. Findings are unverified research notes.</p>
       <p>An already-sent provider request may continue to consume allowance if paused or stopped.</p>
       <div className="research-session-actions"><button type="button" className="primary-action" disabled={busy} onClick={() => void start()}>Confirm and start</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStart(false)}>Cancel</button></div>
     </div>}
@@ -243,8 +256,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
           const currentAction = readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action;
           return <li className="session-row" key={item.id} data-session-id={item.id}>
             <div className="session-row-heading">
-              <span className="session-row-title">Session #{item.session_number}</span><small>{item.strategy_title}</small>
-              <span className={`session-status session-${item.status}`}><i aria-hidden="true"/>{item.status}</span>
+              <span className="session-row-title">Session #{item.session_number}</span><small className="session-strategy-name">Strategy: {item.strategy_title}</small>
             </div>
             <ResearchSessionContents session={{ ...item, current_action: currentAction }} busy={busy} confirmStop={confirmStopId === item.id} setConfirmStop={value => setConfirmStopId(value ? item.id : '')} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
           </li>;
@@ -253,6 +265,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     </div>
     {readError && <p className="error" role="alert">Unable to confirm session state. Last confirmed information is shown: {readError}</p>}
     {error && <p className="error" role="alert">{error}</p>}
+    </div>
     <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
   </section>;
 }
@@ -274,6 +287,10 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
+function formatDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
 
 function DownloadProjectDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -322,7 +339,7 @@ function DownloadProjectDialog({ path, title, onCancel }: { path: string; title:
           <button type="submit" className="export-download-icon" aria-label={busy ? 'Downloading project' : 'Download project'} disabled={busy || !filename.trim()}>
             <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
-          <button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button>
+          <button type="button" className="settings-cancel" disabled={busy} onClick={() => cancel()}>Cancel</button>
         </div>
       </header>
       <div className="settings-body">
@@ -363,6 +380,8 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
   const bodyTrigger = useRef<HTMLElement>(null);
+  const editorForm = useRef<HTMLFormElement>(null);
+  const editorArea = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const controller = new AbortController();
     setData(null); setError(''); setEditing(false);
@@ -388,12 +407,18 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
-  function cancelBodyEdit() {
+  function cancelBodyEdit(restoreFocus = true) {
     setEditing(false);
     onExitMode?.();
     if (editingFromRendered) chooseView('rendered');
-    requestAnimationFrame(() => bodyTrigger.current?.focus());
+    if (restoreFocus) requestAnimationFrame(() => bodyTrigger.current?.focus());
   }
+  useEffect(() => {
+    if (!editing) return;
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !editorArea.current?.contains(event.target)) cancelBodyEdit(false); };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [editing, editingFromRendered]);
   async function convert(targetFormat: TextFormat = format) {
     if (!data || busy) return;
     const controller = new AbortController(); abort.current = controller; setBusy(true); setRendering(true); setError('');
@@ -407,8 +432,8 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         body: JSON.stringify({ path, scope, strategy_id: strategyId, target: targetFormat, expected_digest: data.source_digest, expected_binding: settings.binding }) });
       const next = await response.json();
       if (!response.ok) throw new Error(next.error ?? 'Conversion failed; source text was kept.');
-      setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? ''); chooseView('rendered');
-    } catch (cause) { if (!controller.signal.aborted) { chooseView('plain'); setError(errorMessage(cause)); } }
+      setData(next as TextRepresentations); setDraft(next[targetFormat]?.body ?? ''); chooseView(targetFormat === 'markdown' ? 'rendered' : 'plain');
+    } catch (cause) { if (!controller.signal.aborted) { chooseView('plain'); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); } }
     finally { finishProviderRequest(); if (abort.current === controller) { abort.current = null; setBusy(false); setRendering(false); } }
   }
   async function save(event: FormEvent) {
@@ -421,7 +446,8 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     finally { setBusy(false); }
   }
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
-  const renderTooltip = rendering ? 'Converting to markdown' : selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
+  const plainRecovery = data?.source_format === 'markdown' && !data.plain?.current;
+  const renderTooltip = rendering ? (plainRecovery ? 'Converting to Plain' : 'Converting to markdown') : selected === 'rendered' ? 'Show plain text' : plainRecovery ? 'Convert to Plain' : 'Convert to markdown';
   const renderTooltipId = `sigma-render-tooltip-${scope}-${strategyId ?? 'project'}`;
   function closeExport() {
     setExportOpen(false);
@@ -430,40 +456,41 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const viewActions = <>
     {mathematical && <TooltipWrap>
       <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
-      aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
+      aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} aria-describedby={renderTooltipId}
       disabled={editing || busy} onClick={() => {
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
-        else { void convert('markdown'); }
+        else { void convert(plainRecovery ? 'plain' : 'markdown'); }
       }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
       <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
     </TooltipWrap>}
 
     {editing ? <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
-      <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
+      <button type="button" className="text-view-link" disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
       </> : data && version && <TooltipWrap><button type="button" className="text-view-link text-view-icon" aria-label={`Edit ${name}`} aria-describedby={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} className="sigma-render-tooltip" role="tooltip">{`Edit ${name}`}</span></TooltipWrap>}
 
     {scope === 'project' && !editing && <TooltipWrap><button ref={exportTrigger} type="button" className="copper-button project-download-trigger" aria-label="Download project" aria-describedby="download-project-tooltip" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><span id="download-project-tooltip" className="sigma-render-tooltip" role="tooltip">Download project</span></TooltipWrap>}    {onSettings && !editing && <TooltipWrap><button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon" aria-label="Project settings" aria-describedby="project-settings-tooltip" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button><span id="project-settings-tooltip" className="sigma-render-tooltip" role="tooltip">Project settings</span></TooltipWrap>}
   </>;
-  return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
+  return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {scope === 'project' && exportOpen && <DownloadProjectDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && !hideProjectHeading && <h2 className="investigation-heading">Project</h2>}
       {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
     </div>
-    {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
+    {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
     </form> : current && version ? selected === 'rendered'
       ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
+        {mathematical && plainRecovery && format === 'plain' && <button type="button" className="text-view-link" disabled={busy || modeDisabled} onClick={() => void convert('plain')}>Convert to Plain</button>}
         {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
       </div>}
     {busy && !editing && <span className="sr-only" role="status">Converting to Markdown…</span>}
-    {error && editing && <p role="alert" className="error">{error}</p>}
+    {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
 
@@ -474,9 +501,16 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
   const [error, setError] = useState('');
   const trigger = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const form = useRef<HTMLFormElement>(null);
   useEffect(() => { if (!editing) setDraft(view.project.title); }, [view.project.title, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
-  function cancel() { setDraft(view.project.title); setError(''); setEditing(false); onExitMode(); requestAnimationFrame(() => trigger.current?.focus()); }
+  useEffect(() => {
+    if (!editing) return;
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [editing]);
+  function cancel(restoreFocus = true) { setDraft(view.project.title); setError(''); setEditing(false); onExitMode(); if (restoreFocus) requestAnimationFrame(() => trigger.current?.focus()); }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -490,10 +524,10 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
     finally { setBusy(false); }
   }
   return <div className={`project-pane-title-line${editing ? ' is-renaming' : ''}`}>
-    {editing ? <form className="project-title-edit-form" onSubmit={save}>
+    {editing ? <form ref={form} className="project-title-edit-form" onSubmit={save}>
       <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
       <input ref={input} id="project-pane-title-input" aria-label="Project title" value={draft} maxLength={200} required disabled={busy} onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
-      <button type="submit" className="text-view-link" disabled={busy}>Save</button><button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
+      <button type="submit" className="text-view-link" disabled={busy}>Save</button><button type="button" className="text-view-link" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
       <button type="button" ref={trigger} className="text-view-link text-view-icon project-title-pencil" aria-label={`Edit project title: ${view.project.title}`} title="Edit project title" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) setEditing(true); }}>
@@ -614,7 +648,19 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [previewBusy, setPreviewBusy] = useState(!initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<'main' | 'limits'>('main');
+  const [limits, setLimits] = useState<ResearchLimits>({ research_rounds: 3, model_calls: 6, session_duration_minutes: 30, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null });
+  const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
+  useEffect(() => {
+    if (!initial) return;
+    const controller = new AbortController();
+    fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`, { signal: controller.signal }).then(async response => {
+      const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read');
+      setLimits(data); setLimitsLoaded(true);
+    }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, [initial?.path]);
   useEffect(() => {
     const controller = new AbortController();
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Model catalog unavailable. Check the local server; existing settings are retained.'); return response.json(); }).then(data => {
@@ -644,16 +690,27 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current || !compatible || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
     submitting.current = true; setBusy(true); setError('');
-    try { onSaved(await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : values)); }
+    try {
+      const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : values);
+      if (initial) {
+        const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limits }) });
+        const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');
+      }
+      onSaved(next);
+    }
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2>
-        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (!initial && (!values.problem.trim() || previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
+        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (initial && !limitsLoaded) || (!initial && (!values.problem.trim() || previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
       </header>
-      <div className="settings-body"><p id="project-settings-help">{initial ? 'Choose how to explore this project. Edit its title and description directly on the project page.' : 'Name a project and choose how to explore it.'}</p>
+      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'main' : event.key === 'End' ? 'limits' : activeTab === 'main' ? 'limits' : 'main'; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
+        <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Main</button>
+        <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => setActiveTab('limits')}>Limits</button>
+      </div>}
+      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Choose how to explore this project. Edit its title and description directly on the project page.' : 'Name a project and choose how to explore it.'}</p>
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
@@ -674,7 +731,19 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       {locationError && <p className="error" role="alert">{locationError}</p>}
       {destination?.exists && <p className="error" role="alert">That name is already used by another project, or the location is occupied. Choose another name.</p>}
       {error && <p className="error" role="alert">{error}</p>}
-    </fieldset></div></form>
+    </fieldset></div>
+    {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
+      <p>These limits apply to future sessions. Existing sessions keep the limits captured when they started.</p>
+      <fieldset disabled={busy || !limitsLoaded}>
+        <label htmlFor="research-rounds">Research rounds</label><input id="research-rounds" type="number" min={1} max={3} step={1} value={limits.research_rounds} onChange={event => setLimits(value => ({ ...value, research_rounds: Number(event.target.value) }))}/><p className="settings-hint">Investigator/Skeptic iterations, up to three.</p>
+        <label htmlFor="research-calls">Model calls</label><input id="research-calls" type="number" min={1} max={6} step={1} value={limits.model_calls} onChange={event => setLimits(value => ({ ...value, model_calls: Number(event.target.value) }))}/><p className="settings-hint">Provider request allowance. Calls already dispatched count even if interrupted.</p>
+        <label htmlFor="research-duration">Session duration (minutes)</label><input id="research-duration" type="number" min={1} max={240} step={1} value={limits.session_duration_minutes} onChange={event => setLimits(value => ({ ...value, session_duration_minutes: Number(event.target.value) }))}/><p className="settings-hint">Elapsed wall time from start; time spent paused counts toward this limit.</p>
+        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={12000} step={1} value={limits.output_tokens_per_call} onChange={event => setLimits(value => ({ ...value, output_tokens_per_call: Number(event.target.value) }))}/><p className="settings-hint">SIGMA sends this limit where supported. ChatGPT plan routing may not expose provider-side enforcement; SIGMA still bounds parsed output.</p>
+        <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="number" min={0} max={10000} step="0.01" placeholder="Unlimited" value={limits.maximum_estimated_cost_usd ?? ''} onChange={event => setLimits(value => ({ ...value, maximum_estimated_cost_usd: event.target.value === '' ? null : Number(event.target.value) }))}/><p className="settings-hint">API-key billing only. ChatGPT subscription usage is not converted to dollars. Estimates use published model prices and reported tokens; an unknown price or missing usage stops further calls when a cap is set.</p>
+      </fieldset>
+      {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimits(data); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
+    </section>}
+    </form>
   </dialog>;
 }
 
@@ -839,11 +908,18 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
   const [error, setError] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const form = useRef<HTMLFormElement>(null);
   useEffect(() => { if (!editing) setDraft(shownTitle); }, [shownTitle, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
-  function cancel() {
+  useEffect(() => {
+    if (!editing) return;
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [editing]);
+  function cancel(restoreFocus = true) {
     setEditing(false); onExitMode(); setDraft(shownTitle); setError('');
-    requestAnimationFrame(() => trigger.current?.focus());
+    if (restoreFocus) requestAnimationFrame(() => trigger.current?.focus());
   }
   async function save(event: FormEvent) {
     event.preventDefault(); event.stopPropagation();
@@ -860,12 +936,12 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
     finally { setBusy(false); }
   }
   return <div className={`strategy-title-editor${editing ? ' is-renaming' : ''}`}>
-    {editing ? <form onSubmit={save} className="strategy-rename-form">
+    {editing ? <form ref={form} onSubmit={save} className="strategy-rename-form">
       <label className="sr-only" htmlFor={`strategy-title-${strategy.id}`}>Strategy title</label>
       <input ref={input} id={`strategy-title-${strategy.id}`} aria-label="Strategy title" value={draft} maxLength={200} disabled={busy}
         required onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
       <button type="submit" className="text-view-link" disabled={busy}>Save</button>
-      <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
+      <button type="button" className="text-view-link" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>{shownTitle}</h3>
       <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
@@ -1013,11 +1089,11 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   </form>;
 }
 
-function StrategyCreationActions({ buttonRef, disabled, onManual, onAI }: {
-  buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; onManual: () => void; onAI: () => void;
+function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManual, onAI }: {
+  buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; hideNew?: boolean; onManual: () => void; onAI: () => void;
 }) {
   return <div className="strategy-heading-actions">
-    <button type="button" className="text-view-link" ref={buttonRef} disabled={disabled} onClick={onManual}>New</button>
+    {!hideNew && <button type="button" className="text-view-link" ref={buttonRef} disabled={disabled} onClick={onManual}>New</button>}
     <button type="button" className="text-view-link" disabled={disabled} onClick={onAI}>Generate</button>
   </div>;
 }
@@ -1072,8 +1148,8 @@ async function readAgenticStream(response: Response, onEvent: (event: AgenticEve
   if (!terminal) throw new Error('The progress stream ended without a final result. You can retry; nothing was saved.');
   return terminal;
 }
-function GenerateStrategy({ path, projectId, onSaved, onCancel, onNew }: {
-  path: string; projectId: string; onSaved: (view: ProjectView) => void; onCancel: () => void; onNew: () => void;
+function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
+  path: string; projectId: string; sourceGuard: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const composer = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -1082,6 +1158,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onNew }: {
   const [seed, setSeed] = useState('');
   const ai = useAI();
   const lifetime = useRef(new AbortController());
+  const runGuard = useRef('');
   const [result, setResult] = useState<ProposalResult | null>(null);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -1117,6 +1194,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onNew }: {
   }
   async function generate() {
     if (submitting.current) return; submitting.current = true;
+    runGuard.current = sourceGuard;
     const controller = new AbortController(); request.current = controller; setBusy(true); setError(''); setActivities([]); setCurrentActivity('Preparing run'); setReview(null);
     let finishProviderRequest = () => {};
     try {
@@ -1159,12 +1237,15 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onNew }: {
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current || !result) return; submitting.current = true; setSaving(true); setError('');
-    try { onSaved(await post<ProjectView>('strategies', { path, title, approach, summary, receipt: result.receipt })); }
+    try {
+      if (runGuard.current !== sourceGuard) throw new Error('Project research inputs changed while this strategy was generating. Regenerate against the current project before accepting; this draft is still available for reference.');
+      onSaved(await post<ProjectView>('strategies', { path, title, approach, summary, receipt: result.receipt }));
+    }
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setSaving(false); }
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-new" disabled={busy || saving || cancelling} onClick={onNew}>New</button><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Accepting…' : 'Accept'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Accepting…' : 'Accept'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
     {!busy && <p id="proposal-help" className="hint">Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'} · maximum 6 calls / 2 candidates{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
@@ -1228,6 +1309,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [command, setCommand] = useState<{ mode: 'remove' | 'stage'; strategy: Strategy } | null>(null);
   const [focusStrategy, setFocusStrategy] = useState('');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
+  const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, pause: () => {}, playDisabled: true, pauseDisabled: true, playLabel: 'Start research session' });
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
@@ -1255,7 +1337,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   useEffect(() => {
     if (!focusStrategy || !strategiesExpanded) return;
     const target = document.getElementById(`strategy-${focusStrategy}`);
-    requestAnimationFrame(() => target?.focus());
+    requestAnimationFrame(() => { target?.scrollIntoView({ block: 'center', behavior: 'smooth' }); target?.focus(); });
   }, [focusStrategy, strategiesExpanded]);
   useEffect(() => {
     if (!dragId) return;
@@ -1302,7 +1384,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     requestAnimationFrame(() => document.getElementById('strategy-title')?.focus());
   }
   function startGeneration() {
-    if (!enterMode('generate-strategy')) return;
+    if (modeOwner.current !== null || generating) return;
     expandStrategies(); setGenerating(true);
     requestAnimationFrame(() => document.getElementById('proposal-seed')?.focus());
   }
@@ -1345,7 +1427,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}>PROJECT</h2></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" aria-expanded={projectExpanded} aria-controls="project-pane-content" onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}>PROJECT</button></h2></header>
+      <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}/>
       <div className="project-pane-content">
         <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
@@ -1358,15 +1441,15 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       onPointerCancel={event => { if (resizeStart.current?.pointer === event.pointerId) resizeStart.current = null; }}
       onKeyDown={event => { const current = introPane.current?.getBoundingClientRect().height ?? 120; if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); setIntroHeight(clampIntro(current + (event.key === 'ArrowDown' ? 24 : -24))); } else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); setIntroHeight(event.key === 'Home' ? 120 : introMaximum); } }}><span aria-hidden="true"/></div>
       </div>
+      </div>
     </section>
     {error && <p role="alert" className="error">{error}</p>}
     <section className="pool workspace-pane strategies-pane" aria-labelledby="pool-heading">
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} disabled={activeMode !== null || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          <span className="strategy-heading-divider" aria-hidden="true"/>
           <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
         </div>
       </header>
@@ -1377,8 +1460,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         setView(next); setEditing(false); exitMode('new-strategy'); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
       }}/>}
-      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onNew={() => { setGenerating(false); exitMode('generate-strategy'); startNewStrategy(); }} onCancel={() => { setGenerating(false); exitMode('generate-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
-        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); exitMode('generate-strategy'); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
+      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} sourceGuard={JSON.stringify({ project_id: project.id, problem: project.problem, strategies: project.strategies.map(item => [item.id, item.title, item.approach, item.removed_at]) })} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
+        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
         <div className="strategy-columns" aria-hidden="true"><span>Strategy</span><span>Stage</span></div>

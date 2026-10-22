@@ -1426,3 +1426,51 @@ Escape and blocked underlay, Play/Pause, session history/artifacts and provider
 activity. Desktop and mobile captures were inspected at
 `/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`. No live provider
 calls were made.
+
+## A17.3: research settings, reliability and workspace interaction (2026-10-22)
+
+Project, Strategies and Sessions now collapse independently; the Sessions count
+continues to poll while its content is hidden. Project and strategy inline edits
+cancel on click-away, while Generate runs independently of editing and rejects
+duplicate or stale proposal acceptance. Session headers retain `Session #N`,
+show their strategy separately and align the status column; the strategy action
+is an underlined `Go to <title>` link that expands, scrolls to and focuses by
+stable strategy ID. Starting a session has a separate confirmation showing the
+chosen strategy, billing mode and effective limits.
+
+Settings has keyboard-operable Main and Limits tabs. The per-project limits
+sidecar is validated, privately written by atomic replacement and defaults for
+older projects without migration. A session snapshots its limits at start;
+changing settings does not alter existing sessions. Backend admission is
+serialized across processes, and a worker lock distinguishes a live worker from
+a stale session after restart. A provider request interrupted at an ambiguous
+completion point cannot be resumed and replayed; completed artifacts remain
+available, and the UI explains that a provider may already have charged for the
+attempt. Timeouts remain separate from elapsed session limits, which count pause
+time.
+
+API-key sessions record provider token usage and display estimated cumulative
+spend. Estimates apply model-specific Standard short-context published input,
+cached-input and output rates (checked 2026-10-22 at
+https://developers.openai.com/api/docs/pricing); estimates are not invoices.
+Unknown model prices or missing/unreliable usage are shown as unavailable, and a
+cost-limited session pauses before a call it cannot conservatively bound.
+ChatGPT subscription sessions have no dollar estimate or cost cap. SIGMA sends
+the configured output-token ceiling to the API-key provider; provider-side token
+enforcement is not guaranteed for the ChatGPT transport, so the final parsed
+response is independently bounded. Raw streaming transport is capped at 1 MB to
+allow for framing while retaining a finite ceiling.
+
+Actual verification: `./sigma test` passed all scenarios, including new
+`tests/research_sessions.py`, `tests/project_settings.py` and stale-proposal
+receipt coverage. Ruff check and format check passed across `src`, `tests`, and
+`browser_checks`; Pyright reported zero errors; frontend typecheck and Vite
+production build passed. Real Chrome
+`uv run --with playwright python browser_checks/a17_research.py` passed with the
+isolated provider fixture at 1440px desktop and 390px mobile; I inspected both
+captures at `/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`.
+Coverage includes click-away cancellation, independent collapse and live
+session counts, confirmation limits, token/cost presentation, interruption
+safety, strategy navigation/focus, failure recovery and mobile overflow. No
+live or paid provider call was made. The existing Starlette TestClient/httpx
+deprecation warning remains non-failing.

@@ -120,6 +120,16 @@ async def check(path):
             assert (
                 accepted.json()["project"]["strategies"][-1]["provenance"]["provider"] == "openai"
             )
+            stale = api.post(
+                "/api/projects/strategies",
+                json={
+                    "path": str(path),
+                    "title": "Stale generated draft",
+                    "approach": DRAFT["approach"],
+                    "receipt": second["receipt"],
+                },
+            )
+            assert stale.status_code == 400 and "inputs changed" in stale.json()["error"]
             assert (
                 api.post(
                     "/api/projects/strategies",

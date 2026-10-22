@@ -19,6 +19,11 @@ REAL_CLIENT = httpx.AsyncClient
 def provider_response(value):
     return {
         "status": "completed",
+        "usage": {
+            "input_tokens": 120,
+            "output_tokens": 80,
+            "input_tokens_details": {"cached_tokens": 20},
+        },
         "output": [
             {"type": "message", "content": [{"type": "output_text", "text": json.dumps(value)}]}
         ],
@@ -191,7 +196,6 @@ async def test_pause_counts_interrupted_call(path: Path):
     for gate in (agentic._gate, proposals._gate, text_views._gate, research_sessions._gate):
         assert gate.acquire(blocking=False)
         gate.release()
-    hang[0] = False
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
@@ -202,15 +206,16 @@ async def test_pause_counts_interrupted_call(path: Path):
             ),
         ),
     ):
-        resumed, duplicate_resume = await asyncio.gather(
-            research_sessions.control_session(str(path), started["id"], "resume"),
-            research_sessions.control_session(str(path), started["id"], "resume"),
-        )
-        assert resumed["status"] == "queued" and resumed["calls_used"] == 1
-        assert duplicate_resume["id"] == started["id"]
-        resumed = await wait_for(path, started["id"])
-    assert resumed["status"] == "completed" and resumed["calls_used"] == 3
-    assert resumed["artifacts"][0]["coordinator_decision"] == "stop"
+        try:
+            await research_sessions.control_session(str(path), started["id"], "resume")
+        except ProjectError as exc:
+            assert "ambiguous" in str(exc)
+        else:
+            raise AssertionError("ambiguous provider work was automatically retried")
+        paused = research_sessions.get_session(str(path), started["id"])
+        assert paused["status"] == "paused" and paused["calls_used"] == 1
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
 
     started_call.clear()
     hang[0] = True
@@ -309,6 +314,11 @@ async def test_chatgpt_stream(path: Path):
     envelope = {
         "id": "response-1",
         "status": "completed",
+        "usage": {
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "input_tokens_details": {"cached_tokens": 5},
+        },
         "output": [
             {"type": "message", "content": [{"type": "output_text", "text": json.dumps(output)}]}
         ],
@@ -345,7 +355,152 @@ async def test_chatgpt_stream(path: Path):
         result = await research_sessions._call(
             record, "investigator", {"problem": view.project.problem, "strategy": strategy.approach}
         )
-    assert result == output
+    assert result == (output, {"input_tokens": 25, "cached_input_tokens": 5, "output_tokens": 12})
+
+
+async def test_limits_snapshot_and_usage_cost(path: Path):
+    view, strategy, credential, config = await setup(path)
+    assert research_sessions.get_limits(str(path)) == research_sessions.DEFAULT_LIMITS
+    limits = {
+        "research_rounds": 1,
+        "model_calls": 2,
+        "session_duration_minutes": 10,
+        "output_tokens_per_call": 700,
+        "maximum_estimated_cost_usd": 0.1,
+    }
+    assert research_sessions.save_limits(str(path), limits) == limits
+    outputs = [investigation(1), skeptic(1)]
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        assert payload["max_output_tokens"] == 700
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"], limits
+        )
+        future = {**limits, "model_calls": 4}
+        research_sessions.save_limits(str(path), future)
+        finished = await wait_for(path, started["id"])
+
+    assert finished["call_limit"] == 2 and finished["cycle_limit"] == 1
+    assert finished["duration_limit_minutes"] == 10 and finished["output_token_limit"] == 700
+    assert finished["maximum_estimated_cost_usd"] == 0.1
+    assert finished["cost_status"] == "available" and finished["estimated_cost_usd"] > 0
+    assert all(step["token_usage"]["input_tokens"] == 120 for step in finished["steps"])
+    assert research_sessions.get_limits(str(path)) == future
+
+
+def test_limits_validation(path: Path):
+    initialize_project(path, "Limits project", "A question")
+    before = research_sessions.get_limits(str(path))
+    try:
+        research_sessions.save_limits(str(path), {**before, "model_calls": 7})
+    except ProjectError as exc:
+        assert "model calls" in str(exc).lower()
+    else:
+        raise AssertionError("out-of-range call limit was accepted")
+    assert research_sessions.get_limits(str(path)) == before
+
+
+async def test_single_project_admission(path: Path):
+    view, strategy, credential, config = await setup(path)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def handler(request):
+        entered.set()
+        await entered.wait()
+        await release.wait()
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        try:
+            await research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+        except ProjectError as exc:
+            assert "research worker is active" in str(exc) or "already needs attention" in str(exc)
+        else:
+            raise AssertionError("a second session was admitted for one project")
+        release.set()
+        await wait_for(path, started["id"])
+
+
+async def test_response_transport_and_parsed_bounds(path: Path):
+    view, strategy, credential, config = await setup(path)
+    oversized_projects = path.parent / "transport.sigma"
+    transport_view, transport_strategy, _, _ = await setup(oversized_projects)
+
+    async def oversized_transport(request):
+        response = provider_response(investigation(1))
+        response["padding"] = "x" * 1_010_000
+        return httpx.Response(200, json=response)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(oversized_transport), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(oversized_projects),
+            transport_strategy.id,
+            str(uuid4()),
+            transport_view.project.id,
+            credential["identity"],
+        )
+        failed = await wait_for(oversized_projects, started["id"])
+    assert failed["status"] == "failed" and "1 MB safety bound" in failed["message"]
+    assert failed["artifacts"] == []
+
+    async def oversized_parsed(request):
+        response = provider_response(investigation(1))
+        response["output"][0]["content"][0]["text"] += " " * 70_000
+        return httpx.Response(200, json=response)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(oversized_parsed), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        failed = await wait_for(path, started["id"])
+    assert failed["status"] == "failed" and "Parsed research output exceeded" in failed["message"]
+    assert failed["artifacts"] == []
 
 
 async def test_changed_bindings_pause_before_provider(path: Path):
@@ -469,6 +624,10 @@ def main():
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
+        asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
+        test_limits_validation(root / "invalid-limits.sigma")
+        asyncio.run(test_single_project_admission(root / "single-session.sigma"))
+        asyncio.run(test_response_transport_and_parsed_bounds(root / "parsed.sigma"))
         asyncio.run(test_changed_bindings_pause_before_provider(root / "binding.sigma"))
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
     print("Persistent research session scenarios passed.")

@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from sigma import research_sessions
 from sigma.api import app
 from sigma.projects import (
     ProjectError,
@@ -180,6 +181,19 @@ def main():
             assert client.post("/api/projects/update", json=body).status_code == 400
             assert (
                 client.post("/api/projects/update", json={**body, "id": "new-guid"}).status_code
+                == 422
+            )
+            limits_url = "/api/projects/research-limits"
+            defaults = client.get(limits_url, params={"path": str(path)}).json()
+            assert defaults == research_sessions.DEFAULT_LIMITS
+            changed_limits = {**defaults, "research_rounds": 2, "model_calls": 4}
+            saved_limits = client.put(limits_url, json={"path": str(path), **changed_limits})
+            assert saved_limits.status_code == 200 and saved_limits.json() == changed_limits
+            assert client.get(limits_url, params={"path": str(path)}).json() == changed_limits
+            assert (
+                client.put(
+                    limits_url, json={"path": str(path), **changed_limits, "model_calls": 9}
+                ).status_code
                 == 422
             )
         expected = asdict(project_settings(inspect_project(path).project))

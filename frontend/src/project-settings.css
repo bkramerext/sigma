@@ -2,6 +2,13 @@
 .project-settings-dialog { color-scheme: dark; color: #dce7f0; background: #07111e; border: 1px solid #9d784c; border-radius: 8px; width: min(520px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 26px; box-shadow: 0 24px 80px #000a; }
 .project-settings-dialog::backdrop { background: #01050bb0; }
 .project-settings-dialog h2 { color: #edc38d; font: 400 28px/1.25 Georgia, serif; margin: 0 0 10px; }
+.project-settings-dialog [hidden] { display: none !important; }
+.project-settings-dialog .settings-tabs { display: flex; gap: 20px; border-bottom: 1px solid #35404a; margin: 0 0 18px; }
+.project-settings-dialog .settings-tabs [role="tab"] { padding: 8px 1px 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #aab9c7; font: 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.project-settings-dialog .settings-tabs [role="tab"][aria-selected="true"] { border-bottom-color: #d9a66c; color: #f0cca0; }
+.project-settings-dialog .settings-tabs [role="tab"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.project-settings-dialog .research-limits-panel { max-height: min(62dvh, 620px); overflow: auto; }
+.project-settings-dialog .research-limits-panel input[type="number"] { max-width: 220px; }
 .project-settings-dialog #project-settings-help { font-size: 13px; line-height: 1.6; color: #afbecd; margin: 0 0 22px; }
 .project-settings-dialog fieldset { margin: 0; }
 .project-settings-dialog label { display: block; color: #e2c49e; font-size: 12px; margin: 16px 0 8px; }

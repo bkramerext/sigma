@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sigma.model_catalog import DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, models
 from sigma.plan_stream import completed, failure
-from sigma.projects import ProjectError, ProjectView, Provenance, inspect_project
+from sigma.projects import ProjectError, ProjectView, Provenance, inspect_project, project_path
 
 TIMEOUT_SECONDS = 60
 MAX_CONTEXT = 48000
@@ -113,12 +113,28 @@ async def configuration(
     }
 
 
-def _receipt(project_id: str, model: str, effort: str) -> str:
+def _project_input_digest(path: str) -> str:
+    project = project_path(path)
+    digest = hashlib.sha256()
+    for name in ("project.json", "text-representations.json"):
+        target = project / name
+        if target.is_symlink():
+            raise ProjectError("Project research input state must not be a symbolic link")
+        if target.is_file():
+            contents = target.read_bytes()
+            digest.update(name.encode())
+            digest.update(len(contents).to_bytes(8, "big"))
+            digest.update(contents)
+    return digest.hexdigest()
+
+
+def _receipt(project_id: str, model: str, effort: str, input_digest: str | None = None) -> str:
     raw = json.dumps(
         {
             "project_id": project_id,
             "model": model,
             "reasoning_effort": effort,
+            "input_digest": input_digest,
             "expires": int(time.time()) + 86400,
         }
     ).encode()
@@ -143,7 +159,13 @@ def accepted_provenance(receipt: str, path: str) -> Provenance:
             or metadata["project_id"] != inspect_project(path).project.id
         ):
             raise ValueError()
+        if metadata.get("input_digest") and metadata["input_digest"] != _project_input_digest(path):
+            raise ProjectError(
+                "Project research inputs changed while this strategy was generating. Regenerate against the current project before accepting."
+            )
         return Provenance("openai", metadata["model"], metadata.get("reasoning_effort"))
+    except ProjectError:
+        raise
     except (ValueError, KeyError, TypeError) as exc:
         raise ProjectError(
             "Draft receipt expired or is invalid. Regenerate, or save the text manually without AI attribution."
@@ -366,7 +388,9 @@ async def generate_proposal(
         return {
             "draft": proposal.model_dump(),
             "provenance": asdict(Provenance("openai", returned_model, config["reasoning_effort"])),
-            "receipt": _receipt(project_id, returned_model, config["reasoning_effort"]),
+            "receipt": _receipt(
+                project_id, returned_model, config["reasoning_effort"], _project_input_digest(path)
+            ),
         }
     except ProjectError:
         raise

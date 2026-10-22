@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from dataclasses import asdict
+from typing import Any
 from uuid import UUID
 
 from fastapi import FastAPI, Request
@@ -91,10 +92,39 @@ class ResearchStartRequest(OpenRequest):
     idempotency_key: str = Field(min_length=36, max_length=36)
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
+    expected_limits: dict[str, Any] | None = None
 
 
 class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
+
+
+class ResearchLimitsRequest(OpenRequest):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    research_rounds: int = Field(ge=1, le=3)
+    model_calls: int = Field(ge=1, le=6)
+    session_duration_minutes: int = Field(ge=1, le=240)
+    output_tokens_per_call: int = Field(ge=256, le=12000)
+    maximum_estimated_cost_usd: float | None = Field(default=None, ge=0, le=10000)
+
+
+@app.get("/api/projects/research-limits")
+def research_limits_view(path: str):
+    return research_sessions.get_limits(path)
+
+
+@app.put("/api/projects/research-limits")
+def research_limits_update(body: ResearchLimitsRequest):
+    return research_sessions.save_limits(
+        body.path,
+        {
+            "research_rounds": body.research_rounds,
+            "model_calls": body.model_calls,
+            "session_duration_minutes": body.session_duration_minutes,
+            "output_tokens_per_call": body.output_tokens_per_call,
+            "maximum_estimated_cost_usd": body.maximum_estimated_cost_usd,
+        },
+    )
 
 
 @app.get("/api/projects/research-sessions")
@@ -115,6 +145,7 @@ async def research_start_view(body: ResearchStartRequest):
         body.idempotency_key,
         body.expected_project_id,
         body.expected_binding,
+        body.expected_limits,
     )
 
 

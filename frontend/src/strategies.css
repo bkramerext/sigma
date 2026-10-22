@@ -314,7 +314,7 @@
 .workspace-page .workspace-pane-heading h2 button:hover:not(:disabled) { color: #f4d2a6; text-decoration: underline; text-underline-offset: 4px; }
 .workspace-page .workspace-pane-heading p { min-width: 0; flex: 1 1 250px; margin: 0; color: var(--workspace-muted); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
 .workspace-page .strategies-pane-heading { justify-content: flex-start; }
-.workspace-page .research-session-facts { display: flex; flex-wrap: wrap; gap: 4px 24px; color: #c4d0da; }
+.workspace-page .research-session-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 4px 24px; color: #c4d0da; }
 .workspace-page .research-session-facts p { margin: 3px 0; }
 .workspace-page .research-session-message { color: #e7c08d; }
 .workspace-page .research-session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 14px 0; }
@@ -403,7 +403,7 @@
 .workspace-page .strategy-expanded .strategy-approach { margin: 0 0 8px; }
 .workspace-page .sessions-pane { margin-top: 24px; }
 .workspace-page .sessions-pane-heading .section-count { margin-left: auto; }
-.workspace-page .session-columns { display: grid; grid-template-columns: minmax(0, 1fr) 170px; padding: 14px 24px; text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
+.workspace-page .session-columns { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); padding: 14px 24px; text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .session-table { border: 2px solid var(--workspace-line); border-radius: 12px; }
 .workspace-page .session-list { margin: 0; padding: 0; border: 0; background: transparent; list-style: none; }
 .workspace-page .session-row { min-width: 0; border-top: 1px solid var(--workspace-line); }
@@ -419,6 +419,7 @@
 .workspace-page .session-completed i { border-color: #75b18c; box-shadow: 0 0 5px #75b18c; }
 .workspace-page .session-stopped i, .workspace-page .session-failed i { border-color: #d38578; box-shadow: 0 0 5px #d38578; }
 .workspace-page .session-row-content { min-width: 0; padding: 0 0 0 16px; border-left: 1px solid #243441; color: #c4d0da; line-height: 1.6; }
+.workspace-page .session-status-row { display: flex; min-height: 24px; align-items: center; margin: 0 0 8px; }
 .workspace-page .sessions-empty { margin: 0; padding: 16px 24px; border-top: 1px solid var(--workspace-line); color: var(--workspace-muted); }
 .workspace-page .sessions-pane .research-session-facts { gap: 4px 24px; }
 .workspace-page .sessions-pane .research-session-facts p { margin: 3px 0; }
@@ -445,4 +446,5 @@
   .workspace-page .session-row-content { padding: 12px 0 0; border-left: 0; border-top: 1px solid #243441; }
   .workspace-page .strategies-heading-right { flex: 0 1 auto; justify-content: flex-start; flex-wrap: wrap; gap: 8px 12px; margin-left: 0; }
   .workspace-page .sessions-pane .research-activity li { grid-template-columns: 1fr; gap: 2px; }
+  .workspace-page .sessions-pane .research-session-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }

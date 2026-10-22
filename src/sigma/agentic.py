@@ -22,6 +22,7 @@ from sigma.proposals import (
     MAX_CONTEXT,
     MAX_RESPONSE,
     Proposal,
+    _project_input_digest,
     _receipt,
     configuration,
     context_for,
@@ -645,7 +646,10 @@ async def agentic_events(
                             draft=draft.model_dump(),
                             provenance=provenance,
                             receipt=_receipt(
-                                view.project.id, config["model"], config["reasoning_effort"]
+                                view.project.id,
+                                config["model"],
+                                config["reasoning_effort"],
+                                _project_input_digest(path),
                             ),
                             summary=review.public_summary,
                         )
