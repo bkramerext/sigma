@@ -62,9 +62,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical, editSignal }: {
+function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; editSignal?: number;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -103,7 +103,6 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
-  useEffect(() => { if (editSignal && scope === 'project' && version?.current && !busy) beginBodyEdit(selected === 'rendered'); }, [editSignal]);
   function cancelBodyEdit() {
     setEditing(false);
     if (editingFromRendered) chooseView('rendered');
@@ -147,7 +146,8 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
       {editing ? <>
         <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
         <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
-      </> : scope !== 'project' && data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
+      </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
+      {onSettings && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
     </div>
     {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
@@ -880,7 +880,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
-  const [investigationEditSignal, setInvestigationEditSignal] = useState(0);
   const editProjectButton = useRef<HTMLButtonElement>(null);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
@@ -983,8 +982,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-      <div className="project-description-line"><h2 className="investigation-heading">Investigation</h2><div className="investigation-heading-actions"><button type="button" className="text-view-link" onClick={() => setInvestigationEditSignal(value => value + 1)} disabled={closing || ordering || !!dragId || editing || generating}>Edit</button><button ref={editProjectButton} type="button" className="text-view-link" onClick={() => setProjectEditing(true)} disabled={closing || ordering || !!dragId || editing || generating}>Settings</button></div></div>
-      <TextViews editSignal={investigationEditSignal} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
+      <div className="project-description-line"><h2 className="investigation-heading">Investigation</h2></div>
+      <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
