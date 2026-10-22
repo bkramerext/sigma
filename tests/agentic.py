@@ -121,6 +121,38 @@ async def main_async(root: Path):
     assert view.project.id != "counting-constrained-binary-strings"
     assert view.project.title.endswith(" - Working #1")
 
+    # Provider fields capped at 300 characters must never expose clipped prose.
+    clipped = {
+        **CANDIDATE,
+        "summary": ("A complete sentence. " + "This unfinished continuation " * 12)[:300],
+    }
+    clipped_review = {
+        **DISTINCT,
+        "public_summary": ("A valid review sentence. " + "Unfinished reviewer text " * 12)[:300],
+    }
+    events, _ = await exercise(path, [clipped, clipped_review], before)
+    assert events[-1]["type"] == "run.completed"
+    assert events[-1]["draft"]["summary"] == "A complete sentence."
+    trace = get_run(path, events[-1]["run_id"])
+    assert trace["steps"][0]["output"]["summary"] == "A complete sentence."
+    assert trace["steps"][1]["output"]["public_summary"] == "A valid review sentence."
+    assert trace["terminal"]["summary"] == "A valid review sentence."
+
+    incomplete = {**CANDIDATE, "summary": "An unfinished summary without punctuation"}
+    async def incomplete_handler(request):
+        return httpx.Response(200, json=provider_output(incomplete))
+
+    with patch(
+        "sigma.agentic.httpx.AsyncClient",
+        side_effect=lambda **kwargs: REAL_CLIENT(
+            transport=httpx.MockTransport(incomplete_handler), **kwargs
+        ),
+    ):
+        rejected = await collect(path)
+    assert rejected[-1]["type"] == "run.failed"
+    assert "malformed research output" in rejected[-1]["summary"]
+    assert get_run(path, rejected[-1]["run_id"])["terminal"]["status"] == "failed"
+
     events, calls = await exercise(path, [CANDIDATE, DISTINCT], before)
     assert [call["role"] for call in calls] == ["strategy_explore", "strategy_challenge"]
     assert events[-1]["type"] == "run.completed"
