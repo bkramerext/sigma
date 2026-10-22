@@ -41,6 +41,7 @@
 .workspace-page .strategy-expand-arrow { margin-left: 8px; color: #a98d68; vertical-align: -2px; transition: transform .15s; }
 .workspace-page .strategy-detail[open] .strategy-expand-arrow { transform: rotate(90deg); }
 .workspace-page .strategy-preview { display: block; font-size: 13px; line-height: 1.6; color: #adbecf; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-page .strategy-detail[open] > summary .strategy-preview { display: none; }
 .workspace-page .strategy-expanded { margin-top: 12px; border-top: 1px solid #243441; padding-top: 10px; }
 .workspace-page .strategy-expanded .strategy-approach { margin: 0 0 14px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-page .strategy-expanded .strategy-byline { margin: 0 0 8px; overflow-wrap: anywhere; }
