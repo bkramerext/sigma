@@ -192,3 +192,18 @@
 
 /* Native button title tooltips are viewport-aware; suppress custom hints that can be clipped by narrow panes. */
 .workspace-page .sigma-render-tooltip { display: none !important; }
+
+/* Markdown logo: match the other icon buttons' neutral, active and copper hover states. */
+.workspace-page .text-view-controls .sigma-render-toggle .markdown-logo {
+  display: block; width: 22px; height: 18px; flex: 0 0 auto;
+  color: #8b9296;
+}
+.workspace-page .text-view-controls .sigma-render-toggle.sigma-render-active .markdown-logo {
+  color: #e8b57d;
+}
+.workspace-page .text-view-controls .sigma-render-toggle:hover:not(:disabled) .markdown-logo {
+  color: #fff2e9;
+}
+.workspace-page .text-view-controls .sigma-render-toggle:focus-visible .markdown-logo {
+  color: #fff2e9;
+}
