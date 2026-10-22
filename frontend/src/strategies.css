@@ -192,6 +192,7 @@
 .workspace-page .proposal-heading-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 18px; }
 .workspace-page .proposal-heading-row h2 { margin: 0; }
 .workspace-page .proposal-heading-row .proposal-heading-cancel,
+.workspace-page .proposal-heading-row .proposal-heading-save,
 .workspace-page .proposal-heading-row .proposal-heading-generate {
   width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
   border: 0; border-radius: 0; box-shadow: none; background: transparent;
@@ -199,8 +200,10 @@
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
 }
 .workspace-page .proposal-heading-row .proposal-heading-cancel:disabled,
+.workspace-page .proposal-heading-row .proposal-heading-save:disabled,
 .workspace-page .proposal-heading-row .proposal-heading-generate:disabled { opacity: .5; cursor: default; }
 .workspace-page .proposal-heading-row .proposal-heading-cancel:focus-visible,
+.workspace-page .proposal-heading-row .proposal-heading-save:focus-visible,
 .workspace-page .proposal-heading-row .proposal-heading-generate:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
 .workspace-page .proposal-dialog .generating-status {
