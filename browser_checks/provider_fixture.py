@@ -95,10 +95,9 @@ async def handler(request):
         "assumptions": "Justify convergence and distinguish finite checks from a universal bound.",
         "failure_modes": "Necessary inequalities may be too weak; sampled positivity does not prove the conjecture.",
     }
-    counting = agentic and context["project"]["research_problem"].startswith(
-        "For each integer n >= 0"
-    )
-    previous = context["project"]["existing_strategies"] if counting else []
+    project_context = context.get("project", context)
+    counting = project_context["research_problem"].startswith("For each integer n >= 0")
+    previous = project_context["existing_strategies"] if counting else []
     if counting:
         if previous:
             draft = {
@@ -149,11 +148,29 @@ async def handler(request):
             if counting
             else "Finite minor computations are checks only; the general inequality remains unproved.",
         }
+    if counting and not agentic:
+        draft = {
+            "title": "Terminal-symbol recurrence",
+            "summary": "Partition valid strings by their final symbol to derive a recurrence.",
+            "approach": "Separate length-n valid strings ending in 0 from those ending in 1. An ending 1 forces a preceding 0, relating the two disjoint classes to shorter strings.",
+            "first_tests": "Enumerate n=0,1,2,5,10 and compare to 1,2,3,13,144; finite agreement is not a proof.",
+            "assumptions": "The empty string counts and n below two needs explicit initial conditions.",
+            "failure_modes": "Missing the forced predecessor or mishandling n=0 invalidates the recurrence.",
+        }
+        if previous:
+            draft.update(
+                title="Position-shift subset count",
+                summary="Count strings by a bijection from nonadjacent one positions to subsets.",
+                approach="Fix k ones at increasing positions i_1,...,i_k. Shift position i_j to i_j-(j-1), yielding a k-subset of {1,...,n-k+1}; sum the resulting binomial counts over k.",
+                first_tests="Enumerate n=0,1,2,5,10 and compare to 1,2,3,13,144; finite agreement is not a proof.",
+                assumptions="Positions are one-indexed and k ranges from zero through the largest feasible count.",
+                failure_modes="An incorrect inverse or boundary range would overcount strings.",
+            )
     return httpx.Response(
         200,
         json={
             "status": "completed",
-            "model": body["model"] if agentic else "gpt-4.1-TEST-FIXTURE",
+            "model": body["model"],
             "output": [
                 {"type": "message", "content": [{"type": "output_text", "text": json.dumps(draft)}]}
             ],

@@ -924,6 +924,46 @@ live-model research quality, entitlement or account usage. Playwright's API
 proxy can outlive a locally aborted request briefly; the direct ASGI disconnect
 scenario verifies server-side cancellation and run-gate release.
 
+## A15 — basic Generate Strategy path (2026-10-21)
+
+The active A15 scope is the single-request Generate Strategy assignment. The
+first broken integration was in the visible UI: it called the A14 streamed
+agentic endpoint, while the already-supported bounded proposal service was
+exposed separately and had its own request, validation, receipt and save tests.
+The UI now calls that existing service directly. It presents one editable,
+unsaved proposal; Save remains the only persistence action. Pending and cancel
+states are visible, and the copy no longer promises independent review. A14's
+agentic service and tests remain intact for the deferred A16 extension; the
+original A15 text-representations work remains separately implemented.
+
+Generation rejects an in-flight result if the connected account or billing
+mode, project identity, selected model/thinking effort, or full research and
+strategy context changed while the provider request was running. The existing
+API-key and ChatGPT-plan response adapters, strict structured validation,
+response/context limits, concurrency guard, and signed project/model provenance
+remain in use. Failed requests and local cancellation leave research untouched
+and keep the draft composer recoverable.
+
+Actual verification on 2026-10-21:
+
+- `./sigma test`: all executable scenarios and API/CLI checks passed; Ruff check
+  and format passed; Pyright reported zero errors; frontend typecheck and Vite
+  production build passed. Provider and agent tests use deterministic mocked
+  transports; no paid provider call was made.
+- `uv run --with playwright python browser_checks/a15_generate.py`: real Chrome
+  passed the empty counting-project/empty-seed flow, exactly one bounded request
+  per generation, substantive editable unsaved draft, cancel without mutation,
+  simulated HTTP 500 with one dismissible request toast and inline recovery,
+  in-flight cancellation without mutation, explicit edited save/reopen, and a
+  different proposal with existing strategy context. The source fixture stayed
+  byte-identical. Screenshots at 1440×900 and 390×844 were inspected; neither
+  has horizontal overflow. These checks use the isolated mock provider on port
+  8002, not live OpenAI.
+- `tests/proposals.py` now also exercises the proposals API endpoint and verifies
+  that an account change during a provider request discards the result without
+  changing project state. `tests/model_connection.py` verifies changed-model
+  rejection during the request.
+
 ## Project header spacing follow-up (2026-10-21)
 
 The project header now displays the upper 64% of its unchanged artwork, retaining

@@ -234,6 +234,28 @@ async def generate_proposal(
                         ).hexdigest(),
                     )
                 raw = json.loads(data)
+        current_credential = await auth_context()
+        if (
+            current_credential["identity"] != credential["identity"]
+            or current_credential["mode"] != credential["mode"]
+        ):
+            raise ProjectError(
+                "AI account or billing mode changed during generation. The draft was discarded; retry explicitly."
+            )
+        current_view = inspect_project(path)
+        if (
+            current_view.project.id != project_id
+            or current_view.project.ai_model != config["model"]
+            or current_view.project.reasoning_effort != config["reasoning_effort"]
+        ):
+            raise ProjectError(
+                "Project identity or selected model changed during generation. The draft was discarded; reopen and retry."
+            )
+        _, current_context = context_for(path, seed, current_view)
+        if current_context != context:
+            raise ProjectError(
+                "Project research or strategy history changed during generation. The draft was discarded; review the current source and retry."
+            )
         if raw.get("status") != "completed":
             raise ProjectError(
                 "Provider did not complete the proposal. Retry explicitly; no strategy was saved."

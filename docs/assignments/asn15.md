@@ -1,6 +1,6 @@
 # A15: Make basic Generate Strategy work
 
-**Status:** Ready for Codex implementation. **Scope:** Single-request Generate Strategy, **not** the multi-agent research workflow.
+**Status:** Implemented and verified. **Scope:** Single-request Generate Strategy, **not** the multi-agent research workflow.
 
 **Assignment history:** A14 described and may already have implemented agentic behavior. The heavier Explore → Challenge → Decide orchestration and its detailed requirements are assigned to **A16** (`docs/assignments/asn16.md`). This A15 focuses on the minimal functional user-facing Generate Strategy path. **Do not delete or regress working agentic code** to enforce a single-call design; isolate or bypass it only if needed to make the basic path reliable. The original A15 text-representations specification is preserved in `docs/assignments/asn15-text-representations-original.md`. A14.2 separately covers Markdown conversion.
 

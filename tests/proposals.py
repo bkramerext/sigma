@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 from fastapi.testclient import TestClient
@@ -84,11 +84,21 @@ async def check(path):
     with patch("sigma.proposals.httpx.AsyncClient", side_effect=client):
         first = await proposals.generate_proposal(str(path), consent=True)
         second = await proposals.generate_proposal(str(path), "Try a necessary condition", True)
-        assert len(calls) == 2
         assert (path / "project.json").read_bytes() == before
         provenance = proposals.accepted_provenance(first["receipt"], str(path))
         assert provenance.model == "gpt-4.1-fixture"
         with TestClient(app) as api:
+            generated = api.post(
+                "/api/projects/proposals",
+                json={
+                    "path": str(path),
+                    "seed": "",
+                    "expected_project_id": inspect_project(path).project.id,
+                },
+            )
+            assert generated.status_code == 200, generated.text
+            assert generated.json()["draft"]["title"] == DRAFT["title"]
+            assert generated.json()["provenance"]["model"] == "gpt-4.1-fixture"
             accepted = api.post(
                 "/api/projects/strategies",
                 json={
@@ -110,6 +120,36 @@ async def check(path):
                 ).status_code
                 == 400
             )
+        assert len(calls) == 3
+        unchanged = (path / "project.json").read_bytes()
+        original_binding = {
+            "identity": "proposal-account",
+            "mode": "api_key",
+            "token": "fixture",
+            "status": "connected",
+        }
+        switched_binding = {
+            "identity": "other-account",
+            "mode": "api_key",
+            "token": "fixture",
+            "status": "connected",
+        }
+        with (
+            patch(
+                "sigma.proposals.auth_context",
+                new=AsyncMock(side_effect=[original_binding, original_binding, switched_binding]),
+            ),
+            patch("sigma.proposals.httpx.AsyncClient", side_effect=client),
+        ):
+            await rejects(
+                proposals.generate_proposal(
+                    str(path),
+                    expected_binding="proposal-account",
+                    expected_project_id=inspect_project(path).project.id,
+                ),
+                "changed during generation",
+            )
+        assert (path / "project.json").read_bytes() == unchanged
         await rejects(
             proposals.generate_proposal(str(path), consent=True), "repeats"
         )  # Repeated approach.

@@ -44,7 +44,7 @@ with sync_playwright() as p:
     page.route(
         "**/api/**",
         lambda route: route.fulfill(
-            response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8001"))
+            response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8002"))
         ),
     )
     page.goto("http://127.0.0.1:5173/project?path=" + quote(path))
@@ -280,19 +280,19 @@ with sync_playwright() as p:
     expect(
         dialog.get_by_role("textbox", name="Starting point (optional)", exact=True)
     ).to_be_focused()
-    expect(dialog.get_by_role("button", name="Generate draft", exact=True)).to_be_enabled()
+    expect(dialog.get_by_role("button", name="Generate", exact=True)).to_be_enabled()
     before = state.read_bytes()
     dialog.get_by_role("textbox", name="Starting point (optional)", exact=True).fill(
         "error-fixture"
     )
-    dialog.get_by_role("button", name="Generate draft", exact=True).click()
+    dialog.get_by_role("button", name="Generate", exact=True).click()
     expect(dialog.get_by_role("alert")).to_contain_text("HTTP 500")
     assert state.read_bytes() == before
     dialog.get_by_role("textbox", name="Starting point (optional)", exact=True).fill("")
-    dialog.get_by_role("button", name="Generate draft", exact=True).click()
+    dialog.get_by_role("button", name="Generate", exact=True).click()
     expect(dialog.get_by_label("Title", exact=True)).to_have_value("Moment matrix obstruction")
-    expect(dialog.locator(".agentic-activity")).to_contain_text("Candidate proposed")
-    expect(dialog.locator(".agentic-activity")).to_contain_text("distinct")
+    expect(dialog).to_contain_text("not independently reviewed or verified")
+    assert dialog.locator(".agentic-activity").count() == 0
     assert state.read_bytes() == before
     for w in [1672, 390, 320]:
         page.set_viewport_size({"width": w, "height": 941 if w == 1672 else 844})
@@ -330,10 +330,10 @@ with sync_playwright() as p:
         "timeout-fixture"
     )
     before = state.read_bytes()
-    dialog.get_by_role("button", name="Generate draft", exact=True).click()
+    dialog.get_by_role("button", name="Generate", exact=True).click()
     expect(dialog.get_by_role("button", name="Generating…", exact=True)).to_be_disabled()
     dialog.get_by_role("button", name="Cancel request", exact=True).click()
-    expect(dialog).to_contain_text("Request cancelled locally")
+    expect(dialog).to_contain_text("Request cancelled. The provider may already have processed it")
     expect(
         dialog.get_by_role("textbox", name="Starting point (optional)", exact=True)
     ).to_have_value("timeout-fixture")

@@ -95,21 +95,23 @@ the workspace tagline, shared Home/Close button states, identical Home/workspace
 connection pill styling and live label, disclosure/focus behavior, and keyboard
 Close. Screenshots are `/tmp/sigma-a13-header-*.png`.
 
-## A14 agentic strategy and project layout
+## A15 single-request Generate Strategy
 
-Start a fresh `provider_fixture:app` on port 8001 and keep the normal UI on
-5173, then run `uv run --with playwright python browser_checks/agentic.py`.
-The fixture state must be fresh because this check opens and saves in the stable
-stock project. It verifies the empty counting project, ordered live progress,
-unsaved cancellation, explicit acceptance/reopen, a distinct second mechanism,
-and immutable source data. The provider is entirely mocked. Review captures are
-`/tmp/sigma-a14-review-1440.png` and `-390.png`.
+Start a fresh `provider_fixture:app` on port 8002 and keep the normal UI on
+5173, then run `uv run --with playwright python browser_checks/a15_generate.py`.
+It verifies one bounded request from an empty counting project with an empty
+starting point, an editable unsaved draft, cancellation without mutation,
+provider failure and its single dismissible toast, in-flight cancellation,
+explicit save/reopen, existing-strategy context and immutable stock source.
+The provider is entirely mocked. Review captures are
+`/tmp/sigma-a15-review-1440.png` and `-390.png`.
 
 `uv run --with playwright python browser_checks/strategies.py` also checks the
 collapsible sidebar, compact and draggable project-description divider, and
-existing strategy interactions at desktop and narrow widths.
+existing strategy interactions at desktop and narrow widths. It uses the same
+fresh fixture on port 8002.
 
-## A15 text representations
+## Original A15 text representations (separate implementation)
 
 Run the normal Vite UI on `127.0.0.1:5173`, then start a fresh isolated mock
 provider (`uv run uvicorn browser_checks.provider_fixture:app --host 127.0.0.1

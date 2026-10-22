@@ -15,13 +15,12 @@ from sigma import openai_connection as connection
 from sigma.model_catalog import CATALOG
 from sigma.projects import (
     ProjectError,
-    create_strategy,
     initialize_project,
     inspect_project,
     project_settings,
     update_project,
 )
-from sigma.proposals import accepted_provenance, configuration, generate_proposal
+from sigma.proposals import configuration, generate_proposal
 
 REAL_CLIENT = httpx.AsyncClient
 KEY = "non-secret-discovery-fixture"
@@ -206,19 +205,16 @@ async def checks():
                 expected=prior,
             )
             release.set()
-            draft = await pending
-            provenance = accepted_provenance(draft["receipt"], str(path))
-            assert (
-                provenance.model == "gpt-6-luna-returned" and provenance.reasoning_effort == "xhigh"
-            )
+            try:
+                await pending
+            except ProjectError as exc:
+                assert "selected model changed during generation" in str(exc)
+            else:
+                raise AssertionError("A draft for a changed selected model was returned")
             before = inspect_project(path)
             assert not before.project.strategies
-            accepted = create_strategy(
-                path, DRAFT["title"], DRAFT["approach"], DRAFT["summary"], provenance
-            )
-            assert accepted.project.ai_model == "gpt-6-astra"
-            assert accepted.project.strategies[-1].provenance == provenance
-            assert inspect_project(path) == accepted
+            assert before.project.ai_model == "gpt-6-astra"
+            assert inspect_project(path) == before
         reset()
         with patch(
             "sigma.openai_connection.httpx.AsyncClient",
@@ -248,7 +244,7 @@ async def checks():
             )
             assert edited.project.ai_model == "gpt-6-astra"
     print(
-        "PASS per-project model/actual effort request, immutable concurrent generation metadata, signed acceptance, unavailable choice/no fallback and offline metadata edits"
+        "PASS per-project model/actual effort request, changed-model draft rejection, signed acceptance, unavailable choice/no fallback and offline metadata edits"
     )
 
 
