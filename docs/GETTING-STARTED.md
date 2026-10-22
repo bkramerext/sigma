@@ -10,7 +10,7 @@ From the repository root:
 
 ```sh
 ./sigma setup
-./sigma ui
+./sigma start
 ```
 
 Open **http://127.0.0.1:5173**. Choose **Open Project**, enter `projects/rh.sigma` in the dialog, and open it. **New Project** asks for a name, multiline research problem, and research mode (Default or Mathematical), then opens the created workspace. Cancel or Escape returns Home. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
@@ -21,9 +21,9 @@ removes it from the active pool while retaining the research record and history.
 Cancel/Escape leaves data unchanged; failed saves retain dialog text for retry.
 Edit events include **View changes** with before-and-after text.
 
-To stop the UI from another terminal, run `./sigma shutdown`. It stops only a verified instance belonging to the same checkout; it never stops an unrelated port owner. Running `./sigma ui` again starts or restarts SIGMA, including recovery from a previously suspended (`Ctrl+Z`) launcher when its process identity can be verified. An unverified process is never signalled. `Ctrl+C` in the launch terminal remains the normal clean shutdown.
+To stop the UI from another terminal, run `./sigma shutdown`. It stops only a verified instance belonging to the same checkout; it never stops an unrelated port owner. Running `./sigma start` again starts or restarts SIGMA, including recovery from a previously suspended (`Ctrl+Z`) launcher when its process identity can be verified. An unverified process is never signalled. `Ctrl+C` in the launch terminal remains the normal clean shutdown.
 
-The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma ui` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
+The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma start` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
 
 Scheduling, reports and forks are unavailable; the UI explains their status. Optional AI proposal generation is described below.
 
@@ -86,11 +86,11 @@ dialog map to the existing title/approach fields and share their length limits.
 ./sigma test
 ```
 
-Runs the workflow tests, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary projects and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma ui`, and `sigma test` also work.
+Runs the workflow tests, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary projects and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma start`, and `sigma test` also work.
 
 ## Project location
 
-New Project and `sigma create` use this checkout's absolute `projects/` directory, independent of the browser or shell working directory. To choose another root, create a directory owned by the server user and launch with `SIGMA_PROJECTS_ROOT=/absolute/path ./sigma ui` (or the same environment variable for CLI commands). The root must already exist, be absolute, and must not itself be a symlink. Missing parents are not created.
+New Project and `sigma create` use this checkout's absolute `projects/` directory, independent of the browser or shell working directory. To choose another root, create a directory owned by the server user and launch with `SIGMA_PROJECTS_ROOT=/absolute/path ./sigma start` (or the same environment variable for CLI commands). The root must already exist, be absolute, and must not itself be a symlink. Missing parents are not created.
 
 The server derives a lowercase Unicode-normalized directory name, joining punctuation/spacing with hyphens and adding `.sigma`. Names are 1–200 characters, reject path separators/control characters, and must contain a letter or number. Directory stems are limited to 80 characters/180 UTF-8 bytes. Different names can normalize to the same directory: choose another name when a collision is reported; existing files and projects are never reused or overwritten. The dialog previews this destination read-only. Research problems are 1–20,000 characters after trimming. Open Project still accepts arbitrary valid existing local project paths.
 
@@ -325,7 +325,7 @@ hint is sent directly to the trusted authorization endpoint through a backend
 redirect, never in a React payload. See [security notes](asn8.2-security.md).
 
 Optional API keys use `.env`; no configuration is needed for manual or ChatGPT
-work. Restart with `./sigma ui` after changing a file key. The launcher
+work. Restart with `./sigma start` after changing a file key. The launcher
 reads this checkout’s `ROOT/.env`, even when invoked from another directory;
 manual sourcing is unnecessary. Existing environment variables win, including an empty key. The old enable variable is ignored. To use a changed file value, unset a
 previously exported shell override before restarting. Simple dotenv assignments,
