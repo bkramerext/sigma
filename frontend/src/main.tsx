@@ -135,24 +135,28 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   const renderTooltip = rendering ? 'Converting to markdown' : selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
   const renderTooltipId = `sigma-render-tooltip-${scope}-${strategyId ?? 'project'}`;
+  const viewActions = <>
+    {mathematical && <span className="sigma-render-tooltip-wrap">
+      <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
+      aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
+      aria-pressed={selected === 'rendered' || rendering} aria-describedby={renderTooltipId} title={renderTooltip}
+      disabled={editing || busy} onClick={() => {
+        if (selected === 'rendered') { chooseView('plain'); setError(''); }
+        else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
+        else { void convert('markdown'); }
+      }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
+      <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
+    </span>}
+    {editing ? <>
+      <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
+      <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
+    </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
+    {onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
+  </>;
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     <div className="text-view-controls">
-      {mathematical && <span className="sigma-render-tooltip-wrap">
-        <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
-        aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
-        aria-pressed={selected === 'rendered' || rendering} aria-describedby={renderTooltipId} title={renderTooltip}
-        disabled={editing || busy} onClick={() => {
-          if (selected === 'rendered') { chooseView('plain'); setError(''); }
-          else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
-          else { void convert('markdown'); }
-        }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
-        <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
-      </span>}
-      {editing ? <>
-        <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
-        <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
-      </> : data && version && <button type="button" className="text-view-link" onClick={() => beginBodyEdit(selected === 'rendered')}>Edit</button>}
-      {onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
+      {scope === 'project' && <h2 className="investigation-heading">Project</h2>}
+      {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
     </div>
     {editing ? <form id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
@@ -915,7 +919,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-      <div className="project-description-line"><h2 className="investigation-heading">Project description</h2></div>
       <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
@@ -928,8 +931,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <section className="pool" aria-labelledby="pool-heading">
       <div className="pool-heading">
         <h2 id="pool-heading" tabIndex={-1}>Strategies</h2>
+        <StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
       </div>
-      <div className="pool-actions"><StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/></div>
       <p className="hint strategies-intro">Independent avenues of investigation. Stages are manually tracked.</p>
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {

@@ -1150,11 +1150,12 @@ settings instead of a manual-continuation path.
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
 
-## Strategies action placement (2026-10-21)
+## Project and Strategies heading controls (2026-10-21)
 
-New and Generate now render in their own action row directly below the
-Strategies heading, matching the project description heading and controls.
-Project description editing still shows Save and Cancel without Settings.
+The project heading is simply **Project**. Its text and Settings controls share
+the heading row, with controls aligned to the right. New and Generate are back
+beside Strategies on its heading row. Project description editing shows Save
+and Cancel without Settings.
 
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.

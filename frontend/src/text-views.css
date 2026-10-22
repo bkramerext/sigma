@@ -47,7 +47,8 @@
 /* Shared text rendering switch: outline sigma = plain; copper sigma = Markdown. */
 .workspace-page .text-views { position: relative; }
 .workspace-page .text-view-controls { justify-content: flex-start; }
-.workspace-page .project-text-views .text-view-controls { order: 0; margin: 0 0 8px; justify-content: flex-start; padding: 0; }
+.workspace-page .project-text-views .text-view-controls { position: static; order: 0; display: flex; width: 100%; align-items: center; justify-content: space-between; margin: 0 0 8px; padding: 0; }
+.workspace-page .project-text-views .project-text-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
 .workspace-page .text-view-controls .sigma-render-toggle {
   display: inline-grid; place-items: center;
   width: 32px; height: 32px; min-width: 32px; min-height: 32px;
@@ -70,6 +71,7 @@
 
 /* Controls occupy the upper-left corner of their own text box. */
 .workspace-page .math-text-views { padding-top: 38px; }
+.workspace-page .project-text-views.math-text-views { padding-top: 0; }
 .workspace-page .text-views > .text-view-controls,
 .workspace-page .project-text-views > .text-view-controls {
   position: absolute; top: 0; left: 0; z-index: 2;
@@ -166,5 +168,12 @@
 }
 
 
-/* Tighten only the Investigation heading-to-description spacing. */
+/* Tighten only the Project heading-to-description spacing. */
 .workspace-page .project-text-views { padding-top: 24px; }
+
+/* Project heading and its actions share a row; the body below keeps the scroll space. */
+.workspace-page .project-text-views > .text-view-controls {
+  position: static; top: auto; left: auto; right: auto; z-index: auto;
+  display: flex; width: 100%; align-items: center; justify-content: space-between;
+  margin: 0 0 8px; padding: 0;
+}

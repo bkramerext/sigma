@@ -223,8 +223,6 @@
 .workspace-page .strategy-heading-actions .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
 .workspace-page .pool-heading { justify-content: flex-start; gap: 18px; }
-.workspace-page .pool-actions { display: flex; align-items: center; justify-content: flex-start; margin: 8px 0 9px; }
-.workspace-page .pool-actions .strategy-heading-actions { margin: 0; }
 
 /* Override global strategy form submit-button styling for the header Save link. */
 .workspace-page .strategy-form .new-strategy-heading-actions button[type="submit"].text-view-link {
@@ -261,11 +259,8 @@
   .workspace-page #strategy-composer .inline-proposal { padding: 20px; }
 }
 
-/* Investigation uses the Strategies section-heading hierarchy. */
-.workspace-page .project-description-line {
-  display: flex; align-items: baseline; justify-content: flex-start; gap: 18px; flex-wrap: wrap;
-}
-.workspace-page .project-description-line .investigation-heading {
+/* Project and Strategies share a heading row with their controls on the right. */
+.workspace-page .project-text-views .investigation-heading {
   color: #e7be8d; font-size: 30px; line-height: 1.25; font-weight: inherit; margin: 0;
 }
 .workspace-page .investigation-heading-actions { display: inline-flex; align-items: baseline; gap: 16px; }
