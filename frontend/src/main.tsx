@@ -1044,7 +1044,7 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
   return <span className="strategy-inline-commands">
     <button type="button" className="text-view-link" disabled={disabled}
       onClick={() => onCommand('fork', strategy)}>Fork</button>
-    <button type="button" id={`commands-${strategy.id}`} className="text-view-link destructive-action" disabled={disabled}
+    <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
       onClick={() => onCommand('remove', strategy)}>Remove</button>
   </span>;
 }
