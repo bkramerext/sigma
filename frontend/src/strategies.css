@@ -186,3 +186,15 @@
   opacity: 1;
 }
 .workspace-page .generating-hourglass { display: inline-block; margin-right: 5px; color: #d8a575; }
+
+/* Keep Generate Strategy cancellation beside its title. */
+.workspace-page .proposal-heading-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 18px; }
+.workspace-page .proposal-heading-row h2 { margin: 0; }
+.workspace-page .proposal-heading-row .proposal-heading-cancel {
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  border: 0; border-radius: 0; box-shadow: none; background: transparent;
+  color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.workspace-page .proposal-heading-row .proposal-heading-cancel:disabled { opacity: .5; cursor: default; }
+.workspace-page .proposal-heading-row .proposal-heading-cancel:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
