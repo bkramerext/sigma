@@ -1032,7 +1032,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <details className="strategy-detail">
-            <summary title="Expand or collapse the full approach" onKeyDown={event => { if (event.currentTarget.querySelector(".is-renaming") && (event.key === "Enter" || event.key === " ")) event.preventDefault(); }}><div className="strategy-title-line"><StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/><svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></div>
+            <summary title="Expand or collapse the full approach"><div className="strategy-title-line"><StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/><svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></div>
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
