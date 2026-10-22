@@ -74,6 +74,26 @@ Verification on 2026-10-21: `./sigma test` passed all scenarios, Ruff, Pyright
 updated to match the current `investigation_type` serialization and six-entry
 Recent Projects limit; these were stale test expectations, not runtime changes.
 
+## Large strategy Markdown conversions
+
+The conversion service had incorrectly reused Generate Strategy's 128 KB
+provider-response limit. A complete conversion can have a larger response
+envelope, especially when a ChatGPT-plan bridge omits `Content-Type` and the
+client must buffer a valid SSE stream before classifying it. Text conversions
+now have a separate explicit 1 MB response cap, matching the shared SSE parser;
+payloads above it are still rejected without truncation or a saved conversion.
+The selected model, billing path, source bounds, and validated converted-body
+limits are unchanged.
+
+Verification: `tests/text_views.py` converts an approximately 8 KB generated
+strategy description from both a >128 KB API JSON envelope and >128 KB untyped
+ChatGPT-plan SSE, verifies the full derived result and unchanged authored
+approach, and confirms the 1 MB cap rejects oversized responses without writing
+a representation. `browser_checks/a142.py` passed the failure-toast/source
+retention and explicit-retry UI flow in real Chrome. `./sigma test` passed all
+scenarios, Ruff, Pyright, frontend typecheck and production build; no paid API
+calls were made.
+
 ## Implemented
 
 - **ASN-1 / SPEC-001:** Local project lifecycle with persistent identity/history; shared Python services for UI, API, CLI, and scenarios. RH seed initializes once.

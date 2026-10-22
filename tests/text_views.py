@@ -19,7 +19,7 @@ from sigma.projects import (
     inspect_project,
     remove_strategy,
 )
-from sigma.text_conversion import convert_text
+from sigma.text_conversion import MAX_CONVERSION_RESPONSE_BYTES, convert_text
 from sigma.text_views import digest, inspect_text, save_source
 
 SOURCE = Path("examples/nonconsecutive-subset-sums/project.json")
@@ -125,6 +125,64 @@ async def main_async(root: Path):
         assert len(calls) == 2
         assert (await convert_text(str(path), "project", "plain"))["plain"]["current"]
         assert len(calls) == 2
+
+    # Large strategy descriptions can produce a response envelope above the
+    # smaller proposal limit even though the converted body remains bounded.
+    large_api_path = root / "large-api-conversion.sigma"
+    initialize_project(large_api_path, "Large API conversion", "Review the generated strategy.")
+    long_source = " ".join(["Analyze a_n for n >= 0; preserve every assumption."] * 150)
+    long_markdown = long_source.replace("a_n", "$a_n$").replace("n >= 0", "$n \\ge 0$")
+    long_strategy = create_strategy(
+        large_api_path, "Generated long approach", long_source
+    ).project.strategies[0]
+
+    def large_json_handler(request):
+        raw = provider_output(long_markdown)
+        raw["diagnostic_metadata"] = "x" * 140_000
+        return httpx.Response(200, json=raw)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(large_json_handler), **kwargs
+            ),
+        ),
+    ):
+        large_api_result = await convert_text(
+            str(large_api_path), "strategy", "markdown", long_strategy.id
+        )
+    assert large_api_result["markdown"]["current"]
+    assert large_api_result["markdown"]["body"] == long_markdown
+    assert inspect_project(large_api_path).project.strategies[0].approach == long_source
+    oversized_path = root / "oversized-conversion.sigma"
+    initialize_project(oversized_path, "Oversized conversion", "Review the response bound.")
+
+    def oversized_json_handler(request):
+        raw = provider_output("Review the response bound.")
+        raw["diagnostic_metadata"] = "x" * (MAX_CONVERSION_RESPONSE_BYTES + 100)
+        return httpx.Response(200, json=raw)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(oversized_json_handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await convert_text(str(oversized_path), "project", "markdown")
+        except ProjectError as exc:
+            assert "response exceeded the limit" in str(exc)
+        else:
+            raise AssertionError("An over-limit provider response was accepted")
+    assert not (oversized_path / "text-representations.json").exists()
+    print("PASS large strategy conversions above 128 KB and the explicit 1 MB response cap")
 
     # Legacy v1-v6 documents read without writes, and first representation save
     # only adds the portable companion rather than rewriting project history.
@@ -559,6 +617,67 @@ async def main_async(root: Path):
         untyped_plan = await convert_text(str(untyped_path), "project", "markdown")
     assert untyped_plan["markdown"]["current"]
     assert untyped_plan["markdown"]["body"] == "Count $u_n$ for $n \\ge 0$"
+
+    # Untyped SSE is buffered to identify framing. Keep that path at the same
+    # one-megabyte cap as the strict stream parser, and handle large strategy
+    # text without dropping or truncating the delta.
+    large_plan_path = root / "large-plan-conversion.sigma"
+    initialize_project(large_plan_path, "Large plan conversion", "Review the generated strategy.")
+    large_plan_strategy = create_strategy(
+        large_plan_path, "Generated long plan approach", long_source
+    ).project.strategies[0]
+
+    def large_untyped_plan_handler(request):
+        output_text = json.dumps({"body": long_markdown, "warnings": []})
+        response_id = "resp-large-untyped-plan"
+        terminal = {
+            **provider_output(long_markdown),
+            "id": response_id,
+        }
+        events = [
+            {
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": response_id, "status": "in_progress"},
+            },
+            {
+                "type": "response.metadata",
+                "sequence_number": 1,
+                "metadata": "x" * 140_000,
+            },
+            {
+                "type": "response.output_text.delta",
+                "sequence_number": 2,
+                "delta": output_text,
+            },
+            {
+                "type": "response.completed",
+                "sequence_number": 3,
+                "response": terminal,
+            },
+        ]
+        content = "".join(
+            f"event: {event['type']}\ndata: {json.dumps(event)}\n\n" for event in events
+        )
+        assert len(content.encode()) > 128_000
+        return httpx.Response(200, content=content)
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=plan_binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.text_conversion.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(large_untyped_plan_handler), **kwargs
+            ),
+        ),
+    ):
+        large_plan_result = await convert_text(
+            str(large_plan_path), "strategy", "markdown", large_plan_strategy.id
+        )
+    assert large_plan_result["markdown"]["current"]
+    assert large_plan_result["markdown"]["body"] == long_markdown
+    assert inspect_project(large_plan_path).project.strategies[0].approach == long_source
 
     partial_path = root / "partial-plan-stream.sigma"
     initialize_project(partial_path, "Partial plan stream", "Count p_n for n >= 0")

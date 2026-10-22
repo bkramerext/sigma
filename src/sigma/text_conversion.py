@@ -9,12 +9,13 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma.openai_connection import auth_context
-from sigma.plan_stream import completed, failure
+from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
 from sigma.projects import ProjectError, inspect_project
-from sigma.proposals import MAX_RESPONSE, configuration
+from sigma.proposals import configuration
 from sigma.text_views import Format, _format, inspect_text, store_conversion
 
 CALL_SECONDS = 60
+MAX_CONVERSION_RESPONSE_BYTES = MAX_STREAM_BYTES
 _gate = asyncio.Lock()
 
 
@@ -167,7 +168,7 @@ async def _convert_text(
                             data = bytearray()
                             async for chunk in response.aiter_bytes():
                                 data.extend(chunk)
-                                if len(data) > MAX_RESPONSE:
+                                if len(data) > MAX_CONVERSION_RESPONSE_BYTES:
                                     raise ProjectError("Conversion response exceeded the limit")
                             if not content_type and _looks_like_sse(bytes(data)):
                                 buffered = httpx.Response(
@@ -199,7 +200,7 @@ async def _convert_text(
                         data = bytearray()
                         async for chunk in response.aiter_bytes():
                             data.extend(chunk)
-                            if len(data) > MAX_RESPONSE:
+                            if len(data) > MAX_CONVERSION_RESPONSE_BYTES:
                                 raise ProjectError("Conversion response exceeded the limit")
                         try:
                             raw = json.loads(data)
