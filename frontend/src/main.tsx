@@ -507,6 +507,50 @@ function Home({ initialPath, currentPath, onOpen, goHome }: {
   </div>;
 }
 
+function StrategyTitleEditor({ strategy, path, onSaved }: {
+  strategy: Strategy; path: string; onSaved: (view: ProjectView) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(strategy.title);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const trigger = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (!editing) setDraft(strategy.title); }, [strategy.title, editing]);
+  useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
+  function cancel() {
+    setEditing(false); setDraft(strategy.title); setError('');
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
+  async function save(event: FormEvent) {
+    event.preventDefault(); event.stopPropagation();
+    if (busy || !draft.trim()) return;
+    setBusy(true); setError('');
+    try {
+      const next = await post<ProjectView>('strategies/edit', {
+        path, strategy_id: strategy.id, title: draft, approach: strategy.approach,
+      });
+      setEditing(false); onSaved(next);
+      requestAnimationFrame(() => trigger.current?.focus());
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <div className={`strategy-title-editor${editing ? ' is-renaming' : ''}`}
+    onClick={event => { event.preventDefault(); event.stopPropagation(); }}
+    onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape' && editing && !busy) { event.preventDefault(); cancel(); } }}>
+    {editing ? <form onSubmit={save} className="strategy-rename-form">
+      <input ref={input} aria-label="Strategy name" value={draft} maxLength={200} disabled={busy}
+        required onChange={event => setDraft(event.target.value)}/>
+      <button type="submit" className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
+      <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
+    </form> : <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>
+      <button type="button" ref={trigger} className="strategy-title-edit" aria-label={`Rename strategy: ${strategy.title}`}
+        onClick={() => setEditing(true)}>{strategy.title}</button>
+    </h3>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </div>;
+}
+
 function StrategyCommands({ strategy, onCommand }: {
   strategy: Strategy; onCommand: (mode: 'edit' | 'remove' | 'stage', strategy: Strategy) => void;
 }) {
@@ -988,7 +1032,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <details className="strategy-detail">
-            <summary title="Expand or collapse the full approach"><h3 aria-label={strategy.title} id={`strategy-${strategy.id}`} tabIndex={-1}>{strategy.title}<svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></h3>
+            <summary title="Expand or collapse the full approach"><div className="strategy-title-line"><StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/><svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></div>
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
