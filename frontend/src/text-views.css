@@ -135,3 +135,12 @@
   width: 24px;
   text-align: left;
 }
+
+/* Align the sigma glyph itself with the left edge of the description text. */
+.workspace-page .text-view-controls .sigma-render-toggle {
+  display: flex; align-items: center; justify-content: flex-start;
+  width: 24px; min-width: 24px; padding: 0;
+}
+.workspace-page .text-view-controls .sigma-render-toggle span {
+  width: auto; margin-left: -2px; text-align: left;
+}
