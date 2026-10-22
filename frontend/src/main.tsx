@@ -552,7 +552,7 @@ function StrategyTitleEditor({ strategy, path, onSaved }: {
 }
 
 function StrategyCommands({ strategy, onCommand }: {
-  strategy: Strategy; onCommand: (mode: 'edit' | 'remove' | 'stage', strategy: Strategy) => void;
+  strategy: Strategy; onCommand: (mode: 'remove' | 'stage' | 'fork', strategy: Strategy) => void;
 }) {
   const disclosure = useRef<HTMLDetailsElement>(null);
   function positionMenu() {
@@ -606,12 +606,11 @@ function StrategyCommands({ strategy, onCommand }: {
       </details>
       <details name={`strategy-command-${strategy.id}`}>
         <summary className="secondary">Actions</summary>
-        {(['edit', 'stage', 'remove'] as const).map(mode => <button key={mode} className="secondary" onClick={() => {
+        {(['stage', 'remove'] as const).map(mode => <button key={mode} className="secondary" onClick={() => {
           if (disclosure.current) disclosure.current.open = false;
           onCommand(mode, strategy);
-        }}>{mode === 'edit' ? 'Edit' : mode === 'stage' ? 'Change stage' : 'Remove'}</button>)}
-        <button className="secondary" disabled aria-describedby={`fork-${strategy.id}`}>Fork</button>
-        <p id={`fork-${strategy.id}`} className="hint">Forking is not available yet.</p>
+        }}>{mode === 'stage' ? 'Change stage' : 'Remove'}</button>)}
+        <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand("fork", strategy); }}>Fork</button>
       </details>
     </div>
   </details>;
@@ -906,7 +905,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [dragId, setDragId] = useState<string | null>(null);
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
-  const [command, setCommand] = useState<{ mode: 'edit' | 'remove' | 'stage'; strategy: Strategy } | null>(null);
+  const [command, setCommand] = useState<{ mode: 'remove' | 'stage'; strategy: Strategy } | null>(null);
   const [focusStrategy, setFocusStrategy] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
@@ -1041,7 +1040,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
             </div>
           </details>
           <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
-          <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => { if (!ordering && !dragId) setCommand({ mode, strategy }); }}/>
+          <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => { if (ordering || dragId || editing || generating || projectEditing) return; if (mode === 'fork') { setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
