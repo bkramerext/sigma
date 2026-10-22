@@ -103,7 +103,7 @@ function ExportProjectDialog({ path, title, onCancel }: { path: string; title: s
   return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-labelledby="export-project-heading" aria-describedby="export-project-help"
     onCancel={event => { event.preventDefault(); cancel(); }}>
     <form onSubmit={exportFile}>
-      <header className="settings-header"><h2 id="export-project-heading">Export Project</h2>
+      <header className="settings-header"><h2 id="export-project-heading">Export</h2>
         <div className="settings-actions"><button type="submit" disabled={busy || !filename.trim()}>{busy ? 'Exporting…' : 'Export'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
       </header>
       <div className="settings-body">
