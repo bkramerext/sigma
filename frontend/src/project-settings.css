@@ -99,3 +99,13 @@
   opacity: .5;
   cursor: default;
 }
+
+/* Project export uses the same modal shell and header commands as Settings. */
+.project-settings-dialog.export-project-dialog .export-project-help {
+  margin: 0 0 16px;
+  color: #afbecd;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.project-settings-dialog.export-project-dialog .settings-body label { margin-top: 0; }
+.project-settings-dialog.export-project-dialog .settings-body .error { margin-top: 12px; }
