@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import time
+import webbrowser
 from urllib.error import URLError
 from urllib.request import urlopen
 from uuid import uuid4
@@ -73,7 +74,7 @@ def ready(url: str, instance_id: str | None = None) -> bool:
         return False
 
 
-def run_ui() -> int:
+def run_ui(*, navigate: bool = False) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
         return 2
@@ -156,9 +157,14 @@ def run_ui() -> int:
                             )
                             announced = True
                             instance.unlock()
-                            # Temporarily leave browser navigation to the user.
-                            # Restarting the UI should not create duplicate tabs.
-                            print(f"Use your existing browser tab at {URL} (reload if needed).", flush=True)
+                            if navigate:
+                                try:
+                                    if not webbrowser.open(URL, new=2):
+                                        print(f"Open {URL} in your browser.", flush=True)
+                                except (OSError, webbrowser.Error):
+                                    print(f"Open {URL} in your browser.", flush=True)
+                            else:
+                                print(f"Use your existing browser tab at {URL} (reload if needed).", flush=True)
                         elif time.monotonic() >= deadline:
                             raise RuntimeError("Servers did not become ready within 30 seconds.")
                     replacement = instance.replacement_request()
