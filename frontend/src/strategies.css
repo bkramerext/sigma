@@ -668,3 +668,12 @@
   font-size: 0.78rem;
   line-height: 1.35;
 }
+
+/* Align session outcome and progress with the Session title, not the chevron. */
+.workspace-page .session-row-disclosure { gap: 5px; }
+.workspace-page .session-row-heading > .session-outcome-inline,
+.workspace-page .session-row-heading > .session-progress-inline {
+  display: block;
+  margin-left: 21px;
+}
+.workspace-page .session-row-heading > .session-progress-inline { margin-top: 0; }
