@@ -145,6 +145,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
         }}><span aria-hidden="true">Σ</span></button>
       {data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>Edit</button>}
     </div>}
+    {!mathematical && data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>Edit</button>}
     {editing ? <form className="text-view-editor" onSubmit={save}>
       <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
