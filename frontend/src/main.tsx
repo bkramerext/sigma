@@ -738,7 +738,7 @@ async function readAgenticStream(response: Response, onEvent: (event: AgenticEve
 function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   path: string; projectId: string; onManual: (draft: { title: string; approach: string }) => void; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
+  const composer = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
   const submitting = useRef(false);
   const [config, setConfig] = useState<{ available: boolean; provider: string; mode: string; binding: string; project_id: string; model: string; reasoning_effort: string; message: string } | null>(null);
@@ -756,7 +756,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   const [currentActivity, setCurrentActivity] = useState('');
   const [stopped, setStopped] = useState('');
   useEffect(() => {
-    dialog.current?.showModal(); dialog.current?.querySelector('textarea')?.focus();
+    composer.current?.querySelector('textarea')?.focus();
     const controller = new AbortController();
     fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Could not read AI configuration'); return response.json(); }).then(setConfig).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
     return () => { controller.abort(); lifetime.current.abort(); request.current?.abort(); };
@@ -805,7 +805,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setSaving(false); }
   }
-  return <dialog ref={dialog} className="strategy-dialog proposal-dialog" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onCancel={event => { event.preventDefault(); cancel(); }}>
+  return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
     <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2>{!busy && <button type="button" className="text-view-link proposal-heading-manual" disabled={saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
     <p id="proposal-help" className="hint">{busy && !ai.connecting ? <span className="generating-status" role="status"><span aria-hidden="true">⌛</span> Generating strategy…</span> : "Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof."}</p>
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
@@ -840,7 +840,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
         {result && <button type="submit" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}
       </div>
     </form>
-  </dialog>;
+  </div>;
 }
 
 function ProjectScreen({ path, initialView, onClose, goHome }: {
@@ -977,6 +977,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         const strategy = next.project.strategies[next.project.strategies.length - 1];
         setView(next); setEditing(false); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
+      }}/>}
+      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onManual={draft => { setManualDraft(draft); setGenerating(false); setEditing(true); }} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
+        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
         <div className="strategy-columns" aria-hidden="true"><span>Strategy</span><span>Stage</span></div>
@@ -1010,9 +1013,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
     </section>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onManual={draft => { setManualDraft(draft); setGenerating(false); setEditing(true); }} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
-      const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
-    }}/>}
     {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
       onCancel={() => {
         const id = command.strategy.id;
