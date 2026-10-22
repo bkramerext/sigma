@@ -29,6 +29,8 @@ Working notes for future additions to [WOLF.md](WOLF.md). This is a **writing ch
 - [ ] **Happy-path mathematical test case:** The Maximum Regions Formed by Lines sample was introduced to test agent generation against a tractable, independently checkable problem before relying on RH or a complex operational scenario.
 - [ ] **Course corrections and boundaries:** Record where a direction was deferred or simplified (for example, leaving rubric/schema redesign until evaluation work) rather than retroactively portraying every iteration as planned.
 
+- [ ] Diagram the current A16 workflow: Explorer and Critic as separate LLM calls using the same model, followed by a deterministic Python Coordinator. Show revision/retry branches and human review. Explain why this is bounded multi-agent-style orchestration, not sustained autonomous research.
+
 ## Evidence to gather before writing the retrospective
 
 - [ ] Link a few representative assignment files and their corresponding commits, tests, and status entries. Prefer specific before/after behavior over a long inventory.
