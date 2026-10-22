@@ -1,0 +1,18 @@
+{
+  "schema_version": 6,
+  "id": "5c1a6ab4-2e4d-4ce0-a83e-a4c813721d90",
+  "title": "Operation Narrow Passage",
+  "problem": "FICTIONAL CONTEMPORARY HUMANITARIAN MARITIME CRISIS — OPERATION NARROW PASSAGE.\n\nA small Philippine outpost at an invented disputed maritime feature in the western Pacific has been isolated amid a prolonged coast-guard standoff. Supplies are limited, several personnel are injured, and one patient needs urgent advanced medical care. The Philippines requests assistance from partners. The surrounding authorities dispute access and neither side wants an armed confrontation. Communications are intermittent and reports can conflict.\n\nMISSION: Evaluate how to deliver emergency supplies, evacuate patients, and establish a sustainable humanitarian access arrangement while respecting legal authorities and minimizing the probability and severity of an escalation.\n\nDevelop and compare distinct nonviolent options such as diplomatic mediation, monitored humanitarian passage, multinational medical assistance, third-party evacuation arrangements, and contingency plans. Explicitly identify prerequisites, decision authorities, uncertainty, feasibility limits, resources, dependencies, and evidence that could invalidate each option.\n\nAssess each proposal against mission completion, patient and personnel safety, timeliness, lawful authorization, resource burden, reversibility, information confidence, and escalation exposure. Avoid reducing these conflicting objectives to an unexplained single score. Challenge assumptions and show at least one scenario in which an apparently strong approach should be rejected or revised.\n\nBASELINE (T+0): Evaluate only the initial information above. Later simulated events, conflicting intelligence, and decision reevaluation are specified in scenario.md as a proposed future scenario-evolution capability; the current application does not automatically inject them. All persons, units, positions, events, and outcomes in this sample are fictional. Do not generate targeting, attack plans, weapon employment, or tactical evasion instructions.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-22T04:00:00+00:00"
+    }
+  ],
+  "strategies": [],
+  "research_mode": "default",
+  "active_order": [],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high"
+}
