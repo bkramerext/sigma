@@ -440,7 +440,12 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }, []);
   async function open(sample: SampleProject) {
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
-    try { onOpen(await post<ProjectView>('samples/open', { sample_id: sample.id })); }
+    try {
+      const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
+      // A Sample opens as a saved working copy, which now belongs in Recent.
+      window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
+      onOpen(copy);
+    }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
