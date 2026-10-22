@@ -84,20 +84,25 @@ def open_stock_project(identifier: str) -> ProjectView:
 
     with _title_registry_lock(root):
         occupied = _occupied_titles(root)
-        destination: Path | None = None
         copied_title = ""
         for number in range(10000):
             suffix = " (copy)" if number == 0 else f" (copy {number})"
             title = raw["title"][: 200 - len(suffix)].rstrip() + suffix
-            if _title_key(title) in occupied:
-                continue
-            # Keep existing directory conventions, but never reuse a prior copy.
-            directory_suffix = "" if number == 0 else f"-{number + 1}"
+            if _title_key(title) not in occupied:
+                copied_title = title
+                break
+        if not copied_title:
+            raise ProjectError("Too many copies of this stock project.")
+
+        # Display-name suffixes are independent of directory numbering. A
+        # previous release may have installed a stock project at sample.sigma.
+        destination: Path | None = None
+        for number in range(1, 10001):
+            directory_suffix = "" if number == 1 else f"-{number}"
             candidate = root / f"{identifier}{directory_suffix}.sigma"
             try:
                 candidate.mkdir(mode=0o700)
                 destination = candidate
-                copied_title = title
                 break
             except FileExistsError:
                 continue
