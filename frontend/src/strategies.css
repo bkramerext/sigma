@@ -238,3 +238,25 @@
 .workspace-page .strategy-form .new-strategy-heading-actions button[type="submit"].text-view-link:active:not(:disabled) {
   background: transparent; border: 0; box-shadow: none; color: #f3cd9e;
 }
+
+/* Generate Strategy is a workspace composer, not a modal. */
+.workspace-page #strategy-composer .inline-proposal {
+  position: static; display: block; width: 100%; max-width: none;
+  margin: 0 0 18px; padding: 26px;
+  color: var(--workspace-text); background: #0a121b;
+  border: 1px solid #495044; border-radius: 8px;
+  box-shadow: none;
+}
+.workspace-page #strategy-composer .inline-proposal h2 {
+  font: 500 16px/1.6 Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #e5c59e;
+}
+.workspace-page #strategy-composer .inline-proposal textarea,
+.workspace-page #strategy-composer .inline-proposal input,
+.workspace-page #strategy-composer .inline-proposal .agentic-activity,
+.workspace-page #strategy-composer .inline-proposal .proposal-review {
+  width: 100%; max-width: none; min-width: 0;
+}
+@media (max-width: 700px) {
+  .workspace-page #strategy-composer .inline-proposal { padding: 20px; }
+}
