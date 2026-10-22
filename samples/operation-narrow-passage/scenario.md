@@ -65,11 +65,11 @@ Evacuating the Sierra Madre's crew might protect lives but could have significan
 
 ## Three concurrent clocks
 
-<escape>| Clock | Starting estimate | What it constrains |
+| Clock | Starting estimate | What it constrains |
 | --- | --- | --- |
 | **12 hours** | One critically injured patient needs advanced surgical care | Negotiation, rescue and treatment delays may become medically unacceptable |
 | **24 hours** | Disabled coast guard vessel may become unsafe to occupy | Waiting for complete incident attribution may endanger survivors |
-| **36 hours** | Severe weather expected | Both rescue feasibility and continued occupation of the Sierra Madre could deteriorate |</escape>
+| **36 hours** | Severe weather expected | Both rescue feasibility and continued occupation of the Sierra Madre could deteriorate |
 
 The three deadlines are **estimates**, not facts about a real event. An investigation must test sensitivity to earlier or later outcomes and report which conclusions depend on precise timing.
 
