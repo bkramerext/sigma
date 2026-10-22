@@ -100,9 +100,9 @@ function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
 }
 
-function ResearchSessionContents({ session, expanded, busy, confirmStop, setConfirmStop, onControl, onViewStrategy }: {
-  session: ResearchSession; expanded: boolean; busy: boolean; confirmStop: boolean; setConfirmStop: (value: boolean) => void;
-  onControl: (action: 'stop', target: ResearchSession) => void; onViewStrategy: (id: string) => void;
+function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
+  session: ResearchSession; expanded: boolean; busy: boolean;
+  onViewStrategy: (id: string) => void;
 }) {
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   useEffect(() => {
@@ -130,7 +130,6 @@ function ResearchSessionContents({ session, expanded, busy, confirmStop, setConf
     <div className="research-session-actions">
       <a className="text-view-link" href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>
     </div>
-    {confirmStop && <div className="research-stop-confirm" role="group" aria-label="Confirm stop session"><p>Stop session #{session.session_number}? Stopping is terminal and prevents further calls.</p><button type="button" className="text-view-link" disabled={busy} onClick={() => onControl('stop', session)}>Confirm stop</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session</button></div>}
     {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. {lastStep.status === 'running' ? 'No result has been committed yet.' : lastStep.status === 'interrupted' ? 'This attempt is not a completed research artifact. The provider may have completed it or charged usage; SIGMA will not repeat it automatically because completion is ambiguous.' : 'This attempt failed and is not a completed research artifact.'}</p></section>}
     {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><h3>Research artifacts</h3><ol>{session.artifacts.map(artifact => <li key={artifact.id}><details>
       <summary>Cycle {artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
@@ -157,7 +156,6 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
-  const [confirmStopId, setConfirmStopId] = useState('');
   const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -264,7 +262,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
 
   async function control(action: 'pause' | 'resume' | 'stop', target: ResearchSession | null = null) {
     if (!target) return;
-    setBusy(true); setError(''); setConfirmStopId('');
+    setBusy(true); setError('');
     try { await post<ResearchSession>(`research-sessions/${target.id}/control`, { path, action }); await load(target.id); }
     catch (cause) { await load(target.id).catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -339,10 +337,10 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
           const sessionExpanded = expandedSessionIds.has(item.id);
           return <li className="session-row" key={item.id} data-session-id={item.id}>
             <div className="session-row-heading">
-              <div className="session-heading-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>{['completed', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}{['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" disabled={busy} onClick={() => setConfirmStopId(item.id)}>Stop</button>}</div><small className="session-strategy-name">Strategy: {item.strategy_title}</small>
+              <div className="session-heading-title-line"><button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>{['completed', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}{item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted' && <button type="button" className="text-view-link session-remove-link" disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}{['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}</div><small className="session-strategy-name">Strategy: {item.strategy_title}</small>
               {['completed', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removeSession(item)}>Confirm remove</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Keep session</button></div></div>}
             </div>
-            <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} confirmStop={confirmStopId === item.id} setConfirmStop={value => setConfirmStopId(value ? item.id : '')} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
+            <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
