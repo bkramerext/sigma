@@ -5,6 +5,63 @@ export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: 
 type SignInOptions = { newAccount?: boolean; accountId?: string; enablePlan?: boolean; signal?: AbortSignal };
 type AIState = { info: ConnectionInfo | null; checking: boolean; initialLoading: boolean; backgroundRefreshing: boolean; healthError: boolean; connecting: boolean; transitioning: boolean; error: string; handoff: string; welcome: boolean; dismissWelcome: () => void; refresh: (source?: 'initial' | 'background' | 'manual') => Promise<ConnectionInfo>; signIn: (options?: SignInOptions) => Promise<boolean>; cancelSignIn: () => void; selectMode: (mode: 'chatgpt' | 'api_key', accountId?: string) => Promise<void>; disconnect: () => Promise<void> };
 const Context = createContext<AIState | null>(null);
+const providerActivity = new Set<string>();
+const providerActivityListeners = new Set<() => void>();
+let providerActivitySequence = 0;
+const researchActivityMonitors = new Set<string>();
+function publishProviderActivity() { providerActivityListeners.forEach(listener => listener()); }
+export function setProviderActivity(key: string, active: boolean) {
+  const changed = active ? !providerActivity.has(key) : providerActivity.has(key);
+  if (!changed) return;
+  if (active) providerActivity.add(key); else providerActivity.delete(key);
+  publishProviderActivity();
+}
+export function beginProviderRequest(label: string): () => void {
+  const key = `request:${++providerActivitySequence}:${label}`;
+  setProviderActivity(key, true);
+  return () => setProviderActivity(key, false);
+}
+export function watchResearchProviderActivity(path: string, projectId: string): () => void {
+  if (researchActivityMonitors.has(projectId)) return () => {};
+  researchActivityMonitors.add(projectId);
+  const activityKey = `research:${projectId}`;
+  let stopped = false;
+  const poll = async () => {
+    if (stopped) return;
+    try {
+      const response = await fetch(`/api/projects/research-sessions?${new URLSearchParams({ path })}`);
+      if (!response.ok) throw new Error('Research activity unavailable');
+      const data = await response.json() as { sessions: { status: string; steps: { status: string }[] }[] };
+      const activeSessions = data.sessions.filter(item => ['queued', 'running', 'paused'].includes(item.status));
+      setProviderActivity(activityKey, activeSessions.some(item => item.steps.some(step => step.status === 'running')));
+      if (!activeSessions.length) {
+        stopped = true;
+        researchActivityMonitors.delete(projectId);
+        setProviderActivity(activityKey, false);
+        return;
+      }
+    } catch {
+      // Keep the last confirmed activity state and retry; a later connection-state
+      // check turns off the green pulse while the local server is unavailable.
+    }
+    if (!stopped) window.setTimeout(() => void poll(), 900);
+  };
+  void poll();
+  return () => {
+    // Continue watching across client navigation until the backend confirms the
+    // session has stopped or reached a terminal state.
+  };
+}
+function useProviderActivity() {
+  const [active, setActive] = useState(() => providerActivity.size > 0);
+  useEffect(() => {
+    const update = () => setActive(providerActivity.size > 0);
+    providerActivityListeners.add(update);
+    update();
+    return () => { providerActivityListeners.delete(update); };
+  }, []);
+  return active;
+}
 export function useAI() { const value = useContext(Context); if (!value) throw new Error('AI connection context missing'); return value; }
 const message = (error: unknown) => error instanceof Error ? error.message : 'Could not reach the local server.';
 export async function aiPost<T>(route: string, body: object = {}, signal?: AbortSignal): Promise<T> {
@@ -171,6 +228,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
 }
 export function ConnectionStatus() {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
+  const providerActive = useProviderActivity();
   useEffect(() => {
     function outside(event: PointerEvent) { if (event.target instanceof Node && disclosure.current && !disclosure.current.contains(event.target)) disclosure.current.open = false; }
     function escape(event: KeyboardEvent) { if (event.key === 'Escape' && disclosure.current?.open) { disclosure.current.open = false; disclosure.current.querySelector('summary')?.focus(); } }
@@ -178,7 +236,8 @@ export function ConnectionStatus() {
   }, []);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
-  return <details ref={disclosure} className="api-connection"><summary aria-label="AI connection settings"><span className={`connection-dot connection-${status}`} aria-hidden="true"/><span role="status">{label}</span></summary>
+  const dotActive = status === 'connected' && providerActive;
+  return <details ref={disclosure} className="api-connection"><summary aria-label="AI connection settings"><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{label}</span></summary>
     <div className="connection-details">
       {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
       <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : ai.info?.active_account ? 'Using ChatGPT plan' : 'Connect your ChatGPT account'}</p>

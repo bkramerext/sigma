@@ -39,6 +39,13 @@
 .api-connection > summary::-webkit-details-marker { display: none; }
 .connection-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: #7f8c96; }
 .connection-connected { background: #75b18c; }
+@keyframes connection-dot-pulse {
+  0%, 100% { opacity: .78; box-shadow: 0 0 0 0 #75b18c00; }
+  50% { opacity: 1; box-shadow: 0 0 0 4px #75b18c30; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .connection-dot.connection-active { animation: connection-dot-pulse 1.2s ease-in-out infinite; }
+}
 .connection-unconfigured, .connection-limited, .connection-unavailable, .connection-stale { background: #c6a064; }
 .connection-unauthorized, .connection-forbidden { background: #d38578; }
 .connection-details { position: absolute; top: calc(100% + 8px); right: 0; width: min(300px, calc(100vw - 40px)); padding: 16px; border: 1px solid #73593e; border-radius: 5px; background: #08131f; color: #b9c7d3; box-shadow: 0 12px 36px #0008; text-align: left; }

@@ -1344,33 +1344,45 @@ failure-toast recovery. No
 live or paid provider call was made. The worker runs only while the local API
 process is alive; research notes remain unverified.
 
-## A17.1: project and strategy titles, disclosure, and research controls (2026-10-22)
+## A17.1: consistent section, table and inline-edit patterns (2026-10-22)
 
-The Project pane now uses a `Project: <title>` disclosure heading with a separate
-title pencil; the truncated description was removed from the heading, while the
-full editable problem remains in the pane. Strategy rows use independent
-`Strategy: <title>` disclosures and separate title editors. Title edits retain
-the existing IDs, descriptions, revision history and research snapshots. Missing
-legacy titles display a deterministic first-line fallback without modifying the
-stored project. Proposal generation now requests a concise 2–12 word title and
-rejects multiline or overlong titles.
+Project now has a standalone `PROJECT` section heading followed by an inline
+title-and-pencil row, then the full editable description. It is not collapsible;
+the title has no `Project:` prefix. Strategy rows follow the existing table
+pattern with plain titles, in-place pencil editing and visible descriptions.
+Neither title nor description is hidden behind row disclosure. Existing IDs,
+revision history, provenance and research snapshots remain unchanged. Legacy
+untitled strategies retain their deterministic display-only fallback. Generated
+titles still request a concise 2–12 word name and reject multiline or overlong
+values.
 
-Compact Play/Pause controls now live in the Strategies header. Play deterministically
-chooses the first eligible saved strategy in existing strategy order when no
-session is active; it resumes the bound strategy when a session is paused. The
-strategy is never changed within an active session. Existing confirmation,
-identity/binding checks, six-call/three-cycle cap, idempotency and stop/error
-reconciliation remain in force. Session headings use `Session #N` once a session
-exists. No automatic chaining or live provider calls were added.
+Sessions now follow Strategies in a matching section/table, with a static
+singular/plural count, ascending `Session #N` rows, status indicators and native
+keyboard-accessible row disclosure for activity, findings, critiques, cycles and
+artifacts. Research still starts through Strategies Play; there is no competing
+start action in Sessions. New/Generate sit immediately before the count in the
+right-aligned Strategies heading controls. Play selects the first eligible saved
+strategy in existing order, resumes the currently bound paused session and never
+changes strategy within an active session. A17 confirmation, identity/binding
+checks, idempotency, six-call/three-cycle limits and stop/error reconciliation
+remain in force; no chaining or paid calls were added.
 
-Actual verification: `./sigma test` passed all scenarios, including proposal
-title validation, with Ruff check/format, Pyright, frontend typecheck and Vite
-production build passing. Real Chrome
+The existing ChatGPT connection pill now pulses only its green status dot while
+tracked provider work is active. Request tracking is reference-counted by unique
+request identity, so overlapping generation and text conversion remain active
+until both complete. Research calls are detected from durable session step state
+and monitored through terminal status, including across client navigation. Errors,
+cancellation and timeouts release their request; disconnect or unavailable
+connection status disables the green pulse. Reduced-motion users see a steady
+green dot.
+
+Actual verification: `./sigma test` passed all scenarios; Ruff, Pyright, frontend
+typecheck and Vite production build passed. Real Chrome
 `uv run --with playwright python browser_checks/a17_research.py` passed at
-1440px desktop and 390px mobile; it covered title editing/reload, blank-title
-feedback, generated-title acceptance, non-destructive legacy fallback, pencil
-and disclosure isolation, independent pane collapse, deterministic bounded
-Play, session completion/history/artifacts, pause/resume/stop, failure recovery,
-and no horizontal mobile overflow. Visual captures were inspected at
-`/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`. No paid provider
-calls were made.
+1440px desktop and 390px mobile. It covers inline editing and persistence,
+generated-title acceptance, legacy fallback, absence of Project/Strategy
+disclosure, visible descriptions, session order/count/status/disclosure,
+three-cycle history and artifact inspection, Play/Pause/Stop, error recovery,
+concurrent request pulse, reduced-motion behavior and mobile overflow. I inspected
+the desktop and mobile captures at `/tmp/sigma-a171-desktop.png` and
+`/tmp/sigma-a171-mobile.png`. No paid provider calls were made.

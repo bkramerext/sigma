@@ -140,12 +140,13 @@ the retry goes through the fixture.
 Keep the normal UI running on `127.0.0.1:5173`. Start a fresh isolated
 `provider_fixture:app` on port 8002, then run
 `uv run --with playwright python browser_checks/a17_research.py`. The real-Chrome
-check covers persisted project and strategy title edits, the generated-title
-review/save flow, non-destructive legacy title fallback, independent collapses
-with unsaved drafts retained, pencil/disclosure isolation, deterministic Play
-selection, session numbering/history, explicit billing/budget consent, a
+check covers inline project/strategy title edits, the generated-title review/save
+flow, non-destructive legacy title fallback, no Project/Strategy row disclosure,
+visible strategy descriptions, deterministic Play selection, ordered Session rows
+and disclosure, counts/status indicators, explicit billing/budget consent, a
 three-cycle investigation, live activity and artifact inspection after navigation
 and reopen, pause/resume/stop during delayed fixture work, failure-toast recovery,
-desktop/mobile visual screenshots and mobile overflow, and unchanged project
-strategy data. It makes no live provider call. Screenshots are written to
+the overlapping-request connection pulse and reduced-motion behavior,
+desktop/mobile screenshots and mobile overflow, and unchanged project strategy
+data. It makes no live provider call. Screenshots are written to
 `/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`.
