@@ -12,36 +12,30 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma import chatgpt_auth
 from sigma.agentic import agentic_events
-from sigma.investigations import (
-    InvestigationError,
+from sigma.openai_connection import connection, models
+from sigma.projects import (
+    ProjectError,
     change_stage,
-    close_investigation,
-    create_investigation,
+    close_project,
+    create_project,
     create_strategy,
     edit_strategy,
-    initialize_investigation,
-    inspect_investigation,
-    investigation_destination,
-    investigation_payload,
+    initialize_project,
+    inspect_project,
     list_events,
     list_strategies,
-    open_investigation,
+    open_project,
+    project_destination,
     remove_strategy,
     reorder_strategies,
-    update_investigation,
+    update_project,
 )
-from sigma.openai_connection import connection, models
 from sigma.proposals import accepted_provenance, configuration, generate_proposal
 from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
-
-
-def _view_payload(view):
-    """Return the canonical wrapper plus its explicitly retained legacy alias."""
-    return investigation_payload(view)
 
 
 @app.get("/api/ui-instance")
@@ -74,8 +68,8 @@ async def local_browser_only(request: Request, call_next):
     return response
 
 
-@app.exception_handler(InvestigationError)
-async def investigation_error(request: Request, exc: InvestigationError):
+@app.exception_handler(ProjectError)
+async def project_error(request: Request, exc: ProjectError):
     return JSONResponse({"error": str(exc)}, status_code=400)
 
 
@@ -93,16 +87,14 @@ class InitRequest(OpenRequest):
     reasoning_effort: str = "high"
 
 
-@app.post("/api/projects/open", include_in_schema=False)
-@app.post("/api/investigations/open")
+@app.post("/api/projects/open")
 def open_view(body: OpenRequest):
-    return _view_payload(open_investigation(body.path))
+    return asdict(open_project(body.path))
 
 
-@app.post("/api/projects/init", status_code=201, include_in_schema=False)
-@app.post("/api/investigations/init", status_code=201)
+@app.post("/api/projects/init", status_code=201)
 def init_view(body: InitRequest):
-    view = initialize_investigation(
+    view = initialize_project(
         body.path,
         body.title,
         body.problem,
@@ -113,25 +105,22 @@ def init_view(body: InitRequest):
     from sigma.recents import record_access
 
     record_access(view)
-    return _view_payload(view)
+    return asdict(view)
 
 
-@app.get("/api/projects/inspect", include_in_schema=False)
-@app.get("/api/investigations/inspect")
+@app.get("/api/projects/inspect")
 def inspect_view(path: str):
-    return _view_payload(inspect_investigation(path))
+    return asdict(inspect_project(path))
 
 
-@app.get("/api/projects/events", include_in_schema=False)
-@app.get("/api/investigations/events")
+@app.get("/api/projects/events")
 def events_view(path: str):
     return {"events": [asdict(e) for e in list_events(path)]}
 
 
-@app.post("/api/projects/close", include_in_schema=False)
-@app.post("/api/investigations/close")
+@app.post("/api/projects/close")
 def close_view():
-    close_investigation()
+    close_project()
     return {"closed": True}
 
 
@@ -140,8 +129,7 @@ class StrategyRequest(OpenRequest):
     approach: str
 
 
-@app.get("/api/projects/strategies", include_in_schema=False)
-@app.get("/api/investigations/strategies")
+@app.get("/api/projects/strategies")
 def strategies_view(path: str):
     return {"strategies": [asdict(s) for s in list_strategies(path)]}
 
@@ -151,36 +139,31 @@ class CreateStrategyRequest(StrategyRequest):
     receipt: str | None = None
 
 
-@app.post("/api/projects/strategies", status_code=201, include_in_schema=False)
-@app.post("/api/investigations/strategies", status_code=201)
+@app.post("/api/projects/strategies", status_code=201)
 def create_strategy_view(body: CreateStrategyRequest):
     provenance = accepted_provenance(body.receipt, body.path) if body.receipt else None
-    return _view_payload(
-        create_strategy(body.path, body.title, body.approach, body.summary, provenance)
-    )
+    return asdict(create_strategy(body.path, body.title, body.approach, body.summary, provenance))
 
 
 class RemoveStrategyRequest(OpenRequest):
     strategy_id: str
 
 
-@app.post("/api/projects/strategies/remove", include_in_schema=False)
-@app.post("/api/investigations/strategies/remove")
+@app.post("/api/projects/strategies/remove")
 def remove_strategy_view(body: RemoveStrategyRequest):
-    return _view_payload(remove_strategy(body.path, body.strategy_id))
+    return asdict(remove_strategy(body.path, body.strategy_id))
 
 
 class EditStrategyRequest(StrategyRequest):
     strategy_id: str
 
 
-@app.post("/api/projects/strategies/edit", include_in_schema=False)
-@app.post("/api/investigations/strategies/edit")
+@app.post("/api/projects/strategies/edit")
 def edit_strategy_view(body: EditStrategyRequest):
-    return _view_payload(edit_strategy(body.path, body.strategy_id, body.title, body.approach))
+    return asdict(edit_strategy(body.path, body.strategy_id, body.title, body.approach))
 
 
-class CreateInvestigationRequest(BaseModel):
+class CreateProjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
@@ -191,17 +174,15 @@ class CreateInvestigationRequest(BaseModel):
     reasoning_effort: str = "high"
 
 
-@app.get("/api/projects/destination", include_in_schema=False)
-@app.get("/api/investigations/destination")
+@app.get("/api/projects/destination")
 def destination_view(title: str = ""):
-    return asdict(investigation_destination(title))
+    return asdict(project_destination(title))
 
 
-@app.post("/api/projects/create", status_code=201, include_in_schema=False)
-@app.post("/api/investigations/create", status_code=201)
-def create_investigation_view(body: CreateInvestigationRequest):
-    return _view_payload(
-        create_investigation(
+@app.post("/api/projects/create", status_code=201)
+def create_project_view(body: CreateProjectRequest):
+    return asdict(
+        create_project(
             body.title, body.problem, body.investigation_type, body.ai_model, body.reasoning_effort
         )
     )
@@ -216,35 +197,28 @@ class ReorderRequest(OpenRequest):
     expected_order: list[str]
 
 
-@app.post("/api/projects/strategies/stage", include_in_schema=False)
-@app.post("/api/investigations/strategies/stage")
+@app.post("/api/projects/strategies/stage")
 def stage_view(body: StageRequest):
-    return _view_payload(change_stage(body.path, body.strategy_id, body.stage))
+    return asdict(change_stage(body.path, body.strategy_id, body.stage))
 
 
-@app.post("/api/projects/strategies/reorder", include_in_schema=False)
-@app.post("/api/investigations/strategies/reorder")
+@app.post("/api/projects/strategies/reorder")
 def reorder_view(body: ReorderRequest):
-    return _view_payload(reorder_strategies(body.path, body.order, body.expected_order))
+    return asdict(reorder_strategies(body.path, body.order, body.expected_order))
 
 
 class ProposalRequest(OpenRequest):
     seed: str = ""
     expected_binding: str | None = None
-    expected_investigation_id: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("expected_investigation_id", "expected_project_id"),
-    )
+    expected_project_id: str | None = None
 
 
-@app.get("/api/projects/proposals/config", include_in_schema=False)
-@app.get("/api/investigations/proposals/config")
+@app.get("/api/projects/proposals/config")
 async def proposal_config(path: str | None = None):
     return await configuration(path)
 
 
-@app.post("/api/projects/proposals", include_in_schema=False)
-@app.post("/api/investigations/proposals")
+@app.post("/api/projects/proposals")
 async def proposal_view(body: ProposalRequest, request: Request):
     async def disconnected():
         # Await the ASGI event directly. is_disconnected() polling can miss events
@@ -257,7 +231,7 @@ async def proposal_view(body: ProposalRequest, request: Request):
             body.path,
             body.seed,
             expected_binding=body.expected_binding,
-            expected_investigation_id=body.expected_investigation_id,
+            expected_project_id=body.expected_project_id,
         )
     )
     connection = asyncio.create_task(disconnected())
@@ -275,12 +249,11 @@ async def proposal_view(body: ProposalRequest, request: Request):
         await asyncio.gather(task, connection, return_exceptions=True)
 
 
-@app.post("/api/projects/proposals/agentic", include_in_schema=False)
-@app.post("/api/investigations/proposals/agentic")
+@app.post("/api/projects/proposals/agentic")
 async def agentic_proposal_view(body: ProposalRequest):
     async def stream():
         async for event in agentic_events(
-            body.path, body.seed, body.expected_binding, body.expected_investigation_id
+            body.path, body.seed, body.expected_binding, body.expected_project_id
         ):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
@@ -291,8 +264,7 @@ async def agentic_proposal_view(body: ProposalRequest):
     )
 
 
-@app.get("/api/projects/text", include_in_schema=False)
-@app.get("/api/investigations/text")
+@app.get("/api/projects/text")
 def text_view(path: str, scope: str, strategy_id: str | None = None):
     return inspect_text(path, scope, strategy_id)
 
@@ -305,10 +277,9 @@ class TextSourceRequest(OpenRequest):
     expected_digest: str
 
 
-@app.post("/api/projects/text/source", include_in_schema=False)
-@app.post("/api/investigations/text/source")
+@app.post("/api/projects/text/source")
 def text_source_view(body: TextSourceRequest):
-    return _view_payload(
+    return asdict(
         save_source(
             body.path, body.scope, body.body, body.format, body.expected_digest, body.strategy_id
         )
@@ -323,8 +294,7 @@ class TextConversionRequest(OpenRequest):
     expected_binding: str | None = None
 
 
-@app.post("/api/projects/text/convert", include_in_schema=False)
-@app.post("/api/investigations/text/convert")
+@app.post("/api/projects/text/convert")
 async def text_conversion_view(body: TextConversionRequest, request: Request):
     async def disconnected():
         while (await request.receive())["type"] != "http.disconnect":
@@ -355,7 +325,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
         await asyncio.gather(task, connection, return_exceptions=True)
 
 
-class InvestigationSettingsRequest(BaseModel):
+class ProjectSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
@@ -366,16 +336,15 @@ class InvestigationSettingsRequest(BaseModel):
     reasoning_effort: str
 
 
-class UpdateInvestigationRequest(InvestigationSettingsRequest):
+class UpdateProjectRequest(ProjectSettingsRequest):
     path: str
-    expected: InvestigationSettingsRequest
+    expected: ProjectSettingsRequest
 
 
-@app.post("/api/projects/update", include_in_schema=False)
-@app.post("/api/investigations/update")
-def update_investigation_view(body: UpdateInvestigationRequest):
-    return _view_payload(
-        update_investigation(
+@app.post("/api/projects/update")
+def update_project_view(body: UpdateProjectRequest):
+    return asdict(
+        update_project(
             body.path,
             body.title,
             body.problem,
@@ -451,20 +420,18 @@ async def auth_welcome():
     return {"dismissed": True}
 
 
-@app.get("/api/projects/recent", include_in_schema=False)
-@app.get("/api/investigations/recent")
+@app.get("/api/projects/recent")
 def recent_view():
-    from sigma.recents import home_investigations
+    from sigma.recents import home_projects
 
-    return home_investigations()
+    return home_projects()
 
 
-@app.get("/api/projects/stock", include_in_schema=False)
-@app.get("/api/investigations/stock")
+@app.get("/api/projects/stock")
 def stock_view():
-    from sigma.stock import stock_investigations
+    from sigma.stock import stock_projects
 
-    return stock_investigations()
+    return stock_projects()
 
 
 class StockOpenRequest(BaseModel):
@@ -472,23 +439,21 @@ class StockOpenRequest(BaseModel):
     stock_id: str
 
 
-@app.post("/api/projects/stock/open", include_in_schema=False)
-@app.post("/api/investigations/stock/open")
+@app.post("/api/projects/stock/open")
 def stock_open_view(body: StockOpenRequest):
-    from sigma.stock import open_stock_investigation
+    from sigma.stock import open_stock_project
 
-    return _view_payload(open_stock_investigation(body.stock_id))
+    return asdict(open_stock_project(body.stock_id))
 
 
 class ForgetRecentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    investigation_id: str = Field(validation_alias=AliasChoices("investigation_id", "project_id"))
+    project_id: str
 
 
-@app.post("/api/projects/recent/forget", include_in_schema=False)
-@app.post("/api/investigations/recent/forget")
+@app.post("/api/projects/recent/forget")
 def forget_recent_view(body: ForgetRecentRequest):
     from sigma.recents import forget_recent
 
-    forget_recent(body.investigation_id)
+    forget_recent(body.project_id)
     return {"forgotten": True}

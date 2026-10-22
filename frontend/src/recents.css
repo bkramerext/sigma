@@ -42,23 +42,23 @@
 .home-page .home-content { -webkit-user-select: none; user-select: none; }
 .home-page input, .home-page textarea { -webkit-user-select: text; user-select: text; }
 .home-page .home-hero h1:focus, .home-page .home-hero h1:focus-visible { outline: none; }
-.home-page .investigation-entry-dialog .entry-dialog-actions button[type="submit"],
-.home-page .investigation-settings-dialog .settings-actions button[type="submit"] {
+.home-page .project-entry-dialog .entry-dialog-actions button[type="submit"],
+.home-page .project-settings-dialog .settings-actions button[type="submit"] {
   color: #fff2e9; background: var(--copper-gradient); border: 1px solid #ba7658;
   text-shadow: 0 1px 1px #24120d; box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004;
 }
-.home-page .investigation-entry-dialog .entry-dialog-actions button[type="submit"]:hover:not(:disabled),
-.home-page .investigation-settings-dialog .settings-actions button[type="submit"]:hover:not(:disabled) { background: var(--copper-gradient); color: #fff2e9; filter: brightness(1.13); }
-.home-page .investigation-entry-dialog .entry-dialog-actions button:disabled { background: #513e38; color: #d8cac4; border-color: #66524b; box-shadow: none; }
-.home-page .investigation-settings-dialog .settings-actions button[type="submit"]:disabled { opacity: 1; color: #d3c1b7; background: #44352f; border-color: #6b5045; text-shadow: none; box-shadow: none; }
+.home-page .project-entry-dialog .entry-dialog-actions button[type="submit"]:hover:not(:disabled),
+.home-page .project-settings-dialog .settings-actions button[type="submit"]:hover:not(:disabled) { background: var(--copper-gradient); color: #fff2e9; filter: brightness(1.13); }
+.home-page .project-entry-dialog .entry-dialog-actions button:disabled { background: #513e38; color: #d8cac4; border-color: #66524b; box-shadow: none; }
+.home-page .project-settings-dialog .settings-actions button[type="submit"]:disabled { opacity: 1; color: #d3c1b7; background: #44352f; border-color: #6b5045; text-shadow: none; box-shadow: none; }
 .home-page :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
-.home-page .investigation-entry-dialog, .home-page .investigation-settings-dialog { border-color: #a96548; }
-.home-page .investigation-entry-dialog h2, .home-page .investigation-settings-dialog h2 { color: #e5ad8f; }
-.home-page .investigation-entry-dialog label, .home-page .investigation-settings-dialog label { color: #e1ae94; }
-.home-page .investigation-entry-dialog input:focus, .home-page .investigation-settings-dialog input:focus,
-.home-page .investigation-settings-dialog select:focus, .home-page .investigation-settings-dialog textarea:focus { border-color: #cd9270; }
-.home-page .investigation-entry-dialog .entry-cancel:hover:not(:disabled) { color: #e5ad8f; }
-.home-page .investigation-settings-dialog .settings-actions .settings-cancel:hover:not(:disabled) { color: #ffe1d1; background: #30211e; }
+.home-page .project-entry-dialog, .home-page .project-settings-dialog { border-color: #a96548; }
+.home-page .project-entry-dialog h2, .home-page .project-settings-dialog h2 { color: #e5ad8f; }
+.home-page .project-entry-dialog label, .home-page .project-settings-dialog label { color: #e1ae94; }
+.home-page .project-entry-dialog input:focus, .home-page .project-settings-dialog input:focus,
+.home-page .project-settings-dialog select:focus, .home-page .project-settings-dialog textarea:focus { border-color: #cd9270; }
+.home-page .project-entry-dialog .entry-cancel:hover:not(:disabled) { color: #e5ad8f; }
+.home-page .project-settings-dialog .settings-actions .settings-cancel:hover:not(:disabled) { color: #ffe1d1; background: #30211e; }
 
 .home-catalog { max-width: 560px; margin-top: 32px; border-top: 1px solid #a9654860; padding-top: 17px; }
 .home-page .catalog-tabs { display: flex; width: max-content; max-width: 100%; gap: 2px; padding: 3px; background: #07111eea; border: 1px solid #80503e; border-radius: 7px; }

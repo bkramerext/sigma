@@ -18,7 +18,7 @@ from sigma import chatgpt_auth as auth
 from sigma import openai_connection as connection
 from sigma.ai_store import directory, transaction
 from sigma.api import app
-from sigma.investigations import InvestigationError, initialize_investigation, inspect_investigation
+from sigma.projects import ProjectError, initialize_project, inspect_project
 from sigma.proposals import accepted_provenance, configuration, generate_proposal
 
 REAL_CLIENT = httpx.AsyncClient
@@ -27,7 +27,7 @@ REAL_CLIENT = httpx.AsyncClient
 async def rejection(awaitable, text=None):
     try:
         await awaitable
-    except InvestigationError as error:
+    except ProjectError as error:
         if text:
             assert text in str(error), str(error)
     else:
@@ -223,16 +223,14 @@ async def checks(root):
         fixture.catalog_override = None
         reset_connection()
         path = root / "plan.sigma"
-        initialize_investigation(
-            path, "Plan fixture", "A bounded mathematical question", "mathematical"
-        )
-        before = (path / "investigation.json").read_bytes()
+        initialize_project(path, "Plan fixture", "A bounded mathematical question", "mathematical")
+        before = (path / "project.json").read_bytes()
         config = await configuration(str(path))
         generated = await generate_proposal(
             str(path),
             "Keep this seed",
             expected_binding=config["binding"],
-            expected_investigation_id=config["investigation_id"],
+            expected_project_id=config["project_id"],
         )
         assert generated["draft"] == DRAFT
         assert (
@@ -240,13 +238,11 @@ async def checks(root):
             == "gpt-6.1-sol-fixture-returned"
         )
         assert (
-            inspect_investigation(path).investigation.reasoning_effort == "high"
-            and (path / "investigation.json").read_bytes() == before
+            inspect_project(path).project.reasoning_effort == "high"
+            and (path / "project.json").read_bytes() == before
         )
         assert fixture.generated == 1
-        await rejection(
-            generate_proposal(str(path), expected_investigation_id="changed"), "identity"
-        )
+        await rejection(generate_proposal(str(path), expected_project_id="changed"), "identity")
         await rejection(generate_proposal(str(path), expected_binding="api_key"), "billing mode")
         # SSE malformed/failed/incomplete/refusal/truncated/oversized/out-of-order streams.
         events = fixture.events()
@@ -282,7 +278,7 @@ async def checks(root):
             fixture.stream_override = content
             reset_connection()
             await rejection(generate_proposal(str(path)))
-            assert (path / "investigation.json").read_bytes() == before
+            assert (path / "project.json").read_bytes() == before
         fixture.stream_override = None
         for status, code, expected in (
             (429, "subscription_sharing_usage_limit_exceeded", "limited"),
@@ -340,7 +336,7 @@ async def checks(root):
         state_path.chmod(0o600)
         assert state_path.read_bytes() == saved
         print(
-            "PASS scope decline/enable, multi-account isolation, mode-specific catalogs, strict streamed Responses completion/failures/limits, no generation/save on sign-in, no billing fallback, investigation/account intent binding, key mode without flag, terminal refresh and confirmed/unconfirmed revoke"
+            "PASS scope decline/enable, multi-account isolation, mode-specific catalogs, strict streamed Responses completion/failures/limits, no generation/save on sign-in, no billing fallback, project/account intent binding, key mode without flag, terminal refresh and confirmed/unconfirmed revoke"
         )
 
 

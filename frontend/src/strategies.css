@@ -3,19 +3,19 @@
 .workspace-page .workspace-layout { grid-template-columns: 246px minmax(0, 1fr); }
 .workspace-page .site-header { min-height: 96px; }
 .workspace-page .workspace-content { padding: 0 40px 40px; }
-.workspace-page .investigation-intro { padding: 22px 0 12px; margin-bottom: 0; max-height: min(55dvh, 560px); overflow-y: auto; overflow-x: hidden; border-bottom: 0; scrollbar-color: #6b5847 transparent; }
-.workspace-page .investigation-intro .objective { max-width: none; }
-.workspace-page .investigation-pane-resizer { display: grid; place-items: center; height: 22px; margin: 0 0 12px; border-top: 1px solid var(--workspace-line); cursor: ns-resize; touch-action: none; user-select: none; }
-.workspace-page .investigation-pane-resizer span { display: block; width: 54px; height: 5px; border: 1px solid #936943; border-radius: 999px; background: #755233; box-shadow: 0 1px 6px #0008; }
-.workspace-page .investigation-pane-resizer:hover, .workspace-page .investigation-pane-resizer:focus-visible { border-color: #d5a66c; }
-.workspace-page .investigation-pane-resizer:hover span, .workspace-page .investigation-pane-resizer:focus-visible span { background: #d6a66b; border-color: #eac58e; }
-.workspace-page .investigation-eyebrow { margin: 0 0 12px; text-transform: uppercase; letter-spacing: .25em; font-size: 11px; color: #e4ad67; }
-.workspace-page .investigation-description-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.workspace-page .investigation-description-line .investigation-eyebrow { margin: 0; }
-.workspace-page .investigation-settings-link { padding: 2px 0; border: 0; background: transparent; color: #c49d70; font-size: 11px; cursor: pointer; }
-.workspace-page .investigation-settings-link:hover { color: #f3cd9e; text-decoration: underline; }
-.workspace-page .investigation-settings-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
-.workspace-page .investigation-intro h1 { font-size: clamp(28px, 2.6vw, 42px); }
+.workspace-page .project-intro { padding: 22px 0 12px; margin-bottom: 0; max-height: min(55dvh, 560px); overflow-y: auto; overflow-x: hidden; border-bottom: 0; scrollbar-color: #6b5847 transparent; }
+.workspace-page .project-intro .objective { max-width: none; }
+.workspace-page .project-pane-resizer { display: grid; place-items: center; height: 22px; margin: 0 0 12px; border-top: 1px solid var(--workspace-line); cursor: ns-resize; touch-action: none; user-select: none; }
+.workspace-page .project-pane-resizer span { display: block; width: 54px; height: 5px; border: 1px solid #936943; border-radius: 999px; background: #755233; box-shadow: 0 1px 6px #0008; }
+.workspace-page .project-pane-resizer:hover, .workspace-page .project-pane-resizer:focus-visible { border-color: #d5a66c; }
+.workspace-page .project-pane-resizer:hover span, .workspace-page .project-pane-resizer:focus-visible span { background: #d6a66b; border-color: #eac58e; }
+.workspace-page .project-eyebrow { margin: 0 0 12px; text-transform: uppercase; letter-spacing: .25em; font-size: 11px; color: #e4ad67; }
+.workspace-page .project-description-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.workspace-page .project-description-line .project-eyebrow { margin: 0; }
+.workspace-page .project-settings-link { padding: 2px 0; border: 0; background: transparent; color: #c49d70; font-size: 11px; cursor: pointer; }
+.workspace-page .project-settings-link:hover { color: #f3cd9e; text-decoration: underline; }
+.workspace-page .project-settings-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.workspace-page .project-intro h1 { font-size: clamp(28px, 2.6vw, 42px); }
 .workspace-page .new-strategy-split { position: relative; display: flex; flex: 0 0 auto; z-index: 8; margin-left: auto; }
 .workspace-page .new-strategy-split > button { border-radius: 7px 0 0 7px; min-height: 50px; padding: 14px 20px; font-size: 15px; }
 .workspace-page .new-strategy-split > details > summary { list-style: none; display: grid; place-items: center; width: 44px; min-height: 50px; border: 1px solid #daa66a; border-left: 1px solid #af7c42; border-radius: 0 7px 7px 0; background: linear-gradient(115deg, #f0ca94, #bb8247); color: #1e1409; cursor: pointer; }
@@ -69,14 +69,14 @@
 .workspace-page .proposal-review legend { padding-top: 24px; font-size: 14px; color: #e8c497; }
 @media (max-width: 1100px) {
  .workspace-page .workspace-layout { grid-template-columns: 190px minmax(0, 1fr); }
- .workspace-page .investigation-intro { padding-bottom: 24px; }
+ .workspace-page .project-intro { padding-bottom: 24px; }
  .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 130px 36px; gap: 10px; padding-left: 18px; }
  .workspace-page .strategy-columns { grid-template-columns: minmax(0, 1fr) 190px; padding-left: 18px; }
 }
 @media (max-width: 700px) {
  .workspace-page .workspace-layout { grid-template-columns: 1fr; }
  .workspace-page .workspace-content { padding: 0 20px 40px; }
- .workspace-page .investigation-intro { padding-top: 26px; }
+ .workspace-page .project-intro { padding-top: 26px; }
  .workspace-page .strategy-choice-menu { width: min(342px, calc(100vw - 40px)); }
  .workspace-page .strategy-columns { display: none; }
  .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 36px; padding: 16px 30px 16px 16px; column-gap: 8px; row-gap: 8px; }
@@ -90,7 +90,7 @@
 }
 @media (prefers-reduced-motion: reduce) { .workspace-page .strategy-row { transition: none; } }
 
-.workspace-page .investigation-intro h1:focus { outline: none; }
+.workspace-page .project-intro h1:focus { outline: none; }
 
 .workspace-page .workspace-layout.nav-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
 .workspace-page .workspace-nav .nav-collapse { justify-content: center; width: 36px; min-height: 36px; padding: 6px; margin: 0 0 12px auto; border: 1px solid #775a3c; border-radius: 6px; }
@@ -128,7 +128,7 @@
 @keyframes agentic-sweep { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .workspace-page .agentic-filament { animation: none; transform: none; background: #b68457; } }
 
-/* Match the home New Investigation button, including the attached dropdown. */
+/* Match the home New Project button, including the attached dropdown. */
 .workspace-page .new-strategy-split > .copper-button,
 .workspace-page .new-strategy-split > details > summary { min-height: 50px; font-size: 15px; }
 .workspace-page .new-strategy-split > .copper-button {
@@ -160,7 +160,7 @@
 .workspace-page .new-strategy-heading-actions .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .new-strategy-heading-actions .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
-/* Expanded descriptions share the investigation description's type scale and fill their row. */
+/* Expanded descriptions share the project description's type scale and fill their row. */
 .workspace-page .strategy-expanded,
 .workspace-page .strategy-expanded .text-views,
 .workspace-page .strategy-expanded .strategy-approach,
@@ -262,10 +262,10 @@
 }
 
 /* Investigation uses the Strategies section-heading hierarchy. */
-.workspace-page .investigation-description-line {
+.workspace-page .project-description-line {
   display: flex; align-items: baseline; justify-content: flex-start; gap: 18px; flex-wrap: wrap;
 }
-.workspace-page .investigation-description-line .investigation-heading {
+.workspace-page .project-description-line .investigation-heading {
   color: #e7be8d; font-size: 30px; line-height: 1.25; font-weight: inherit; margin: 0;
 }
 .workspace-page .investigation-heading-actions { display: inline-flex; align-items: baseline; gap: 16px; }

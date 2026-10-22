@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv.parser import parse_stream
 
-from sigma.investigations import ROOT
+from sigma.projects import ROOT
 
 
 def load_local_config(root: Path = ROOT) -> None:

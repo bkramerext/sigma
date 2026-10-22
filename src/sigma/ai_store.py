@@ -1,4 +1,4 @@
-"""Owner-only, atomic application credentials. Never stored in a research investigation."""
+"""Owner-only, atomic application credentials. Never stored in a research project."""
 
 import asyncio
 import fcntl
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from sigma.investigations import ROOT, InvestigationError
+from sigma.projects import ROOT, ProjectError
 from sigma.ui_instance import private_directory
 
 
@@ -24,8 +24,8 @@ def directory() -> Path:
             or path.resolve().is_relative_to(ROOT)
             or any(part.endswith(".sigma") for part in path.resolve().parts)
         ):
-            raise InvestigationError(
-                "SIGMA_AUTH_HOME must be an absolute private directory outside investigations."
+            raise ProjectError(
+                "SIGMA_AUTH_HOME must be an absolute private directory outside projects."
             )
         # The explicit override's parent must exist; never create an unexpected tree.
     else:
@@ -34,12 +34,12 @@ def directory() -> Path:
             parent.mkdir(mode=0o700)
         info = parent.lstat()
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
-            raise InvestigationError("Unsafe SIGMA configuration parent directory.")
+            raise ProjectError("Unsafe SIGMA configuration parent directory.")
         path = parent / "sigma"
     try:
         private_directory(path)
     except (OSError, RuntimeError):
-        raise InvestigationError(
+        raise ProjectError(
             "Cannot open private SIGMA account storage. Check directory ownership/0700 permissions."
         ) from None
     return path
@@ -79,9 +79,7 @@ def read(path: Path) -> dict[str, Any]:
 def write(path: Path, value: dict[str, Any]) -> None:
     encoded = json.dumps(value).encode("utf-8")
     if len(encoded) > 1000000:
-        raise InvestigationError(
-            "Account storage limit reached; existing credentials were retained."
-        )
+        raise ProjectError("Account storage limit reached; existing credentials were retained.")
     fd, temporary = tempfile.mkstemp(prefix=".credentials-", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -125,7 +123,7 @@ async def transaction():
         if json.dumps(value, sort_keys=True) != previous:
             write(state_path, value)
     except (OSError, ValueError, TypeError, KeyError, TimeoutError):
-        raise InvestigationError(
+        raise ProjectError(
             "Cannot safely read/write SIGMA account storage. Check owned 0700 directory/0600 files; existing credentials were not printed."
         ) from None
     finally:

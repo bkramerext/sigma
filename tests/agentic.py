@@ -1,4 +1,4 @@
-"""Offline, controlled A14 coordinator and stock-investigation scenarios."""
+"""Offline, controlled A14 coordinator and stock-project scenarios."""
 
 import asyncio
 import json
@@ -12,12 +12,12 @@ from pydantic import ValidationError
 
 from sigma import agentic, chatgpt_auth
 from sigma.api import app
-from sigma.investigations import create_strategy, inspect_investigation
+from sigma.projects import create_strategy, inspect_project
 from sigma.proposals import accepted_provenance
-from sigma.stock import open_stock_investigation, stock_investigations
+from sigma.stock import open_stock_project, stock_projects
 
 MODEL = "gpt-6.1-sol"
-SOURCE = Path("examples/counting-constrained-binary-strings/investigation.json")
+SOURCE = Path("examples/counting-constrained-binary-strings/project.json")
 CANDIDATE = {
     "title": "Recurrence from the final symbol",
     "summary": "Partition valid strings by the last symbol and justify a recurrence.",
@@ -79,7 +79,7 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"].startswith("strategy_")
         context = json.loads(payload["input"])
-        assert context["investigation"]["research_problem"].startswith("For each integer n >= 0")
+        assert context["project"]["research_problem"].startswith("For each integer n >= 0")
         calls.append({"role": payload["text"]["format"]["name"], "context": context})
         return httpx.Response(200, json=provider_output(outputs.pop(0)))
 
@@ -88,7 +88,7 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
 
     with patch("sigma.agentic.httpx.AsyncClient", side_effect=client):
         events = await collect(path)
-    assert (Path(path) / "investigation.json").read_bytes() == before
+    assert (Path(path) / "project.json").read_bytes() == before
     assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
     assert len({event["run_id"] for event in events}) == 1
     assert len(calls) <= 6 and not outputs
@@ -98,15 +98,15 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
 async def main_async(root: Path):
     await chatgpt_auth.select("api_key")
     source_before = SOURCE.read_bytes()
-    stock = stock_investigations()["investigations"]
+    stock = stock_projects()["projects"]
     assert any(
         item["id"] == "counting-constrained-binary-strings" and item["strategy_count"] == 0
         for item in stock
     )
-    view = open_stock_investigation("counting-constrained-binary-strings")
-    assert not view.investigation.strategies and not view.investigation.active_order
+    view = open_stock_project("counting-constrained-binary-strings")
+    assert not view.project.strategies and not view.project.active_order
     path = view.path
-    before = (Path(path) / "investigation.json").read_bytes()
+    before = (Path(path) / "project.json").read_bytes()
     assert before == source_before
 
     events, calls = await exercise(path, [CANDIDATE, DISTINCT], before)
@@ -115,7 +115,7 @@ async def main_async(root: Path):
     assert events[-1]["draft"]["title"] == CANDIDATE["title"]
     assert any(event["type"] == "activity.started" for event in events)
     assert any(event["type"] == "decision" and event["outcome"] == "present" for event in events)
-    assert inspect_investigation(path).investigation.strategies == ()
+    assert inspect_project(path).project.strategies == ()
     provenance = accepted_provenance(events[-1]["receipt"], path)
     saved = create_strategy(
         path,
@@ -125,24 +125,18 @@ async def main_async(root: Path):
         provenance,
     )
     assert (
-        len(saved.investigation.strategies) == 1
-        and saved.investigation.strategies[0].provenance == provenance
+        len(saved.project.strategies) == 1 and saved.project.strategies[0].provenance == provenance
     )
-    assert (
-        len(
-            open_stock_investigation("counting-constrained-binary-strings").investigation.strategies
-        )
-        == 1
-    )
+    assert len(open_stock_project("counting-constrained-binary-strings").project.strategies) == 1
     assert SOURCE.read_bytes() == source_before
     print(
         "PASS stock zero-pool, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source"
     )
 
-    before = (Path(path) / "investigation.json").read_bytes()
+    before = (Path(path) / "project.json").read_bytes()
     events, calls = await exercise(path, [ALTERNATIVE, DISTINCT], before)
     assert events[-1]["type"] == "run.completed"
-    assert calls[0]["context"]["investigation"]["existing_strategies"][0]["approach"].startswith(
+    assert calls[0]["context"]["project"]["existing_strategies"][0]["approach"].startswith(
         CANDIDATE["approach"]
     )
     assert events[-1]["draft"]["title"] == ALTERNATIVE["title"]
@@ -179,7 +173,7 @@ async def main_async(root: Path):
     )
     assert events[-1]["type"] == "run.failed" and "Six-call" in events[-1]["summary"]
     assert len(calls) == agentic.MAX_CALLS
-    assert len(inspect_investigation(path).investigation.strategies) == 1
+    assert len(inspect_project(path).project.strategies) == 1
     print(
         "PASS later novelty corpus, duplicate retry, skeptical revision, exhausted no-proposal branch and no mutation"
     )
@@ -198,7 +192,7 @@ async def main_async(root: Path):
         events = await collect(path)
         assert events[-1]["type"] == "run.failed"
     assert not agentic._gate.locked()
-    assert (Path(path) / "investigation.json").read_bytes() == before
+    assert (Path(path) / "project.json").read_bytes() == before
     print("PASS malformed provider output fails with terminal event and releases run gate")
     try:
         agentic.ProgressEvent(
@@ -243,9 +237,7 @@ async def main_async(root: Path):
             event async for event in agentic.agentic_events(path, expected_binding="original")
         ]
     assert events[-1]["type"] == "run.failed" and "account/billing" in events[-1]["summary"]
-    events = [
-        event async for event in agentic.agentic_events(path, expected_investigation_id="wrong")
-    ]
+    events = [event async for event in agentic.agentic_events(path, expected_project_id="wrong")]
     assert events[-1]["type"] == "run.failed" and "identity" in events[-1]["summary"]
 
     started = asyncio.Event()
@@ -286,7 +278,7 @@ async def main_async(root: Path):
             and "timed out" in timeout_events[-1]["summary"]
         )
         assert not agentic._gate.locked()
-    assert (Path(path) / "investigation.json").read_bytes() == before
+    assert (Path(path) / "project.json").read_bytes() == before
     print(
         "PASS binding/identity changes, duplicate run, cancellation, timeout and clean gate release"
     )
@@ -325,10 +317,10 @@ async def main_async(root: Path):
     ):
         candidate = await agentic._invoke(
             "explore",
-            {"investigation": {"research_problem": "fixture"}},
+            {"project": {"research_problem": "fixture"}},
             {"model": MODEL, "reasoning_effort": "high"},
             binding,
-            inspect_investigation(path),
+            inspect_project(path),
         )
     assert isinstance(candidate, agentic.Candidate) and candidate.title == CANDIDATE["title"]
     print(
@@ -352,8 +344,8 @@ async def main_async(root: Path):
         "http_version": "1.1",
         "method": "POST",
         "scheme": "http",
-        "path": "/api/investigations/proposals/agentic",
-        "raw_path": b"/api/investigations/proposals/agentic",
+        "path": "/api/projects/proposals/agentic",
+        "raw_path": b"/api/projects/proposals/agentic",
         "query_string": b"",
         "root_path": "",
         "headers": [(b"host", b"testserver"), (b"content-type", b"application/json")],

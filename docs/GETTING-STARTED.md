@@ -1,6 +1,6 @@
 # Getting Started
 
-SIGMA runs locally. The current application supports investigation lifecycle and manually authored strategies; agents and automated research are not yet available.
+SIGMA runs locally. The current application supports project lifecycle and manually authored strategies; agents and automated research are not yet available.
 
 ## Install and launch
 
@@ -13,7 +13,7 @@ From the repository root:
 ./sigma ui
 ```
 
-Open **http://127.0.0.1:5173**. Choose **Open Investigation**, enter `investigations/rh.sigma` in the dialog, and open it. **New Investigation** asks for a name, multiline research problem, and research mode (Default or Mathematical), then opens the created workspace. Cancel or Escape returns Home. On the investigation page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close investigation** returns Home. Investigation details/history are collapsible.
+Open **http://127.0.0.1:5173**. Choose **Open Project**, enter `projects/rh.sigma` in the dialog, and open it. **New Project** asks for a name, multiline research problem, and research mode (Default or Mathematical), then opens the created workspace. Cancel or Escape returns Home. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
 
 Use the three-dot menu beside a strategy, then **Actions → Edit** to change its
 name and description in a dialog. **Actions → Remove** asks for confirmation and
@@ -23,18 +23,18 @@ Edit events include **View changes** with before-and-after text.
 
 To stop the UI from another terminal, run `./sigma shutdown`. It stops only a verified instance belonging to the same checkout; it never stops an unrelated port owner. Running `./sigma ui` again starts or restarts SIGMA, including recovery from a previously suspended (`Ctrl+Z`) launcher when its process identity can be verified. An unverified process is never signalled. `Ctrl+C` in the launch terminal remains the normal clean shutdown.
 
-The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma ui` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Investigation URLs contain local filesystem paths, not shareable links.
+The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma ui` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
 
 Scheduling, reports and forks are unavailable; the UI explains their status. Optional AI proposal generation is described below.
 
 ## CLI
 
 ```sh
-./sigma create --title 'My investigation' --problem 'Investigate it' --investigation-type mathematical
+./sigma create --title 'My investigation' --problem 'Investigate it' --research-mode mathematical
 ./sigma init /tmp/example.sigma --title 'Example' --problem 'Investigate it'
-./sigma open investigations/rh.sigma
-./sigma inspect investigations/rh.sigma
-./sigma events investigations/rh.sigma
+./sigma open projects/rh.sigma
+./sigma inspect projects/rh.sigma
+./sigma events projects/rh.sigma
 ./sigma new-strategy /tmp/example.sigma --title 'Idea' --approach 'Test this hypothesis'
 ./sigma strategies /tmp/example.sigma
 ./sigma edit-strategy /tmp/example.sigma STRATEGY_ID --title 'Revised idea' --approach 'Updated description'
@@ -42,8 +42,8 @@ Scheduling, reports and forks are unavailable; the UI explains their status. Opt
 ./sigma close
 ```
 
-Successful commands print JSON to stdout (exit 0). Investigation errors print `{"error":"..."}` to stderr (exit 2); argparse syntax errors also exit 2. `close` is stateless. `strategies` lists the active pool; `inspect` retains removed
-records and all audit events. Edit/remove commands return the updated investigation. Only the canonical RH seed initializes implicitly; other investigations require `create` (managed location) or `init` (explicit directory). Both accept `--investigation-type default|mathematical`, defaulting to `default`; `--research-mode` remains a CLI alias.
+Successful commands print JSON to stdout (exit 0). Project errors print `{"error":"..."}` to stderr (exit 2); argparse syntax errors also exit 2. `close` is stateless. `strategies` lists the active pool; `inspect` retains removed
+records and all audit events. Edit/remove commands return the updated project. Only the canonical RH seed initializes implicitly; other projects require `create` (managed location) or `init` (explicit directory). Both accept `--research-mode default|mathematical`, defaulting to `default`.
 
 ## API
 
@@ -51,22 +51,22 @@ The local API exposes the same services:
 
 | Method | Endpoint |
 | --- | --- |
-| POST | `/api/investigations/init` |
-| GET | `/api/investigations/destination?title=...` |
-| POST | `/api/investigations/create` |
-| POST | `/api/investigations/open` |
-| GET | `/api/investigations/inspect?path=...` |
-| GET | `/api/investigations/events?path=...` |
-| POST | `/api/investigations/close` |
-| POST | `/api/investigations/strategies` |
-| GET | `/api/investigations/strategies?path=...` |
-| POST | `/api/investigations/strategies/edit` |
-| POST | `/api/investigations/strategies/remove` |
+| POST | `/api/projects/init` |
+| GET | `/api/projects/destination?title=...` |
+| POST | `/api/projects/create` |
+| POST | `/api/projects/open` |
+| GET | `/api/projects/inspect?path=...` |
+| GET | `/api/projects/events?path=...` |
+| POST | `/api/projects/close` |
+| POST | `/api/projects/strategies` |
+| GET | `/api/projects/strategies?path=...` |
+| POST | `/api/projects/strategies/edit` |
+| POST | `/api/projects/strategies/remove` |
 
-Managed create accepts `{title,problem,investigation_type?}`; additional fields such as `path` are rejected. Destination preview returns `{root,path,exists}` (omit title for root only). Unknown modes return 400. Init accepts `{path,title,problem,investigation_type?}`; open accepts `{path}`; create-strategy accepts `{path,title,approach}`. Strategy titles are 1–200 characters; approaches are 1–10,000 after trimming. Investigation errors return HTTP 400; invalid bodies 422; creation 201.
+Managed create accepts `{title,problem,research_mode?}`; additional fields such as `path` are rejected. Destination preview returns `{root,path,exists}` (omit title for root only). Unknown modes return 400. Init accepts `{path,title,problem,research_mode?}`; open accepts `{path}`; create-strategy accepts `{path,title,approach}`. Strategy titles are 1–200 characters; approaches are 1–10,000 after trimming. Project errors return HTTP 400; invalid bodies 422; creation 201.
 
 Edit accepts `{path,strategy_id,title,approach}`; remove accepts `{path,strategy_id}`.
-Both return the updated investigation (HTTP 200). Unknown or already-removed strategies
+Both return the updated project (HTTP 200). Unknown or already-removed strategies
 produce HTTP 400; removed strategies cannot be edited. Name/description in the
 dialog map to the existing title/approach fields and share their length limits.
 
@@ -76,41 +76,23 @@ dialog map to the existing title/approach fields and share their length limits.
 ./sigma test
 ```
 
-Runs the workflow tests, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary investigations and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma ui`, and `sigma test` also work.
+Runs the workflow tests, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary projects and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma ui`, and `sigma test` also work.
 
-## Investigation location
+## Project location
 
-New Investigation and `sigma create` use this checkout's absolute `investigations/` directory, independent of the browser or shell working directory. To choose another root, create a directory owned by the server user and launch with `SIGMA_PROJECTS_ROOT=/absolute/path ./sigma ui` (or the same environment variable for CLI commands). The root must already exist, be absolute, and must not itself be a symlink. Missing parents are not created.
+New Project and `sigma create` use this checkout's absolute `projects/` directory, independent of the browser or shell working directory. To choose another root, create a directory owned by the server user and launch with `SIGMA_PROJECTS_ROOT=/absolute/path ./sigma ui` (or the same environment variable for CLI commands). The root must already exist, be absolute, and must not itself be a symlink. Missing parents are not created.
 
-The server derives a lowercase Unicode-normalized directory name, joining punctuation/spacing with hyphens and adding `.sigma`. Names are 1–200 characters, reject path separators/control characters, and must contain a letter or number. Directory stems are limited to 80 characters/180 UTF-8 bytes. Different names can normalize to the same directory: choose another name when a collision is reported; existing files and investigations are never reused or overwritten. The dialog previews this destination read-only. Research problems are 1–20,000 characters after trimming. Open Investigation still accepts arbitrary valid existing local investigation paths.
+The server derives a lowercase Unicode-normalized directory name, joining punctuation/spacing with hyphens and adding `.sigma`. Names are 1–200 characters, reject path separators/control characters, and must contain a letter or number. Directory stems are limited to 80 characters/180 UTF-8 bytes. Different names can normalize to the same directory: choose another name when a collision is reported; existing files and projects are never reused or overwritten. The dialog previews this destination read-only. Research problems are 1–20,000 characters after trimming. Open Project still accepts arbitrary valid existing local project paths.
 
 Canonical artwork lives in `assets/`; Vite copies its exact bytes into runtime public assets on dev startup and builds. No manual frontend artwork copy is needed.
 
 ## Data and limitations
 
-New investigations use JSON schema v7 in `investigation.json`. Legacy `project.json`
-files load without writes. The first actual change preserves an exact
-`investigation.vN.json` backup and publishes the v7 document; reads and no-op
-edits never migrate. IDs, strategies, event history, ordering, settings and source
-text survive. A conflicting pair of old/new state files is rejected without
-changing either. The RH seed now lives under `investigations/rh.sigma`; existing
-`.sigma` directories in the former `projects/` root remain openable, and old RH
-paths resolve to the moved seed.
+New projects use JSON schema v6 with persisted research mode, AI model and Thinking level. Existing v1–v5 documents open without rewriting; missing mode defaults to Default and missing AI settings use the documented legacy bootstrap; strategy writes retain their established lazy migration behavior. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
+V3–v6 retain removed records and edit/removal events; older clients cannot read newer schemas.
+Unchanged edits add no event or migration. Writes use POSIX advisory locks and atomic replacement. Use a local macOS/Linux filesystem; do not edit project JSON while a save is running. Generated RH project state is excluded from Git.
 
-New API and browser routes use `/api/investigations` and `/investigation`. The
-former `/api/projects` and `/project` routes remain compatibility aliases; old
-API payload keys and `SIGMA_PROJECTS_ROOT` are supported. The legacy
-`edit-project` CLI command is an alias for `edit-investigation`. Existing local
-UI preferences remain readable and are retained. See [Architectural Decisions](DECISIONS.md)
-for the complete compatibility list and migration details.
-
-Unchanged edits add no event or migration. Writes use POSIX advisory locks and
-atomic replacement. Use a local macOS/Linux filesystem; do not edit investigation
-JSON while a save is running. Generated RH investigation state is excluded from Git.
-
-See [Architectural Decisions](DECISIONS.md) for concurrency/crash limitations,
-[Status](STATUS.md) for verified behavior, and [SPEC-001](../specs/project-lifecycle.md)
-for the lifecycle contract.
+See [Architectural Decisions](DECISIONS.md) for concurrency/crash limitations, [Status](STATUS.md) for verified behavior, and [SPEC-001](../specs/project-lifecycle.md) for the original lifecycle contract.
 
 ## Strategies and human-tracked stages
 
@@ -132,16 +114,16 @@ reject a stale drop: reopen/refresh before retrying. New strategies append to th
 active list; removal preserves the underlying record and creation timestamp.
 
 ```sh
-./sigma stage-strategy /path/investigation.sigma STRATEGY_ID exploring
-./sigma reorder-strategies /path/investigation.sigma --order ID_B ID_A --expected-order ID_A ID_B
+./sigma stage-strategy /path/project.sigma STRATEGY_ID exploring
+./sigma reorder-strategies /path/project.sigma --order ID_B ID_A --expected-order ID_A ID_B
 ```
 
-API: `POST /api/investigations/strategies/stage` accepts `{path,strategy_id,stage}`
-(`draft|ready|exploring|hold`). `POST /api/investigations/strategies/reorder` accepts
+API: `POST /api/projects/strategies/stage` accepts `{path,strategy_id,stage}`
+(`draft|ready|exploring|hold`). `POST /api/projects/strategies/reorder` accepts
 `{path,order:[all active IDs],expected_order:[previous active IDs]}`. Both return
-the updated investigation. `InvestigationView.investigation.active_order` is the authoritative
+the updated project. `ProjectView.project.active_order` is the authoritative
 active list; the stored `strategies` array retains creation order and removed
-records. Legacy first stage/reorder saves upgrade to at least v5; investigation settings and
+records. Legacy first stage/reorder saves upgrade to at least v5; project settings and
 new reasoning-provenance saves upgrade to v6 with an exact old-version backup; legacy files read as Draft/in creation order without writes.
 Existing manual-only create/edit/remove lazy migrations remain unchanged.
 
@@ -158,17 +140,17 @@ welcome explains this; it never blocks generation or repeats after presentation.
 You can instead open Generate, type a Starting point, and continue sign-in there.
 Successful sign-in resumes that one pending request with its seed preserved.
 Cancel/decline/failure retains your text; Continue manually transfers it to the
-manual composer. Header-only sign-in never generates. Account/investigation changes,
+manual composer. Header-only sign-in never generates. Account/project changes,
 unmounts, cancelled attempts and stale callbacks cannot authorize duplicate work.
 
 The advanced **Use API key · billed separately** action explicitly selects the
 optional `OPENAI_API_KEY` from checkout `.env` or server environment. It is separate
 API billing. No `SIGMA_AI_ENABLED` gate remains, and a present key never selects
 billing by itself. ChatGPT errors or limits never use a saved key automatically.
-Choose model/Thinking in New/Edit Investigation; mode/account are application preferences,
-not investigation credentials or research settings.
+Choose model/Thinking in New/Edit Project; mode/account are application preferences,
+not project credentials or research settings.
 
-The dialog permanently explains transmission of the investigation
+The dialog permanently explains transmission of the project
 research problem, mode, **all** existing strategy titles/full approaches (including
 removed directions) and optional Starting point. An empty seed requests an
 independent direction. There are no generation calls on load or typing; a cached, non-generating
@@ -180,7 +162,7 @@ using the selected billing mode and replaces editable fields only after success.
 one-line preview and full approach (including first tests, assumptions and ways
 the idea might fail). Save strategy is the only persistence action; it records an
 AI-assisted suggestion accepted/edited by a human, with returned provider/model and the requested thinking level.
-Cancel leaves investigation files unchanged. Failed generation or acceptance retains
+Cancel leaves project files unchanged. Failed generation or acceptance retains
 existing draft edits. Cancelling a request closes the local connection; provider
 processing/billing may already have occurred. No automatic retries.
 
@@ -199,21 +181,21 @@ Uses pinned `httpx==0.28.1` with the official Responses REST endpoint and
 not log prompts, responses or keys by default. Errors expose generic status/help,
 not raw provider responses. Proxies/redirects/custom provider URLs are disabled.
 
-`GET /api/investigations/proposals/config?path=...` reports the saved investigation model/effort
+`GET /api/projects/proposals/config?path=...` reports the saved project model/effort
 and account eligibility separately from authentication health; it does not prove
 generation or billing readiness.
-`POST /api/investigations/proposals` accepts `{path,seed?,expected_binding?,expected_investigation_id?}` and returns an
+`POST /api/projects/proposals` accepts `{path,seed?,expected_binding?,expected_project_id?}` and returns an
 unsaved structured draft, provenance and a signed acceptance receipt. Saving uses
-`POST /api/investigations/strategies` with `{path,title,approach,summary,receipt}`. The
-receipt binds provenance to that investigation, expires after 24 hours, and expires on
+`POST /api/projects/strategies` with `{path,title,approach,summary,receipt}`. The
+receipt binds provenance to that project, expires after 24 hours, and expires on
 server restart. If it expires, copy your edits before regenerating, or write the
 text manually (without AI attribution). Receipts contain no request/response dump
 or key. There is no persistent draft store.
 
-## Investigation settings and curated models (A8)
+## Project settings and curated models (A8)
 
-**New Investigation** opens the **New Investigation** dialog. On the workspace, the pencil immediately
-beside the main investigation name opens **Edit Investigation**. Both use the same fields:
+**New Project** opens the **New Project** dialog. On the workspace, the pencil immediately
+beside the main project name opens **Edit Project**. Both use the same fields:
 name, research problem, research mode, AI model, Thinking level. Name/problem are
 required; Low, Medium, High and Extra high map to `low`, `medium`, `high`, `xhigh`.
 High is the default. Edits save together on **Save Changes**; Cancel/Escape does
@@ -224,8 +206,8 @@ overwrite another editor's settings. Strategy edits can proceed independently.
 Changing display name never moves the directory or changes the existing UUID.
 Create still derives a safe readonly destination. Mode can change in either
 direction; no strategies, stages, order, archived records or provenance reset.
-Investigation details expose identity/settings and before/after `investigation.updated` audit.
-Close Investigation simply returns Home, with no save/flush/confirmation or work teardown.
+Project details expose identity/settings and before/after `project.updated` audit.
+Close Project simply returns Home, with no save/flush/confirmation or work teardown.
 
 The backend-reviewed capability catalog (verified 2026-10-20) includes:
 
@@ -258,7 +240,7 @@ All new init/create operations write v6. Legacy v1–v5 reads do not change byte
 missing model/effort defaults to Sol/High, or a reviewed `SIGMA_AI_MODEL` bootstrap
 override plus High. Unreviewed overrides (including A7's `gpt-4.1`) are explicitly
 qualified in discovery guidance and do not enter the reasoning catalog. Once v6
-settings are saved, environment model overrides have no effect on that investigation.
+settings are saved, environment model overrides have no effect on that project.
 Old AI provenance retains unknown thinking as null; no historical effort is invented.
 New proposals snapshot context/model/effort at request start, send actual
 `reasoning: {effort: ...}`, and bind returned model/requested effort into acceptance
@@ -283,13 +265,12 @@ fallback. No per-strategy configuration or agent loop is added.
 ./sigma create --title 'Question' --problem 'Investigate it' --model gpt-6-luna --thinking high
 ```
 
-`./sigma edit-investigation PATH --title ... --problem ... --investigation-type mathematical
+`./sigma edit-project PATH --title ... --problem ... --research-mode mathematical
 --model gpt-6-astra --thinking high --expected 'JSON'` takes the five previous
-settings as JSON (`title`, `problem`, `investigation_type`, `ai_model`,
+settings as JSON (`title`, `problem`, `research_mode`, `ai_model`,
 `reasoning_effort`) for conflict detection. The equivalent API is
-`POST /api/investigations/update` with `{path,title,problem,investigation_type,ai_model,reasoning_effort,expected:{...}}`.
-The former `research_mode` field remains accepted for existing clients.
-It returns the complete updated InvestigationView. No UUID/path mutation fields exist.
+`POST /api/projects/update` with `{path,title,problem,research_mode,ai_model,reasoning_effort,expected:{...}}`.
+It returns the complete updated ProjectView. No UUID/path mutation fields exist.
 Init/create bodies now accept `ai_model` and `reasoning_effort`. The shared service
 uses the existing lock, full-document validation, exact backup and atomic replace.
 
@@ -321,13 +302,13 @@ across processes and atomically replace tokens; terminal errors clear unusable
 tokens while preserving the account/client mapping. Disconnect attempts provider
 revocation; unconfirmed revocation is disclosed while local secrets are cleared.
 
-Storage is `~/.config/sigma/credentials.json`, outside this checkout/investigations:
+Storage is `~/.config/sigma/credentials.json`, outside this checkout/projects:
 owned 0700 directory, no-follow 0600 files, file locking, atomic replacement and
 fsync. This portable local-file choice avoids a platform Keychain dependency;
 other processes already running as your OS account remain a trust boundary.
 `SIGMA_AUTH_HOME` can select an owned private test/storage directory outside the
-checkout and investigation packages. Never copy tokens from another app or put them in
-`.env`, Vite, URLs, browser storage, logs or investigation JSON. Only a retained ID-token
+checkout and project packages. Never copy tokens from another app or put them in
+`.env`, Vite, URLs, browser storage, logs or project JSON. Only a retained ID-token
 hint is sent directly to the trusted authorization endpoint through a backend
 redirect, never in a React payload. See [security notes](asn8.2-security.md).
 
@@ -341,7 +322,7 @@ no shell execution or variable expansion. Missing files are normal; malformed or
 unreadable files stop startup with a safe line/permissions instruction before
 replacing the running instance. Never use frontend `.env` files or `VITE_` variables
 for secrets. The pinned parser is python-dotenv 1.2.1. `.env.example` is a template.
-CLI investigation commands use the same loader; setup/test do not load local credentials.
+CLI project commands use the same loader; setup/test do not load local credentials.
 A standalone backend can use `uv run uvicorn sigma.server:create_app --factory
 --host 127.0.0.1 --port 8000` for the same configuration behavior.
 
@@ -356,51 +337,51 @@ unverified live endpoint cause safe refusal. This is a local same-user trust
 boundary, not protection from another process already running as your account.
 Readiness checks a fresh non-secret instance ID at both API and Vite proxy, keeping
 fixed routing and existing origin/host restrictions intact. Starting/restarting
-never writes investigations; Close Investigation remains navigation only.
+never writes projects; Close Project remains navigation only.
 
 Tests use explicit no-network fixtures. Live provider billing/quality is
 unverified and no billable request is made by setup. With free 8000/5173 ports,
 run the separate real-process/Chrome regression:
 `uv run --with playwright python tests/ui_lifecycle.py`. It uses disposable
 checkouts and fixture credentials, exercises restart/crash/conflicts, and leaves
-normal investigation files untouched. Chrome is expected at the standard macOS path.
+normal project files untouched. Chrome is expected at the standard macOS path.
 
-## Recent Investigations and the included mathematical example (A9)
+## Recent Projects and the included mathematical example (A9)
 
-Home lists up to four distinct investigations, newest successful access first. Create,
-Open Investigation and recent-row clicks update the same application index; CLI
+Home lists up to four distinct projects, newest successful access first. Create,
+Open Project and recent-row clicks update the same application index; CLI
 create/open/init and API create/open/init do likewise. Inspect, settings edits,
 cancel and Close do not change access order. Titles refresh from the actual
-investigation. Forget (the small ×) removes only the index entry, never research.
+project. Forget (the small ×) removes only the index entry, never research.
 Missing/corrupt/moved entries remain clearly unavailable until located with
-Open Investigation or forgotten. Opening a moved copy updates its path by stable UUID.
+Open Project or forgotten. Opening a moved copy updates its path by stable UUID.
 
 State is `~/.local/state/sigma/recents.json` (or `$XDG_STATE_HOME/sigma/`), with
 an owned 0700 directory, 0600 index and persistent lock, atomic replacement and
 fsync. `SIGMA_STATE_DIR` can point to an existing-parent absolute private directory
-outside the checkout/investigation packages. The index holds only UUID/path/access
-metadata and bootstrap facts; it is separate from OAuth credentials and investigation
+outside the checkout/project packages. The index holds only UUID/path/access
+metadata and bootstrap facts; it is separate from OAuth credentials and project
 JSON. Index failure warns without reporting a successful research save as failed.
-The Home list then reports the state problem; Open/New Investigation remain available.
+The Home list then reports the state problem; Open/New Project remain available.
 
 The first successful UI launch/Home setup copies the immutable v5 source
-`examples/nonconsecutive-subset-sums/investigation.json` into the configured investigations
-root as `nonconsecutive-subset-sums.sigma/investigation.json`, with exclusive publication.
+`examples/nonconsecutive-subset-sums/project.json` into the configured projects
+root as `nonconsecutive-subset-sums.sigma/project.json`, with exclusive publication.
 The provided Mathematical exercise opens with exactly three real Draft
 strategies. It is initially labeled Included example, with no invented human
 access time; opening it makes it a normal recent. Installation never overwrites
-an existing investigation. An evolved same-UUID copy is preserved; other collisions are
+an existing project. An evolved same-UUID copy is preserved; other collisions are
 reported. A per-root bootstrap fact prevents reseeding after deletion/forgetting,
 and four genuine entries are never evicted merely to include the sample.
 Changing the root installs its copy independently while UUID deduplication still
 limits the installation's index to four. User edits never alter the Git template.
 
-New/Edit Investigation now have a fixed title/action header: Create or Save Changes,
+New/Edit Project now have a fixed title/action header: Create or Save Changes,
 plus Cancel. Only the body scrolls, so controls remain visible on laptop and
 phone screens. Busy saves disable both buttons and Escape; native required-field
 validation, keyboard submit, retry and focus restoration remain in place.
 
 The independent mathematical verification is in
 [example-math-verification.md](example-math-verification.md), outside the active
-investigation. The future [agent output reader design](agent-output-design.md) is only
+project. The future [agent output reader design](agent-output-design.md) is only
 a proposal; no autonomous work, proof execution or transcript renderer is added.

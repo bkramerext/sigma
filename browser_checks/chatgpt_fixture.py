@@ -19,7 +19,7 @@ from sigma.api import app
 __all__ = ["app"]
 os.environ["SIGMA_AUTH_HOME"] = mkdtemp(prefix="sigma-siwc-browser-auth-")
 os.environ["SIGMA_STATE_DIR"] = mkdtemp(prefix="sigma-browser-recents-")
-os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-siwc-browser-investigations-")
+os.environ["SIGMA_PROJECTS_ROOT"] = mkdtemp(prefix="sigma-siwc-browser-projects-")
 os.environ["OPENAI_API_KEY"] = "explicit-api-key-fixture"
 os.environ.pop("SIGMA_AI_ENABLED", None)
 fixture = Fixture()

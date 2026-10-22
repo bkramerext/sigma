@@ -17,7 +17,7 @@ import httpx
 import jwt
 
 from sigma.ai_store import transaction
-from sigma.investigations import InvestigationError
+from sigma.projects import ProjectError
 
 ISSUER = "https://auth.openai.com"
 RESOURCE = "https://api.openai.com/v1"
@@ -213,7 +213,7 @@ async def begin(
         if time.monotonic() > attempt.expires + 60:
             _attempts.pop(key)
     if sum(a.status == "connecting" for a in _attempts.values()) >= 4:
-        raise InvestigationError(
+        raise ProjectError(
             "A sign-in is already pending. Complete or cancel it before another attempt."
         )
     try:
@@ -228,16 +228,14 @@ async def begin(
                 or failed.status != "failed"
                 or time.monotonic() > failed.expires
             ):
-                raise InvestigationError(
+                raise ProjectError(
                     "Previous sign-in can no longer be retried. Start a new sign-in."
                 )
             attempt.client_id = failed.retry_client_id
         async with transaction() as state:
             previous = state["accounts"].get(account_id) if account_id else None
             if account_id and not previous:
-                raise InvestigationError(
-                    "Saved account was not found. Choose Connect another account."
-                )
+                raise ProjectError("Saved account was not found. Choose Connect another account.")
             if previous:
                 attempt.client_id = previous["client_id"]
             host = state["ext_agent_host_id"]
@@ -288,7 +286,7 @@ async def begin(
             "authorization_url": "/api/ai/auth/open/" + attempt.id,
         }
     except (httpx.HTTPError, TimeoutError, ValueError, jwt.PyJWTError, AuthFailure):
-        raise InvestigationError(
+        raise ProjectError(
             "Cannot start ChatGPT sign-in. OpenAI discovery/network validation failed; retry later."
         ) from None
 
@@ -299,7 +297,7 @@ _urls: dict[str, str] = {}
 def attempt_status(identifier: str) -> dict:
     attempt = _attempts.get(identifier)
     if not attempt:
-        raise InvestigationError(
+        raise ProjectError(
             "Sign-in attempt expired or belongs to another server session. Retry sign-in."
         )
     if attempt.status == "connecting" and time.monotonic() > attempt.expires:
@@ -328,10 +326,10 @@ def cancel(identifier: str) -> None:
 def authorization_url(identifier: str) -> str:
     attempt = _attempts.get(identifier)
     if not attempt or attempt.status != "connecting" or attempt.consumed:
-        raise InvestigationError("Sign-in attempt is no longer active. Retry sign-in.")
+        raise ProjectError("Sign-in attempt is no longer active. Retry sign-in.")
     url = _urls.pop(identifier, None)
     if url is None:
-        raise InvestigationError(
+        raise ProjectError(
             "The sign-in browser was already opened. Complete it or cancel and retry."
         )
     return url  # Browser handoff can be opened once only.
@@ -456,7 +454,7 @@ async def callback(
         UnicodeError,
         jwt.PyJWTError,
         AuthFailure,
-        InvestigationError,
+        ProjectError,
         httpx.HTTPError,
         TimeoutError,
         asyncio.IncompleteReadError,
@@ -574,11 +572,11 @@ async def preferences() -> dict:
 
 async def select(mode: str, account_id: str | None = None) -> None:
     if mode not in {"chatgpt", "api_key"}:
-        raise InvestigationError("Choose ChatGPT plan or API-key billing explicitly.")
+        raise ProjectError("Choose ChatGPT plan or API-key billing explicitly.")
     async with transaction() as state:
         if account_id is not None:
             if account_id not in state["accounts"]:
-                raise InvestigationError("Account was not found.")
+                raise ProjectError("Account was not found.")
             state["active"] = account_id
         state["mode"] = mode
 

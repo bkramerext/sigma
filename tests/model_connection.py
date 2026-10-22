@@ -1,4 +1,4 @@
-"""No-network fixtures: classified discovery, cache/coalescing, investigation model snapshots."""
+"""No-network fixtures: classified discovery, cache/coalescing, project model snapshots."""
 
 import asyncio
 import json
@@ -12,15 +12,15 @@ import httpx
 
 from sigma import chatgpt_auth
 from sigma import openai_connection as connection
-from sigma.investigations import (
-    InvestigationError,
-    create_strategy,
-    initialize_investigation,
-    inspect_investigation,
-    investigation_settings,
-    update_investigation,
-)
 from sigma.model_catalog import CATALOG
+from sigma.projects import (
+    ProjectError,
+    create_strategy,
+    initialize_project,
+    inspect_project,
+    project_settings,
+    update_project,
+)
 from sigma.proposals import accepted_provenance, configuration, generate_proposal
 
 REAL_CLIENT = httpx.AsyncClient
@@ -157,10 +157,10 @@ async def checks():
     )
     with TemporaryDirectory() as directory:
         path = Path(directory) / "settings.sigma"
-        initialize_investigation(
+        initialize_project(
             path, "Snapshot", "A mathematical question", "mathematical", "gpt-6-luna", "xhigh"
         )
-        initial = inspect_investigation(path)
+        initial = inspect_project(path)
         request_started = asyncio.Event()
         release = asyncio.Event()
 
@@ -195,12 +195,12 @@ async def checks():
                 generate_proposal(str(path), "A starting constraint", True)
             )
             await asyncio.wait_for(request_started.wait(), 2)
-            prior = asdict(investigation_settings(initial.investigation))
+            prior = asdict(project_settings(initial.project))
             settings_update = {
                 key: value for key, value in prior.items() if key != "investigation_type"
             }
             settings_update["research_mode"] = prior["investigation_type"]
-            update_investigation(
+            update_project(
                 path,
                 **{**settings_update, "ai_model": "gpt-6-astra", "reasoning_effort": "low"},
                 expected=prior,
@@ -211,14 +211,14 @@ async def checks():
             assert (
                 provenance.model == "gpt-6-luna-returned" and provenance.reasoning_effort == "xhigh"
             )
-            before = inspect_investigation(path)
-            assert not before.investigation.strategies
+            before = inspect_project(path)
+            assert not before.project.strategies
             accepted = create_strategy(
                 path, DRAFT["title"], DRAFT["approach"], DRAFT["summary"], provenance
             )
-            assert accepted.investigation.ai_model == "gpt-6-astra"
-            assert accepted.investigation.strategies[-1].provenance == provenance
-            assert inspect_investigation(path) == accepted
+            assert accepted.project.ai_model == "gpt-6-astra"
+            assert accepted.project.strategies[-1].provenance == provenance
+            assert inspect_project(path) == accepted
         reset()
         with patch(
             "sigma.openai_connection.httpx.AsyncClient",
@@ -232,23 +232,23 @@ async def checks():
             assert not config["available"] and config["model"] == "gpt-6-astra"
             try:
                 await generate_proposal(str(path), consent=True)
-            except InvestigationError as exc:
+            except ProjectError as exc:
                 assert "unavailable" in str(exc)
             else:
                 raise AssertionError("No model fallback allowed")
         # Catalog removal never erases settings or forces metadata edits to make network calls.
         with patch.dict(CATALOG, {}, clear=True):
-            prior = asdict(investigation_settings(inspect_investigation(path).investigation))
+            prior = asdict(project_settings(inspect_project(path).project))
             settings_update = {
                 key: value for key, value in prior.items() if key != "investigation_type"
             }
             settings_update["research_mode"] = prior["investigation_type"]
-            edited = update_investigation(
+            edited = update_project(
                 path, **{**settings_update, "title": "Still editable"}, expected=prior
             )
-            assert edited.investigation.ai_model == "gpt-6-astra"
+            assert edited.project.ai_model == "gpt-6-astra"
     print(
-        "PASS per-investigation model/actual effort request, immutable concurrent generation metadata, signed acceptance, unavailable choice/no fallback and offline metadata edits"
+        "PASS per-project model/actual effort request, immutable concurrent generation metadata, signed acceptance, unavailable choice/no fallback and offline metadata edits"
     )
 
 

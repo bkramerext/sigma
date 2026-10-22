@@ -1,4 +1,4 @@
-"""Six-entry application access index for investigations the user opened or created."""
+"""Six-entry application access index for projects the user opened or created."""
 
 import fcntl
 import json
@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from sigma.investigations import (
+from sigma.projects import (
     ROOT,
-    InvestigationError,
-    InvestigationView,
+    ProjectError,
+    ProjectView,
     _stage,
-    inspect_investigation,
+    inspect_project,
 )
 from sigma.ui_instance import private_directory
 
@@ -31,13 +31,13 @@ def state_directory() -> Path:
             or path.resolve().is_relative_to(ROOT)
             or any(part.endswith(".sigma") for part in path.resolve().parts)
         ):
-            raise InvestigationError(
-                "SIGMA_STATE_DIR must be absolute and outside the checkout/investigation packages."
+            raise ProjectError(
+                "SIGMA_STATE_DIR must be absolute and outside the checkout/project packages."
             )
     else:
         base = Path(os.environ.get("XDG_STATE_HOME", str(Path.home().resolve() / ".local/state")))
         if not base.is_absolute():
-            raise InvestigationError("XDG_STATE_HOME must be absolute.")
+            raise ProjectError("XDG_STATE_HOME must be absolute.")
         # Create missing application-state parents; refuse symlinks and foreign owners.
         for parent in reversed((base, *base.parents)):
             if parent == Path(parent.anchor):
@@ -46,20 +46,16 @@ def state_directory() -> Path:
                 parent.mkdir(mode=0o700)
             info = parent.lstat()
             if not stat.S_ISDIR(info.st_mode) or (parent == base and info.st_uid != os.getuid()):
-                raise InvestigationError("Unsafe application state parent.")
+                raise ProjectError("Unsafe application state parent.")
         path = base / "sigma"
     if path.resolve().is_relative_to(ROOT) or any(
         part.endswith(".sigma") for part in path.resolve().parts
     ):
-        raise InvestigationError(
-            "Application state must remain outside the checkout/investigation packages."
-        )
+        raise ProjectError("Application state must remain outside the checkout/project packages.")
     try:
         private_directory(path)
     except (OSError, RuntimeError):
-        raise InvestigationError(
-            "Recent Investigations needs an owned private 0700 state directory."
-        ) from None
+        raise ProjectError("Recent Projects needs an owned private 0700 state directory.") from None
     return path
 
 
@@ -147,11 +143,11 @@ def _index():
         original = json.dumps(value, sort_keys=True)
         # Older releases inserted canonical stock examples in Recents. Keep
         # their directories but show only independent user work here.
-        from sigma.stock import stock_investigation_ids
+        from sigma.stock import stock_project_ids
 
         try:
-            stock_ids = stock_investigation_ids()
-        except (InvestigationError, OSError, ValueError, TypeError, KeyError):
+            stock_ids = stock_project_ids()
+        except (ProjectError, OSError, ValueError, TypeError, KeyError):
             stock_ids = set()
         value["entries"] = [
             entry
@@ -175,52 +171,48 @@ def _index():
             finally:
                 staged.unlink(missing_ok=True)
     except (OSError, ValueError, TypeError, KeyError):
-        raise InvestigationError(
-            "Recent Investigations index is unavailable. Check its owned 0700 directory/0600 files; research was not altered."
+        raise ProjectError(
+            "Recent Projects index is unavailable. Check its owned 0700 directory/0600 files; research was not altered."
         ) from None
     finally:
         if descriptor is not None:
             os.close(descriptor)
 
 
-def record_access(view: InvestigationView) -> None:
+def record_access(view: ProjectView) -> None:
     """A secondary index failure must not turn a successful research write into a retry."""
-    from sigma.stock import stock_investigation_ids
+    from sigma.stock import stock_project_ids
 
     try:
-        if view.investigation.id in stock_investigation_ids():
+        if view.project.id in stock_project_ids():
             return
-    except (InvestigationError, OSError, ValueError, TypeError, KeyError):
+    except (ProjectError, OSError, ValueError, TypeError, KeyError):
         pass
     try:
         with _index() as index:
             index["entries"] = [
                 {
-                    "id": str(UUID(view.investigation.id)),
+                    "id": str(UUID(view.project.id)),
                     "path": view.path,
                     "accessed_at": datetime.now(UTC).isoformat(),
                     "included_example": False,
                 },
-                *(
-                    entry
-                    for entry in index["entries"]
-                    if entry["id"] != str(UUID(view.investigation.id))
-                ),
+                *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
             ][:6]
-    except InvestigationError:
+    except ProjectError:
         print(
-            "Recent Investigations could not be updated. The investigation operation succeeded; check application state permissions.",
+            "Recent Projects could not be updated. The project operation succeeded; check application state permissions.",
             file=sys.stderr,
         )
 
 
-def forget_recent(investigation_id: str) -> None:
+def forget_recent(project_id: str) -> None:
     with _index() as index:
-        index["entries"] = [entry for entry in index["entries"] if entry["id"] != investigation_id]
+        index["entries"] = [entry for entry in index["entries"] if entry["id"] != project_id]
 
 
 @dataclass(frozen=True)
-class RecentInvestigation:
+class RecentProject:
     id: str
     path: str
     title: str
@@ -232,42 +224,41 @@ class RecentInvestigation:
     error: str | None = None
 
 
-def recent_investigations() -> dict:
+def recent_projects() -> dict:
     with _index() as index:
         entries = [dict(entry) for entry in index["entries"]]
     recent = []
     for entry in entries:
         try:
-            view = inspect_investigation(entry["path"])
-            if str(UUID(view.investigation.id)) != entry["id"]:
-                raise InvestigationError("Investigation identity changed")
+            view = inspect_project(entry["path"])
+            if str(UUID(view.project.id)) != entry["id"]:
+                raise ProjectError("Project identity changed")
             recent.append(
                 asdict(
-                    RecentInvestigation(
+                    RecentProject(
                         **entry,
-                        title=view.investigation.title,
-                        investigation_type=view.investigation.investigation_type,
-                        strategy_count=len(view.investigation.active_order),
+                        title=view.project.title,
+                        investigation_type=view.project.investigation_type,
+                        strategy_count=len(view.project.active_order),
                         available=True,
                     )
                 )
             )
-        except (InvestigationError, OSError):
+        except (ProjectError, OSError):
             recent.append(
                 asdict(
-                    RecentInvestigation(
+                    RecentProject(
                         **entry,
                         title=Path(entry["path"]).name,
                         investigation_type=None,
                         strategy_count=None,
                         available=False,
-                        error="Unavailable or changed identity. Use Open Investigation to locate it, or forget this entry.",
+                        error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",
                     )
                 )
             )
-    # Keep the former response key during the API transition.
-    return {"investigations": recent, "projects": recent}
+    return {"projects": recent}
 
 
-def home_investigations() -> dict:
-    return recent_investigations()
+def home_projects() -> dict:
+    return recent_projects()

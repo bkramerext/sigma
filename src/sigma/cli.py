@@ -1,53 +1,46 @@
-"""JSON investigation commands and streamed repository setup/verification commands."""
+"""JSON project commands and streamed repository setup/verification commands."""
 
 import argparse
 import json
 import sys
 from dataclasses import asdict
 
-from sigma.investigations import (
-    InvestigationError,
+from sigma.local_config import load_local_config
+from sigma.projects import (
+    ProjectError,
     change_stage,
-    close_investigation,
-    create_investigation,
+    close_project,
+    create_project,
     create_strategy,
     edit_strategy,
-    initialize_investigation,
-    inspect_investigation,
-    investigation_payload,
+    initialize_project,
+    inspect_project,
     list_events,
     list_strategies,
-    open_investigation,
+    open_project,
     remove_strategy,
     reorder_strategies,
-    update_investigation,
+    update_project,
 )
-from sigma.local_config import load_local_config
 from sigma.text_views import inspect_text, save_source
 from sigma.tooling import run_tooling
 from sigma.ui import run_shutdown, run_ui
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SIGMA investigations and repository maintenance")
+    parser = argparse.ArgumentParser(description="SIGMA projects and repository maintenance")
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init")
     init.add_argument("path")
     init.add_argument("--title", required=True)
     init.add_argument("--problem", required=True)
-    init.add_argument(
-        "--investigation-type", "--research-mode", dest="investigation_type", default="default"
-    )
+    init.add_argument("--research-mode", default="default")
     init.add_argument("--model", default="gpt-6.1-sol")
     init.add_argument("--thinking", default="high")
-    create = commands.add_parser(
-        "create", help="Create an investigation in its configured location"
-    )
+    create = commands.add_parser("create", help="Create a project in the configured projects root")
     create.add_argument("--title", required=True)
     create.add_argument("--problem", required=True)
-    create.add_argument(
-        "--investigation-type", "--research-mode", dest="investigation_type", default="default"
-    )
+    create.add_argument("--research-mode", default="default")
     create.add_argument("--model", default="gpt-6.1-sol")
     create.add_argument("--thinking", default="high")
     for name in ("open", "inspect", "events"):
@@ -80,24 +73,20 @@ def main() -> None:
     reorder.add_argument("path")
     reorder.add_argument("--order", nargs="+", required=True)
     reorder.add_argument("--expected-order", nargs="+", required=True)
-    edit_investigation = commands.add_parser(
-        "edit-investigation",
-        help="Atomically update investigation settings with a prior settings JSON snapshot",
-        aliases=["edit-project"],
+    edit_project = commands.add_parser(
+        "edit-project",
+        help="Atomically update project settings with a prior settings JSON snapshot",
     )
-    edit_investigation.add_argument("path")
-    for field in ("title", "problem", "model", "thinking", "expected"):
-        edit_investigation.add_argument("--" + field, required=True)
-    edit_investigation.add_argument(
-        "--investigation-type", "--research-mode", dest="investigation_type", required=True
-    )
+    edit_project.add_argument("path")
+    for field in ("title", "problem", "research-mode", "model", "thinking", "expected"):
+        edit_project.add_argument("--" + field, required=True)
     text = commands.add_parser("text", help="Inspect current and cached Plain/Markdown text")
     text.add_argument("path")
-    text.add_argument("--scope", choices=["investigation", "strategy"], required=True)
+    text.add_argument("--scope", choices=["project", "strategy"], required=True)
     text.add_argument("--strategy-id")
     save_text = commands.add_parser("save-text", help="Save an authored Plain or Markdown source")
     save_text.add_argument("path")
-    save_text.add_argument("--scope", choices=["investigation", "strategy"], required=True)
+    save_text.add_argument("--scope", choices=["project", "strategy"], required=True)
     save_text.add_argument("--strategy-id")
     save_text.add_argument("--format", choices=["plain", "markdown"], required=True)
     save_text.add_argument("--body", required=True)
@@ -117,62 +106,58 @@ def main() -> None:
     try:
         load_local_config()
         if args.command == "init":
-            result = investigation_payload(
-                initialize_investigation(
+            result = asdict(
+                initialize_project(
                     args.path,
                     args.title,
                     args.problem,
-                    args.investigation_type,
+                    args.research_mode,
                     args.model,
                     args.thinking,
                 )
             )
         elif args.command == "create":
-            result = investigation_payload(
-                create_investigation(
-                    args.title, args.problem, args.investigation_type, args.model, args.thinking
+            result = asdict(
+                create_project(
+                    args.title, args.problem, args.research_mode, args.model, args.thinking
                 )
             )
-        elif args.command in {"edit-investigation", "edit-project"}:
+        elif args.command == "edit-project":
             try:
                 expected = json.loads(args.expected)
             except ValueError as exc:
-                raise InvestigationError("--expected must be a JSON settings snapshot") from exc
-            result = investigation_payload(
-                update_investigation(
+                raise ProjectError("--expected must be a JSON settings snapshot") from exc
+            result = asdict(
+                update_project(
                     args.path,
                     args.title,
                     args.problem,
-                    args.investigation_type,
+                    args.research_mode,
                     args.model,
                     args.thinking,
                     expected,
                 )
             )
         elif args.command == "open":
-            result = investigation_payload(open_investigation(args.path))
+            result = asdict(open_project(args.path))
         elif args.command == "inspect":
-            result = investigation_payload(inspect_investigation(args.path))
+            result = asdict(inspect_project(args.path))
         elif args.command == "new-strategy":
-            result = investigation_payload(create_strategy(args.path, args.title, args.approach))
+            result = asdict(create_strategy(args.path, args.title, args.approach))
         elif args.command == "edit-strategy":
-            result = investigation_payload(
-                edit_strategy(args.path, args.strategy_id, args.title, args.approach)
-            )
+            result = asdict(edit_strategy(args.path, args.strategy_id, args.title, args.approach))
         elif args.command == "remove-strategy":
-            result = investigation_payload(remove_strategy(args.path, args.strategy_id))
+            result = asdict(remove_strategy(args.path, args.strategy_id))
         elif args.command == "stage-strategy":
-            result = investigation_payload(change_stage(args.path, args.strategy_id, args.stage))
+            result = asdict(change_stage(args.path, args.strategy_id, args.stage))
         elif args.command == "reorder-strategies":
-            result = investigation_payload(
-                reorder_strategies(args.path, args.order, args.expected_order)
-            )
+            result = asdict(reorder_strategies(args.path, args.order, args.expected_order))
         elif args.command == "strategies":
             result = {"strategies": [asdict(s) for s in list_strategies(args.path)]}
         elif args.command == "text":
             result = inspect_text(args.path, args.scope, args.strategy_id)
         elif args.command == "save-text":
-            result = investigation_payload(
+            result = asdict(
                 save_source(
                     args.path,
                     args.scope,
@@ -185,14 +170,14 @@ def main() -> None:
         elif args.command == "events":
             result = {"events": [asdict(e) for e in list_events(args.path)]}
         else:
-            close_investigation()
+            close_project()
             result = {"closed": True}
         if args.command == "init":
             from sigma.recents import record_access
 
-            record_access(inspect_investigation(args.path))
+            record_access(inspect_project(args.path))
         print(json.dumps(result))
-    except (InvestigationError, RuntimeError) as exc:
+    except (ProjectError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}), file=sys.stderr)
         sys.exit(2)
 

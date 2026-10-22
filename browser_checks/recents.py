@@ -5,7 +5,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-SOURCE = Path("examples/nonconsecutive-subset-sums/investigation.json")
+SOURCE = Path("examples/nonconsecutive-subset-sums/project.json")
 original = SOURCE.read_bytes()
 
 with sync_playwright() as playwright:
@@ -28,18 +28,18 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", forward)
     page.goto("http://127.0.0.1:5173/")
-    recent_tab = page.get_by_role("tab", name="Recent Investigations")
-    stock_tab = page.get_by_role("tab", name="Stock Investigations")
-    assert page.get_by_role("tab").all_text_contents() == ["Stock Investigations", "Recent Investigations"]
+    recent_tab = page.get_by_role("tab", name="Recent Projects")
+    stock_tab = page.get_by_role("tab", name="Stock Projects")
+    assert page.get_by_role("tab").all_text_contents() == ["Stock Projects", "Recent Projects"]
     expect(stock_tab).to_have_attribute("aria-selected", "true")
-    assert page.get_by_role("heading", name="Recent Investigations").count() == 0
-    assert page.get_by_role("heading", name="Stock Investigations").count() == 0
+    assert page.get_by_role("heading", name="Recent Projects").count() == 0
+    assert page.get_by_role("heading", name="Stock Projects").count() == 0
     assert page.locator(".home-hero h1").evaluate("e=>getComputedStyle(e).userSelect") == "none"
-    assert page.request.get("http://127.0.0.1:8001/api/investigations/recent").json()["investigations"] == []
+    assert page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"] == []
     assert abs(page.locator(".home-slogan").bounding_box()["x"]) < 1
     assert page.locator(".home-hero").bounding_box()["x"] > 20
-    open_action = page.locator(".home-entry-actions").get_by_role("button", name="Open Investigation")
-    new_action = page.locator(".home-entry-actions").get_by_role("button", name="New Investigation")
+    open_action = page.locator(".home-entry-actions").get_by_role("button", name="Open Project")
+    new_action = page.locator(".home-entry-actions").get_by_role("button", name="New Project")
     button_style = "e => { const s = getComputedStyle(e); return [s.backgroundColor, s.backgroundImage, s.color, s.borderColor] }"
     assert open_action.evaluate(button_style) == new_action.evaluate(button_style)
     assert page.locator(".home-hero h1").evaluate("e => getComputedStyle(e).color") == open_action.evaluate("e => getComputedStyle(e).color")
@@ -56,10 +56,10 @@ with sync_playwright() as playwright:
     stock_tab.focus()
     page.keyboard.press("ArrowRight")
     expect(recent_tab).to_be_focused()
-    expect(page.get_by_text("No recent investigations yet.", exact=False)).to_be_visible()
+    expect(page.get_by_text("No recent projects yet.", exact=False)).to_be_visible()
     page.keyboard.press("ArrowLeft")
     expect(stock_tab).to_be_focused()
-    stock_panel = page.get_by_role("tabpanel", name="Stock Investigations")
+    stock_panel = page.get_by_role("tabpanel", name="Stock Projects")
     expect(stock_panel.get_by_text("Nonconsecutive Subset Sums Modulo 3")).to_be_visible()
     expect(stock_panel.get_by_text("Did Jesus Use Cannabis?")).to_be_visible()
     assert stock_panel.locator(".stock-open strong").all_text_contents()[-1] == "Did Jesus Use Cannabis?"
@@ -72,10 +72,10 @@ with sync_playwright() as playwright:
     expect(page.locator(".strategy-row")).to_have_count(3)
     stock_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     assert stock_path.endswith("/nonconsecutive-subset-sums.sigma")
-    assert Path(stock_path, "investigation.json").read_bytes() == original
-    saved = page.request.post("http://127.0.0.1:8001/api/investigations/strategies", data={"path": stock_path, "title": "Browser stock addition", "approach": "Keep this strategy"})
+    assert Path(stock_path, "project.json").read_bytes() == original
+    saved = page.request.post("http://127.0.0.1:8001/api/projects/strategies", data={"path": stock_path, "title": "Browser stock addition", "approach": "Keep this strategy"})
     assert saved.status == 201
-    close_button = page.get_by_role("button", name="Close investigation")
+    close_button = page.get_by_role("button", name="Close project")
     assert close_button.evaluate("e=>getComputedStyle(e).borderRadius") == "50%"
     base_close = close_button.evaluate("e=>getComputedStyle(e).backgroundColor")
     close_button.hover()
@@ -84,9 +84,9 @@ with sync_playwright() as playwright:
     close_button.click()
     expect(stock_tab).to_have_attribute("aria-selected", "true")
     recent_tab.click()
-    recent_panel = page.get_by_role("tabpanel", name="Recent Investigations")
-    expect(recent_panel.get_by_text("No recent investigations yet.", exact=False)).to_be_visible()
-    assert page.request.get("http://127.0.0.1:8001/api/investigations/recent").json()["investigations"] == []
+    recent_panel = page.get_by_role("tabpanel", name="Recent Projects")
+    expect(recent_panel.get_by_text("No recent projects yet.", exact=False)).to_be_visible()
+    assert page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"] == []
 
     stock_tab.click()
     expect(stock_panel.get_by_text("4 strategies")).to_be_visible()
@@ -94,24 +94,24 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name="Strategies", exact=True)).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(4)
     assert page.evaluate("new URL(location.href).searchParams.get('path')") == stock_path
-    page.get_by_role("button", name="Close investigation").click()
-    assert page.request.get("http://127.0.0.1:8001/api/investigations/recent").json()["investigations"] == []
+    page.get_by_role("button", name="Close project").click()
+    assert page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"] == []
 
-    created = page.request.post("http://127.0.0.1:8001/api/investigations/create", data={"title": "Browser recent", "problem": "Own research"})
+    created = page.request.post("http://127.0.0.1:8001/api/projects/create", data={"title": "Browser recent", "problem": "Own research"})
     assert created.status == 201
-    listing = page.request.get("http://127.0.0.1:8001/api/investigations/recent").json()["investigations"]
-    assert len(listing) == 1 and listing[0]["id"] == created.json()["investigation"]["id"]
+    listing = page.request.get("http://127.0.0.1:8001/api/projects/recent").json()["projects"]
+    assert len(listing) == 1 and listing[0]["id"] == created.json()["project"]["id"]
     page.goto("http://127.0.0.1:5173/")
     recent_tab.click()
     expect(recent_panel.get_by_text("Browser recent")).to_be_visible()
     assert recent_panel.locator(".recent-open small").first.evaluate("e=>getComputedStyle(e).fontWeight") == "400"
 
-    # Losing the investigation path must preserve an actionable unavailable recent.
+    # Losing the project path must preserve an actionable unavailable recent.
     missing = Path(listing[0]["path"])
     missing.rename(missing.with_name(missing.name + ".moved"))
     page.goto("http://127.0.0.1:5173/")
     recent_tab.click()
-    recent_panel = page.get_by_role("tabpanel", name="Recent Investigations")
+    recent_panel = page.get_by_role("tabpanel", name="Recent Projects")
     expect(recent_panel.get_by_text("Unavailable or changed identity.", exact=False)).to_be_visible()
     expect(recent_panel.locator(".recent-open").first).to_be_disabled()
     recent_panel.locator(".recent-forget").first.click()
@@ -128,15 +128,15 @@ with sync_playwright() as playwright:
         assert page.get_by_role("dialog").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.screenshot(path=f"/tmp/sigma-a11-workspace-{width}.png", full_page=True)
-        page.get_by_role("button", name="Close investigation").click()
+        page.get_by_role("button", name="Close project").click()
         expect(stock_panel).to_be_visible()
     assert SOURCE.read_bytes() == original
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.get_by_role("button", name="New Investigation", exact=True).click()
-    new_dialog = page.get_by_role("dialog", name="New Investigation")
+    page.get_by_role("button", name="New Project", exact=True).click()
+    new_dialog = page.get_by_role("dialog", name="New Project")
     expect(new_dialog).to_be_visible()
     assert new_dialog.locator(".settings-body").evaluate("e=>e.scrollHeight<=e.clientHeight")
-    page.screenshot(path="/tmp/sigma-a11-new-investigation-1280.png", full_page=True)
+    page.screenshot(path="/tmp/sigma-a11-new-project-1280.png", full_page=True)
     new_dialog.get_by_role("button", name="Cancel").click()
     assert not errors, errors
     browser.close()

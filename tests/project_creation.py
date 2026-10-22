@@ -1,4 +1,4 @@
-"""Managed investigation creation, research modes, legacy reads and safe failure."""
+"""Managed project creation, research modes, legacy reads and safe failure."""
 
 import json
 import os
@@ -12,19 +12,19 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from sigma.api import app
-from sigma.investigations import (
+from sigma.projects import (
     ROOT,
     STATE,
-    InvestigationError,
+    ProjectError,
     ResearchMode,
-    create_investigation,
+    create_project,
     create_strategy,
     edit_strategy,
-    initialize_investigation,
-    inspect_investigation,
-    investigation_destination,
-    investigations_root,
-    open_investigation,
+    initialize_project,
+    inspect_project,
+    open_project,
+    project_destination,
+    projects_root,
     remove_strategy,
 )
 
@@ -32,7 +32,7 @@ from sigma.investigations import (
 def rejects(action) -> None:
     try:
         action()
-    except InvestigationError:
+    except ProjectError:
         return
     raise AssertionError("Expected rejection")
 
@@ -43,31 +43,29 @@ def main() -> None:
         managed = root / "managed"
         managed.mkdir()
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(managed)}):
-            assert investigation_destination().root == str(managed)
+            assert project_destination().root == str(managed)
             for mode in ResearchMode:
                 title = f"A {mode.value} investigation"
-                expected = investigation_destination(title)
+                expected = project_destination(title)
                 assert expected.path and not expected.exists
-                created = create_investigation(title, "A bounded question", mode)
+                created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
-                assert created.investigation.schema_version == 7
-                assert created.investigation.research_mode == mode
+                assert created.project.schema_version == 6
+                assert created.project.research_mode == mode
                 raw = json.loads((Path(created.path) / STATE).read_bytes())
                 assert raw["investigation_type"] == mode.value
-                assert open_investigation(created.path) == created
-                assert investigation_destination(title).exists
+                assert open_project(created.path) == created
+                assert project_destination(title).exists
                 # Strategy mutations retain mode and v4 without a downgrade.
                 added = create_strategy(created.path, "Idea", "Approach")
-                strategy_id = added.investigation.strategies[0].id
+                strategy_id = added.project.strategies[0].id
                 edit_strategy(created.path, strategy_id, "Edited idea", "Updated approach")
                 removed = remove_strategy(created.path, strategy_id)
-                assert removed.investigation.research_mode == mode
-                assert removed.investigation.schema_version == 7
+                assert removed.project.research_mode == mode
+                assert removed.project.schema_version == 6
                 snapshot = (Path(created.path) / STATE).read_bytes()
                 rejects(
-                    lambda title=title, mode=mode: create_investigation(
-                        title, "Overwrite attempt", mode
-                    )
+                    lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
                 )
                 assert (Path(created.path) / STATE).read_bytes() == snapshot
             print(
@@ -89,27 +87,27 @@ def main() -> None:
                 ("a\nb", "Q", "default"),
             ):
                 rejects(
-                    lambda title=title, problem=problem, mode=mode: create_investigation(
+                    lambda title=title, problem=problem, mode=mode: create_project(
                         title, problem, mode
                     )
                 )
             assert set(managed.iterdir()) == existing
             # Real Unicode names remain safe and deterministic.
-            unicode_investigation = create_investigation("  Étude — Σ  ", "Question")
-            assert Path(unicode_investigation.path).parent == managed
-            assert investigation_destination("Étude — Σ").path == unicode_investigation.path
-            long_unicode = investigation_destination("𐐀" * 200)
+            unicode_project = create_project("  Étude — Σ  ", "Question")
+            assert Path(unicode_project.path).parent == managed
+            assert project_destination("Étude — Σ").path == unicode_project.path
+            long_unicode = project_destination("𐐀" * 200)
             assert long_unicode.path and len(Path(long_unicode.path).name.encode()) <= 255
             occupied = managed / "occupied.sigma"
             occupied.mkdir()
             notes = occupied / "notes.txt"
             notes.write_text("Irreplaceable notes")
-            rejects(lambda: create_investigation("Occupied", "Question"))
+            rejects(lambda: create_project("Occupied", "Question"))
             assert notes.read_text() == "Irreplaceable notes"
             broken = managed / "linked.sigma"
             broken.symlink_to(root / "does-not-exist")
-            assert investigation_destination("Linked").exists
-            rejects(lambda: create_investigation("Linked", "Question"))
+            assert project_destination("Linked").exists
+            rejects(lambda: create_project("Linked", "Question"))
             assert broken.is_symlink()
             print(
                 "PASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection"
@@ -117,44 +115,39 @@ def main() -> None:
 
             for operation in ("fsync", "link"):
                 with patch(
-                    f"sigma.investigations.os.{operation}",
-                    side_effect=OSError("publication failed"),
+                    f"sigma.projects.os.{operation}", side_effect=OSError("publication failed")
                 ):
-                    rejects(lambda: create_investigation("Failed publication", "Question"))
+                    rejects(lambda: create_project("Failed publication", "Question"))
                 assert not (managed / "failed-publication.sigma").exists()
 
             # If another local process inserts research into a reserved directory, never remove it.
             def inserted_research(path, *args):
                 (Path(path) / "notes.txt").write_text("Concurrent research")
-                raise InvestigationError("Initialization failed")
+                raise ProjectError("Initialization failed")
 
-            with patch(
-                "sigma.investigations.initialize_investigation", side_effect=inserted_research
-            ):
-                rejects(lambda: create_investigation("Preserve partial", "Question"))
+            with patch("sigma.projects.initialize_project", side_effect=inserted_research):
+                rejects(lambda: create_project("Preserve partial", "Question"))
             assert (
                 managed / "preserve-partial.sigma/notes.txt"
             ).read_text() == "Concurrent research"
 
             def competing_create(index):
                 try:
-                    return create_investigation("One reservation", f"Question {index}")
-                except InvestigationError:
+                    return create_project("One reservation", f"Question {index}")
+                except ProjectError:
                     return None
 
             with ThreadPoolExecutor(max_workers=4) as pool:
                 results = list(pool.map(competing_create, range(8)))
             assert sum(result is not None for result in results) == 1
             winner = next(result for result in results if result is not None)
-            assert inspect_investigation(winner.path) == winner
+            assert inspect_project(winner.path) == winner
             print(
                 "PASS publication rollback, concurrent data preservation and exclusive name reservation"
             )
 
             with TestClient(app) as client:
-                preview = client.get(
-                    "/api/investigations/destination", params={"title": "API math"}
-                )
+                preview = client.get("/api/projects/destination", params={"title": "API math"})
                 assert preview.status_code == 200
                 assert preview.json()["path"] == str(managed / "api-math.sigma")
                 body = {
@@ -162,34 +155,29 @@ def main() -> None:
                     "problem": "A mathematical question",
                     "research_mode": "mathematical",
                 }
-                response = client.post("/api/investigations/create", json=body)
+                response = client.post("/api/projects/create", json=body)
                 assert response.status_code == 201, response.text
-                assert response.json()["investigation"]["investigation_type"] == "mathematical"
-                assert client.post("/api/investigations/create", json=body).status_code == 400
+                assert response.json()["project"]["investigation_type"] == "mathematical"
+                assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(
-                        "/api/investigations/create", json={**body, "research_mode": "invalid"}
+                        "/api/projects/create", json={**body, "research_mode": "invalid"}
                     ).status_code
                     == 400
                 )
                 assert (
                     client.post(
-                        "/api/investigations/create",
-                        json={**body, "path": str(root / "escaped.sigma")},
+                        "/api/projects/create", json={**body, "path": str(root / "escaped.sigma")}
                     ).status_code
                     == 422
                 )
                 assert not (root / "escaped.sigma").exists()
                 assert (
-                    client.post(
-                        "/api/investigations/create", json={"title": "Incomplete"}
-                    ).status_code
+                    client.post("/api/projects/create", json={"title": "Incomplete"}).status_code
                     == 422
                 )
                 assert (
-                    client.get(
-                        "/api/investigations/destination", params={"title": "../bad"}
-                    ).status_code
+                    client.get("/api/projects/destination", params={"title": "../bad"}).status_code
                     == 400
                 )
             environment = {**os.environ, "SIGMA_PROJECTS_ROOT": str(managed)}
@@ -214,21 +202,18 @@ def main() -> None:
                 )
                 assert result.returncode == 0, result.stderr
                 data = json.loads(result.stdout)
-                assert data["investigation"]["investigation_type"] == mode.value
-                assert inspect_investigation(data["path"]).investigation.research_mode == mode
+                assert data["project"]["investigation_type"] == mode.value
+                assert inspect_project(data["path"]).project.research_mode == mode
             print("PASS API create/preview/errors and both CLI research modes")
 
         for version in (1, 2, 3):
             legacy = root / f"v{version}.sigma"
-            initialize_investigation(legacy, "Legacy", "Keep its history")
+            initialize_project(legacy, "Legacy", "Keep its history")
             if version >= 2:
                 created = create_strategy(legacy, "An idea", "An approach")
                 if version == 3:
                     edit_strategy(
-                        legacy,
-                        created.investigation.strategies[0].id,
-                        "Edited",
-                        "Preserve earlier text",
+                        legacy, created.project.strategies[0].id, "Edited", "Preserve earlier text"
                     )
             raw = json.loads((legacy / STATE).read_bytes())
             raw["schema_version"] = version
@@ -247,41 +232,38 @@ def main() -> None:
                     del item["removed_at"]
             (legacy / STATE).write_text(json.dumps(raw))
             before = (legacy / STATE).read_bytes()
-            view = open_investigation(legacy)
-            assert view.investigation.research_mode == ResearchMode.DEFAULT
+            view = open_project(legacy)
+            assert view.project.research_mode == ResearchMode.DEFAULT
             assert (legacy / STATE).read_bytes() == before
             updated = create_strategy(legacy, "Another", "Independent approach")
-            assert updated.investigation.research_mode == ResearchMode.DEFAULT
-            assert (
-                updated.investigation.events[: len(view.investigation.events)]
-                == view.investigation.events
-            )
+            assert updated.project.research_mode == ResearchMode.DEFAULT
+            assert updated.project.events[: len(view.project.events)] == view.project.events
         print("PASS v1/v2/v3 default-mode reads without rewriting and retained history on writes")
 
         for configured in (
             "relative",
             str(root / "missing"),
-            str(managed / "api-math.sigma/investigation.json"),
+            str(managed / "api-math.sigma/project.json"),
         ):
             with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": configured}):
-                rejects(lambda: create_investigation("Wrong location", "Question"))
+                rejects(lambda: create_project("Wrong location", "Question"))
         linked_root = root / "root-link"
         linked_root.symlink_to(managed)
         with patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(linked_root)}):
-            rejects(investigations_root)
+            rejects(projects_root)
         with (
             patch.dict(os.environ, {"SIGMA_PROJECTS_ROOT": str(managed)}),
-            patch("sigma.investigations.os.geteuid", return_value=-1),
+            patch("sigma.projects.os.geteuid", return_value=-1),
         ):
-            rejects(investigations_root)
+            rejects(projects_root)
         assert not (root / "missing").exists()
         with patch.dict(os.environ):
             os.environ.pop("SIGMA_PROJECTS_ROOT", None)
-            assert investigations_root() == (ROOT / "investigations").resolve()
+            assert projects_root() == (ROOT / "projects").resolve()
         print(
             "PASS explicit default/configured roots, missing parents, ownership and root symlinks"
         )
-    print("All investigation-creation scenarios passed.")
+    print("All project-creation scenarios passed.")
 
 
 if __name__ == "__main__":

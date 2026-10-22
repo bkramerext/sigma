@@ -15,15 +15,10 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from sigma.investigations import (
-    InvestigationError,
-    InvestigationView,
-    Provenance,
-    inspect_investigation,
-)
 from sigma.model_catalog import DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, models
 from sigma.plan_stream import completed, failure
+from sigma.projects import ProjectError, ProjectView, Provenance, inspect_project
 
 TIMEOUT_SECONDS = 60
 MAX_CONTEXT = 48000
@@ -43,11 +38,11 @@ class Proposal(BaseModel):
 
 
 async def configuration(
-    path: str | None = None, view: InvestigationView | None = None, context: dict | None = None
+    path: str | None = None, view: ProjectView | None = None, context: dict | None = None
 ) -> dict[str, Any]:
-    snapshot = view or (inspect_investigation(path) if path else None)
-    model = snapshot.investigation.ai_model if snapshot else DEFAULT_MODEL
-    effort = snapshot.investigation.reasoning_effort if snapshot else "high"
+    snapshot = view or (inspect_project(path) if path else None)
+    model = snapshot.project.ai_model if snapshot else DEFAULT_MODEL
+    effort = snapshot.project.reasoning_effort if snapshot else "high"
     context = context or await auth_context()
     discovery = await models(context=context)
     available = False
@@ -57,14 +52,14 @@ async def configuration(
         selected = next(c for c in discovery["models"] if c["id"] == model)
         available = selected["availability"] == "available"
         if not available and discovery["connection"]["status"] == "connected":
-            message = "Selected investigation model is unavailable to this API account. Change it explicitly in Edit Investigation; no fallback will be used."
+            message = "Selected project model is unavailable to this API account. Change it explicitly in Edit Project; no fallback will be used."
     except ValueError as exc:
         message = str(exc)
     return {
         "provider": "openai",
         "mode": discovery["connection"]["mode"],
         "binding": context["identity"],
-        "investigation_id": snapshot.investigation.id if snapshot else None,
+        "project_id": snapshot.project.id if snapshot else None,
         "model": model,
         "reasoning_effort": effort,
         "available": available,
@@ -77,10 +72,10 @@ async def configuration(
     }
 
 
-def _receipt(investigation_id: str, model: str, effort: str) -> str:
+def _receipt(project_id: str, model: str, effort: str) -> str:
     raw = json.dumps(
         {
-            "investigation_id": investigation_id,
+            "project_id": project_id,
             "model": model,
             "reasoning_effort": effort,
             "expires": int(time.time()) + 86400,
@@ -104,27 +99,27 @@ def accepted_provenance(receipt: str, path: str) -> Provenance:
         metadata = json.loads(raw)
         if (
             metadata["expires"] < time.time()
-            or metadata["investigation_id"] != inspect_investigation(path).investigation.id
+            or metadata["project_id"] != inspect_project(path).project.id
         ):
             raise ValueError()
         return Provenance("openai", metadata["model"], metadata.get("reasoning_effort"))
     except (ValueError, KeyError, TypeError) as exc:
-        raise InvestigationError(
+        raise ProjectError(
             "Draft receipt expired or is invalid. Regenerate, or save the text manually without AI attribution."
         ) from exc
 
 
-def context_for(path: str, seed: str, view: InvestigationView | None = None) -> tuple[str, str]:
+def context_for(path: str, seed: str, view: ProjectView | None = None) -> tuple[str, str]:
     if not isinstance(seed, str) or len(seed) > 4000:
-        raise InvestigationError("Starting point must be at most 4000 characters")
-    investigation = (view or inspect_investigation(path)).investigation
+        raise ProjectError("Starting point must be at most 4000 characters")
+    project = (view or inspect_project(path)).project
     from sigma.text_views import inspect_text
 
     context = json.dumps(
         {
-            "research_problem": investigation.problem,
-            "research_problem_format": inspect_text(path, "investigation")["source_format"],
-            "research_mode": investigation.research_mode,
+            "research_problem": project.problem,
+            "research_problem_format": inspect_text(path, "project")["source_format"],
+            "research_mode": project.research_mode,
             "existing_strategies": [
                 {
                     "title": s.title,
@@ -132,17 +127,17 @@ def context_for(path: str, seed: str, view: InvestigationView | None = None) -> 
                     "approach_format": inspect_text(path, "strategy", s.id)["source_format"],
                     "removed": s.removed_at is not None,
                 }
-                for s in investigation.strategies
+                for s in project.strategies
             ],
             "starting_point": seed.strip(),
         },
         ensure_ascii=False,
     )
     if len(context) > MAX_CONTEXT:
-        raise InvestigationError(
-            "Investigation context exceeds 48,000 characters. Generation was not sent; no research constraints were truncated."
+        raise ProjectError(
+            "Project context exceeds 48,000 characters. Generation was not sent; no research constraints were truncated."
         )
-    return investigation.id, context
+    return project.id, context
 
 
 async def generate_proposal(
@@ -150,24 +145,24 @@ async def generate_proposal(
     seed: str = "",
     consent: bool = False,
     expected_binding: str | None = None,
-    expected_investigation_id: str | None = None,
+    expected_project_id: str | None = None,
 ) -> dict[str, Any]:
-    view = inspect_investigation(path)
-    if expected_investigation_id is not None and view.investigation.id != expected_investigation_id:
-        raise InvestigationError(
-            "Investigation identity changed. Reopen it before generating; nothing was sent."
+    view = inspect_project(path)
+    if expected_project_id is not None and view.project.id != expected_project_id:
+        raise ProjectError(
+            "Project identity changed. Reopen it before generating; nothing was sent."
         )
     credential = await auth_context()
     if expected_binding is not None and expected_binding != credential["identity"]:
-        raise InvestigationError(
+        raise ProjectError(
             "AI account/billing mode changed. Review the current connection before generating; no request was sent."
         )
     config = await configuration(view=view, context=credential)
     if not config["available"]:
-        raise InvestigationError(config["message"])
-    investigation_id, context = context_for(path, seed, view)
+        raise ProjectError(config["message"])
+    project_id, context = context_for(path, seed, view)
     if not _gate.acquire(blocking=False):
-        raise InvestigationError(
+        raise ProjectError(
             "A proposal request is already running. Wait for it to finish or cancel it."
         )
     try:
@@ -196,7 +191,7 @@ async def generate_proposal(
             headers["Accept"] = "text/event-stream"
         current = await auth_context()
         if current["identity"] != credential["identity"] or current["mode"] != credential["mode"]:
-            raise InvestigationError(
+            raise ProjectError(
                 "AI account/billing mode changed. Retry explicitly with the selected account; no request was sent."
             )
         # asyncio.timeout bounds the whole operation, including slow streaming peers.
@@ -222,7 +217,7 @@ async def generate_proposal(
                 async for chunk in response.aiter_bytes():
                     data.extend(chunk)
                     if len(data) > MAX_RESPONSE:
-                        raise InvestigationError(
+                        raise ProjectError(
                             "Provider response exceeded the limit; no strategy was saved."
                         )
                 if response.status_code != 200:
@@ -240,7 +235,7 @@ async def generate_proposal(
                     )
                 raw = json.loads(data)
         if raw.get("status") != "completed":
-            raise InvestigationError(
+            raise ProjectError(
                 "Provider did not complete the proposal. Retry explicitly; no strategy was saved."
             )
         contents = [
@@ -250,12 +245,10 @@ async def generate_proposal(
             for c in item.get("content", [])
         ]
         if any(c.get("type") == "refusal" for c in contents):
-            raise InvestigationError("Provider declined this request; no strategy was saved.")
+            raise ProjectError("Provider declined this request; no strategy was saved.")
         texts = [c["text"] for c in contents if c.get("type") == "output_text"]
         if len(texts) != 1:
-            raise InvestigationError(
-                "Provider returned an invalid proposal; no strategy was saved."
-            )
+            raise ProjectError("Provider returned an invalid proposal; no strategy was saved.")
         proposal = Proposal.model_validate_json(texts[0])
         if (
             any(not text.strip() for text in proposal.model_dump().values())
@@ -272,12 +265,12 @@ async def generate_proposal(
             ga, gb = grams(a), grams(b)
             return len(ga & gb) / max(1, len(ga | gb))
 
-        for strategy in inspect_investigation(path).investigation.strategies:
+        for strategy in inspect_project(path).project.strategies:
             if (
                 normalize(proposal.title) == normalize(strategy.title)
                 or similarity(proposal.approach, strategy.approach) > 0.75
             ):
-                raise InvestigationError(
+                raise ProjectError(
                     "The proposal repeats an existing direction. Try a different starting point or explicitly regenerate."
                 )
         returned_model = raw.get("model", config["model"])
@@ -288,20 +281,20 @@ async def generate_proposal(
         return {
             "draft": proposal.model_dump(),
             "provenance": asdict(Provenance("openai", returned_model, config["reasoning_effort"])),
-            "receipt": _receipt(investigation_id, returned_model, config["reasoning_effort"]),
+            "receipt": _receipt(project_id, returned_model, config["reasoning_effort"]),
         }
-    except InvestigationError:
+    except ProjectError:
         raise
     except (TimeoutError, httpx.TimeoutException) as exc:
-        raise InvestigationError(
+        raise ProjectError(
             "Proposal timed out after 60 seconds. Retry explicitly; no strategy was saved."
         ) from exc
     except httpx.HTTPError as exc:
-        raise InvestigationError(
+        raise ProjectError(
             "Could not reach OpenAI. Check connectivity and retry explicitly; no strategy was saved."
         ) from exc
     except (ValueError, KeyError, TypeError, AttributeError, ValidationError) as exc:
-        raise InvestigationError(
+        raise ProjectError(
             "Provider returned malformed proposal data; no strategy was saved."
         ) from exc
     finally:

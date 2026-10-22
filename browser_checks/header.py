@@ -1,4 +1,4 @@
-"""Investigation header title, back navigation and connection disclosure."""
+"""Project header title, back navigation and connection disclosure."""
 
 import os
 from urllib.parse import urlencode
@@ -30,8 +30,8 @@ with sync_playwright() as playwright:
     page.route("**/api/**", forward)
     page.goto("http://127.0.0.1:5173/")
     expect(page.locator(".home-slogan")).to_be_visible()
-    home_open = page.locator(".home-entry-actions").get_by_role("button", name="Open Investigation")
-    home_new = page.locator(".home-entry-actions").get_by_role("button", name="New Investigation")
+    home_open = page.locator(".home-entry-actions").get_by_role("button", name="Open Project")
+    home_new = page.locator(".home-entry-actions").get_by_role("button", name="New Project")
     assert home_open.evaluate(STYLE) == home_new.evaluate(STYLE)
     home_open.evaluate("e => e.disabled = true")
     expect(home_open).to_be_disabled()
@@ -48,24 +48,24 @@ with sync_playwright() as playwright:
     home_pill_hover = home_pill.evaluate(PILL)
 
     created = page.request.post(
-        "http://127.0.0.1:8001/api/investigations/create",
+        "http://127.0.0.1:8001/api/projects/create",
         data={"title": TITLE, "problem": "Check whether a long header title remains readable."},
     )
     assert created.status == 201
     path = created.json()["path"]
-    page.goto(f"http://127.0.0.1:5173/investigation?{urlencode({'path': path})}")
-    header = page.locator(".investigation-art-header")
-    title = header.locator(".current-investigation")
+    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    header = page.locator(".project-art-header")
+    title = header.locator(".current-project")
     expect(title).to_have_text(TITLE)
     assert header.locator(".expansion").count() == 0
     expect(page.get_by_role("heading", name=TITLE)).to_be_visible()
-    art = header.locator(".investigation-header-art img")
+    art = header.locator(".project-header-art img")
     assert art.evaluate("e => [e.naturalWidth, e.naturalHeight]") == [1774, 887]
-    assert art.get_attribute("src") == "/sigma-investigation-header.png"
-    close = header.get_by_role("button", name="Close investigation")
+    assert art.get_attribute("src") == "/sigma-project-header.png"
+    close = header.get_by_role("button", name="Close project")
     pill = header.locator(".api-connection > summary")
     assert close.locator("svg").count() == 1
-    assert header.get_by_text("Close investigation", exact=True).count() == 0
+    assert header.get_by_text("Close project", exact=True).count() == 0
     assert pill.evaluate(PILL) == home_pill_style
     assert pill.locator('[role="status"]').inner_text() == home_label
     assert pill.locator(".connection-dot").get_attribute("class") == home_dot
@@ -92,7 +92,7 @@ with sync_playwright() as playwright:
         assert title.evaluate("e => getComputedStyle(e).overflow") == "visible"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         art_box = art.bounding_box()
-        art_frame = header.locator(".investigation-header-art").bounding_box()
+        art_frame = header.locator(".project-header-art").bounding_box()
         workspace_box = page.locator(".workspace-layout").bounding_box()
         title_box = title.bounding_box()
         close_box = close.bounding_box()

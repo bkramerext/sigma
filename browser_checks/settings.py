@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
-from sigma.investigations import create_strategy, inspect_investigation, investigation_settings, update_investigation
+from sigma.projects import create_strategy, inspect_project, project_settings, update_project
 
 
 def status_handler(data):
@@ -58,23 +58,23 @@ with sync_playwright() as p:
     expect(
         page.get_by_text("API authentication/reachability verified only.", exact=False)
     ).to_be_visible()
-    page.get_by_role("button", name="New Investigation", exact=True).click()
+    page.get_by_role("button", name="New Project", exact=True).click()
     dialog = page.get_by_role("dialog")
-    expect(dialog.get_by_role("heading", name="New Investigation", exact=True)).to_be_visible()
-    expect(dialog.get_by_label("Investigation name", exact=True)).to_be_focused()
-    labels = ["Investigation name", "Research problem", "Research mode", "AI model", "Thinking level"]
+    expect(dialog.get_by_role("heading", name="New Project", exact=True)).to_be_visible()
+    expect(dialog.get_by_label("Project name", exact=True)).to_be_focused()
+    labels = ["Project name", "Research problem", "Research mode", "AI model", "Thinking level"]
     assert dialog.locator("label").all_text_contents() == labels
     expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6.1-sol")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("high")
     assert dialog.get_by_label("AI model", exact=True).locator("option").count() == 3
     title = "Settings browser " + uuid4().hex[:6]
-    dialog.get_by_label("Investigation name", exact=True).fill(title)
+    dialog.get_by_label("Project name", exact=True).fill(title)
     dialog.get_by_label("Research problem", exact=True).fill(
         "Preserve the complete research problem.\nTest assumptions critically."
     )
     dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
     expect(dialog.get_by_role("button", name="Create", exact=True)).to_be_enabled()
-    destination = Path(dialog.locator(".investigation-destination code").inner_text())
+    destination = Path(dialog.locator(".project-destination code").inner_text())
     assert not destination.exists()
     for width in (1672, 768, 390, 320):
         page.set_viewport_size({"width": width, "height": 941 if width == 1672 else 844})
@@ -82,18 +82,18 @@ with sync_playwright() as p:
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-create-{width}.png", full_page=True)
     page.route(
-        "**/api/investigations/create",
+        "**/api/projects/create",
         lambda route: route.fulfill(
             status=400, content_type="application/json", body='{"error":"Injected create failure"}'
         ),
     )
     dialog.get_by_role("button", name="Create", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_text("Injected create failure")
-    expect(dialog.get_by_label("Investigation name", exact=True)).to_have_value(title)
+    expect(dialog.get_by_label("Project name", exact=True)).to_have_value(title)
     assert not destination.exists()
-    page.unroute("**/api/investigations/create")
+    page.unroute("**/api/projects/create")
     creates = []
-    page.route("**/api/investigations/create", lambda route: creates.append(route))
+    page.route("**/api/projects/create", lambda route: creates.append(route))
     dialog.locator("form").evaluate(
         '(form) => { for (let i=0;i<2;i++) form.dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})); }'
     )
@@ -107,9 +107,9 @@ with sync_playwright() as p:
             url=creates[0].request.url.replace("127.0.0.1:5173", "127.0.0.1:8001")
         )
     )
-    page.unroute("**/api/investigations/create")
+    page.unroute("**/api/projects/create")
     expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
-    state = destination / "investigation.json"
+    state = destination / "project.json"
     raw = json.loads(state.read_bytes())
     identity = raw["id"]
     assert (
@@ -120,14 +120,14 @@ with sync_playwright() as p:
     added = create_strategy(
         destination, "Existing research", "Full existing approach.\nDo not reset this research."
     )
-    strategy_id = added.investigation.strategies[-1].id
+    strategy_id = added.project.strategies[-1].id
     page.reload()
     expect(page.get_by_role("heading", name="Existing research", exact=True)).to_be_visible()
     before = state.read_bytes()
-    title_button = page.get_by_role("button", name=f"Edit investigation title: {title}")
+    title_button = page.get_by_role("button", name=f"Edit project title: {title}")
     title_button.focus()
     title_button.press("Enter")
-    title_input = page.get_by_role("textbox", name="Investigation title")
+    title_input = page.get_by_role("textbox", name="Project title")
     expect(title_input).to_be_focused()
     title_input.fill("Cancelled changes")
     title_input.press("Escape")
@@ -135,7 +135,7 @@ with sync_playwright() as p:
     assert state.read_bytes() == before
     title_button.click()
     title_input.fill("Renamed browser investigation")
-    page.locator(".investigation-title-actions").get_by_role("button", name="Save").click()
+    page.locator(".project-title-actions").get_by_role("button", name="Save").click()
     expect(page.get_by_role("heading", name="Renamed browser investigation")).to_be_visible()
     description_button = page.get_by_role("button", name="Edit Plain description")
     description_button.click()
@@ -145,13 +145,13 @@ with sync_playwright() as p:
     assert "A revised problem" not in state.read_text()
     description_button.click()
     description.fill("A revised problem.\nKeep uncertainty explicit.")
-    page.locator(".investigation-intro").get_by_role("button", name="Save text").click()
+    page.locator(".project-intro").get_by_role("button", name="Save text").click()
     expect(page.get_by_role("button", name="Edit Plain description")).to_contain_text(
         "A revised problem"
     )
-    settings_button = page.get_by_role("button", name="Investigation Settings", exact=True)
+    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
     settings_button.click()
-    expect(dialog.get_by_role("heading", name="Investigation Settings", exact=True)).to_be_visible()
+    expect(dialog.get_by_role("heading", name="Project Settings", exact=True)).to_be_visible()
     assert dialog.locator("label").all_text_contents() == [
         "Research mode",
         "AI model",
@@ -192,7 +192,7 @@ with sync_playwright() as p:
     dialog.get_by_label("AI model", exact=True).select_option("gpt-6-luna")
     dialog.get_by_label("Thinking level", exact=True).select_option("xhigh")
     page.route(
-        "**/api/investigations/update",
+        "**/api/projects/update",
         lambda route: route.fulfill(
             status=400, content_type="application/json", body='{"error":"Injected save failure"}'
         ),
@@ -200,7 +200,7 @@ with sync_playwright() as p:
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_text("Injected save failure")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
-    page.unroute("**/api/investigations/update")
+    page.unroute("**/api/projects/update")
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
     expect(settings_button).to_be_focused()
     raw = json.loads(state.read_bytes())
@@ -210,11 +210,11 @@ with sync_playwright() as p:
         and raw["reasoning_effort"] == "xhigh"
     )
     assert (
-        raw["strategies"][0]["id"] == strategy_id and raw["events"][-1]["kind"] == "investigation.updated"
+        raw["strategies"][0]["id"] == strategy_id and raw["events"][-1]["kind"] == "project.updated"
     )
-    assert inspect_investigation(destination).path == str(destination)
+    assert inspect_project(destination).path == str(destination)
     page.reload()
-    settings_button = page.get_by_role("button", name="Investigation Settings", exact=True)
+    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
     settings_button.click()
     expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
@@ -228,9 +228,9 @@ with sync_playwright() as p:
     dialog.press("Escape")
     settings_button.click()
     dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
-    latest = inspect_investigation(destination)
-    prior = asdict(investigation_settings(latest.investigation))
-    update_investigation(
+    latest = inspect_project(destination)
+    prior = asdict(project_settings(latest.project))
+    update_project(
         destination, **{**prior, "title": "Another editor changed this name"}, expected=prior
     )
     conflict_bytes = state.read_bytes()
@@ -240,7 +240,7 @@ with sync_playwright() as p:
     assert state.read_bytes() == conflict_bytes
     dialog.press("Escape")
     page.reload()
-    settings_button = page.get_by_role("button", name="Investigation Settings", exact=True)
+    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
     expect(settings_button).to_be_visible()
     no_models = {
         "models": [],
@@ -284,7 +284,7 @@ with sync_playwright() as p:
             status_handler(data),
         )
         page.reload()
-        expect(page.get_by_role("button", name="Investigation Settings", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()
         expect(
             page.get_by_text(
                 "OpenAI API · key billing" if status == "connected" else label, exact=True
@@ -295,11 +295,11 @@ with sync_playwright() as p:
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-status-{status}-320.png", full_page=True)
         page.unroute("**/api/ai/connection?*")
-    page.get_by_role("button", name="Close investigation", exact=True).click()
-    expect(page.get_by_role("button", name="New Investigation", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Close project", exact=True).click()
+    expect(page.get_by_role("button", name="New Project", exact=True)).to_be_visible()
     page.wait_for_timeout(150)
     page.go_back()
-    expect(page.get_by_role("button", name="Investigation Settings", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()
     assert (
         state.read_bytes() == json.dumps(json.loads(state.read_bytes()), indent=2).encode() + b"\n"
     )
@@ -307,5 +307,5 @@ with sync_playwright() as p:
     page.unroute_all(behavior="ignoreErrors")
     browser.close()
 print(
-    "PASS shared Create/Edit labels, defaults, offline selection retention, atomic save/no-op/error/retry/focus, UUID/path/history, per-investigation AI settings, responsive layouts and truthful status alternatives"
+    "PASS shared Create/Edit labels, defaults, offline selection retention, atomic save/no-op/error/retry/focus, UUID/path/history, per-project AI settings, responsive layouts and truthful status alternatives"
 )

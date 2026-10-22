@@ -11,8 +11,8 @@ from typing import Any
 import httpx
 
 from sigma import chatgpt_auth
-from sigma.investigations import InvestigationError
 from sigma.model_catalog import CATALOG, DEFAULT_MODEL
+from sigma.projects import ProjectError
 
 TTL = 60
 RETRY_COOLDOWN = 3
@@ -204,7 +204,7 @@ async def connection(refresh: bool = False, context: dict | None = None) -> dict
     try:
         context = context or await auth_context()
         prefs = await chatgpt_auth.preferences()
-    except InvestigationError:
+    except ProjectError:
         return {
             "mode": "unknown",
             "status": "unavailable",
@@ -287,7 +287,7 @@ async def models(refresh: bool = False, context: dict | None = None) -> dict[str
     elif default != DEFAULT_MODEL:
         message = f"Sol is unavailable to this account. Initial choice: {CATALOG[default]['label']} / High. Later requests never substitute models."
     if os.environ.get("SIGMA_AI_MODEL") and os.environ["SIGMA_AI_MODEL"] not in CATALOG:
-        message += " SIGMA_AI_MODEL is not a reviewed reasoning model; legacy investigations use the documented Sol/High default. Saved investigation choices are unaffected."
+        message += " SIGMA_AI_MODEL is not a reviewed reasoning model; legacy projects use the documented Sol/High default. Saved project choices are unaffected."
     return {
         "models": choices,
         "connection": state,

@@ -12,23 +12,23 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from sigma.api import app
-from sigma.investigations import (
-    InvestigationError,
+from sigma.projects import (
+    ProjectError,
     change_stage,
     create_strategy,
     edit_strategy,
-    initialize_investigation,
-    inspect_investigation,
-    investigation_settings,
+    initialize_project,
+    inspect_project,
+    project_settings,
     remove_strategy,
-    update_investigation,
+    update_project,
 )
 
 
 def rejects(action):
     try:
         action()
-    except InvestigationError:
+    except ProjectError:
         return
     raise AssertionError("Expected safe failure")
 
@@ -36,7 +36,7 @@ def rejects(action):
 def edit(path, values, prior):
     normalized = dict(values)
     normalized["research_mode"] = normalized.pop("investigation_type")
-    return update_investigation(path, **normalized, expected=prior)
+    return update_project(path, **normalized, expected=prior)
 
 
 def main():
@@ -44,17 +44,15 @@ def main():
         root = Path(directory)
         for version in range(1, 6):
             path = root / f"legacy{version}.sigma"
-            initialize_investigation(path, "Original", "Original question")
+            initialize_project(path, "Original", "Original question")
             if version >= 2:
-                first = create_strategy(path, "A", "First approach").investigation.strategies[0]
-                second = create_strategy(
-                    path, "B", "Keep archived content"
-                ).investigation.strategies[-1]
+                first = create_strategy(path, "A", "First approach").project.strategies[0]
+                second = create_strategy(path, "B", "Keep archived content").project.strategies[-1]
                 if version >= 3:
                     remove_strategy(path, second.id)
                 if version >= 5:
                     change_stage(path, first.id, "ready")
-            raw = json.loads((path / "investigation.json").read_bytes())
+            raw = json.loads((path / "project.json").read_bytes())
             raw["schema_version"] = version
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
@@ -71,17 +69,16 @@ def main():
             if version == 2:
                 for strategy in raw["strategies"]:
                     del strategy["removed_at"]
-            (path / "investigation.json").write_text(json.dumps(raw))
-            before = (path / "investigation.json").read_bytes()
-            view = inspect_investigation(path)
+            (path / "project.json").write_text(json.dumps(raw))
+            before = (path / "project.json").read_bytes()
+            view = inspect_project(path)
             assert (
-                view.investigation.ai_model == "gpt-6.1-sol"
-                and view.investigation.reasoning_effort == "high"
+                view.project.ai_model == "gpt-6.1-sol" and view.project.reasoning_effort == "high"
             )
-            assert (path / "investigation.json").read_bytes() == before
-            prior = asdict(investigation_settings(view.investigation))
+            assert (path / "project.json").read_bytes() == before
+            prior = asdict(project_settings(view.project))
             assert edit(path, prior, prior) == view
-            assert (path / "investigation.json").read_bytes() == before
+            assert (path / "project.json").read_bytes() == before
             values = {
                 **prior,
                 "title": "Renamed",
@@ -91,37 +88,35 @@ def main():
                 "reasoning_effort": "xhigh",
             }
             result = edit(path, values, prior)
-            assert result.path == view.path and result.investigation.id == view.investigation.id
-            assert result.investigation.schema_version == 7
-            assert result.investigation.strategies == view.investigation.strategies
-            assert result.investigation.active_order == view.investigation.active_order
-            assert result.investigation.events[:-1] == view.investigation.events
-            assert (path / f"investigation.v{version}.json").read_bytes() == before
-            investigation_change = result.investigation.events[-1].investigation_change
-            assert investigation_change is not None
-            assert asdict(investigation_change) == {
+            assert result.path == view.path and result.project.id == view.project.id
+            assert result.project.schema_version == 6
+            assert result.project.strategies == view.project.strategies
+            assert result.project.active_order == view.project.active_order
+            assert result.project.events[:-1] == view.project.events
+            assert (path / f"project.v{version}.json").read_bytes() == before
+            project_change = result.project.events[-1].project_change
+            assert project_change is not None
+            assert asdict(project_change) == {
                 "previous": prior,
                 "current": values,
             }
-            assert inspect_investigation(path) == result
+            assert inspect_project(path) == result
             # Reverse mode as an actual single transaction.
             back = edit(path, {**values, "investigation_type": "default"}, values)
-            assert back.investigation.id == view.investigation.id
+            assert back.project.id == view.project.id
         print(
             "PASS v1-v5 no-write/default/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen"
         )
         path = root / "new.sigma"
-        initial = initialize_investigation(
+        initial = initialize_project(
             path, "Created", "Question", "mathematical", "gpt-6.1-sol", "high"
         )
         rejects(
-            lambda: initialize_investigation(
-                root / "invalid-model.sigma", "Bad", "Question", ai_model=""
-            )
+            lambda: initialize_project(root / "invalid-model.sigma", "Bad", "Question", ai_model="")
         )
         assert not (root / "invalid-model.sigma").exists()
-        assert initial.investigation.schema_version == 7
-        prior = asdict(investigation_settings(initial.investigation))
+        assert initial.project.schema_version == 6
+        prior = asdict(project_settings(initial.project))
         for key, bad in (
             ("title", " "),
             ("problem", ""),
@@ -132,74 +127,68 @@ def main():
             ("reasoning_effort", "none"),
         ):
             rejects(lambda key=key, bad=bad: edit(path, {**prior, key: bad}, prior))
-        assert inspect_investigation(path) == initial
+        assert inspect_project(path) == initial
         for failure in ("os.replace", "os.fsync"):
-            with patch(
-                "sigma.investigations." + failure, side_effect=OSError("Injected save failure")
-            ):
+            with patch("sigma.projects." + failure, side_effect=OSError("Injected save failure")):
                 rejects(lambda: edit(path, {**prior, "title": "Failed"}, prior))
-            assert inspect_investigation(path) == initial
+            assert inspect_project(path) == initial
 
         def race(title):
             try:
                 return edit(path, {**prior, "title": title}, prior)
-            except InvestigationError:
+            except ProjectError:
                 return None
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(race, ["Editor one", "Editor two"]))
         assert sum(r is not None for r in results) == 1
-        current = inspect_investigation(path)
-        assert len(current.investigation.events) == 2
+        current = inspect_project(path)
+        assert len(current.project.events) == 2
         create_strategy(path, "Independent strategy", "No settings conflict")
-        values = asdict(investigation_settings(current.investigation))
+        values = asdict(project_settings(current.project))
         fresh = edit(path, {**values, "problem": "Concurrent strategy survives"}, values)
-        assert len(fresh.investigation.strategies) == 1
-        item = fresh.investigation.strategies[0]
+        assert len(fresh.project.strategies) == 1
+        item = fresh.project.strategies[0]
         change_stage(path, item.id, "exploring")
         edit_strategy(path, item.id, "Edited strategy", "New approach")
         remove_strategy(path, item.id)
-        assert inspect_investigation(path).investigation.schema_version == 7
+        assert inspect_project(path).project.schema_version == 6
         print(
             "PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes"
         )
-        valid = json.loads((path / "investigation.json").read_bytes())
+        valid = json.loads((path / "project.json").read_bytes())
         bad = root / "corrupt.sigma"
         bad.mkdir()
         for mutation in (
             lambda d: d.update(title="Unaudited"),
-            lambda d: [e for e in d["events"] if e["kind"] == "investigation.updated"][-1][
-                "investigation_change"
+            lambda d: [e for e in d["events"] if e["kind"] == "project.updated"][-1][
+                "project_change"
             ]["previous"].update(title="Broken chain"),
-            lambda d: d["events"][1]["investigation_change"]["current"].update(
-                title="Incorrect final"
-            ),
+            lambda d: d["events"][1]["project_change"]["current"].update(title="Incorrect final"),
             lambda d: d.update(reasoning_effort="invented"),
             lambda d: d.update(extra="unexpected"),
         ):
             raw = json.loads(json.dumps(valid))
             mutation(raw)
-            (bad / "investigation.json").write_text(json.dumps(raw))
-            rejects(lambda: inspect_investigation(bad))
+            (bad / "project.json").write_text(json.dumps(raw))
+            rejects(lambda: inspect_project(bad))
         with TestClient(app) as client:
-            expected = asdict(investigation_settings(inspect_investigation(path).investigation))
+            expected = asdict(project_settings(inspect_project(path).project))
             body = {"path": str(path), **expected, "title": "API name", "expected": expected}
-            response = client.post("/api/investigations/update", json=body)
+            response = client.post("/api/projects/update", json=body)
             assert response.status_code == 200, response.text
-            assert client.post("/api/investigations/update", json=body).status_code == 400
+            assert client.post("/api/projects/update", json=body).status_code == 400
             assert (
-                client.post(
-                    "/api/investigations/update", json={**body, "id": "new-guid"}
-                ).status_code
+                client.post("/api/projects/update", json={**body, "id": "new-guid"}).status_code
                 == 422
             )
-        expected = asdict(investigation_settings(inspect_investigation(path).investigation))
+        expected = asdict(project_settings(inspect_project(path).project))
         result = subprocess.run(
             [
                 sys.executable,
                 "-m",
                 "sigma.cli",
-                "edit-investigation",
+                "edit-project",
                 str(path),
                 "--title",
                 "CLI name",
@@ -219,9 +208,9 @@ def main():
             check=False,
         )
         assert result.returncode == 0, result.stderr
-        assert inspect_investigation(path).investigation.id == initial.investigation.id
+        assert inspect_project(path).project.id == initial.project.id
         print(
-            "PASS strict investigation audit corruption rejection and consistent API/CLI update/conflict behavior"
+            "PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior"
         )
 
 
