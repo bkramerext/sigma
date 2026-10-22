@@ -18,6 +18,15 @@ This assignment owns the *heavy* agentic scope previously described in `docs/ass
 6. **Human authority:** Return an editable **unsaved** strategy and public review summary, or an honest no-viable-proposal result. Persist only on explicit **Save strategy**. Preserve history, provenance, receipts, account/model/thinking binding and source revision safeguards.
 7. **Resilience:** Handle malformed provider output, provider rejection (including HTTP 200 error envelopes), invalid/missing terminal progress events, timeout, cancellation, disconnect, concurrent runs, and identity changes without corrupting investigation data. Reuse the existing request-error toast and maintain a recoverable UI; no silent billing fallback, implicit model switch or automatic retries.
 
+## Evidence capture before quality trials
+
+Complete [A16.1: Preserve agentic generation evidence](asn16.1.md) before running
+real-model qualitative comparisons. Public progress events alone do not retain
+the full Explorer, Critic, and revision outputs, so they are insufficient for
+independent assessment. A16.1 records validated outputs, decisions, and
+unsuccessful attempts without saving an unaccepted strategy. The evaluation
+rubric and general research-artifact system remain separate future work.
+
 ## Acceptance and tests
 
 Use the existing sample fixture `samples/counting-constrained-binary-strings/project.json`, starting with zero strategies. Verify a real Explore → Challenge → Decide path produces a reviewable unsaved draft; cancel leaves zero strategies; explicit save produces one persistent strategy. Run again with that strategy present and verify mechanism-aware overlap checking and an acceptable distinct proposal **or** justified no-viable-proposal outcome.
