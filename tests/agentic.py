@@ -139,6 +139,7 @@ async def main_async(root: Path):
     assert trace["terminal"]["summary"] == "A valid review sentence."
 
     incomplete = {**CANDIDATE, "summary": "An unfinished summary without punctuation"}
+
     async def incomplete_handler(request):
         return httpx.Response(200, json=provider_output(incomplete))
 

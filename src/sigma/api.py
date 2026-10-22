@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chatgpt_auth
+from sigma import chatgpt_auth, research_sessions
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
@@ -84,6 +84,43 @@ async def project_error(request: Request, exc: ProjectError):
 
 class OpenRequest(BaseModel):
     path: str
+
+
+class ResearchStartRequest(OpenRequest):
+    strategy_id: str = Field(min_length=1, max_length=100)
+    idempotency_key: str = Field(min_length=36, max_length=36)
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+
+
+class ResearchControlRequest(OpenRequest):
+    action: str = Field(min_length=4, max_length=6)
+
+
+@app.get("/api/projects/research-sessions")
+def research_sessions_view(path: str):
+    return {"sessions": research_sessions.list_sessions(path)}
+
+
+@app.get("/api/projects/research-sessions/{session_id}")
+def research_session_view(session_id: str, path: str):
+    return research_sessions.get_session(path, session_id)
+
+
+@app.post("/api/projects/research-sessions/start")
+async def research_start_view(body: ResearchStartRequest):
+    return await research_sessions.start_session(
+        body.path,
+        body.strategy_id,
+        body.idempotency_key,
+        body.expected_project_id,
+        body.expected_binding,
+    )
+
+
+@app.post("/api/projects/research-sessions/{session_id}/control")
+async def research_control_view(session_id: str, body: ResearchControlRequest):
+    return await research_sessions.control_session(body.path, session_id, body.action)
 
 
 class InitRequest(OpenRequest):

@@ -44,6 +44,121 @@ type ProjectView = {
   };
 };
 
+type ResearchArtifact = { id: string; sequence: number; claim_or_question: string; method: string; evidence_status: string; skeptic_response: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; note: string };
+type ResearchSession = { id: string; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed'; model: string; mode: string; calls_used: number; call_limit: number; cycle: number; current_question: string; message: string; artifacts: ResearchArtifact[]; created_at: string };
+
+function ResearchSessionPanel({ path, projectId, strategy }: { path: string; projectId: string; strategy: Strategy }) {
+  const [session, setSession] = useState<ResearchSession | null>(null);
+  const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const idempotencyKey = useRef<string | null>(null);
+  const previousStatus = useRef<ResearchSession['status'] | null>(null);
+  const readErrorReported = useRef(false);
+  const active = session && (session.status === 'queued' || session.status === 'running');
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const query = new URLSearchParams({ path });
+    const response = await fetch(`/api/projects/research-sessions?${query}`, { signal });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
+    readErrorReported.current = false;
+    const sessions = data.sessions as ResearchSession[];
+    const match = sessions.find(item => item.strategy_id === strategy.id)
+      ?? sessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused')
+      ?? null;
+    setSession(match);
+    if (match?.status === 'failed' && (previousStatus.current === 'queued' || previousStatus.current === 'running')) {
+      setError(match.message);
+      reportRequestFailure(match.message);
+    }
+    previousStatus.current = match?.status ?? null;
+  }, [path, strategy.id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void load(controller.signal).catch(cause => {
+      if (!controller.signal.aborted) {
+        const message = errorMessage(cause);
+        setError(message);
+        if (!readErrorReported.current) reportRequestFailure(message);
+        readErrorReported.current = true;
+      }
+    });
+    return () => controller.abort();
+  }, [load]);
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => { void load().catch(cause => {
+      const message = errorMessage(cause);
+      setError(message);
+      if (!readErrorReported.current) reportRequestFailure(message);
+      readErrorReported.current = true;
+    }); }, 1000);
+    return () => window.clearInterval(timer);
+  }, [active, load]);
+  async function begin() {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
+      const current = await response.json();
+      if (!response.ok) throw new Error(current.error ?? 'Could not read AI configuration');
+      setConfig(current);
+      if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
+      setConfirm(true);
+    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  async function start() {
+    if (!config) return;
+    setBusy(true); setError('');
+    try {
+      idempotencyKey.current ??= crypto.randomUUID();
+      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: strategy.id, expected_project_id: projectId, expected_binding: config.binding, idempotency_key: idempotencyKey.current });
+      setSession(next); setConfirm(false);
+      previousStatus.current = next.status;
+      idempotencyKey.current = null;
+      await load();
+    } catch (cause) { await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  async function control(action: 'pause' | 'resume' | 'stop') {
+    if (!session) return;
+    setBusy(true); setError('');
+    try {
+      const next = await post<ResearchSession>(`research-sessions/${session.id}/control`, { path, action });
+      setSession(next); await load();
+    } catch (cause) { await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  return <section className="research-session" aria-label={`Research session for ${strategy.title}`}>
+    {!session && <button type="button" className="text-view-link" disabled={busy} onClick={() => void begin()}>{busy ? 'Checking AI…' : 'Investigate'}</button>}
+    {confirm && config && <div className="research-consent" role="group" aria-label="Confirm research session">
+      <p><strong>{strategy.title}</strong></p><p>{config.model} · {config.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
+      <p>Up to 3 cycles and 6 provider calls. Usage may accrue. Findings are unverified research notes; provider usage may continue for a request already sent.</p>
+      <button type="button" className="text-view-link" disabled={busy} onClick={() => void start()}>Start investigation</button>
+      <button type="button" className="text-view-link" onClick={() => setConfirm(false)}>Cancel</button>
+    </div>}
+    {session && <div className="research-session-body">
+      <div className="research-session-heading"><strong>Investigation{session.strategy_id !== strategy.id ? ` · ${session.strategy_title}` : ''} · {session.status}</strong><span>{session.calls_used}/{session.call_limit} calls · {session.cycle}/3 cycles · {session.model}</span></div>
+      <p>{session.message}</p>
+      {!!session.current_question && <p><strong>Current question:</strong> {session.current_question}</p>}
+      {active && <div className="research-session-actions">
+        <button type="button" className="text-view-link" disabled={busy} onClick={() => void control('pause')}>Pause</button>
+        <button type="button" className="text-view-link" disabled={busy} onClick={() => void control('stop')}>Stop</button>
+      </div>}
+      {session.status === 'paused' && <button type="button" className="text-view-link" disabled={busy} onClick={() => void control('resume')}>Resume</button>}
+      {!!session.artifacts.length && <ol className="research-artifacts" aria-label="Research artifacts">{session.artifacts.map(artifact => <li key={artifact.id}>
+        <h4>Cycle {artifact.sequence}: {artifact.claim_or_question}</h4><p><strong>Method:</strong> {artifact.method}</p><p><strong>Evidence:</strong> {artifact.evidence_status}</p><p><strong>Skeptic:</strong> {artifact.skeptic_response}</p>
+        {artifact.objections.length > 0 && <p><strong>Objections:</strong> {artifact.objections.join(' · ')}</p>}
+        {artifact.open_obligations.length > 0 && <p><strong>Open obligations:</strong> {artifact.open_obligations.join(' · ')}</p>}
+        <p><strong>Next:</strong> {artifact.next_question || artifact.coordinator_decision}</p><small>{artifact.note}</small>
+      </li>)}</ol>}
+      {session.status === 'stopped' || session.status === 'completed' || session.status === 'failed' ? <button type="button" className="text-view-link" disabled={busy} onClick={() => setSession(null)}>Start another investigation</button> : null}
+    </div>}
+    {error && <p className="error" role="alert">{error}</p>}
+  </section>;
+}
+
 type TextFormat = 'plain' | 'markdown';
 type TextDisplay = 'plain' | 'rendered';
 type TextVersion = { body: string; kind: 'authored' | 'ai_derived'; current: boolean; source_digest: string; source_format: TextFormat; created_at: string; provenance: { provider: string; model: string; reasoning_effort: string | null } | null; warnings: string[] };
@@ -1108,6 +1223,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
               
             </summary>
             <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
+              {!strategy.removed_at && <ResearchSessionPanel path={view.path} projectId={project.id} strategy={strategy}/>}
               
             </div>
           </details>

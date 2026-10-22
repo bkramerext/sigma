@@ -37,6 +37,42 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
+    if body["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}:
+        strategy_title = context.get("strategy", {}).get("title")
+        if strategy_title == "Failure fixture strategy":
+            return httpx.Response(500)
+        if strategy_title == "Stop fixture strategy":
+            await asyncio.sleep(2)
+        cycle = context["cycle"]
+        if body["text"]["format"]["name"] == "research_investigator":
+            result = {
+                "claim": f"Fixture claim {cycle}: a candidate consequence follows from the saved strategy.",
+                "method": f"Use the stated mechanism to derive consequence {cycle}.",
+                "assumptions": [f"Fixture assumption {cycle}"],
+                "evidence_status": "Unverified model derivation; no tool was run.",
+                "open_obligations": [f"Check obligation {cycle}"],
+            }
+        else:
+            result = {
+                "assessment": "revise" if cycle == 1 else "continue",
+                "response": f"Independent fixture review for cycle {cycle}.",
+                "objections": [f"Check boundary case {cycle}"],
+                "remaining_obligations": [f"Resolve obligation {cycle}"],
+                "next_question": f"Study the distinct consequence for cycle {cycle + 1}.",
+            }
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(result)}],
+                    }
+                ],
+            },
+        )
     if body["text"]["format"]["name"] == "text_conversion":
         await asyncio.sleep(0.25)
         source = context["text"]

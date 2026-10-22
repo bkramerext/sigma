@@ -305,3 +305,17 @@
 }
 .workspace-page .strategy-rename-form .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .strategy-detail > summary:hover .strategy-rename-form { text-decoration: none; }
+.research-session {
+  margin: 1rem 0 0;
+  padding-top: .75rem;
+  border-top: 1px solid var(--line, rgba(180, 145, 110, .3));
+}
+.research-consent, .research-session-body { max-width: 58rem; }
+.research-consent p, .research-session-body p { margin: .45rem 0; }
+.research-session-actions { display: flex; gap: .75rem; }
+.research-session-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
+.research-session-heading span { color: var(--muted, #8e8a84); font-size: .9em; }
+.research-artifacts { margin: .75rem 0; padding-left: 1.3rem; }
+.research-artifacts li { padding: .6rem 0; }
+.research-artifacts h4 { margin: 0 0 .35rem; }
+.research-artifacts small { color: var(--muted, #8e8a84); }

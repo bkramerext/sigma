@@ -1304,3 +1304,37 @@ the isolated mock provider, confirming the existing A15 generation flow remains
 intact. No live model calls were made. Scenario artifacts are created in
 temporary projects and removed with the test directory; a real run is saved at
 `<project>.sigma/agentic-runs/<run-id>.json`.
+
+## A17: persistent research sessions (2026-10-22)
+
+An expanded, saved strategy now has an explicit **Investigate** action. Before
+starting, SIGMA shows the selected model, account billing mode, six-call/three-
+cycle cap, and usage disclosure. A background worker runs one structured
+Investigator and one independent Skeptic call per cycle. Python uses each
+Skeptic decision to continue, revise the next question, or stop. Each completed
+cycle is a durable, ordered artifact labeled as unverified model research; no
+claim is called tested or proved, and the saved project or strategy is never
+mutated.
+
+Sessions and public role outputs are stored separately under
+`<project>.sigma/research-sessions/` with owner-only permissions, atomic writes,
+per-record and per-project storage bounds, and no artifact pruning. Start,
+status, pause, resume, and stop are available through local project API routes.
+Sessions survive browser navigation and recover on backend restart as paused;
+in-flight calls count against the limit and are not automatically retried.
+Calls coordinate with strategy generation, proposal generation, and text
+conversion gates. Credentials, provider envelopes and hidden reasoning are not
+stored. No strategy stage promotion, external research, or computational
+verification is performed.
+
+Actual verification: `./sigma test` passed all scenarios, including new
+`tests/research_sessions.py` coverage for three dependent cycles, the revise
+branch, six-call cap, strategy nonmutation, pause/stop and gate release,
+explicit resume with remaining budget, malformed output, streamed ChatGPT
+Responses, idempotency and restart recovery. Ruff check/format, Pyright,
+frontend typecheck and production build passed. Real Chrome
+`uv run --with playwright python browser_checks/a17_research.py` passed against
+the isolated mock provider at desktop and mobile sizes, including consent,
+artifact inspection, navigation/reopen, stop, and failure-toast recovery. No
+live or paid provider call was made. The worker runs only while the local API
+process is alive; research notes remain unverified.

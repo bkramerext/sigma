@@ -134,3 +134,13 @@ verifies the Σ tooltip, one dismissible failed-request toast, retained Plain
 source with no artifact, and explicit successful retry. It makes no live
 provider call; the first local conversion response is deliberately failed and
 the retry goes through the fixture.
+
+## A17 persistent research sessions
+
+Keep the normal UI running on `127.0.0.1:5173`. Start a fresh isolated
+`provider_fixture:app` on port 8002, then run
+`uv run --with playwright python browser_checks/a17_research.py`. The real-Chrome
+check covers explicit billing/budget consent, a three-cycle investigation,
+artifact inspection after navigation and reopen, Stop during a delayed provider
+call, failure-toast recovery, mobile overflow, and unchanged project strategy
+data. It makes no live provider call.
