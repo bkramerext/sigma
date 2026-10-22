@@ -144,3 +144,9 @@
 .workspace-page .text-view-controls .sigma-render-toggle span {
   width: auto; margin-left: -2px; text-align: left;
 }
+
+/* Correct the visible sigma inset against the strategy description text edge. */
+.workspace-page .strategy-expanded .sigma-render-toggle span {
+  position: relative;
+  left: -14px;
+}
