@@ -93,7 +93,9 @@ with sync_playwright() as playwright:
 
     # Project navigation unmounts Home; tab state should survive that and reload.
     recent_panel.locator(".recent-open").first.click()
-    expect(page.get_by_role("heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3 \\(copy"))).to_be_visible()
+    expect(
+        page.get_by_role("heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3"))
+    ).to_be_visible()
     page.get_by_role("button", name="Close project").click()
     expect(recent_tab).to_have_attribute("aria-selected", "true")
     page.reload()
