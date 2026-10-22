@@ -2,7 +2,7 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
-**Explore difficult questions without losing the thread.**
+**A notebook for AI-assisted research and strategy development.**
 
 SIGMA is a research workspace for people investigating problems with more than one plausible approach. It is particularly suited to mathematical exploration, where promising ideas must be tested against precise assumptions, evidence, and counterexamples.
 
