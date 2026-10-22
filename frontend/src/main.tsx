@@ -62,13 +62,14 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
+function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string;
-  contentClass: string; onSaved: (view: ProjectView) => void;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
-  const [selected, setSelected] = useState<TextDisplay>(() => window.localStorage.getItem(preferenceKey) === 'rendered' ? 'rendered' : 'plain');
+  const [storedSelected, setSelected] = useState<TextDisplay>(() => window.localStorage.getItem(preferenceKey) === 'rendered' ? 'rendered' : 'plain');
+  const selected: TextDisplay = mathematical ? storedSelected : 'plain';
   const [rendering, setRendering] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editingFromRendered, setEditingFromRendered] = useState(false);
@@ -132,8 +133,8 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
     finally { setBusy(false); }
   }
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
-  return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}`}>
-    <div className="text-view-controls">
+  return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
+    {mathematical && <div className="text-view-controls">
       <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}`}
         aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
         aria-pressed={selected === 'rendered' || rendering} title={selected === 'rendered' ? 'Show plain text' : 'Render Markdown'}
@@ -143,7 +144,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved }: {
           else { void convert('markdown'); }
         }}><span aria-hidden="true">Σ</span></button>
       {data && version && !editing && scope === 'strategy' && <button type="button" className="text-view-edit" onClick={() => { setDraft(version.body); setEditing(true); setError(''); }}>Edit</button>}
-    </div>
+    </div>}
     {editing ? <form className="text-view-editor" onSubmit={save}>
       <label htmlFor={`text-editor-${scope}-${strategyId ?? 'project'}`}>Edit {format === 'plain' ? 'Plain' : 'Markdown'} source</label>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
@@ -974,7 +975,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
       <div className="project-description-line"><p className="project-eyebrow">Project description</p><button ref={editProjectButton} type="button" className="project-settings-link" onClick={() => setProjectEditing(true)} disabled={closing || ordering || !!dragId || editing || generating}>Project Settings</button></div>
-      <TextViews path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
+      <TextViews mathematical={project.research_mode === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -1004,7 +1005,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
-            <div className="strategy-expanded"><TextViews path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
+            <div className="strategy-expanded"><TextViews mathematical={project.research_mode === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
               <p className="strategy-byline">{strategy.provenance ? `AI-assisted suggestion · ${strategy.provenance.provider} / ${strategy.provenance.model}${strategy.provenance.reasoning_effort ? ` · ${thinkingLabels[strategy.provenance.reasoning_effort] ?? strategy.provenance.reasoning_effort} thinking` : ''} · Accepted/edited by a human` : 'Human-authored'} · <time dateTime={strategy.created_at}>{dateLabel(strategy.created_at)}</time></p>
               <code className="strategy-identity">{strategy.id}</code>
             </div>
