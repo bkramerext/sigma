@@ -122,6 +122,14 @@ def inspect_view(path: str):
     return asdict(inspect_project(path))
 
 
+@app.get("/api/projects/export")
+def export_project_view(path: str):
+    """Export current project state and retained agentic run evidence together."""
+    project = asdict(inspect_project(path).project)
+    runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
+    return {"export_version": 1, "project": project, "agentic_runs": runs}
+
+
 @app.get("/api/projects/events")
 def events_view(path: str):
     return {"events": [asdict(e) for e in list_events(path)]}
