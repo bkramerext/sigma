@@ -88,3 +88,14 @@
 .new-project-dialog .settings-header .settings-actions button[type="submit"]:hover:not(:disabled) {
   background: transparent; box-shadow: none; border: 0; color: #f3cd9e;
 }
+
+/* The global Home disabled rule must not turn the Create link into a filled button. */
+.home-page .new-project-dialog .settings-header .settings-actions button[type="submit"]:disabled {
+  background: transparent;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  color: #d9b17e;
+  opacity: .5;
+  cursor: default;
+}
