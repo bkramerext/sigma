@@ -649,3 +649,14 @@
   background: transparent;
   box-shadow: none;
 }
+
+/* Strategy reorder handle belongs in the upper-left corner. */
+.workspace-page .strategy-row .drag-grip {
+  left: 0;
+  right: auto;
+  border-radius: 8px 0 6px 0;
+}
+.workspace-page .strategy-row { padding-left: 36px; }
+@media (max-width: 900px) {
+  .workspace-page .strategy-row { padding-left: 38px; }
+}
