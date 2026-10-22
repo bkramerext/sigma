@@ -38,7 +38,9 @@ with sync_playwright() as playwright:
         page.get_by_role("heading", name=re.compile(r"Maximum Regions Formed by Lines - Working"))
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(1)
-    expect(page.get_by_role("button", name="Download project")).to_be_visible()
+    download_trigger = page.get_by_role("button", name="Download project")
+    expect(download_trigger).to_be_visible()
+    assert download_trigger.inner_text() == ""
     page.get_by_role("button", name="Download project").click()
     download_dialog = page.get_by_role("dialog", name="Download project")
     expect(download_dialog.get_by_label("Proposed filename")).to_have_value(re.compile(r"\.json$"))

@@ -50,8 +50,8 @@
 .workspace-page .project-text-views .text-view-controls { position: static; order: 0; display: flex; width: 100%; align-items: center; justify-content: space-between; margin: 0 0 8px; padding: 0; }
 .workspace-page .project-text-views .project-text-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-left: 0; }
 .workspace-page .project-text-actions .project-download-trigger {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  min-height: 32px; padding: 5px 10px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; min-width: 32px; min-height: 32px; padding: 0; border-radius: 6px;
   color: #e6af92; font: 500 12px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
   text-decoration: none;
 }
