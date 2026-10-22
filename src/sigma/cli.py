@@ -100,8 +100,12 @@ def main() -> None:
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run tests, API/CLI checks, lint, types and build")
-    ui_command = commands.add_parser("start", help="Start or safely restart this checkout's browser UI")
-    ui_command.add_argument("--navigate", action="store_true", help="Open SIGMA in a browser tab after startup")
+    ui_command = commands.add_parser(
+        "start", help="Start or safely restart this checkout's browser UI"
+    )
+    ui_command.add_argument(
+        "--navigate", action="store_true", help="Open SIGMA in a browser tab after startup"
+    )
     commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
     args = parser.parse_args()
     if args.command == "start":

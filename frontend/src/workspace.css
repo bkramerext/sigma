@@ -57,6 +57,7 @@
 .workspace-page .project-back:hover { border-color: #d6a76e; background: #4b311c; color: #fff0d9; }
 .workspace-page .project-back:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .workspace-page .project-back:disabled { opacity: .55; cursor: wait; }
+.workspace-page .project-back-label { align-self: center; color: #c6b59f; font-size: 12px; letter-spacing: .02em; }
 .workspace-page .local { color: var(--workspace-copper); background: transparent; border-color: #71543a; }
 .workspace-page .workspace-layout { position: relative; z-index: 1; display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: calc(100dvh - 88px); }
 .workspace-page .workspace-nav { background: #03090f; border-right: 1px solid var(--workspace-line); padding: 24px 10px; }

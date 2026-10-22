@@ -103,7 +103,7 @@ class Instance:
                 or current["start"] != record["start"]
                 or current["command"] != record["command"]
                 or entry not in command
-                or not command.endswith(" ui")
+                or not command.endswith((" ui", " start", " start --navigate"))
             ):
                 raise RuntimeError("SIGMA owner process identity changed; refusing to signal.")
             return pid, current
@@ -141,7 +141,7 @@ class Instance:
             if (
                 process["uid"] != str(os.getuid())
                 or entry not in process["command"].split()
-                or not process["command"].endswith(" ui")
+                or not process["command"].endswith((" ui", " start", " start --navigate"))
                 or not process["start"]
             ):
                 raise RuntimeError(

@@ -32,7 +32,7 @@ MESSAGES = {
     ),
     "unconfigured": (
         "OpenAI API not configured",
-        "API key not configured. Set OPENAI_API_KEY in the checkout .env (or server environment), then run ./sigma ui. This optional mode uses separate API billing; manual work remains available.",
+        "API key not configured. Set OPENAI_API_KEY in the checkout .env (or server environment), then run ./sigma start. This optional mode uses separate API billing; manual work remains available.",
     ),
     "unauthorized": (
         "Can't connect to OpenAI API · Check API key",

@@ -135,7 +135,9 @@ def main():
             log = base / f"launch-{len(processes)}.log"
             stream = log.open("w")
             command = (
-                [str(root / ".venv/bin/sigma"), "start"] if direct else [str(checkout / "sigma"), "start"]
+                [str(root / ".venv/bin/sigma"), "start"]
+                if direct
+                else [str(checkout / "sigma"), "start"]
             )
             proc = subprocess.Popen(
                 command, cwd=base, env=env, stdout=stream, stderr=stream, start_new_session=True

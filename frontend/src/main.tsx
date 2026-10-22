@@ -242,21 +242,11 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
         {orderedSessions.map(item => {
           const currentAction = readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action;
           return <li className="session-row" key={item.id} data-session-id={item.id}>
-            <details onToggle={event => {
-              if (event.currentTarget.open) {
-                selectedSessionId.current = item.id;
-                void load(item.id).catch(reportReadFailure);
-              } else if (selectedSessionId.current === item.id) {
-                selectedSessionId.current = '__collapsed__';
-                setConfirmStopId('');
-              }
-            }}>
-              <summary aria-label={`Session #${item.session_number}, ${item.status}`}>
-                <span className="session-row-heading"><span className="session-row-title">Session #{item.session_number}</span><small>{item.strategy_title}</small></span>
-                <span className={`session-status session-${item.status}`}><i aria-hidden="true"/>{item.status}</span>
-              </summary>
-              <ResearchSessionContents session={{ ...item, current_action: currentAction }} busy={busy} confirmStop={confirmStopId === item.id} setConfirmStop={value => setConfirmStopId(value ? item.id : '')} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
-            </details>
+            <div className="session-row-heading">
+              <span className="session-row-title">Session #{item.session_number}</span><small>{item.strategy_title}</small>
+              <span className={`session-status session-${item.status}`}><i aria-hidden="true"/>{item.status}</span>
+            </div>
+            <ResearchSessionContents session={{ ...item, current_action: currentAction }} busy={busy} confirmStop={confirmStopId === item.id} setConfirmStop={value => setConfirmStopId(value ? item.id : '')} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
@@ -355,9 +345,9 @@ function TooltipWrap({ children }: { children: React.ReactNode }) {
   </span>;
 }
 
-function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading }: {
+function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, modeDisabled = false, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; modeDisabled?: boolean; onEnterMode?: () => boolean; onExitMode?: () => void;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -393,13 +383,14 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const version = data?.[format];
   const current = version?.current ?? false;
   function beginBodyEdit(fromRendered = false) {
-    if (!version?.current || busy) return;
+    if (!version?.current || busy || modeDisabled || (onEnterMode && !onEnterMode())) return;
     setDraft(version.body); setEditingFromRendered(fromRendered);
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
   function cancelBodyEdit() {
     setEditing(false);
+    onExitMode?.();
     if (editingFromRendered) chooseView('rendered');
     requestAnimationFrame(() => bodyTrigger.current?.focus());
   }
@@ -425,7 +416,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     setBusy(true); setError('');
     try {
       const next = await post<ProjectView>('text/source', { path, scope, strategy_id: strategyId, body: draft, format, expected_digest: data.source_digest });
-      setEditing(false); onSaved(next);
+      setEditing(false); onExitMode?.(); onSaved(next);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   }
@@ -452,7 +443,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {editing ? <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
       <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
-    </> : data && version && <TooltipWrap><button type="button" className="text-view-link text-view-icon" aria-label={`Edit ${name}`} aria-describedby={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} className="sigma-render-tooltip" role="tooltip">{`Edit ${name}`}</span></TooltipWrap>}
+      </> : data && version && <TooltipWrap><button type="button" className="text-view-link text-view-icon" aria-label={`Edit ${name}`} aria-describedby={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} className="sigma-render-tooltip" role="tooltip">{`Edit ${name}`}</span></TooltipWrap>}
 
     {scope === 'project' && !editing && <TooltipWrap><button ref={exportTrigger} type="button" className="copper-button project-download-trigger" aria-label="Download project" aria-describedby="download-project-tooltip" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><span id="download-project-tooltip" className="sigma-render-tooltip" role="tooltip">Download project</span></TooltipWrap>}    {onSettings && !editing && <TooltipWrap><button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon" aria-label="Project settings" aria-describedby="project-settings-tooltip" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button><span id="project-settings-tooltip" className="sigma-render-tooltip" role="tooltip">Project settings</span></TooltipWrap>}
   </>;
@@ -476,7 +467,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   </div>;
 }
 
-function ProjectPaneTitle({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
+function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, onExitMode }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean; modeDisabled: boolean; onEnterMode: () => boolean; onExitMode: () => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(view.project.title);
   const [busy, setBusy] = useState(false);
@@ -485,7 +476,7 @@ function ProjectPaneTitle({ view, onSaved, disabled }: { view: ProjectView; onSa
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { if (!editing) setDraft(view.project.title); }, [view.project.title, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
-  function cancel() { setDraft(view.project.title); setError(''); setEditing(false); requestAnimationFrame(() => trigger.current?.focus()); }
+  function cancel() { setDraft(view.project.title); setError(''); setEditing(false); onExitMode(); requestAnimationFrame(() => trigger.current?.focus()); }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -494,7 +485,7 @@ function ProjectPaneTitle({ view, onSaved, disabled }: { view: ProjectView; onSa
     try {
       const current = settingsOf(view);
       const next = await post<ProjectView>('update', { path: view.path, ...current, title: draft, expected: current });
-      setEditing(false); onSaved(next); requestAnimationFrame(() => trigger.current?.focus());
+      setEditing(false); onExitMode(); onSaved(next); requestAnimationFrame(() => trigger.current?.focus());
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
   }
@@ -505,23 +496,23 @@ function ProjectPaneTitle({ view, onSaved, disabled }: { view: ProjectView; onSa
       <button type="submit" className="text-view-link" disabled={busy}>Save</button><button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
-      <button type="button" ref={trigger} className="text-view-link text-view-icon project-title-pencil" aria-label={`Edit project title: ${view.project.title}`} title="Edit project title" disabled={disabled} onClick={() => setEditing(true)}>
+      <button type="button" ref={trigger} className="text-view-link text-view-icon project-title-pencil" aria-label={`Edit project title: ${view.project.title}`} title="Edit project title" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) setEditing(true); }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
       </button></>}
   </div>;
 }
 
-function Header({ goHome, close, projectArtwork = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectArtwork?: boolean }) {
+function Header({ goHome, close, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Close project" title="Back to projects"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button></div>
+      {projectArtwork ? close && <div className="project-title-line"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to Home" title="Back to Home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><span className="project-back-label">Back to Home</span></div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    <ConnectionStatus/>
+    <ConnectionStatus disabled={connectionDisabled}/>
     </div>
   </header>;
 }
@@ -544,9 +535,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close }: {
+function WorkspaceFrame({ children, goHome, close, connectionDisabled = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean };
+  close?: { action: () => void; busy: boolean }; connectionDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -559,7 +550,7 @@ function WorkspaceFrame({ children, goHome, close }: {
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectArtwork/>
+    <Header goHome={goHome} close={close} projectArtwork connectionDisabled={connectionDisabled}/>
     <div className={`workspace-layout${collapsed ? ' nav-collapsed' : ''}`}>
       <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -838,8 +829,8 @@ function Home({ initialPath, onOpen }: {
   </div>;
 }
 
-function StrategyTitleEditor({ strategy, path, onSaved }: {
-  strategy: Strategy; path: string; onSaved: (view: ProjectView) => void;
+function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMode, onExitMode }: {
+  strategy: Strategy; path: string; onSaved: (view: ProjectView) => void; modeDisabled: boolean; onEnterMode: () => boolean; onExitMode: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const shownTitle = displayStrategyTitle(strategy);
@@ -851,7 +842,7 @@ function StrategyTitleEditor({ strategy, path, onSaved }: {
   useEffect(() => { if (!editing) setDraft(shownTitle); }, [shownTitle, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
   function cancel() {
-    setEditing(false); setDraft(shownTitle); setError('');
+    setEditing(false); onExitMode(); setDraft(shownTitle); setError('');
     requestAnimationFrame(() => trigger.current?.focus());
   }
   async function save(event: FormEvent) {
@@ -863,7 +854,7 @@ function StrategyTitleEditor({ strategy, path, onSaved }: {
       const next = await post<ProjectView>('strategies/edit', {
         path, strategy_id: strategy.id, title: draft, approach: strategy.approach,
       });
-      setEditing(false); onSaved(next);
+      setEditing(false); onExitMode(); onSaved(next);
       requestAnimationFrame(() => trigger.current?.focus());
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -877,15 +868,15 @@ function StrategyTitleEditor({ strategy, path, onSaved }: {
       <button type="button" className="text-view-link" disabled={busy} onClick={cancel}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>{shownTitle}</h3>
-      <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`}
-        onClick={() => setEditing(true)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
+      <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
+        onClick={() => { if (onEnterMode()) setEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
   </div>;
 }
 
-function StrategyCommands({ strategy, onCommand }: {
-  strategy: Strategy; onCommand: (mode: 'remove' | 'stage' | 'fork', strategy: Strategy) => void;
+function StrategyCommands({ strategy, onCommand, disabled = false }: {
+  strategy: Strategy; onCommand: (mode: 'remove' | 'stage' | 'fork', strategy: Strategy) => void; disabled?: boolean;
 }) {
   const disclosure = useRef<HTMLDetailsElement>(null);
   function positionMenu() {
@@ -915,7 +906,7 @@ function StrategyCommands({ strategy, onCommand }: {
       disclosure.current.querySelector('summary')?.focus();
     }
   }}>
-    <summary id={`commands-${strategy.id}`} className="secondary strategy-toggle" aria-label={`Commands for ${strategy.title}`}>
+    <summary id={`commands-${strategy.id}`} className="secondary strategy-toggle" aria-label={`Commands for ${strategy.title}`} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
         <circle cx="8" cy="3" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="13" r="1.3" fill="currentColor"/>
       </svg>
@@ -924,9 +915,9 @@ function StrategyCommands({ strategy, onCommand }: {
       <button className="secondary" disabled title="Scheduling is not available yet">Pause / Resume</button>
       <button className="secondary" disabled title="Audit reports are not available yet">Audit</button>
       <button className="secondary" disabled title="Additional artifact types are not available yet">Other artifact types</button>
-      <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('stage', strategy); }}>Change stage</button>
-      <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
-      <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
+      <button className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('stage', strategy); }}>Change stage</button>
+      <button className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
+      <button className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
     </div>
   </details>;
 }
@@ -1218,6 +1209,16 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
+  const modeOwner = useRef<string | null>(null);
+  const [activeMode, setActiveMode] = useState<string | null>(null);
+  const enterMode = useCallback((owner: string) => {
+    if (modeOwner.current !== null) return false;
+    modeOwner.current = owner; setActiveMode(owner); return true;
+  }, []);
+  const exitMode = useCallback((owner: string) => {
+    if (modeOwner.current !== owner) return;
+    modeOwner.current = null; setActiveMode(null);
+  }, []);
   const editProjectButton = useRef<HTMLButtonElement>(null);
   const [ordering, setOrdering] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
@@ -1282,7 +1283,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     try { await post('close'); onClose(); }
     catch (error) { setError(errorMessage(error)); setClosing(false); }
   }
-  const frame = { goHome, close: { action: close, busy: closing } };
+  const frame = { goHome, close: { action: close, busy: closing }, connectionDisabled: activeMode !== null };
   function toggleStrategiesPane() {
     setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
   }
@@ -1293,7 +1294,18 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     }
     if (id) setFocusStrategy(id);
   }
-  function cancel() { setEditing(false); requestAnimationFrame(() => newButton.current?.focus()); }
+  function cancel() { setEditing(false); exitMode('new-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }
+  function expandStrategies() { setStrategiesExpanded(true); window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true'); }
+  function startNewStrategy() {
+    if (!enterMode('new-strategy')) return;
+    expandStrategies(); setManualDraft(undefined); setEditing(true);
+    requestAnimationFrame(() => document.getElementById('strategy-title')?.focus());
+  }
+  function startGeneration() {
+    if (!enterMode('generate-strategy')) return;
+    expandStrategies(); setGenerating(true);
+    requestAnimationFrame(() => document.getElementById('proposal-seed')?.focus());
+  }
   if (!view) return <WorkspaceFrame {...frame}><div className="workspace-state" aria-live="polite">{error ? <>
     <h1 ref={heading} tabIndex={-1}>Project unavailable</h1><p role="alert" className="error">{error}</p>
     <p>Close this project to choose another directory.</p>
@@ -1334,10 +1346,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}>PROJECT</h2></header>
-      <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId}/>
+      <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}/>
       <div className="project-pane-content">
         <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton} hideProjectHeading/>
+          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} onSettings={() => { if (enterMode('project-settings')) setProjectEditing(true); }} settingsDisabled={closing || ordering || !!dragId || activeMode !== null} settingsButtonRef={editProjectButton} hideProjectHeading modeDisabled={activeMode !== null && activeMode !== 'text-project'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
         </div>
         <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -1352,31 +1364,32 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
+          <StrategyCreationActions buttonRef={newButton} disabled={activeMode !== null || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          <ProcessControlsView controls={processControls} disabled={editing || generating || projectEditing || closing || ordering || !!dragId}/>
+          <span className="strategy-heading-divider" aria-hidden="true"/>
+          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
         </div>
       </header>
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
         const strategy = next.project.strategies[next.project.strategies.length - 1];
-        setView(next); setEditing(false); setAnnouncement(`Strategy saved: ${strategy.title}`);
+        setView(next); setEditing(false); exitMode('new-strategy'); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
       }}/>}
-      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onNew={() => { setGenerating(false); setManualDraft(undefined); setEditing(true); }} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
-        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
+      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onNew={() => { setGenerating(false); exitMode('generate-strategy'); startNewStrategy(); }} onCancel={() => { setGenerating(false); exitMode('generate-strategy'); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
+        const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); exitMode('generate-strategy'); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
         <div className="strategy-columns" aria-hidden="true"><span>Strategy</span><span>Stage</span></div>
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/>
-            <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/></div>
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)}/>
+            <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
           </div>
           <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
-          <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => { if (ordering || dragId || editing || generating || projectEditing) return; if (mode === 'fork') { setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
+          <StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => { if (ordering || dragId || activeMode !== null) return; if (mode === 'fork') { if (!enterMode('new-strategy')) return; expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
@@ -1392,7 +1405,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </div>
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
-    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
       onCancel={() => {
         const id = command.strategy.id;

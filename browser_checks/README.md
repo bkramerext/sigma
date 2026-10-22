@@ -135,18 +135,19 @@ source with no artifact, and explicit successful retry. It makes no live
 provider call; the first local conversion response is deliberately failed and
 the retry goes through the fixture.
 
-## A17 / A17.1 project titles and research sessions
+## A17 / A17.1 / A17.2 project titles and research sessions
 
 Keep the normal UI running on `127.0.0.1:5173`. Start a fresh isolated
 `provider_fixture:app` on port 8002, then run
 `uv run --with playwright python browser_checks/a17_research.py`. The real-Chrome
-check covers inline project/strategy title edits, the generated-title review/save
-flow, non-destructive legacy title fallback, no Project/Strategy row disclosure,
-visible strategy descriptions, deterministic Play selection, ordered Session rows
-and disclosure, counts/status indicators, explicit billing/budget consent, a
-three-cycle investigation, live activity and artifact inspection after navigation
-and reopen, pause/resume/stop during delayed fixture work, failure-toast recovery,
-the overlapping-request connection pulse and reduced-motion behavior,
-desktop/mobile screenshots and mobile overflow, and unchanged project strategy
-data. It makes no live provider call. Screenshots are written to
-`/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`.
+check covers inline title edits, cross-workspace mutual exclusion (rapid clicks,
+keyboard entry, cancel, and save failure), New/Generate auto-expansion and focus,
+Strategies control order, Back to Home, and connection dialog portal/backdrop/
+focus/Escape behavior with blocked underlying controls. Session rows do not
+collapse, while activity and artifact details remain inspectable. It also checks
+generated-title review/save, non-destructive legacy fallback, billing consent,
+three-cycle research, navigation/reopen, pause/resume/stop during delayed fixture
+work, failure recovery, concurrent provider pulse and reduced motion,
+desktop/mobile layout, and unchanged strategy data. It makes no live provider
+call. Screenshots are written to `/tmp/sigma-a171-desktop.png` and
+`/tmp/sigma-a171-mobile.png`.

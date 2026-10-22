@@ -1386,3 +1386,43 @@ three-cycle history and artifact inspection, Play/Pause/Stop, error recovery,
 concurrent request pulse, reduced-motion behavior and mobile overflow. I inspected
 the desktop and mobile captures at `/tmp/sigma-a171-desktop.png` and
 `/tmp/sigma-a171-mobile.png`. No paid provider calls were made.
+
+## A17.2: workspace interaction consistency and layering (2026-10-22)
+
+Session rows no longer disclose or hide their contents. Their status, action,
+budget, activity and controls remain visible; artifact entries retain their own
+detail disclosures so full validated role outputs remain inspectable. Strategies
+header controls now follow the heading inline in New/Generate, count, divider,
+Play/Pause order. Project title editing keeps its pencil beside the title, and
+the header labels its existing navigation control **Back to Home**.
+
+New and Generate expand Strategies before opening and focus their creation
+surface. A synchronous workspace mode lock allows only one Project/Strategy edit,
+New or Generate mode at a time. Competing entry buttons expose disabled state;
+keyboard and rapid pointer attempts are blocked. Save errors retain the active
+draft and its recovery controls; cancel and successful saves release the lock.
+Play/Pause and the connection pill are disabled during these UI modes, without
+changing or claiming cancellation of an already-running research session.
+
+The connection popover now uses a body portal with a modal backdrop and focus
+trap, sits above project/workspace stacking contexts, and blocks underlying
+pointer actions. Escape and backdrop close it and restore trigger focus. Small
+screens keep the panel within the viewport. The remote launcher rename was also
+reconciled: `./sigma start` is the current command, `--navigate` is opt-in, and
+owner verification still accepts an already-running legacy `./sigma ui` process.
+Owner verification also recognizes the new `./sigma start --navigate` invocation.
+Launcher tests now match these behaviors.
+
+Actual verification: `./sigma test` passed all scenarios, Ruff check/format,
+Pyright (zero errors), frontend typecheck, and production build. The existing
+Starlette TestClient/httpx deprecation warning remains non-failing. The updated
+`tests/tooling.py` passed separately after adding an explicit legacy-owner
+compatibility assertion. Real Chrome `uv run --with playwright python
+browser_checks/a17_research.py` passed with the isolated provider fixture at
+1440px desktop and 390px mobile. It exercises noncollapsible Sessions with
+artifact access, header order, auto-expand/focus, cross-workspace mode exclusion
+by keyboard and rapid clicks, cancel/save-error recovery, modal portal/backdrop/
+Escape and blocked underlay, Play/Pause, session history/artifacts and provider
+activity. Desktop and mobile captures were inspected at
+`/tmp/sigma-a171-desktop.png` and `/tmp/sigma-a171-mobile.png`. No live provider
+calls were made.

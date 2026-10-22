@@ -61,7 +61,7 @@ def check_ui() -> None:
     ):
         assert run_ui() == 2
         launch.assert_not_called()
-    for outcome in ("launch failure", "early exit", "interrupt"):
+    for outcome in ("launch failure", "early exit", "interrupt", "navigate"):
         backend = Mock()
         backend.poll.return_value = 7 if outcome == "early exit" else None
         frontend = Mock()
@@ -86,11 +86,13 @@ def check_ui() -> None:
             patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
             patch("sigma.ui.stop_servers") as stop,
         ):
-            assert run_ui() == (0 if outcome == "interrupt" else 1)
+            assert run_ui(navigate=outcome == "navigate") == (
+                0 if outcome in {"interrupt", "navigate"} else 1
+            )
             stop.assert_called_once_with(
                 [backend] if outcome == "launch failure" else [backend, frontend]
             )
-            if outcome == "interrupt":
+            if outcome == "navigate":
                 open_browser.assert_called_once_with("http://127.0.0.1:5173", new=2)
             else:
                 open_browser.assert_not_called()
@@ -109,7 +111,7 @@ def check_shutdown_and_suspended() -> None:
             str(ROOT / ".venv" / "bin" / "python")
             + " "
             + str(ROOT / ".venv" / "bin" / "sigma")
-            + " ui"
+            + " start"
         )
         processes = {
             123456: {
@@ -144,6 +146,11 @@ def check_shutdown_and_suspended() -> None:
             processes[123457]["stat"] = "S"
             assert not instance._terminate_suspended_lock_holders()
             send.assert_not_called()
+            processes[123456]["command"] = command.removesuffix(" start") + " ui"
+            assert len(instance._legacy_lock_owners()) == 2
+            processes[123456]["command"] = command + " --navigate"
+            assert len(instance._legacy_lock_owners()) == 2
+            processes[123456]["command"] = command
             processes[123457]["command"] = "/usr/bin/unrelated ui"
             try:
                 instance._terminate_suspended_lock_holders()

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import './ai-connection.css';
 
 export type ConnectionInfo = { mode: 'chatgpt' | 'api_key' | 'unknown'; status: string; label: string; guidance: string; checked_at: string | null; ttl_seconds: number; account_label?: string; active_account?: string; accounts: { id: string; label: string }[]; welcome_pending?: boolean };
@@ -226,19 +227,50 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus() {
+export function ConnectionStatus({ disabled = false }: { disabled?: boolean } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const providerActive = useProviderActivity();
   useEffect(() => {
-    function outside(event: PointerEvent) { if (event.target instanceof Node && disclosure.current && !disclosure.current.contains(event.target)) disclosure.current.open = false; }
-    function escape(event: KeyboardEvent) { if (event.key === 'Escape' && disclosure.current?.open) { disclosure.current.open = false; disclosure.current.querySelector('summary')?.focus(); } }
-    document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape); return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, []);
+    if (!open) return;
+    const place = () => {
+      const trigger = disclosure.current?.querySelector('summary');
+      const rect = trigger?.getBoundingClientRect();
+      if (!rect || !panel.current) return;
+      const panelRect = panel.current.getBoundingClientRect();
+      const below = rect.bottom + 8 + panelRect.height <= window.innerHeight - 8;
+      const preferredRight = Math.max(8, window.innerWidth - rect.right);
+      const right = Math.min(preferredRight, Math.max(8, window.innerWidth - panelRect.width - 8));
+      setPosition({ top: below ? rect.bottom + 8 : Math.max(8, rect.top - panelRect.height - 8), right });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      panel.current?.querySelector<HTMLElement>('button:not(:disabled), a, select, summary')?.focus();
+    });
+    window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+  }, [open]);
+  useEffect(() => {
+    function escape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); }
+      if (event.key !== 'Tab' || !open || !panel.current) return;
+      const items = Array.from(panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], select:not(:disabled), summary, [tabindex="0"]')).filter(item => item.offsetParent !== null);
+      if (!items.length) { event.preventDefault(); panel.current.focus(); return; }
+      const first = items[0]; const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener('keydown', escape); return () => document.removeEventListener('keydown', escape);
+  }, [open]);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
   const dotActive = status === 'connected' && providerActive;
-  return <details ref={disclosure} className="api-connection"><summary aria-label="AI connection settings"><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{label}</span></summary>
-    <div className="connection-details">
+  return <details ref={disclosure} className="api-connection" open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label="AI connection settings" aria-haspopup="dialog" aria-expanded={open} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{label}</span></summary>
+    {open && createPortal(<>
+    <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
+    <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
       {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
       <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : ai.info?.active_account ? 'Using ChatGPT plan' : 'Connect your ChatGPT account'}</p>
       <p>{ai.healthError && ai.info?.status !== 'unavailable' ? 'Connection status could not be refreshed. Retry when convenient.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
@@ -248,6 +280,6 @@ export function ConnectionStatus() {
       <button type="button" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
       {ai.info?.mode === 'api_key' ? <button type="button" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>Use API key (advanced)</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" onClick={() => void ai.selectMode('api_key')}>Use API key · billed separately</button></details>}
       {ai.error && <p role="alert">{ai.error}</p>}
-    </div>
+    </div></>, document.body)}
   </details>;
 }

@@ -32,7 +32,7 @@ def check_ports() -> None:
                 raise RuntimeError(
                     f"Port {port} is occupied by an unrelated or unverifiable service. "
                     "SIGMA cannot safely replace it. Close that service using its own controls, "
-                    "then retry ./sigma ui. No process was signalled."
+                    "then retry ./sigma start. No process was signalled."
                 ) from exc
 
 
@@ -164,7 +164,10 @@ def run_ui(*, navigate: bool = False) -> int:
                                 except (OSError, webbrowser.Error):
                                     print(f"Open {URL} in your browser.", flush=True)
                             else:
-                                print(f"Use your existing browser tab at {URL} (reload if needed).", flush=True)
+                                print(
+                                    f"Use your existing browser tab at {URL} (reload if needed).",
+                                    flush=True,
+                                )
                         elif time.monotonic() >= deadline:
                             raise RuntimeError("Servers did not become ready within 30 seconds.")
                     replacement = instance.replacement_request()
