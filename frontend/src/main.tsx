@@ -1207,8 +1207,8 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        <button type="button" className="text-view-link" disabled={disabled} onClick={controls.start}>Start session #{controls.nextSessionNumber}</button>
-        <button type="button" className="text-view-link" disabled={disabled} onClick={controls.cancel}>Cancel</button>
+        <button type="button" className="text-view-link session-start-link" disabled={disabled} onClick={controls.start}>Start session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button type="button" className="text-view-link text-view-icon process-control" aria-label={controls.playLabel} title={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
