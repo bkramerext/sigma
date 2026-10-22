@@ -159,3 +159,19 @@
 }
 .workspace-page .new-strategy-heading-actions .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .new-strategy-heading-actions .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+/* Expanded descriptions share the project description's type scale and fill their row. */
+.workspace-page .strategy-expanded,
+.workspace-page .strategy-expanded .text-views,
+.workspace-page .strategy-expanded .strategy-approach,
+.workspace-page .strategy-expanded .rendered-text,
+.workspace-page .strategy-expanded .text-view-editor {
+  width: 100%; max-width: none; min-width: 0;
+}
+.workspace-page .strategy-expanded .strategy-approach,
+.workspace-page .strategy-expanded .strategy-approach.rendered-text {
+  margin: 0 0 14px;
+  font-size: 16px;
+  line-height: 1.75;
+}
+.workspace-page .strategy-expanded .text-view-editor textarea { width: 100%; font-size: 16px; line-height: 1.75; }
