@@ -4,14 +4,17 @@ Status: **assigned to Codex; not yet implemented or verified.**
 
 Read `docs/HUMAN-AI-INTERACTION.md` and current `docs/STATUS.md` before implementation. Inspect current code; do not assume A17.4 documentation still describes the current UI.
 
-## Feature: Project report
+## Feature: combined Project export dialog
 
-- Add a **Report** icon button (document/file-text icon) to the Project title actions, alongside Download and Settings. Provide accessible label, keyboard focus, and visible-on-hover native title tooltip.
-- Clicking opens an accessible modal **Report** dialog with a suggested editable filename (derived safely from project name), required format selection: **Plain text (.txt), Markdown (.md), HTML (.html), LaTeX (.tex)**, and a checkbox **Open in new browser tab** (default unchecked). Show **Create** and **Cancel** buttons in the application's usual dialog button styling (Create is the primary action); show failure feedback and preserve dialog state on errors.
-- Generate a human-readable research **report**, not a raw project archive/export. Include project title/problem, strategies (including their approaches), sessions in durable order, execution status distinct from outcome, outcomes and caveats, artifact claims/methods/assumptions/evidence status, objections, decisions and open obligations. Preserve meaningful chronology, provenance and explicit provisional/unverified distinctions. Do not fabricate findings. Gracefully handle projects without sessions or strategies, legacy records, and missing optional fields.
-- Ensure each format is actually usable: valid UTF-8 plain text; well-structured Markdown; standalone escaped HTML with safe rendering (no unsanitized model text as executable HTML); compilable/escaped LaTeX document including mathematical content where feasible. Prevent injection and unsafe filename/path behavior. Prefer deterministic report generation from saved data, no model calls or billing.
-- Download the chosen file using the chosen name and extension. When the checkbox is checked, also open the generated report in a new tab, avoiding popup blockers by opening on the initiating user gesture, with safe object URL lifetime/cleanup and graceful fallback when the browser blocks the tab. A download must still work independently. Test this behavior in Chrome; choose practical handling for plain text/Markdown/LaTeX display in the tab.
-- Keep the report dialog visually consistent with Settings/Download, usable on narrow screens, with Escape, focus management, cancel and error recovery.
+- Replace the existing Project Download control and the proposed separate Report control with **one Export Project icon button** (file-down icon) in the Project title actions beside Settings. Provide accessible label, keyboard focus and native hover title.
+- The **Export Project** dialog offers **Export type** radio buttons: **Project Audit** (selected by default) and **Research Report**. Project Audit must preserve the existing JSON audit export content and semantics.
+- Show a **Format** dropdown at all times. It is **disabled/gray for Project Audit** (whose format is fixed to JSON). When Research Report is selected, enable the dropdown with **Text (.txt)**, **HTML (.html)** and **LaTeX (.tex)**; default Text. (The latest user specification intentionally excludes Markdown from this dropdown.)
+- Display a **read-only automatically chosen filename**, derived safely from the project name and selected type/format. It updates as the selection changes. Never ask the user to edit the filename.
+- Provide an **Open in browser tab** checkbox (not a radio button), default unchecked, and standard dialog-styled **Create** (primary) and **Cancel** buttons.
+- Research Report is generated deterministically from saved data, with no model calls or billing. Include project title/problem, strategies/approaches, sessions in durable order, execution status distinct from outcome, outcomes/caveats, artifacts' claims/methods/assumptions/evidence status, objections, decisions and open obligations. Preserve chronology and explicitly distinguish provisional/unverified findings. Gracefully handle empty projects, legacy records and missing optional fields.
+- Generate usable escaped UTF-8 text, standalone safe HTML (no model-output script injection), and compilable escaped LaTeX. Preserve mathematical notation where feasible; test injection and special-character handling.
+- Create downloads the chosen audit or report using the derived filename. If the checkbox is checked, also open a viewable representation in a new browser tab; avoid popup blockers by opening during the initiating gesture and handle blocked tabs gracefully. Verify JSON/text/HTML/LaTeX behavior in a real browser. Handle object URL cleanup.
+- Keep modal visuals consistent with existing SIGMA dialogs, including narrow screens, Escape, focus management, Cancel, and error recovery.
 
 ## Stabilization: assistant direct edits after A17.4
 
