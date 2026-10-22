@@ -1,10 +1,10 @@
-# A22 — Cloud deployment and Onebrief-ready access
+# A22 — Cloud deployment and organization-ready access
 
 Status: Requirements specification. Do not begin A22 until the user explicitly starts it; the starting A-number may change as earlier work progresses.
 
 ## Objective
 
-Deploy SIGMA for a polished, reliable Onebrief demonstration while preserving today's local-first workflow. Keep scope bounded. Resolve implementation choices independently; do not insert discretionary approval gates or expand scope. A time-boxed feasibility check for Cloudflare runtime compatibility is part of A22, not a separate project. Choose the smallest maintainable architecture that meets the requirements.
+Deploy SIGMA for a polished, reliable external demonstration while preserving today's local-first workflow. Keep scope bounded. Resolve implementation choices independently; do not insert discretionary approval gates or expand scope. A time-boxed feasibility check for Cloudflare runtime compatibility is part of A22, not a separate project. Choose the smallest maintainable architecture that meets the requirements.
 
 ## Must-have requirements
 
@@ -28,7 +28,7 @@ Deploy SIGMA for a polished, reliable Onebrief demonstration while preserving to
 ### 3. Authentication and authorization
 
 - Public unauthenticated visitors can use the Demo (requirements below).
-- Provide federated sign-in, initially with Google. Keep authorization logic independent of the identity provider so another provider can be added if Onebrief's actual identity setup requires it. Do not assume a Onebrief email address necessarily has a Google-hosted mailbox.
+- Provide federated sign-in, initially with Google. Keep authorization logic independent of the identity provider so another provider can be added if the target organization's identity setup requires it. Do not assume a company email address necessarily has a Google-hosted mailbox.
 - Put the sign-in experience on the Home page, above the project area. Guests can continue into the Demo without signing in.
 - Support these authorization paths:
   1. Unauthenticated guest: read-only Demo only.
@@ -36,10 +36,10 @@ Deploy SIGMA for a polished, reliable Onebrief demonstration while preserving to
   3. User whose verified email domain matches an administrator-configured allowed domain: private workspace.
   4. Designated administrator: Access Management and deployment-level administrative capabilities.
 - Domain-level invites must be configurable, not hardcoded. Support allowed email domains plus individually authorized email addresses, with clear precedence and revocation semantics.
-- For initial testing, gmail.com may be configured temporarily as an allowed domain to test with the user's existing Google account. This is configuration, never a special-case code path. Document removal/replacement before a real Onebrief demonstration.
+- For initial testing, gmail.com may be configured temporarily as an allowed domain to test with the user's existing Google account. This is configuration, never a special-case code path. Document removal/replacement before a real external demonstration.
 - Individual invitations are authorization entries only. “Invite” does not send email. No email-sending service or invitation-email workflow is required.
 - No purchased domain, Google Workspace, or paid test identity is required for development or acceptance testing. Automated identity fixtures must cover matching domains, nonmatching domains, individual authorization, revocation, identity-provider claims and malformed/unverified identities. Real Google sign-in can be tested with the user's existing account via individual authorization or the temporary gmail.com rule.
-- Do not hardcode a Onebrief domain, user email, or administrator identity into application code. Bootstrap the first administrator via documented deployment configuration/secret, then let that administrator manage authorization in SIGMA.
+- Do not hardcode a organization domain, user email, or administrator identity into application code. Bootstrap the first administrator via documented deployment configuration/secret, then let that administrator manage authorization in SIGMA.
 - Cloudflare Access may be used if it materially simplifies deployment, but it is not a requirement. Do not force the entire public Demo behind an Access login. If using Access, ensure guest routes remain public and backend identity claims are verified. Direct OAuth is also acceptable. Choose one approach and implement it end-to-end.
 - Enforce authentication, authorization, workspace ownership and administrator privileges server-side on every applicable operation. Hiding controls is not security. Verify identity through a trusted provider flow and use a stable identity key; do not trust browser-supplied identity/email headers.
 - Revocation must prevent subsequent access, including API and session access. Preserve a revoked user's data by default; deletion is a separate explicit administrative action.
@@ -76,7 +76,7 @@ Deploy SIGMA for a polished, reliable Onebrief demonstration while preserving to
 ### 7. Administration and operations
 
 - Provide a small administrator-only Access Management UI: list individually authorized email addresses and allowed domains; add/remove individual authorization; add/remove allowed domain; show basic account/access state; and identify the initial administrator/bootstrap procedure. No email sending.
-- Domain changes and revocation take effect server-side promptly. Validate domain syntax and normalize case/whitespace; require verified identity email before applying domain authorization. Never use suffix matching that accepts lookalike domains (e.g. notonebrief.com matching onebrief.com).
+- Domain changes and revocation take effect server-side promptly. Validate domain syntax and normalize case/whitespace; require verified identity email before applying domain authorization. Never use suffix matching that accepts lookalike domains (e.g. notexample.org matching example.org).
 - Provide configurable global and per-user limits, basic health/error reporting, and enough audit events to investigate authorization changes, agent starts/stops and budget denials without logging secrets or full private artifacts.
 - Secure configuration and secrets, use least privilege, protect against CSRF/session fixation/token theft, validate uploads/exports/inputs, apply security headers and rate limits, and keep dependencies updated.
 - Apply the CSO threat model throughout implementation: public guest-to-private escalation, cross-workspace data access, unauthorized admin, spoofed identity claims, agent-budget abuse, secret leakage, untrusted model output injection, export path/injection vulnerabilities, and data loss/replay after interruption.
@@ -93,14 +93,14 @@ Deploy SIGMA for a polished, reliable Onebrief demonstration while preserving to
 
 These are not to be implemented in A22. At A22 exit, revisit this list with the user and decide what, if anything, belongs in a later increment.
 
-- Multiple identity providers beyond initial Google integration, unless required to make the agreed Onebrief workflow actually work.
+- Multiple identity providers beyond initial Google integration, unless required to make the agreed organization access workflow actually work.
 - Shared projects, collaboration, concurrent editing, project sharing/permissions and team workspaces.
 - Advanced workspace administration.
 - Public self-registration controls beyond specified domain/individual authorization paths.
 - User-facing usage dashboards, invoices, subscription billing or monetization.
 - Rich administrative analytics, organizational dashboards and elaborate audit UI.
 - Sophisticated search across all users/projects, vector databases or semantic cross-workspace retrieval.
-- Advanced enterprise integrations (SCIM, SSO policy administration, enterprise identity lifecycle) unless a required Onebrief identity setup cannot otherwise authenticate.
+- Advanced enterprise integrations (SCIM, SSO policy administration, enterprise identity lifecycle) unless a required organization identity setup cannot otherwise authenticate.
 - Multiple regions, high availability guarantees and large-scale autoscaling beyond what the initial demonstration needs.
 - Email delivery for invitations or notifications.
 - Custom branded marketing site or public directory of projects.
@@ -126,7 +126,7 @@ These are not to be implemented in A22. At A22 exit, revisit this list with the 
 ### Product and access
 - Guest can open SIGMA without signing in, inspect the seeded Demo and create/download all supported exports/reports; all mutations and agent starts are blocked in UI and backend.
 - Sign-in appears above Projects on Home. Successful authorized login opens that user's private workspace. Sign-out returns to guest Demo.
-- Individual authorization and configured domain authorization each grant access. An unapproved identity receives only guest Demo access. The temporary gmail.com rule is configuration-only and has a documented cleanup step before real Onebrief use.
+- Individual authorization and configured domain authorization each grant access. An unapproved identity receives only guest Demo access. The temporary gmail.com rule is configuration-only and has a documented cleanup step before real external use.
 - Access Management is administrator-only; bootstrap works on a fresh deployment. Add/revoke domain and email rules and prove the server immediately enforces changes. No email is sent.
 - Two separate users cannot access each other's projects, sessions, artifacts, settings, or exports, even by direct API/ID manipulation. Recents are private.
 - Owner/admin can configure resource ceilings; concurrent and repeated requests cannot exceed them. Guest actions cannot trigger inference.
