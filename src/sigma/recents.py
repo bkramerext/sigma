@@ -216,7 +216,7 @@ class RecentProject:
     id: str
     path: str
     title: str
-    research_mode: str | None
+    investigation_type: str | None
     strategy_count: int | None
     accessed_at: str | None
     included_example: bool
@@ -238,7 +238,7 @@ def recent_projects() -> dict:
                     RecentProject(
                         **entry,
                         title=view.project.title,
-                        research_mode=view.project.research_mode,
+                        investigation_type=view.project.investigation_type,
                         strategy_count=len(view.project.active_order),
                         available=True,
                     )
@@ -250,7 +250,7 @@ def recent_projects() -> dict:
                     RecentProject(
                         **entry,
                         title=Path(entry["path"]).name,
-                        research_mode=None,
+                        investigation_type=None,
                         strategy_count=None,
                         available=False,
                         error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",
