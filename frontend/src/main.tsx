@@ -452,7 +452,9 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
 }
 
 function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
-  const [tab, setTab] = useState<'recent' | 'samples'>('samples');
+  const [tab, setTab] = useState<'recent' | 'samples'>(() =>
+    window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
+  useEffect(() => { window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [tab]);
   const recent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
   function switchTab(next: 'recent' | 'samples') { setTab(next); (next === 'recent' ? recent : samples).current?.focus(); }
