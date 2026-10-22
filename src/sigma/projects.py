@@ -477,7 +477,7 @@ def _document(project: Project) -> bytes:
             for key in ("stage", "summary", "provenance"):
                 del strategy[key]
     if project.schema_version < 4:
-        del raw["research_mode"]
+        del raw["investigation_type"]
     if project.schema_version < 3:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
