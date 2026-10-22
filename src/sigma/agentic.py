@@ -29,8 +29,8 @@ from sigma.proposals import (
 
 MAX_CALLS = 6
 MAX_ATTEMPTS = 2
-OVERALL_SECONDS = 120
-CALL_SECONDS = 35
+OVERALL_SECONDS = 780
+CALL_SECONDS = 120
 _gate = threading.Lock()
 EventType = Literal[
     "run.started",
@@ -722,7 +722,7 @@ async def agentic_events(
     except ProjectError as exc:
         yield failed(str(exc))
     except TimeoutError:
-        yield failed("The 120-second run limit was reached. Nothing was saved.")
+        yield failed(f"The {OVERALL_SECONDS}-second run limit was reached. No strategy was saved.")
     except asyncio.CancelledError:
         if evidence is None:
             save_unstarted("cancelled", "Run cancelled before completion; no strategy was saved.")
