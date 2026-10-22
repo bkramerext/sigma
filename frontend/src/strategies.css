@@ -660,3 +660,11 @@
 @media (max-width: 900px) {
   .workspace-page .strategy-row { padding-left: 38px; }
 }
+
+.workspace-page .session-progress-inline {
+  display: block;
+  margin: 3px 0 0 24px;
+  color: var(--muted, #a7a7a7);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
