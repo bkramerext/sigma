@@ -263,7 +263,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
    independently below the SIGMA lettering in the background artwork. */
 .home-page .home-topline { height: 52px; }
 .home-page .home-slogan {
-  top: clamp(190px, 25vh, 260px);
+  top: calc(clamp(190px, 25vh, 260px) + 10px);
   left: 50%;
   width: min(68vw, 850px);
   transform: translateX(-50%);
@@ -272,7 +272,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 @media (max-width: 700px) {
   .home-page .home-topline { height: 52px; }
   .home-page .home-slogan {
-    top: clamp(210px, 34vh, 320px);
+    top: calc(clamp(210px, 34vh, 320px) + 10px);
     left: 50%;
     width: min(94vw, 480px);
   }
