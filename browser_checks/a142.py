@@ -1,5 +1,6 @@
 """A14.2 real-browser Σ conversion failure, dismiss, and explicit retry check."""
 
+import re
 from urllib.parse import urlencode
 
 from playwright.sync_api import expect, sync_playwright
@@ -36,11 +37,17 @@ with sync_playwright() as playwright:
     panel = page.get_by_role("tabpanel", name="Stock")
     panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
     expect(
-        page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3 (copy)", exact=True)
+        page.get_by_role(
+            "heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy(?: \d+)?\)")
+        )
     ).to_be_visible()
 
     render = page.get_by_role("button", name="Render research problem as Markdown")
     expect(render).to_have_attribute("title", "Convert to markdown")
+    tooltip = page.get_by_role("tooltip")
+    render.hover()
+    expect(tooltip).to_have_text("Convert to markdown")
+    expect(tooltip).to_be_visible()
     source_node = page.locator(".project-intro .objective")
     expect(source_node).to_be_visible()
     source_before = source_node.inner_text()
@@ -67,9 +74,11 @@ with sync_playwright() as playwright:
     expect(toast).to_have_count(0)
     page.get_by_role("button", name="Render research problem as Markdown").click()
     expect(page.locator(".project-intro .rendered-text")).to_be_visible()
-    expect(page.get_by_role("button", name="Show plain research problem")).to_have_attribute(
-        "title", "Show plain text"
-    )
+    rendered_toggle = page.get_by_role("button", name="Show plain research problem")
+    expect(rendered_toggle).to_have_attribute("title", "Show plain text")
+    rendered_toggle.hover()
+    expect(tooltip).to_have_text("Show plain text")
+    expect(tooltip).to_be_visible()
     assert conversion_calls == 2
     after_retry = page.request.get(text_url).json()
     assert after_retry["source_digest"] == before["source_digest"]

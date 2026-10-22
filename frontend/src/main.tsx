@@ -133,16 +133,21 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     finally { setBusy(false); }
   }
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
+  const renderTooltip = selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
+  const renderTooltipId = `sigma-render-tooltip-${scope}-${strategyId ?? 'project'}`;
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     <div className="text-view-controls">
-      {mathematical && <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
+      {mathematical && <span className="sigma-render-tooltip-wrap">
+        <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
         aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
-        aria-pressed={selected === 'rendered' || rendering} title={selected === 'rendered' ? 'Show plain text' : 'Convert to markdown'}
+        aria-pressed={selected === 'rendered' || rendering} aria-describedby={renderTooltipId} title={renderTooltip}
         disabled={editing || busy} onClick={() => {
           if (selected === 'rendered') { chooseView('plain'); setError(''); }
           else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
           else { void convert('markdown'); }
-        }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>}
+        }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
+        <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
+      </span>}
       {editing ? <>
         <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
         <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>

@@ -1103,3 +1103,15 @@ listeners, changed process identity and SIGKILL escalation, and runs in
 `./sigma test`. The isolated tests passed in the assistant's Python
 environment, but end-to-end behavior on the user's macOS machine is not yet
 verified.
+
+## Markdown conversion tooltip (2026-10-21)
+
+The gray Σ control now shows a visible hover and keyboard-focus tooltip reading
+“Convert to markdown”; after a successful conversion, the same tooltip reads
+“Show plain text”. The A14.2 real-Chrome regression checks both states.
+
+Actual verification: `uv run --with playwright python
+browser_checks/a142.py` passed in real Chrome, including the initial gray state,
+conversion failure and retry, and the rendered-state tooltip. `./sigma test`
+passed all scenarios, API/CLI checks, Ruff, Pyright, frontend typecheck and
+production build.
