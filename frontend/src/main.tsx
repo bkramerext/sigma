@@ -655,12 +655,12 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
   </div>;
 }
 
-function Header({ goHome, close, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to Home" title="Back to Home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><span className="project-back-label">Back to Home</span></div>
+      {projectArtwork ? close && <div className="project-title-line"><div className="project-back-stack"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to Home" title="Back to Home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><span className="project-back-label">Back to home</span></div>{projectTitle && <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -688,9 +688,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, connectionDisabled = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, connectionDisabled = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; connectionDisabled?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; connectionDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -703,7 +703,7 @@ function WorkspaceFrame({ children, goHome, close, connectionDisabled = false }:
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectArtwork connectionDisabled={connectionDisabled}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectArtwork connectionDisabled={connectionDisabled}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -1517,7 +1517,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
-  return <WorkspaceFrame {...frame}>
+  return <WorkspaceFrame {...frame} projectTitle={project.title}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
