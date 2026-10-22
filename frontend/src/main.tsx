@@ -34,7 +34,7 @@ type ProjectView = {
     schema_version: number;
     ai_model: string;
     reasoning_effort: string;
-    research_mode: 'default' | 'mathematical';
+    investigation_type: 'default' | 'mathematical';
     events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
       project_change?: { previous: Settings; current: Settings } | null;
       order?: string[] | null; stage_change?: { previous: Stage; stage: Stage } | null;
@@ -288,17 +288,17 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   </dialog>;
 }
 
-type Settings = { title: string; problem: string; research_mode: ResearchMode; ai_model: string; reasoning_effort: string };
+type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string };
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; availability: 'available' | 'unavailable' | 'unverified' };
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
-const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, research_mode: view.project.research_mode, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort });
+const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort });
 
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', research_mode: 'default', ai_model: '', reasoning_effort: 'high' });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high' });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -349,7 +349,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
-      <label htmlFor="project-mode">Investigation type</label><select id="project-mode" value={values.research_mode} onChange={event => change('research_mode', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
+      <label htmlFor="project-mode">Investigation type</label><select id="project-mode" value={values.investigation_type} onChange={event => change('investigation_type', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
       <label htmlFor="project-model">AI model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
@@ -370,8 +370,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; research_mode: string | null; strategy_count: number | null; available: boolean; error: string | null };
-type StockProject = { id: string; title: string; problem: string; research_mode: string; strategy_count: number };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; available: boolean; error: string | null };
+type StockProject = { id: string; title: string; problem: string; investigation_type: string; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
@@ -400,7 +400,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new investigation.</p>}
     <ul>{projects.map(entry => <li key={entry.id}>
-      <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong><small>{entry.research_mode === 'mathematical' ? 'Mathematical' : entry.research_mode === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small><span title={entry.path}>{entry.path}</span></button>
+      <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong><small>{entry.investigation_type === 'mathematical' ? 'Mathematical' : entry.investigation_type === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small><span title={entry.path}>{entry.path}</span></button>
       <button className="recent-forget" disabled={!!opening} aria-label={`Forget ${entry.title} from Recent Projects`} title="Forget from Recent Projects; keep all research" onClick={() => void forget(entry)}>×</button>
       {entry.error && <p className="recent-unavailable">{entry.error}</p>}
     </li>)}</ul>
@@ -431,7 +431,7 @@ function StockProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }
   return <div className="empty home-empty home-stock">
     {loading ? <p role="status">Loading stock projects…</p> : !projects.length && !error && <p>No stock projects are available.</p>}
-    <ul>{projects.map(stock => <li key={stock.id}><button className="stock-open" disabled={!!opening} onClick={() => void open(stock)} aria-label={`Open ${stock.title}`}><strong>{stock.title}</strong><small>{stock.research_mode === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(stock.strategy_count)}</small></button></li>)}</ul>
+    <ul>{projects.map(stock => <li key={stock.id}><button className="stock-open" disabled={!!opening} onClick={() => void open(stock)} aria-label={`Open ${stock.title}`}><strong>{stock.title}</strong><small>{stock.investigation_type === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(stock.strategy_count)}</small></button></li>)}</ul>
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -491,7 +491,7 @@ function Home({ initialPath, currentPath, onOpen, goHome }: {
     <div className="home-content">
     <div className="home-topline"><img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/><ConnectionStatus/></div>
     <div className="home-hero">
-    {currentProject && <div className="home-current"><p>Current Project</p><button type="button" disabled={reopening} onClick={() => void reopenCurrent()}>{currentProject.project.title}<span aria-hidden="true">→</span></button></div>}
+    {currentProject && <div className="home-current"><p>Current Project</p><button type="button" disabled={reopening} onClick={() => void reopenCurrent()}><span className="home-current-title">{currentProject.project.title}</span><span className="home-current-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m10 5 7 7-7 7M17 12H4"/></svg></span></button></div>}
     {currentError && <p role="alert" className="error">{currentError}</p>}
     <h1 ref={heading} tabIndex={-1}>Switch to a new project</h1>
     <p className="intro">Open an existing project or begin a new investigation.</p>
@@ -959,7 +959,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
       <div className="project-description-line"><h2 className="investigation-heading">Investigation</h2><div className="investigation-heading-actions"><button type="button" className="text-view-link" onClick={() => setInvestigationEditSignal(value => value + 1)} disabled={closing || ordering || !!dragId || editing || generating}>Edit</button><button ref={editProjectButton} type="button" className="text-view-link" onClick={() => setProjectEditing(true)} disabled={closing || ordering || !!dragId || editing || generating}>Settings</button></div></div>
-      <TextViews editSignal={investigationEditSignal} mathematical={project.research_mode === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
+      <TextViews editSignal={investigationEditSignal} mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -992,7 +992,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
-            <div className="strategy-expanded"><TextViews mathematical={project.research_mode === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
+            <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
               <code className="strategy-identity">{strategy.id}</code>
             </div>
           </details>
@@ -1028,12 +1028,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       }}/>}
     <details className="project-details">
       <summary>Project details &amp; history</summary>
-      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Investigation type</dt><dd>{project.research_mode === 'mathematical' ? 'Mathematical' : 'Default'}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
+      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Investigation type</dt><dd>{project.investigation_type === 'mathematical' ? 'Mathematical' : 'Default'}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
       <h3>Event history</h3>
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
-          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', research_mode: 'Investigation type', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {event.project_change!.previous[key]}<br/>After: {event.project_change!.current[key]}</dd></div>)}</dl></details>}
+          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', investigation_type: 'Investigation type', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {event.project_change!.previous[key]}<br/>After: {event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
           {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>
