@@ -85,8 +85,8 @@ with sync_playwright() as playwright:
     )
     assert saved.status == 201
     page.get_by_role("button", name="Close project").click()
-    expect(samples_tab).to_have_attribute("aria-selected", "true")
-    recent_tab.click()
+    # A Sample is copied into working projects; return to Recent automatically.
+    expect(recent_tab).to_have_attribute("aria-selected", "true")
     expect(
         recent_panel.get_by_text(re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy\)"))
     ).to_be_visible()
@@ -103,6 +103,12 @@ with sync_playwright() as playwright:
     samples_tab.click()
     expect(samples_tab).to_have_attribute("aria-selected", "true")
 
+    # A second successful Sample copy must select Recent again.
+    samples_panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
+    page.get_by_role("button", name="Close project").click()
+    expect(recent_tab).to_have_attribute("aria-selected", "true")
+    samples_tab.click()
+
     for width, height in ((1280, 720), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
         samples_tab.click()
@@ -114,5 +120,5 @@ with sync_playwright() as playwright:
     assert not errors, errors
     browser.close()
     print(
-        "PASS Chrome sticky Samples/Recent tabs, full expanded strategy text, keyboard access, sample copy, immutable source, and responsive layout"
+        "PASS Chrome Recent after Sample copies, manual tab persistence, full strategy expansion, and source immutability"
     )
