@@ -1,49 +1,46 @@
-# A15: Make Generate Strategy work end to end
+# A15: Make basic Generate Strategy work
 
-**Status:** Ready for Codex implementation. **Priority:** Complete the existing Generate Strategy workflow; do not invent a new agent architecture.
+**Status:** Ready for Codex implementation. **Scope:** Single-request Generate Strategy, **not** the multi-agent research workflow.
 
-**Assignment history:** The former A15 specification for Plain/Markdown/Rendered text views is preserved verbatim in `docs/assignments/asn15-text-representations-original.md`. This A15 supersedes that assignment number for the next development task. A14.2 covers the separate Markdown conversion regression; do not absorb that work here.
+**Assignment history:** A14 described and may already have implemented agentic behavior. The heavier Explore → Challenge → Decide orchestration and its detailed requirements are assigned to **A16** (`docs/assignments/asn16.md`). This A15 focuses on the minimal functional user-facing Generate Strategy path. **Do not delete or regress working agentic code** to enforce a single-call design; isolate or bypass it only if needed to make the basic path reliable. The original A15 text-representations specification is preserved in `docs/assignments/asn15-text-representations-original.md`. A14.2 separately covers Markdown conversion.
 
 ## Objective
 
-Deliver a functional, reliable **Generate Strategy** workflow, from clicking **Generate with AI** to a reviewable, editable **unsaved** proposal and an explicitly saved persistent strategy. A14 already defines the intended multi-agent behavior in `docs/assignments/asn14.md`; treat that document as the product/agentic contract. **A15 is implementation completion, integration, diagnosis and verification**, not a speculative redesign or a new Generate Scenario feature.
+Make **New Strategy → Generate with AI** work end to end for a real investigation using the **simplest existing supported generation path**: one bounded LLM generation request, validated response, editable **unsaved** draft, and explicit Save. Fix actual integration failures rather than expanding agent orchestration.
 
-Read the current implementation, tests, `docs/HUMAN-AI-INTERACTION.md`, `docs/agent-output-design.md`, and `docs/STATUS.md` before editing. Start by identifying what is already implemented and the first concrete failure along the actual path. Fix defects in place and avoid duplicate frameworks.
+Read the current implementation, existing tests, `docs/STATUS.md`, and `docs/HUMAN-AI-INTERACTION.md`. Identify the first broken step in the actual UI → API → model → draft → save path before modifying code. Reuse current auth, request, receipt and persistence services. Do not introduce a second competing generation framework.
 
-## Required functional path
+## Required behavior
 
-1. From an open mathematical investigation, **New Strategy → Generate with AI** opens the existing dialog. Accept an optional starting point, but work with an empty one. Respect the selected model, thinking effort, connected identity and billing mode. Do not change settings implicitly.
-2. Load the current authoritative research problem and **all** existing and previously attempted strategy mechanisms, including removed/abandoned entries as available. Preserve original mathematical notation, source content, and source revision/binding checks. Handle too-large context honestly, never silently drop prior strategies.
-3. Run real bounded agent activity: **Explore** proposes a concrete mechanism; a **separate invocation** independently **Challenges** its relevance, assumptions, proof obligations, possible counterexamples and substantive overlap; the coordinator then **Decides** to present, revise, try a distinct direction or stop. Branches must be driven by actual review results, not pre-scripted stages. Retain A14's ceilings of **6 model calls** and **2 candidate attempts**, finite deadlines, explicit cancellation and no automatic provider retries or billing fallback.
-4. Stream **actual, typed, ordered progress events** into the existing dark-navy/copper dialog. Report only work that started/completed, with a truthful current activity and compact completed ledger. Handle malformed, missing or interrupted terminal events as failures. No fake percentages, fabricated research/testing, or exposure of hidden reasoning.
-5. On viable completion, populate the **existing editable strategy draft** (title, summary, approach, concrete first tests/obligations/failure modes as appropriate) and public review summary. Nothing is added to the investigation until the user explicitly chooses **Save strategy**. Reject/cancel/close leaves the pool unchanged. Saving must preserve signed receipt/provenance and project identity/history; reopening shows the saved strategy.
-6. A second generation after a saved strategy must compare the **underlying mathematical mechanism** against previous approaches. Cosmetic rewording is not sufficient. When the bounded search finds no defensible distinct proposal, display a truthful no-viable-proposal outcome rather than manufacturing success.
-7. On provider rejection (including a ChatGPT-plan HTTP 200 error envelope), authentication/account/model change, timeout, network failure, malformed output, concurrent run or cancellation, restore a usable dialog, preserve the user's starting point and investigation data, release run gates, and allow an **explicit** retry. Use the existing **single dismissible request-failure toast** plus appropriate inline UI state; do not show success or switch to an empty/irrelevant view. Do not expose credentials, raw provider payloads or sensitive source text in diagnostics.
+1. From an investigation with **zero or more strategies**, the existing **Generate with AI** action opens its existing dialog and accepts an optional user starting point. An empty starting point is valid.
+2. Send the authoritative current research problem, relevant existing strategy context, selected model and thinking effort through the **current connected account and billing mode**. Keep untrusted investigation text as data. Reject oversized context clearly rather than silently truncating important strategy history.
+3. Generate **one** proposed strategy with a concrete mechanism, title, summary, approach, assumptions/obligations and plausible initial tests/failure modes as supported by the existing draft schema. Ask the model to avoid duplicating previous strategies, but **do not claim independent adversarial review** in A15.
+4. Validate provider completion, structured output, source/account/model binding, response bounds and receipt/provenance. Handle both API-key and ChatGPT-plan response contracts without silently switching billing mode or model. No automatic retries or unbounded loops.
+5. Display a truthful pending indicator while the request runs; show the result in the existing **editable unsaved** strategy draft. Nothing is added to the investigation until the user explicitly selects **Save strategy**. Closing/cancelling/rejecting preserves existing strategies and research.
+6. Save through the existing guarded service, then reopen and confirm the strategy persists with its identity, event history and attribution. Preserve the user's typed draft on save errors and recover focus/UI state appropriately.
+7. On provider rejection, malformed output, timeout, network failure, cancellation, changed account/model, concurrent run or incomplete response, preserve source and strategy pool; restore a usable dialog with an explicit retry path. Use the existing **single dismissible error toast** and appropriate inline state. Do not show an empty draft or claim success on failure.
 
-## First acceptance scenario
+## Acceptance test
 
-Use the committed stock fixture `examples/counting-constrained-binary-strings/project.json` (zero strategies). Do not alter the canonical fixture.
+Use `examples/counting-constrained-binary-strings/project.json` without changing the canonical fixture.
 
-- Open a managed copy. Verify zero strategies and the original research problem.
-- Trigger Generate with AI with **no starting point**. Observe real Explore → Challenge → conditional Decision activity and a complete unsaved, editable draft. The content must have a concrete mathematical mechanism and falsifiable or provable obligations.
-- Cancel/reject once and confirm zero saved strategies. Repeat, then explicitly save a valid draft; verify **exactly one** strategy with correct attribution, persisted on reopening.
-- Trigger generation again and verify that the reviewer considers the saved strategy and rejects merely renamed versions of its mechanism. A legitimately different strategy or a justified no-viable-proposal result is acceptable.
-- Verify cancellation during an in-flight stage and a simulated provider failure do not alter the strategy pool, original research problem or user settings.
+- Open a managed copy and confirm it starts with **zero strategies**.
+- Choose Generate with AI with **no starting point**. Verify one actual bounded generation request yields an editable **unsaved** candidate with a substantive mathematical approach.
+- Cancel or reject and confirm the pool remains empty.
+- Generate again, explicitly Save, reopen and verify **exactly one** strategy persists with correct metadata.
+- Generate with an existing strategy present, verify prior context is supplied and the output does not simply copy the existing title/approach. This is a prompt/quality check, **not** A16's independent mechanism-review guarantee.
+- Simulate provider failure and cancellation; verify unchanged research, one error toast, usable recovery and no saved draft.
 
-Use A14's test-only oracle `n=0,1,2,5,10 → 1,2,3,13,144` for checking proposed examples. Do not feed a preselected solution into the generation prompt.
+## Verification and delivery
 
-## Test requirements
+Add deterministic **no-paid-call** backend/API and browser tests for successful generation, empty optional seed, existing strategy context, invalid/missing output, provider rejection including HTTP 200 error envelopes, cancellation, timeout, account/model changes, conflict and explicit save/reopen. Verify any progress shown is truthful; **multi-stage agent progress is not required by A15**.
 
-Add or repair deterministic **mock-provider, no-paid-call** backend and API tests for: distinct accepted candidate, duplicate rejected then retry, targeted revision, exhausted candidates, malformed/refused output, provider rejection including HTTP 200 error-object, truncated/invalid progress stream, timeout, cancellation/disconnect, changed identity/model/billing mode, concurrent run gate, source revision conflict, receipt integrity and save/reopen.
+Run `./sigma test`, frontend build/typecheck and relevant browser tests. Record commands and results in `docs/STATUS.md`; don't claim a live provider run unless actually executed. Keep changes focused; preserve approved artwork, Home, text representations, and unrelated migration work.
 
-Exercise the **real frontend path** in browser tests: entry from New Strategy, optional starting point, chronological progress, reduced motion, cancel/close, error toast and recovery, completed editable draft, explicit save, and persistence after reopen. Test the zero-strategy fixture and a nonempty strategy pool. Do not use mocked UI timers to imply real backend progress.
+**Commit and push directly to `main`**, no pull request. Report commit SHA, root causes, tests actually run and remaining limitations.
 
-Run `./sigma test`, the frontend build/typecheck and applicable browser tests; record exact commands, pass/fail counts and limitations in `docs/STATUS.md`. Do not claim a successful live-model run unless it was actually performed. A manual live-provider smoke test, if available and explicitly authorized, should use the current account/billing selection with no hidden fallback.
+## Explicitly deferred to A16
 
-## Delivery and boundaries
+Independent Explorer/Critic calls; Python critique-driven coordinator; multi-attempt revision/retry; mechanism-aware independent overlap assessment; multi-stage typed progress ledger; no-viable-proposal decision from a bounded agentic search. These are **not A15 acceptance criteria**.
 
-- Preserve approved artwork, Home layout, investigation workspace design and text-view behavior. Do not change A14.2 Markdown conversion or the broader A14.1 Project → Investigation migration except for integration fixes needed by Generate Strategy.
-- No new Scenario generator, autonomous experiment execution, proof claims, broad architecture rewrite, provider switch or extra product features.
-- Commit and push **directly to `main`**, no pull request. Report the commit SHA, observed root cause(s), tests actually run and any remaining blockers.
-
-**Definition of done:** A user can generate a genuinely reviewed strategy through real agent calls, see truthful progress, edit the result, explicitly save it, reopen it, and repeat with meaningful overlap checking; errors/cancellation preserve all prior research and recover cleanly.
+**Definition of done:** Generate Strategy reliably produces a single-model, reviewable, editable draft and persists it **only** after explicit user acceptance, with safe failure/cancellation behavior.
