@@ -616,3 +616,10 @@
     padding-left: 16px;
   }
 }
+
+/* Strategy stages are retired; keep the reorder grip but no stage column. */
+.workspace-page .strategy-columns { grid-template-columns: minmax(0, 1fr); }
+.workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 44px; }
+@media (max-width: 900px) {
+  .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 36px; }
+}
