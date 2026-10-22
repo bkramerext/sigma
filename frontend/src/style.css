@@ -240,13 +240,14 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-topline { height: 52px; }
 .home-page .home-hero { margin-top: 12px; }
 
-/* Anchor the beam artwork to the viewport, independent of its dimensions. */
+/* Match the background's cover scale: both images share image-top/center anchors. */
 .home-page .home-slogan {
   position: fixed;
-  top: 300px;
+  top: calc(300px * var(--home-art-scale, 1));
   left: 50%;
   right: auto;
-  width: min(850px, calc(100vw - 32px));
+  width: calc(850px * var(--home-art-scale, 1));
+  max-width: none;
   height: auto;
   margin: 0;
   transform: translateX(-50%);
