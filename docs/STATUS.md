@@ -1,5 +1,21 @@
 # SIGMA status
 
+## Strategy preview and Home tab persistence (2026-10-21)
+
+The collapsed strategy summary remains a one-line teaser. Expanding a strategy
+now hides that teaser and displays the full approach without truncation.
+Home remembers the Samples/Recent selection across project navigation and page
+reload using the existing browser-local preference mechanism, while retaining
+Samples as the default when no preference exists.
+
+Added real-Chrome assertions to `browser_checks/recents.py` for expanding and
+collapsing full strategy text, retaining Samples after a sample-project visit,
+and retaining Recent after a recent-project visit and reload. Reviewed the
+committed CSS, React state, and test assertions for consistency. **The browser
+regression and full `./sigma test` suite have not been executed in this session**
+because the local SIGMA web/API servers and repository test environment are
+not accessible here. No runtime-verification claim is made.
+
 Updated: 2026-10-21
 
 ## A14.2 ChatGPT-plan Markdown conversion recovery
