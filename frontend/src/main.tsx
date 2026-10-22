@@ -12,6 +12,9 @@ import { AIProvider, ConnectionStatus, ManageUsage, PlanWelcome, beginProviderRe
 import { installRequestErrorToasts, reportRequestFailure, RequestErrorToasts } from './request-toast';
 const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
+// Prospective navigation rail; keep implementation available for later activation.
+const ENABLE_WORKSPACE_SIDEBAR = false;
+
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
 type Strategy = {
@@ -585,8 +588,8 @@ function WorkspaceFrame({ children, goHome, close, connectionDisabled = false }:
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
     <Header goHome={goHome} close={close} projectArtwork connectionDisabled={connectionDisabled}/>
-    <div className={`workspace-layout${collapsed ? ' nav-collapsed' : ''}`}>
-      <nav className="workspace-nav" aria-label="Project navigation">
+    <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
+      {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
         <a href="#project-pane-heading" aria-label="Project" title={collapsed ? 'Project' : undefined} onClick={event => { event.preventDefault(); focusWorkspace('project-pane-heading'); }}><WorkspaceIcon name="Settings"/><span>Project</span></a>
         <a href="#sessions-heading" aria-label="Sessions" title={collapsed ? 'Sessions' : undefined} onClick={event => { event.preventDefault(); focusWorkspace('sessions-heading'); }}><WorkspaceIcon name="Analysis"/><span>Sessions</span></a>
@@ -598,7 +601,7 @@ function WorkspaceFrame({ children, goHome, close, connectionDisabled = false }:
             <WorkspaceIcon name={name}/><span>{name}</span><small>Later</small>
           </button>)}
         <p id="workspace-nav-help">Other destinations are not available yet.</p>
-      </nav>
+      </nav>}
       <div id="workspace-content" className="workspace-content" tabIndex={-1}>{children}</div>
     </div>
   </>;
