@@ -1,4 +1,4 @@
-"""Discover shipped sample projects and copy them into independent user projects."""
+"""Discover shipped sample projects and create independent working projects."""
 
 import json
 import os
@@ -67,7 +67,7 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
 
 
 def sample_projects() -> dict[str, list[dict[str, Any]]]:
-    """The Sample list always describes the untouched templates, not user copies."""
+    """The Sample list always describes the untouched templates, not working projects."""
     return {"projects": [asdict(_load(name)[1]) for name, _ in _projects()]}
 
 
@@ -76,7 +76,7 @@ def sample_project_ids() -> set[str]:
 
 
 def open_sample_project(identifier: str) -> ProjectView:
-    """Create an independent copy named 'Title (copy)', then '(copy 1)', etc."""
+    """Create an independent working project named 'Title - Working #1', etc."""
     raw, _ = _load(identifier)
     root = projects_root()
     if root.is_relative_to(SAMPLES):
@@ -84,15 +84,15 @@ def open_sample_project(identifier: str) -> ProjectView:
 
     with _title_registry_lock(root):
         occupied = _occupied_titles(root)
-        copied_title = ""
-        for number in range(10000):
-            suffix = " (copy)" if number == 0 else f" (copy {number})"
+        working_title = ""
+        for number in range(1, 10001):
+            suffix = f" - Working #{number}"
             title = raw["title"][: 200 - len(suffix)].rstrip() + suffix
             if _title_key(title) not in occupied:
-                copied_title = title
+                working_title = title
                 break
-        if not copied_title:
-            raise ProjectError("Too many copies of this sample project.")
+        if not working_title:
+            raise ProjectError("Too many working projects from this sample.")
 
         # Display-name suffixes are independent of directory numbering. A
         # previous release may have installed a sample project at sample.sigma.
@@ -107,13 +107,13 @@ def open_sample_project(identifier: str) -> ProjectView:
             except FileExistsError:
                 continue
             except OSError as exc:
-                raise ProjectError(f"Cannot create sample project copy: {exc}") from exc
+                raise ProjectError(f"Cannot create sample working project: {exc}") from exc
         if destination is None:
             raise ProjectError("Too many copies of this sample project.")
 
         staged: Path | None = None
         try:
-            copied = {**raw, "id": str(uuid4()), "title": copied_title}
+            copied = {**raw, "id": str(uuid4()), "title": working_title}
             # Keep the strategies and their history, but give this project
             # its own identity and a distinct display name.
             _decode(copied)
@@ -121,7 +121,7 @@ def open_sample_project(identifier: str) -> ProjectView:
             os.link(staged, destination / STATE)
             view = inspect_project(destination)
         except OSError as exc:
-            raise ProjectError(f"Cannot open sample project copy: {exc}") from exc
+            raise ProjectError(f"Cannot open sample working project: {exc}") from exc
         finally:
             if staged is not None:
                 staged.unlink(missing_ok=True)
