@@ -1474,3 +1474,54 @@ session counts, confirmation limits, token/cost presentation, interruption
 safety, strategy navigation/focus, failure recovery and mobile overflow. No
 live or paid provider call was made. The existing Starlette TestClient/httpx
 deprecation warning remains non-failing.
+
+## A17.4: workspace disclosures, session outcomes and export (2026-10-22)
+
+Project, Strategies, Sessions, each strategy and each session now use focusable
+chevron disclosures. Their content stays mounted while collapsed, so drafts,
+activity updates and session polling continue. Project Download and Settings
+remain in the Project bar while its description is collapsed. Section headings
+share Home Projects typography and divider spacing. Home recents put the open
+project first, bold its title and place Remove on its metadata row. Strategy
+More actions is a flat menu beside the title pencil; Schedule and Report artifact
+remain disabled with explanations, while Fork, Change stage and separated
+Remove retain their behavior. Play expands and reveals the launched/resumed
+session. Session removal is terminal-only, confirmation-based, revision-checked
+and leaves the project and other sessions untouched; a durable sequence counter
+prevents reusing deleted numbers.
+
+Settings uses a wider fixed outer frame with an internally scrolling body and
+validates future-session limits without changing existing snapshots. Backend
+and UI enforce 1–10 rounds, 2–20 calls, 1–120 minutes, 256–16,384 output
+tokens, and $0.01–$100 or blank for the API-only cost cap; call allowance must
+cover two calls per round. Numeric spinners are hidden. Session Outcome is
+derived from saved artifacts and Coordinator decisions, carries caveats, and
+remains independent of execution status. Export v2 includes ordered session
+records with snapshots, steps, token use, artifacts, decisions, errors and the
+same derived outcome while filtering credentials and identity metadata.
+
+Coordination audit: the observed local two-call session had an Investigator
+result followed by a Skeptic review that accepted the result and found no next
+test. The previous Coordinator stopped on the generic `stop` assessment, so the
+stop itself was appropriate but its reason was ambiguous. The structured
+`productive_conclusion` branch now records a useful reported conclusion and
+explicitly labels it unverified. Mocked decisions cover recoverable objections
+(revise when a concrete question remains), decisive counterexamples, no
+progress, budget exhaustion and productive conclusions; criticism alone does
+not stop a session.
+
+Previously saved limit sidecars that fit the older contract but exceed the new
+bounds remain readable without rewriting. The Settings form shows their
+validation errors and requires explicit correction before save; backend session
+admission rejects them until then. Existing session snapshots remain untouched.
+
+Final A17.4 verification: `./sigma test` passed all scenarios, Ruff, Pyright,
+frontend typecheck and production build. Real Chrome used the local mock
+provider, not paid/live calls, at 1440×900 desktop and 390×844 narrow mobile.
+The A17 research browser scenario covers stable Settings dimensions, collapsed
+Project actions, menu order/keyboard state, strategy/session disclosures,
+launch scrolling, completed activity collapse, artifact/outcome visibility,
+confirmed deletion and preservation of session numbers 1 and 3 after removing
+2. Screenshots: `/tmp/sigma-a174-desktop.png` and
+`/tmp/sigma-a174-mobile.png`. Legacy project/session records are not migrated;
+out-of-bound saved limits remain unchanged until explicitly corrected.

@@ -55,6 +55,7 @@ async def handler(request):
         else:
             result = {
                 "assessment": "revise" if cycle == 1 else "continue",
+                "stop_reason": "recoverable_objection",
                 "response": f"Independent fixture review for cycle {cycle}.",
                 "objections": [f"Check boundary case {cycle}"],
                 "remaining_obligations": [f"Resolve obligation {cycle}"],

@@ -271,8 +271,8 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects-heading h1 {
   margin: 0;
   color: #e6af92;
-  font: 400 clamp(25px, 2.5vw, 34px)/1.3 Georgia, serif;
-  letter-spacing: -.02em;
+  font: 400 23px/1.3 Georgia, serif;
+  letter-spacing: 0;
 }
 .home-page .home-projects-heading .home-project-action,
 .home-page .home-projects-heading .home-project-action:hover:not(:disabled) {

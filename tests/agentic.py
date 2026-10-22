@@ -174,7 +174,7 @@ async def main_async(root: Path):
     assert agentic_runs_view(path)["runs"][0]["run_id"] == events[-1]["run_id"]
     assert agentic_runs_view(path, events[-1]["run_id"])["final_candidate"] == CANDIDATE
     export = export_project_view(path)
-    assert export["export_version"] == 1
+    assert export["export_version"] == 2
     assert export["project"]["id"] == view.project.id
     assert not export["project"][
         "strategies"

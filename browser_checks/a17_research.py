@@ -1,5 +1,6 @@
 """Real Chrome A17 three-pane workspace against the isolated provider fixture."""
 
+import json
 import os
 import re
 from pathlib import Path
@@ -48,10 +49,19 @@ with sync_playwright() as playwright:
         "button", name="Open Counting Constrained Binary Strings"
     ).click()
     page.wait_for_url("**/project?*")
-    expect(page.get_by_role("heading", name="PROJECT")).to_be_visible()
+    expect(page.get_by_role("heading", name="Project")).to_be_visible()
     expect(page.get_by_role("button", name="Back to Home", exact=True)).to_be_visible()
+    project_header = page.locator(".project-pane-heading")
+    project_disclosure = project_header.get_by_role("button", name="Project", exact=True)
+    project_disclosure.click()
+    expect(page.locator("#project-pane-content")).to_be_hidden()
+    project_header.get_by_role("button", name="Download project", exact=True).click()
+    expect(page.get_by_role("dialog", name="Export")).to_be_visible()
+    page.get_by_role("button", name="Cancel", exact=True).click()
+    expect(page.locator("#project-pane-content")).to_be_hidden()
     page.get_by_role("button", name="Project settings", exact=True).click()
     settings = page.get_by_role("dialog", name="Settings")
+    main_box = settings.bounding_box()
     expect(settings.get_by_role("tab", name="Main")).to_have_attribute("aria-selected", "true")
     settings.get_by_role("tab", name="Limits").focus()
     page.keyboard.press("ArrowRight")
@@ -59,7 +69,36 @@ with sync_playwright() as playwright:
     expect(settings.get_by_role("tabpanel", name="Limits")).to_be_visible()
     expect(settings.get_by_label("Research rounds")).to_have_value("3")
     expect(settings.get_by_label("Model calls")).to_have_value("6")
+    rounds_input = settings.get_by_label("Research rounds")
+    assert rounds_input.evaluate("element => getComputedStyle(element).appearance") == "textfield"
+    rounds_input.fill("4")
+    expect(
+        settings.get_by_role("alert").filter(has_text="two model calls per round")
+    ).to_be_visible()
+    save_settings = settings.get_by_role("button", name="Save", exact=True)
+    expect(save_settings).to_be_disabled()
+    rounds_input.fill("0")
+    expect(
+        settings.get_by_role("alert").filter(has_text="whole number from 1 to 10")
+    ).to_be_visible()
+    rounds_input.fill("3")
+    cost_input = settings.get_by_label("Maximum estimated session cost (USD)")
+    cost_input.fill("0")
+    expect(settings.get_by_role("alert").filter(has_text="$0.01 to $100.00")).to_be_visible()
+    expect(save_settings).to_be_disabled()
+    cost_input.fill("")
+    expect(save_settings).to_be_enabled()
+    limits_box = settings.bounding_box()
+    assert (
+        main_box
+        and limits_box
+        and abs(main_box["width"] - limits_box["width"]) < 1
+        and abs(main_box["height"] - limits_box["height"]) < 1
+    )
     settings.get_by_role("button", name="Cancel", exact=True).click()
+    expect(page.locator("#project-pane-content")).to_be_hidden()
+    project_disclosure.click()
+    expect(page.locator("#project-pane-content")).to_be_visible()
     connection = page.locator(".api-connection")
     connection.locator("summary").click()
     connection_dialog = page.get_by_role("dialog", name="AI connection settings")
@@ -99,7 +138,7 @@ with sync_playwright() as playwright:
         "pool workspace-pane strategies-pane",
         "sessions-pane workspace-pane",
     ]
-    expect(page.get_by_role("heading", name="PROJECT")).to_be_visible()
+    expect(page.get_by_role("heading", name="Project")).to_be_visible()
     expect(page.locator(".project-pane-title-line")).not_to_contain_text("Project:")
     expect(page.locator(".project-pane").locator("details")).to_have_count(0)
     original_project_title = page.locator(".project-pane-title-line .current-project").inner_text()
@@ -122,7 +161,7 @@ with sync_playwright() as playwright:
     pencil_box = page.locator(".project-title-pencil").bounding_box()
     assert title_box and pencil_box and pencil_box["x"] < title_box["x"] + title_box["width"] + 20
     expect(page.locator(".project-pane-heading")).not_to_contain_text("For each integer n")
-    page.screenshot(path="/tmp/sigma-a171-desktop.png", full_page=True)
+    page.screenshot(path="/tmp/sigma-a174-desktop.png", full_page=True)
     page.reload()
     expect(page.locator(".project-pane-title-line .current-project")).to_have_text(workspace_title)
     page.get_by_role("button", name=re.compile("Edit project title:")).click()
@@ -234,6 +273,27 @@ with sync_playwright() as playwright:
     expect(first_row.locator(".strategy-title-line h3")).to_have_text("Saved research approach")
     expect(first_row.locator(".strategy-expanded")).to_be_visible()
     expect(first_row.locator("details.strategy-detail")).to_have_count(0)
+    more = first_row.get_by_role(
+        "button", name="More actions for Saved research approach", exact=True
+    )
+    more.click()
+    expect(more).to_have_attribute("aria-expanded", "true")
+    menu = first_row.get_by_role("menu")
+    expect(menu.locator("[role=menuitem]")).to_have_count(5)
+    assert menu.locator("[role=menuitem]").all_text_contents() == [
+        "Schedule",
+        "Fork",
+        "Report artifact",
+        "Change stage",
+        "Remove",
+    ]
+    expect(menu.get_by_role("menuitem", name="Schedule")).to_be_disabled()
+    menu.get_by_role("menuitem", name="Fork").focus()
+    page.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="Change stage")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(more).to_be_focused()
+    expect(more).to_have_attribute("aria-expanded", "false")
     page.get_by_role(
         "button", name="Edit strategy title: Saved research approach", exact=True
     ).click()
@@ -252,7 +312,9 @@ with sync_playwright() as playwright:
     page.locator(f"li[data-strategy-id='{first_strategy_id}']").get_by_role(
         "button", name="Save", exact=True
     ).click()
-    expect(page.locator(f"h3#strategy-{first_strategy_id}")).to_have_text("A17.1 saved approach")
+    expect(page.locator(f"button#strategy-{first_strategy_id} h3")).to_have_text(
+        "A17.1 saved approach"
+    )
     expect(first_row.locator(".strategy-expanded")).to_be_visible()
 
     def fail_strategy_edit(route):
@@ -292,6 +354,10 @@ with sync_playwright() as playwright:
     expect(first_session).to_have_count(1, timeout=15000)
     expect(first_session.locator(".session-row-title")).to_have_text("Session #1")
     expect(first_session.locator(".session-status")).to_contain_text("completed")
+    page.wait_for_function(
+        """id => { const row = document.querySelector(`[data-session-id="${CSS.escape(id)}"]`); if (!row) return false; const rect = row.getBoundingClientRect(); return rect.top < innerHeight && rect.bottom > 0; }""",
+        arg=first_session.get_attribute("data-session-id"),
+    )
     expect(research.locator(".section-count")).to_have_text("1 session, 0 running")
     expect(page.locator(".api-connection .connection-dot")).not_to_have_class(
         re.compile("connection-active")
@@ -307,10 +373,13 @@ with sync_playwright() as playwright:
     expect(artifacts).to_contain_text("Unverified research note")
     events = research.get_by_label("Recent session activity")
     expect(events.locator("li").last).to_contain_text("artifact committed")
-    strategy_navigation = first_session.locator(".text-view-link").filter(has_text="Go to ")
+    expect(events.get_by_role("button", name="Recent activity")).to_have_attribute(
+        "aria-expanded", "false"
+    )
+    strategy_navigation = first_session.get_by_role(
+        "link", name="Go to strategy: A17.1 saved approach", exact=True
+    )
     expect(strategy_navigation).to_be_visible()
-    navigation_label = strategy_navigation.inner_text()
-    assert navigation_label.startswith("Go to ") and navigation_label.removeprefix("Go to ")
     strategy_navigation.click()
     expect(page.locator("#strategy-" + first_strategy_id)).to_be_focused()
     assert project_file.read_bytes() == project_before
@@ -364,6 +433,7 @@ with sync_playwright() as playwright:
     expect(dot).to_have_css("animation-name", "connection-dot-pulse")
     page.get_by_role("button", name="Pause research session", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("paused", timeout=5000)
+    expect(pause_row.get_by_role("button", name="Remove session", exact=True)).to_have_count(0)
     resume = page.get_by_role("button", name=re.compile("Resume unavailable"))
     expect(resume).to_be_disabled()
     expect(pause_row).to_contain_text("completion is ambiguous")
@@ -371,6 +441,7 @@ with sync_playwright() as playwright:
     confirm_stop = research.get_by_role("group", name="Confirm stop session")
     confirm_stop.get_by_role("button", name="Confirm stop", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
+    expect(pause_row.get_by_role("button", name="Remove session", exact=True)).to_be_visible()
 
     # A background provider failure is reconciled into the history and a toast.
     page.get_by_role(
@@ -416,15 +487,18 @@ with sync_playwright() as playwright:
     assert project_file.read_bytes() == saved_before_fallback
     legacy_titleless["enabled"] = False
 
-    # Project, strategy, and session rows are plain and non-collapsible.
+    # All workspace sections and rows use independent accessible disclosures.
     expect(page.locator(".project-pane").locator("details")).to_have_count(0)
-    expect(
-        page.locator("li[data-strategy-id]").first.locator("details.strategy-detail")
-    ).to_have_count(0)
     expect(research).to_be_visible()
     first_session = research.locator("li[data-session-id]").first
     expect(first_session.locator(":scope > details")).to_have_count(0)
+    first_session.get_by_role("button", name=re.compile("Session #1")).click()
     expect(first_session.locator(".session-row-content")).to_be_visible()
+    first_session.get_by_role("button", name=re.compile("Session #1")).press("Enter")
+    expect(first_session.locator(".session-row-content")).to_be_hidden()
+    first_session.get_by_role("button", name=re.compile("Session #1")).press("Space")
+    expect(first_session.locator(".session-row-content")).to_be_visible()
+    expect(first_session.locator(".session-outcome")).to_contain_text("Outcome:")
     expect(
         first_session.get_by_label("Research artifacts").locator(":scope > ol > li > details")
     ).to_have_count(3)
@@ -432,6 +506,39 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Strategies", exact=True).click()
     expect(page.locator("#strategies-pane-content")).to_be_hidden()
     expect(research).to_be_visible()
+    page.get_by_role("button", name="Strategies", exact=True).click()
+    expect(page.locator("#strategies-pane-content")).to_be_visible()
+    first_strategy_row = page.locator("li[data-strategy-id]").first
+    first_strategy_row.locator(".strategy-row-disclosure").click()
+    expect(first_strategy_row.locator(".strategy-expanded")).to_be_hidden()
+    first_strategy_row.locator(".strategy-row-disclosure").press("Enter")
+    expect(first_strategy_row.locator(".strategy-expanded")).to_be_visible()
+    stopped_session = research.locator("li[data-session-id]").filter(has_text="Session #2")
+    expect(stopped_session.locator(".session-row-content")).to_be_hidden()
+    stopped_session.get_by_role("button", name="Remove session", exact=True).click()
+    confirm_remove = stopped_session.get_by_role("group", name="Confirm remove Session 2")
+    confirm_remove.get_by_role("button", name="Confirm remove", exact=True).click()
+    expect(research.locator("li[data-session-id]")).to_have_count(2)
+    remaining = page.evaluate(
+        "async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.map(session => session.session_number)",
+        path,
+    )
+    assert sorted(remaining) == [1, 3], remaining
+    page.get_by_role("button", name="Project", exact=True).click()
+    expect(page.locator("#project-pane-content")).to_be_hidden()
+    page.get_by_role("button", name="Download project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export")
+    expect(export_dialog).to_be_visible()
+    with page.expect_download() as download_info:
+        export_dialog.get_by_role("button", name="Download project", exact=True).click()
+    export_data = json.loads(Path(download_info.value.path()).read_text(encoding="utf-8"))
+    assert export_data["export_version"] == 2
+    assert [session["session_number"] for session in export_data["research_sessions"]] == [1, 3]
+    assert export_data["research_sessions"][0]["artifacts"]
+    assert export_data["research_sessions"][0]["outcome"]["assessment"] == "mixed"
+    assert "fixture-token" not in json.dumps(export_data)
+    expect(export_dialog).to_be_hidden()
+    expect(page.locator("#project-pane-content")).to_be_hidden()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert (
@@ -450,11 +557,11 @@ with sync_playwright() as playwright:
     assert dialog_box["y"] + dialog_box["height"] <= 844
     page.keyboard.press("Escape")
     expect(mobile_dialog).to_be_hidden()
-    page.screenshot(path="/tmp/sigma-a171-mobile.png", full_page=True)
+    page.screenshot(path="/tmp/sigma-a174-mobile.png", full_page=True)
     assert not errors, errors
     assert len(starts) == 3, starts
     print(
-        "PASS real Chrome A17.3: inline click-away, concurrent generation/edit modes, tabbed limits, collapsible panes and live session counts, session confirmations, safe interrupted-call handling, title navigation, connection layering, token/cost limits, artifacts, failure recovery and mobile overflow"
+        "PASS real Chrome A17.4: stable Settings frame, Project actions while collapsed, keyboard menu, project/strategy/session disclosures, launch scroll, outcome/artifact visibility, activity collapse, confirmed deletion, export round-trip and mobile overflow"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

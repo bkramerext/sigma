@@ -12,6 +12,9 @@
 .home-page .home-recents .recent-open strong {
   display: inline; font: 400 17px/1.45 Georgia, serif; color: inherit; overflow-wrap: anywhere;
 }
+.home-page .home-recents .recent-open strong.is-current-project { font-weight: 700; }
+.home-page .home-recents .recent-meta-row { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; margin-top: 4px; }
+.home-page .home-recents .recent-meta-row > small { margin-top: 0; }
 .home-page .home-recents .recent-open:hover:not(:disabled) {
   background: transparent; color: #f3d0a4; text-decoration: underline;
   text-underline-offset: 3px;

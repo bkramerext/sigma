@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import './workspace.css';
@@ -50,8 +50,42 @@ type ProjectView = {
 type ResearchArtifact = { id: string; sequence: number; claim_or_question: string; method: string; assumptions: string[]; evidence_status: string; skeptic_response: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; note: string; investigator_output: Record<string, unknown>; skeptic_output: Record<string, unknown> };
 type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?: string | null; message: string };
 type ResearchStep = { id: string; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; output?: Record<string, unknown> };
-type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string };
+type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean };
+type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
+type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_minutes: string; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
+const limitBounds = {
+  research_rounds: [1, 10], model_calls: [2, 20], session_duration_minutes: [1, 120], output_tokens_per_call: [256, 16384],
+} as const;
+function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
+  return { research_rounds: String(value.research_rounds), model_calls: String(value.model_calls), session_duration_minutes: String(value.session_duration_minutes), output_tokens_per_call: String(value.output_tokens_per_call), maximum_estimated_cost_usd: value.maximum_estimated_cost_usd === null ? '' : String(value.maximum_estimated_cost_usd) };
+}
+function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
+  const errors: Partial<Record<keyof ResearchLimitsDraft, string>> = {};
+  const value = {} as ResearchLimits;
+  for (const key of Object.keys(limitBounds) as Array<keyof typeof limitBounds>) {
+    const input = draft[key];
+    const [minimum, maximum] = limitBounds[key];
+    if (!/^\d+$/.test(input)) { errors[key] = 'Enter a whole number.'; continue; }
+    const number = Number(input);
+    if (!Number.isSafeInteger(number) || number < minimum || number > maximum) {
+      errors[key] = `Enter a whole number from ${minimum} to ${maximum}.`; continue;
+    }
+    value[key] = number;
+  }
+  if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
+  else if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(draft.maximum_estimated_cost_usd)) {
+    errors.maximum_estimated_cost_usd = 'Enter a USD amount from $0.01 to $100.00, or leave blank for unlimited.';
+  } else {
+    const cost = Number(draft.maximum_estimated_cost_usd);
+    if (!Number.isFinite(cost) || cost < 0.01 || cost > 100) errors.maximum_estimated_cost_usd = 'Enter a USD amount from $0.01 to $100.00, or leave blank for unlimited.';
+    else value.maximum_estimated_cost_usd = Math.round(cost * 100) / 100;
+  }
+  if (!errors.research_rounds && !errors.model_calls && value.model_calls < 2 * value.research_rounds) {
+    errors.model_calls = 'Allow at least two model calls per round so each round can include Investigator and Skeptic.';
+  }
+  return { value: Object.keys(errors).length ? null : value, errors };
+}
 
 function displayStrategyTitle(strategy: Strategy | undefined): string {
   if (!strategy) return 'Strategy';
@@ -62,14 +96,27 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
 
 type ProcessControls = { play: () => void; pause: () => void; playDisabled: boolean; pauseDisabled: boolean; playLabel: string };
 
-function ResearchSessionContents({ session, busy, confirmStop, setConfirmStop, onControl, onViewStrategy }: {
-  session: ResearchSession; busy: boolean; confirmStop: boolean; setConfirmStop: (value: boolean) => void;
+function DisclosureChevron({ expanded }: { expanded: boolean }) {
+  return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
+}
+
+function ResearchSessionContents({ session, expanded, busy, confirmStop, setConfirmStop, onControl, onViewStrategy }: {
+  session: ResearchSession; expanded: boolean; busy: boolean; confirmStop: boolean; setConfirmStop: (value: boolean) => void;
   onControl: (action: 'stop', target: ResearchSession) => void; onViewStrategy: (id: string) => void;
 }) {
+  const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
+  useEffect(() => {
+    setActivityExpanded(session.status === 'queued' || session.status === 'running');
+  }, [session.status]);
   const active = session.status === 'queued' || session.status === 'running';
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
-  return <div className="session-row-content">
+  return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
+    <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
+      <p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p>
+      <p>{session.outcome.summary}</p>
+      {!!session.outcome.caveats.length && <ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul>}
+    </section>
     <div className="session-status-row"><span className={`session-status session-${session.status}`}><i aria-hidden="true"/>{session.status}</span></div>
     <div className="research-session-facts"><p><strong>Model:</strong> {session.model} · {thinkingLabels[session.reasoning_effort] ?? session.reasoning_effort} thinking · {session.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
       <p><strong>Progress:</strong> Cycle {session.cycle} of {session.cycle_limit ?? 3} · {session.calls_used} of {session.call_limit} calls used ({Math.max(0, session.call_limit - session.calls_used)} remaining)</p>
@@ -79,14 +126,13 @@ function ResearchSessionContents({ session, busy, confirmStop, setConfirmStop, o
       {lastActivity && <p><strong>Last activity:</strong> <time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time></p>}
     </div>
     <p className="research-session-message">{session.message}</p>
-    {!!session.current_question && <p><strong>Current question:</strong> {session.current_question}</p>}
+    {!!session.current_question && <p><strong>Current focus:</strong> {session.current_question}</p>}
     <div className="research-session-actions">
       {(active || session.status === 'paused') && <button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(true)}>Stop</button>}
-      <a className="text-view-link" href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to {session.strategy_title}</a>
+      <a className="text-view-link" href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>
     </div>
     {confirmStop && <div className="research-stop-confirm" role="group" aria-label="Confirm stop session"><p>Stop session #{session.session_number}? Stopping is terminal and prevents further calls.</p><button type="button" className="text-view-link" disabled={busy} onClick={() => onControl('stop', session)}>Confirm stop</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmStop(false)}>Keep session</button></div>}
     {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. {lastStep.status === 'running' ? 'No result has been committed yet.' : lastStep.status === 'interrupted' ? 'This attempt is not a completed research artifact. The provider may have completed it or charged usage; SIGMA will not repeat it automatically because completion is ambiguous.' : 'This attempt failed and is not a completed research artifact.'}</p></section>}
-    {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h3>Recent activity</h3><ol>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
     {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><h3>Research artifacts</h3><ol>{session.artifacts.map(artifact => <li key={artifact.id}><details>
       <summary>Cycle {artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
       <div className="research-artifact-content"><p><strong>Method:</strong> {artifact.method}</p><p><strong>Assumptions:</strong> {artifact.assumptions.join(' · ') || 'None stated'}</p><p><strong>Evidence status:</strong> {artifact.evidence_status}</p><p><strong>Skeptic response:</strong> {artifact.skeptic_response}</p>
@@ -96,6 +142,10 @@ function ResearchSessionContents({ session, busy, confirmStop, setConfirmStop, o
         <small>{artifact.note}</small>
       </div>
     </details></li>)}</ol></section>}
+    {!!session.events.length && <section className="research-activity" aria-label="Recent session activity">
+      <h3><button type="button" aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h3>
+      <ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol>
+    </section>}
   </div>;
 }
 
@@ -109,11 +159,13 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
   const [confirmStopId, setConfirmStopId] = useState('');
+  const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const [expanded, setExpanded] = useState(() => window.localStorage.getItem(`sigma.sessionsPane:${path}`) !== 'false');
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
   const readErrorReported = useRef(false);
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
@@ -130,12 +182,14 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     readErrorReported.current = false;
     setReadError('');
     const requestedId = preferredId ?? selectedSessionId.current;
+    const firstLoad = !sessionsLoaded.current;
     const chosen = (requestedId ? nextSessions.find(item => item.id === requestedId) : null)
       ?? (!sessionsLoaded.current && !selectedSessionId.current
         ? nextSessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused') ?? nextSessions[0] ?? null
         : null);
     sessionsLoaded.current = true;
     selectedSessionId.current = chosen?.id ?? '';
+    if (firstLoad && chosen) setExpandedSessionIds(current => current.size ? current : new Set([chosen.id]));
     if (chosen) {
       const transition = `${chosen.id}:${chosen.status}:${chosen.current_action}`;
       if (chosen.status === 'failed' && lastAnnouncement.current.startsWith(`${chosen.id}:`) && /:(queued|running):/.test(lastAnnouncement.current)) {
@@ -183,6 +237,9 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
       const limitResponse = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path })}`);
       const currentLimits = await limitResponse.json();
       if (!limitResponse.ok) throw new Error(currentLimits.error ?? 'Could not read research limits');
+      if (!validateLimitDraft(draftLimits(currentLimits)).value) {
+        throw new Error('Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
+      }
       setConfig(current); setLimits(currentLimits);
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       setConfirmStart(true);
@@ -201,6 +258,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
       await load(next.id);
+      revealSession(next.id);
     } catch (cause) { await load().catch(() => {}); setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
   }
@@ -213,16 +271,45 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     finally { setBusy(false); }
   }
 
+  function revealSession(id: string) {
+    setExpanded(true);
+    window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
+    setExpandedSessionIds(current => new Set(current).add(id));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
+      row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }));
+  }
+
+  async function removeSession(target: ResearchSession) {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/research-sessions/${encodeURIComponent(target.id)}`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path, expected_updated_at: target.updated_at }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Session removal failed');
+      setConfirmRemoveId('');
+      setExpandedSessionIds(current => { const next = new Set(current); next.delete(target.id); return next; });
+      if (selectedSessionId.current === target.id) selectedSessionId.current = '';
+      await load();
+      setAnnouncement(`Session #${result.session_number} removed. Strategy and other sessions were kept.`);
+    } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+
   const interruptedActive = activeSession?.status === 'paused' && activeSession.steps.at(-1)?.status === 'interrupted';
   const playLabel = activeSession?.status === 'paused' ? interruptedActive ? 'Resume unavailable · prior call completion is ambiguous' : 'Resume research session' : 'Start research session';
   const play = useCallback(() => {
     if (busy || readError) return;
-    if (activeSession?.status === 'paused') { if (!interruptedActive) void control('resume', activeSession); return; }
+    setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
+    if (activeSession?.status === 'paused') { revealSession(activeSession.id); if (!interruptedActive) void control('resume', activeSession); return; }
     if (activeSession || !eligible.length) return;
     setPendingStrategyId(nextStrategyId);
     setConfirmStart(false);
     void begin();
-  }, [activeSession, busy, nextStrategyId, eligible.length, interruptedActive, readError]);
+  }, [activeSession, busy, nextStrategyId, eligible.length, interruptedActive, readError, path]);
   const pause = useCallback(() => {
     if (activeSession?.status === 'running' && !busy && !readError) void control('pause', activeSession);
   }, [activeSession, busy, readError]);
@@ -240,7 +327,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
   return <section className="sessions-pane workspace-pane" aria-labelledby="sessions-heading">
     <header className="workspace-pane-heading sessions-pane-heading">
-      <h2 id="sessions-heading" tabIndex={-1}><button type="button" aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}>Sessions</button></h2>
+      <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
     </header>
 
@@ -257,11 +344,13 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
           const currentAction = readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action;
+          const sessionExpanded = expandedSessionIds.has(item.id);
           return <li className="session-row" key={item.id} data-session-id={item.id}>
             <div className="session-row-heading">
-              <span className="session-row-title">Session #{item.session_number}</span><small className="session-strategy-name">Strategy: {item.strategy_title}</small>
+              <button type="button" className="session-row-disclosure" aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button><small className="session-strategy-name">Strategy: {item.strategy_title}</small>
+              {['completed', 'stopped', 'failed'].includes(item.status) && <div className="session-remove-actions"><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove session</button>{confirmRemoveId === item.id && <div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removeSession(item)}>Confirm remove</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmRemoveId('')}>Keep session</button></div>}</div>}
             </div>
-            <ResearchSessionContents session={{ ...item, current_action: currentAction }} busy={busy} confirmStop={confirmStopId === item.id} setConfirmStop={value => setConfirmStopId(value ? item.id : '')} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
+            <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} confirmStop={confirmStopId === item.id} setConfirmStop={value => setConfirmStopId(value ? item.id : '')} onControl={(action, target) => void control(action, target)} onViewStrategy={onViewStrategy}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
@@ -321,8 +410,8 @@ function DownloadProjectDialog({ path, title, onCancel }: { path: string; title:
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
       }
-      const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[] };
-      if (result.export_version !== 1 || !result.project || !Array.isArray(result.agentic_runs)) throw new Error('Invalid project export response');
+      const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[]; research_sessions: ResearchSession[] };
+      if (result.export_version !== 2 || !result.project || !Array.isArray(result.agentic_runs) || !Array.isArray(result.research_sessions)) throw new Error('Invalid project export response');
       const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2) + '\n'], { type: 'application/json' }));
       try {
         const link = document.createElement('a');
@@ -365,9 +454,9 @@ function TooltipWrap({ children }: { children: React.ReactNode }) {
   </span>;
 }
 
-function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, modeDisabled = false, onEnterMode, onExitMode }: {
+function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, modeDisabled = false, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; modeDisabled?: boolean; onEnterMode?: () => boolean; onExitMode?: () => void;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; modeDisabled?: boolean; onEnterMode?: () => boolean; onExitMode?: () => void;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -474,7 +563,8 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       <button type="button" className="text-view-link" disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
       </> : data && version && <TooltipWrap><button type="button" className="text-view-link text-view-icon" aria-label={`Edit ${name}`} aria-describedby={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`edit-tooltip-${scope}-${strategyId ?? 'project'}`} className="sigma-render-tooltip" role="tooltip">{`Edit ${name}`}</span></TooltipWrap>}
 
-    {scope === 'project' && !editing && <TooltipWrap><button ref={exportTrigger} type="button" className="copper-button project-download-trigger" aria-label="Download project" aria-describedby="download-project-tooltip" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><span id="download-project-tooltip" className="sigma-render-tooltip" role="tooltip">Download project</span></TooltipWrap>}    {onSettings && !editing && <TooltipWrap><button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon" aria-label="Project settings" aria-describedby="project-settings-tooltip" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button><span id="project-settings-tooltip" className="sigma-render-tooltip" role="tooltip">Project settings</span></TooltipWrap>}
+    {!hideProjectActions && scope === 'project' && !editing && <TooltipWrap><button ref={exportTrigger} type="button" className="copper-button project-download-trigger" aria-label="Download project" aria-describedby="download-project-tooltip" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><span id="download-project-tooltip" className="sigma-render-tooltip" role="tooltip">Download project</span></TooltipWrap>}
+    {!hideProjectActions && onSettings && !editing && <TooltipWrap><button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon" aria-label="Project settings" aria-describedby="project-settings-tooltip" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button><span id="project-settings-tooltip" className="sigma-render-tooltip" role="tooltip">Project settings</span></TooltipWrap>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {scope === 'project' && exportOpen && <DownloadProjectDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
@@ -652,15 +742,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'main' | 'limits'>('main');
-  const [limits, setLimits] = useState<ResearchLimits>({ research_rounds: 3, model_calls: 6, session_duration_minutes: 30, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null });
+  const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, model_calls: 6, session_duration_minutes: 30, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
+  const limitValidation = validateLimitDraft(limitDraft);
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
   useEffect(() => {
     if (!initial) return;
     const controller = new AbortController();
     fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`, { signal: controller.signal }).then(async response => {
       const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read');
-      setLimits(data); setLimitsLoaded(true);
+      setLimitDraft(draftLimits(data)); setLimitsLoaded(true);
     }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
     return () => controller.abort();
   }, [initial?.path]);
@@ -691,13 +782,14 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
   const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
   async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current || !compatible || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
+    event.preventDefault(); if (submitting.current || !compatible || (initial && !limitValidation.value) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
     submitting.current = true; setBusy(true); setError('');
     try {
       const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : values);
       if (initial) {
-        const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limits }) });
+        const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');
+        setLimitDraft(draftLimits(result));
       }
       onSaved(next);
     }
@@ -707,7 +799,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2>
-        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (initial && !limitsLoaded) || (!initial && (!values.problem.trim() || previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
+        <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (initial && (!limitsLoaded || !limitValidation.value)) || (!initial && (!values.problem.trim() || previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>
       </header>
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'main' : event.key === 'End' ? 'limits' : activeTab === 'main' ? 'limits' : 'main'; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Main</button>
@@ -738,13 +830,13 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>These limits apply to future sessions. Existing sessions keep the limits captured when they started.</p>
       <fieldset disabled={busy || !limitsLoaded}>
-        <label htmlFor="research-rounds">Research rounds</label><input id="research-rounds" type="number" min={1} max={3} step={1} value={limits.research_rounds} onChange={event => setLimits(value => ({ ...value, research_rounds: Number(event.target.value) }))}/><p className="settings-hint">Investigator/Skeptic iterations, up to three.</p>
-        <label htmlFor="research-calls">Model calls</label><input id="research-calls" type="number" min={1} max={6} step={1} value={limits.model_calls} onChange={event => setLimits(value => ({ ...value, model_calls: Number(event.target.value) }))}/><p className="settings-hint">Provider request allowance. Calls already dispatched count even if interrupted.</p>
-        <label htmlFor="research-duration">Session duration (minutes)</label><input id="research-duration" type="number" min={1} max={240} step={1} value={limits.session_duration_minutes} onChange={event => setLimits(value => ({ ...value, session_duration_minutes: Number(event.target.value) }))}/><p className="settings-hint">Elapsed wall time from start; time spent paused counts toward this limit.</p>
-        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={12000} step={1} value={limits.output_tokens_per_call} onChange={event => setLimits(value => ({ ...value, output_tokens_per_call: Number(event.target.value) }))}/><p className="settings-hint">SIGMA sends this limit where supported. ChatGPT plan routing may not expose provider-side enforcement; SIGMA still bounds parsed output.</p>
-        <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="number" min={0} max={10000} step="0.01" placeholder="Unlimited" value={limits.maximum_estimated_cost_usd ?? ''} onChange={event => setLimits(value => ({ ...value, maximum_estimated_cost_usd: event.target.value === '' ? null : Number(event.target.value) }))}/><p className="settings-hint">API-key billing only. ChatGPT subscription usage is not converted to dollars. Estimates use published model prices and reported tokens; an unknown price or missing usage stops further calls when a cap is set.</p>
+        <label htmlFor="research-rounds">Research rounds</label><input id="research-rounds" type="number" min={1} max={10} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 10.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
+        <label htmlFor="research-calls">Model calls</label><input id="research-calls" type="number" min={2} max={20} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 20. At least two calls per round are required for Investigator and Skeptic.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
+        <label htmlFor="research-duration">Session duration (minutes)</label><input id="research-duration" type="number" min={1} max={120} step={1} value={limitDraft.session_duration_minutes} aria-invalid={!!limitValidation.errors.session_duration_minutes} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_minutes: event.target.value }))}/><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 to 120 minutes. Time spent paused counts.</p>{limitValidation.errors.session_duration_minutes && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_minutes}</p>}
+        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={16384} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 16,384. SIGMA sends this limit where supported; ChatGPT routing may not expose provider enforcement, so parsed output remains bounded separately.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
+        <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="number" min={0.01} max={100} step="0.01" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/><p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage pause further calls when a cap is set.</p>{limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
       </fieldset>
-      {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimits(data); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
+      {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
     </form>
   </dialog>;
@@ -762,7 +854,8 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
-    setProjects(data.projects); setLoading(false);
+    const currentPath = window.localStorage.getItem('sigma.currentProject');
+    setProjects(currentPath ? [...data.projects].sort((a: RecentProject, b: RecentProject) => Number(b.path === currentPath) - Number(a.path === currentPath)) : data.projects); setLoading(false);
   }, []);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } }); return () => controller.abort(); }, [load]);
   async function open(entry: RecentProject) {
@@ -782,10 +875,9 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     <ul>{projects.map(entry => <li key={entry.id}>
       <div className="recent-entry">
         <div className="recent-title-row">
-          <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong></button>
-          <button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} title="Remove from Recent Projects; keep all research" onClick={() => void forget(entry)}>Remove</button>
+          <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className="is-current-project">{entry.title}</strong> : entry.title}</button>
         </div>
-        <small>{entry.investigation_type === 'mathematical' ? 'Mathematical' : entry.investigation_type === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small>
+        <div className="recent-meta-row"><small>{entry.investigation_type === 'mathematical' ? 'Mathematical' : entry.investigation_type === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} title="Remove from Recent Projects; keep all research" onClick={() => void forget(entry)}>Remove</button></div>
         <span title={entry.path}>{entry.path}</span>
       </div>
       {entry.error && <p className="recent-unavailable">{entry.error}</p>}
@@ -901,8 +993,9 @@ function Home({ initialPath, onOpen }: {
   </div>;
 }
 
-function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMode, onExitMode }: {
+function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMode, onExitMode, expanded, onToggle, commands }: {
   strategy: Strategy; path: string; onSaved: (view: ProjectView) => void; modeDisabled: boolean; onEnterMode: () => boolean; onExitMode: () => void;
+  expanded: boolean; onToggle: () => void; commands: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const shownTitle = displayStrategyTitle(strategy);
@@ -946,9 +1039,10 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
       <button type="submit" className="text-view-link" disabled={busy}>Save</button>
       <button type="button" className="text-view-link" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
-      <h3 id={`strategy-${strategy.id}`} tabIndex={-1}>{shownTitle}</h3>
+      <button type="button" id={`strategy-${strategy.id}`} className="strategy-row-disclosure" aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
       <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) setEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
+      {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
   </div>;
@@ -958,6 +1052,7 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
   strategy: Strategy; onCommand: (mode: 'remove' | 'stage' | 'fork', strategy: Strategy) => void; disabled?: boolean;
 }) {
   const disclosure = useRef<HTMLDetailsElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   function positionMenu() {
     const element = disclosure.current;
     const panel = element?.querySelector<HTMLElement>('.command-panel');
@@ -979,24 +1074,39 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, []);
-  return <details className="strategy-commands" name="strategy-commands" ref={disclosure} onToggle={positionMenu} onClick={() => requestAnimationFrame(positionMenu)} onKeyDown={event => {
+  return <details className="strategy-commands" name="strategy-commands" ref={disclosure} onToggle={() => {
+    setMenuOpen(disclosure.current?.open ?? false);
+    positionMenu();
+    if (disclosure.current?.open) requestAnimationFrame(() => disclosure.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus());
+  }} onClick={() => requestAnimationFrame(positionMenu)} onKeyDown={event => {
     if (event.key === 'Escape' && disclosure.current) {
       event.preventDefault(); event.stopPropagation(); disclosure.current.open = false;
       disclosure.current.querySelector('summary')?.focus();
     }
   }}>
-    <summary id={`commands-${strategy.id}`} className="secondary strategy-toggle" aria-label={`Commands for ${strategy.title}`} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}>
+    <summary id={`commands-${strategy.id}`} role="button" className="secondary strategy-toggle" aria-label={`More actions for ${strategy.title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
         <circle cx="8" cy="3" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="13" r="1.3" fill="currentColor"/>
       </svg>
     </summary>
-    <div className="command-panel">
-      <button className="secondary" disabled title="Scheduling is not available yet">Pause / Resume</button>
-      <button className="secondary" disabled title="Audit reports are not available yet">Audit</button>
-      <button className="secondary" disabled title="Additional artifact types are not available yet">Other artifact types</button>
-      <button className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('stage', strategy); }}>Change stage</button>
-      <button className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
-      <button className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
+    <div className="command-panel" role="menu" aria-labelledby={`commands-${strategy.id}`} onKeyDown={event => {
+      const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+      const index = items.indexOf(document.activeElement as HTMLButtonElement);
+      let next = -1;
+      if (event.key === 'ArrowDown') next = (index + 1) % items.length;
+      else if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = items.length - 1;
+      if (next >= 0 && items.length) { event.preventDefault(); items[next].focus(); }
+    }}>
+      <button role="menuitem" className="secondary" disabled title="Scheduling is not available yet" aria-describedby={`schedule-explanation-${strategy.id}`}>Schedule</button>
+      <button role="menuitem" className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
+      <button role="menuitem" className="secondary" disabled title="Artifact reporting is not available yet" aria-describedby={`report-explanation-${strategy.id}`}>Report artifact</button>
+      <button role="menuitem" className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('stage', strategy); }}>Change stage</button>
+      <hr role="separator"/>
+      <button role="menuitem" className="secondary destructive-action" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
+      <span className="sr-only" id={`schedule-explanation-${strategy.id}`}>Scheduling is not available yet.</span>
+      <span className="sr-only" id={`report-explanation-${strategy.id}`}>Artifact reporting is not available yet.</span>
     </div>
   </details>;
 }
@@ -1293,6 +1403,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [generating, setGenerating] = useState(false);
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -1312,6 +1423,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [command, setCommand] = useState<{ mode: 'remove' | 'stage'; strategy: Strategy } | null>(null);
   const [focusStrategy, setFocusStrategy] = useState('');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
+  const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, pause: () => {}, playDisabled: true, pauseDisabled: true, playLabel: 'Start research session' });
   const heading = useRef<HTMLHeadingElement>(null);
@@ -1373,6 +1485,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     setStrategiesExpanded(open => { window.localStorage.setItem(`sigma.strategiesPane:${path}`, String(!open)); return !open; });
   }
   function showStrategy(id: string) {
+    setCollapsedStrategies(current => { const next = new Set(current); next.delete(id); return next; });
     if (!strategiesExpanded) {
       setStrategiesExpanded(true);
       window.localStorage.setItem(`sigma.strategiesPane:${path}`, 'true');
@@ -1430,12 +1543,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" aria-expanded={projectExpanded} aria-controls="project-pane-content" onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}>PROJECT</button></h2></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Download project" title="Download project" disabled={closing || ordering || !!dragId} onClick={() => setDownloadOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}/>
       <div className="project-pane-content">
         <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} onSettings={() => { if (enterMode('project-settings')) setProjectEditing(true); }} settingsDisabled={closing || ordering || !!dragId || activeMode !== null} settingsButtonRef={editProjectButton} hideProjectHeading modeDisabled={activeMode !== null && activeMode !== 'text-project'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
+          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} hideProjectActions hideProjectHeading modeDisabled={activeMode !== null && activeMode !== 'text-project'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
         </div>
         <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -1449,7 +1562,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {error && <p role="alert" className="error">{error}</p>}
     <section className="pool workspace-pane strategies-pane" aria-labelledby="pool-heading">
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
-        <h2 id="pool-heading" tabIndex={-1}><button type="button" aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}>Strategies</button></h2>
+        <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
           <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
@@ -1471,11 +1584,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)}/>
-            <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => { if (ordering || dragId || activeMode !== null) return; if (mode === 'fork') { if (!enterMode('new-strategy')) return; expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>} />
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
           </div>
           <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
-          <StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => { if (ordering || dragId || activeMode !== null) return; if (mode === 'fork') { if (!enterMode('new-strategy')) return; expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
@@ -1492,6 +1604,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
+    {downloadOpen && <DownloadProjectDialog path={view.path} title={project.title} onCancel={() => { setDownloadOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Download project"]')?.focus()); }}/>}
     {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
       onCancel={() => {
         const id = command.strategy.id;

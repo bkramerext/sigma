@@ -6,6 +6,7 @@ import asyncio
 import fcntl
 import hashlib
 import json
+import math
 import os
 import threading
 from contextlib import contextmanager
@@ -57,6 +58,9 @@ class Investigator(BaseModel):
 class Skeptic(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     assessment: str = Field(pattern="^(continue|revise|stop)$")
+    stop_reason: str = Field(
+        pattern="^(decisive_counterexample|productive_conclusion|no_progress|recoverable_objection|unresolved)$"
+    )
     response: str = Field(min_length=1, max_length=2500)
     objections: list[str] = Field(max_length=12)
     remaining_obligations: list[str] = Field(max_length=12)
@@ -110,29 +114,190 @@ def get_limits(path: str) -> dict[str, Any]:
         raise ProjectError("Research limits are unreadable") from exc
     if not isinstance(raw, dict) or set(raw) != set(DEFAULT_LIMITS):
         raise ProjectError("Research limits are invalid")
-    return _validate_limits(raw)
+    try:
+        return _validate_limits(raw)
+    except ProjectError as current_error:
+        try:
+            return _validate_legacy_limits(raw)
+        except ProjectError:
+            raise current_error
+
+
+def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
+    """Read pre-A17.4 settings unchanged so tighter bounds never corrupt projects."""
+    legacy_bounds = {
+        "research_rounds": (1, 3),
+        "model_calls": (1, CALL_LIMIT),
+        "session_duration_minutes": (1, 240),
+        "output_tokens_per_call": (256, 12000),
+    }
+    for key, (minimum, maximum) in legacy_bounds.items():
+        value = raw.get(key)
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise ProjectError("Research limits are invalid")
+    cost = raw.get("maximum_estimated_cost_usd")
+    if cost is not None and (
+        type(cost) not in {int, float} or not math.isfinite(cost) or not 0 <= cost <= 10000
+    ):
+        raise ProjectError("Research limits are invalid")
+    return dict(raw)
 
 
 def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     result = dict(raw)
     bounds = {
-        "research_rounds": (1, 3),
-        "model_calls": (1, CALL_LIMIT),
-        "session_duration_minutes": (1, 240),
-        "output_tokens_per_call": (256, 12000),
+        "research_rounds": (1, 10),
+        "model_calls": (2, 20),
+        "session_duration_minutes": (1, 120),
+        "output_tokens_per_call": (256, 16384),
     }
     for key, (minimum, maximum) in bounds.items():
         value = result.get(key)
         if type(value) is not int or not minimum <= value <= maximum:
             raise ProjectError(f"{key.replace('_', ' ').capitalize()} must be {minimum}–{maximum}")
     cost = result.get("maximum_estimated_cost_usd")
-    if cost is not None and (type(cost) not in {float, int} or not 0 <= cost <= 10000):
-        raise ProjectError(
-            "Maximum estimated session cost must be a positive USD amount or unlimited"
-        )
+    if cost is not None and (
+        type(cost) not in {float, int} or not math.isfinite(cost) or not 0.01 <= cost <= 100
+    ):
+        raise ProjectError("Maximum estimated session cost must be USD $0.01–$100.00 or unlimited")
     if cost is not None:
-        result["maximum_estimated_cost_usd"] = round(float(cost), 6)
+        result["maximum_estimated_cost_usd"] = round(float(cost), 2)
+    if result["model_calls"] < 2 * result["research_rounds"]:
+        raise ProjectError(
+            "Model calls must be at least twice the research rounds so each round can include Investigator and Skeptic"
+        )
     return result
+
+
+def coordinate_decision(
+    assessment: str,
+    stop_reason: str,
+    next_question: str,
+    obligations: list[str],
+    cycle: int,
+    cycle_limit: int,
+    calls_used: int,
+    call_limit: int,
+) -> tuple[str, str]:
+    """Choose a concrete next branch; skepticism alone is not a stop signal."""
+    question = next_question.strip() or next(
+        (item.strip() for item in obligations if item.strip()), ""
+    )
+    if stop_reason == "decisive_counterexample":
+        return "stop_decisive_counterexample", ""
+    if stop_reason == "productive_conclusion":
+        return "stop_productive_conclusion", ""
+    if cycle >= cycle_limit or calls_used >= call_limit:
+        return "stop_budget_exhausted", ""
+    if assessment == "stop" or stop_reason == "no_progress":
+        return ("revise", question) if question else ("stop_no_progress", "")
+    if assessment == "revise":
+        return ("revise", question) if question else ("stop_no_progress", "")
+    return ("continue", question) if question else ("stop_no_progress", "")
+
+
+def _outcome(record: dict[str, Any]) -> dict[str, Any]:
+    artifacts = record.get("artifacts", [])
+    status = record.get("status")
+    if not artifacts:
+        if status in {"queued", "running"}:
+            assessment, label = "pending", "Pending"
+            summary = "No Investigator/Skeptic cycle has produced a saved artifact yet."
+        elif status == "failed":
+            assessment, label = "pending", "Pending · execution failed"
+            summary = "Execution failed before a research artifact was saved."
+        else:
+            assessment, label = "mixed", "Mixed · no saved result"
+            summary = "The session ended before a complete research cycle was saved."
+        return {
+            "assessment": assessment,
+            "label": label,
+            "summary": summary,
+            "caveats": ["No complete research artifact is available."],
+            "basis_artifact_ids": [],
+            "provisional": assessment == "pending",
+        }
+    decisive = next(
+        (
+            a
+            for a in reversed(artifacts)
+            if a["coordinator_decision"] == "stop_decisive_counterexample"
+        ),
+        None,
+    )
+    productive = next(
+        (
+            a
+            for a in reversed(artifacts)
+            if a["coordinator_decision"] == "stop_productive_conclusion"
+        ),
+        None,
+    )
+    if decisive:
+        assessment, label = "negative", "Negative · counterexample reported"
+        summary = f"The Skeptic reported a decisive counterexample: {decisive['skeptic_response']}"
+    elif productive:
+        assessment, label = "positive", "Positive · useful result reported"
+        summary = f"The roles reported a useful conclusion: {productive['claim_or_question']}"
+    elif artifacts[-1]["coordinator_decision"] == "stop_no_progress":
+        assessment, label = "negative", "Negative · no useful next path identified"
+        summary = f"The latest review found no concrete next question: {artifacts[-1]['skeptic_response']}"
+    else:
+        assessment, label = "mixed", "Mixed · partial progress, unresolved"
+        latest = artifacts[-1]
+        summary = f"Latest result: {latest['claim_or_question']} Skeptic review: {latest['skeptic_response']}"
+    caveats = ["Agent-reported evidence is unverified; agreement is not independent verification."]
+    if status == "failed":
+        caveats.append(
+            "Execution failed; this outcome reflects saved work only and may be incomplete."
+        )
+    if any(a.get("open_obligations") for a in artifacts):
+        caveats.append(
+            "Open obligations remain; inspect the saved artifacts before relying on this result."
+        )
+    return {
+        "assessment": assessment,
+        "label": label,
+        "summary": summary[:1600],
+        "caveats": caveats,
+        "basis_artifact_ids": [a["id"] for a in artifacts],
+        "provisional": status in {"queued", "running", "paused"},
+    }
+
+
+def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
+    directory = _directory(path)
+    counter = directory / "sequence.json"
+    if counter.is_symlink():
+        raise ProjectError("Research session sequence file is unsafe")
+    current = max((item.get("session_number", 0) for item in records), default=0) + 1
+    if counter.exists():
+        try:
+            stored = json.loads(counter.read_text(encoding="utf-8"))
+            if (
+                not isinstance(stored, dict)
+                or stored.get("project_id") != inspect_project(path).project.id
+                or type(stored.get("next_session_number")) is not int
+                or stored["next_session_number"] < 1
+            ):
+                raise ValueError
+            current = max(current, stored["next_session_number"])
+        except (OSError, ValueError) as exc:
+            raise ProjectError("Research session sequence file is unreadable") from exc
+    payload = {
+        "schema_version": 1,
+        "project_id": inspect_project(path).project.id,
+        "next_session_number": current + 1,
+    }
+    staged = _stage(
+        directory, (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    )
+    try:
+        os.chmod(staged, 0o600)
+        os.replace(staged, counter)
+    finally:
+        staged.unlink(missing_ok=True)
+    return current
 
 
 def _usage(raw: Any) -> dict[str, int] | None:
@@ -171,7 +336,7 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
     role_guidance = (
         "Advance the current question with one specific claim, mechanism, assumptions, and honest evidence status."
         if role == "investigator"
-        else "Independently examine the investigator's public claim and stated evidence. Find a concrete objection, missing obligation, or justified next step. Skeptic approval is never verification. Choose continue, revise, or stop based on the evidence."
+        else "Independently examine the investigator's public claim and stated evidence. Identify whether any objection is recoverable or a decisive counterexample, whether a useful conclusion is reached, or whether no progress is possible. Skeptic criticism alone never ends research; approval is never verification. Return a concrete next question when an objection can be tested. Choose stop only with a decisive counterexample, a useful completed conclusion, or no concrete next step."
     )
     payload = {
         "model": record["model"],
@@ -320,6 +485,7 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             result["elapsed_seconds"] = max(0, int((end - start).total_seconds()))
         except (ValueError, TypeError):
             result["elapsed_seconds"] = None
+    result["outcome"] = _outcome(record)
     return result
 
 
@@ -361,6 +527,46 @@ def get_session(path: str, session_id: str) -> dict[str, Any]:
     return _public(_recover(_read(path, session_id)))
 
 
+def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict[str, Any]:
+    """Delete one confirmed terminal session; leave the monotonic sequence intact."""
+    try:
+        UUID(session_id)
+    except ValueError as exc:
+        raise ProjectError("Invalid research session identifier") from exc
+    with _project_manager_lock(path):
+        record = _read(path, session_id)
+        if record.get("updated_at") != expected_updated_at:
+            raise ProjectError("Session changed; refresh its status before removing it")
+        if record.get("status") not in {"completed", "stopped", "failed"}:
+            raise ProjectError("Only completed, stopped, or failed sessions can be removed")
+        task = _tasks.get(session_id)
+        if task is not None and not task.done():
+            raise ProjectError(
+                "Session work is still active; refresh its status before removing it"
+            )
+        target = _directory(path) / f"{session_id}.json"
+        if target.is_symlink() or not target.is_file():
+            raise ProjectError("Research session not found")
+        number = record["session_number"]
+        try:
+            target.unlink()
+        except OSError as exc:
+            raise ProjectError(
+                "Research session could not be removed; its record was retained"
+            ) from exc
+        try:
+            directory_fd = os.open(_directory(path), os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError as exc:
+            raise ProjectError(
+                "Research session was removed but the directory sync failed; refresh to confirm"
+            ) from exc
+    return {"removed": True, "id": session_id, "session_number": number}
+
+
 def _snapshot(path: str) -> tuple[Any, str]:
     view = inspect_project(path)
     state = Path(view.path) / "project.json"
@@ -390,6 +596,7 @@ async def start_session(
     async with _manager_lock:
         with _project_manager_lock(view.path):
             limits = get_limits(view.path)
+            limits = _validate_limits(limits)
             if expected_limits is not None and _validate_limits(expected_limits) != limits:
                 raise ProjectError(
                     "Research limits changed before confirmation; review the current limits and retry"
@@ -432,13 +639,11 @@ async def start_session(
                 raise ProjectError(
                     "No reviewed published price is available for this model; a cost-limited session cannot start"
                 )
+            session_number = _allocate_session_number(view.path, records)
             record = {
                 "schema_version": 1,
                 "id": str(uuid4()),
-                "session_number": max(
-                    (item.get("session_number", 0) for item in records), default=0
-                )
-                + 1,
+                "session_number": session_number,
                 "project_path": view.path,
                 "project_id": view.project.id,
                 "strategy_id": strategy.id,
@@ -480,6 +685,7 @@ async def start_session(
                 "current_action": "Queued",
                 "events": [],
             }
+            record["outcome"] = _outcome(record)
             _event(record, "queued", record["message"])
             _save(view.path, record)
             event = asyncio.Event()
@@ -645,7 +851,7 @@ async def _call(
     role_guidance = (
         "Advance the current question with one specific claim, mechanism, assumptions, and honest evidence status."
         if role == "investigator"
-        else "Independently examine the investigator's public claim and stated evidence. Find a concrete objection, missing obligation, or justified next step. Skeptic approval is never verification. Choose continue, revise, or stop based on the evidence."
+        else "Independently examine the investigator's public claim and stated evidence. Identify whether any objection is recoverable or a decisive counterexample, whether a useful conclusion is reached, or whether no progress is possible. Skeptic criticism alone never ends research; approval is never verification. Return a concrete next question when an objection can be tested. Choose stop only with a decisive counterexample, a useful completed conclusion, or no concrete next step."
     )
     payload: dict[str, Any] = {
         "model": record["model"],
@@ -934,30 +1140,16 @@ async def _worker(session_id: str, path: str) -> None:
                 "coordinator.started",
                 f"Cycle {cycle_num}: coordinator is applying the skeptic decision.",
             )
-            assessment = output["assessment"]
-            if assessment == "stop":
-                decision = "stop"
-                next_question = ""
-            elif cycle_num >= record.get("cycle_limit", 3) or record["calls_used"] >= record.get(
-                "call_limit", CALL_LIMIT
-            ):
-                decision = "stop_budget_exhausted"
-                next_question = ""
-            elif assessment == "revise":
-                decision = "revise"
-                next_question = (
-                    output["next_question"].strip()
-                    or (output["remaining_obligations"] or ["Revisit the unresolved obligation"])[0]
-                )
-            else:
-                decision = "continue"
-                next_question = (
-                    output["next_question"].strip()
-                    or (
-                        output["remaining_obligations"]
-                        or ["Check a distinct consequence of the strategy"]
-                    )[0]
-                )
+            decision, next_question = coordinate_decision(
+                output["assessment"],
+                output["stop_reason"],
+                output["next_question"],
+                output["remaining_obligations"],
+                cycle_num,
+                record.get("cycle_limit", 3),
+                record["calls_used"],
+                record.get("call_limit", CALL_LIMIT),
+            )
             artifact = {
                 "id": str(uuid4()),
                 "project_id": record["project_id"],
@@ -986,12 +1178,14 @@ async def _worker(session_id: str, path: str) -> None:
             _event(record, "artifact.saved", f"Cycle {cycle_num} research artifact committed.")
             record["cycle"] = cycle_num
             record["current_question"] = next_question
-            if decision == "stop":
+            if decision.startswith("stop_") and decision != "stop_budget_exhausted":
                 record["status"] = "completed"
                 record["current_action"] = "Completed"
-                record["message"] = (
-                    "Skeptic recommended stopping. Notes are unverified; no claim was established."
-                )
+                record["message"] = {
+                    "stop_decisive_counterexample": "The Skeptic reported a decisive counterexample; saved notes remain unverified.",
+                    "stop_productive_conclusion": "The roles reported a useful conclusion; it is not independently verified.",
+                    "stop_no_progress": "No concrete next question was identified; saved notes remain unverified.",
+                }[decision]
             elif cycle_num >= record.get("cycle_limit", 3) or record["calls_used"] >= record.get(
                 "call_limit", CALL_LIMIT
             ):
@@ -1006,6 +1200,9 @@ async def _worker(session_id: str, path: str) -> None:
                 record["message"] = (
                     f"Cycle {cycle_num} saved; coordinator selected the next question."
                 )
+            record["outcome"] = _outcome(record)
+            if record["status"] == "completed":
+                record["terminal_reason"] = decision
             _save(path, record)
             if record["status"] == "completed":
                 return

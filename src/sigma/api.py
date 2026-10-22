@@ -99,13 +99,17 @@ class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
 
 
+class ResearchSessionRemoveRequest(OpenRequest):
+    expected_updated_at: str = Field(min_length=1, max_length=64)
+
+
 class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
-    research_rounds: int = Field(ge=1, le=3)
-    model_calls: int = Field(ge=1, le=6)
-    session_duration_minutes: int = Field(ge=1, le=240)
-    output_tokens_per_call: int = Field(ge=256, le=12000)
-    maximum_estimated_cost_usd: float | None = Field(default=None, ge=0, le=10000)
+    research_rounds: int = Field(ge=1, le=10)
+    model_calls: int = Field(ge=2, le=20)
+    session_duration_minutes: int = Field(ge=1, le=120)
+    output_tokens_per_call: int = Field(ge=256, le=16384)
+    maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
 
 
 @app.get("/api/projects/research-limits")
@@ -154,6 +158,11 @@ async def research_control_view(session_id: str, body: ResearchControlRequest):
     return await research_sessions.control_session(body.path, session_id, body.action)
 
 
+@app.delete("/api/projects/research-sessions/{session_id}")
+def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
+    return research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
+
+
 class InitRequest(OpenRequest):
     title: str
     problem: str
@@ -192,10 +201,16 @@ def inspect_view(path: str):
 
 @app.get("/api/projects/export")
 def export_project_view(path: str):
-    """Export current project state and retained agentic run evidence together."""
+    """Export project, agentic evidence, and reconstructable research sessions."""
     project = asdict(inspect_project(path).project)
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
-    return {"export_version": 1, "project": project, "agentic_runs": runs}
+    sessions = list(reversed(research_sessions.list_sessions(path)))
+    return {
+        "export_version": 2,
+        "project": project,
+        "agentic_runs": runs,
+        "research_sessions": sessions,
+    }
 
 
 @app.get("/api/projects/events")

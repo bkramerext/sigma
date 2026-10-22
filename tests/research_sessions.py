@@ -40,9 +40,10 @@ def investigation(n):
     }
 
 
-def skeptic(n, assessment="continue"):
+def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
     return {
         "assessment": assessment,
+        "stop_reason": stop_reason,
         "response": f"Independent objection review for cycle {n}.",
         "objections": [f"Check boundary case {n}"],
         "remaining_obligations": [f"Resolve obligation {n}"],
@@ -97,6 +98,8 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert payload["max_output_tokens"] == 4000
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}
+        if payload["text"]["format"]["name"] == "research_skeptic":
+            assert "stop_reason" in payload["text"]["format"]["schema"]["required"]
         context = json.loads(payload["input"])
         contexts.append((payload["text"]["format"]["name"], context))
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
@@ -147,10 +150,27 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert finished["artifacts"][2]["next_question"] == ""
     assert (path / "project.json").read_bytes() == before
     assert finished["artifacts"][0]["note"].startswith("Unverified")
+    assert finished["outcome"]["assessment"] == "mixed"
     assert "fixture-token" not in json.dumps(finished) and "fixture-account" not in json.dumps(
         finished
     )
     assert len(research_sessions.list_sessions(str(path))) == 1
+    from sigma.api import export_project_view
+
+    exported = export_project_view(str(path))
+    exported_session = exported["research_sessions"][0]
+    assert exported["export_version"] == 2
+    assert exported_session["strategy_text"] == strategy.approach
+    assert exported_session["problem"] == view.project.problem
+    assert exported_session["steps"][0]["output"] == investigation(1)
+    assert (
+        exported_session["artifacts"][0]["id"] in exported_session["outcome"]["basis_artifact_ids"]
+    )
+    assert "fixture-token" not in json.dumps(exported) and "identity_hash" not in json.dumps(
+        exported
+    )
+    round_trip = json.loads(json.dumps(exported))
+    assert round_trip["research_sessions"] == exported["research_sessions"]
     assert [event["sequence"] for event in finished["events"]] == list(
         range(1, len(finished["events"]) + 1)
     )
@@ -404,13 +424,135 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
 def test_limits_validation(path: Path):
     initialize_project(path, "Limits project", "A question")
     before = research_sessions.get_limits(str(path))
-    try:
-        research_sessions.save_limits(str(path), {**before, "model_calls": 7})
-    except ProjectError as exc:
-        assert "model calls" in str(exc).lower()
-    else:
-        raise AssertionError("out-of-range call limit was accepted")
+    invalid = [
+        {**before, "model_calls": 21},
+        {**before, "research_rounds": 4, "model_calls": 6},
+        {**before, "research_rounds": 3, "model_calls": 5},
+        {**before, "session_duration_minutes": 121},
+        {**before, "output_tokens_per_call": 16385},
+        {**before, "maximum_estimated_cost_usd": 0.001},
+        {**before, "maximum_estimated_cost_usd": 100.01},
+        {**before, "maximum_estimated_cost_usd": float("inf")},
+        {**before, "research_rounds": 2.5},
+    ]
+    for candidate in invalid:
+        try:
+            research_sessions.save_limits(str(path), candidate)
+        except ProjectError:
+            pass
+        else:
+            raise AssertionError(f"invalid research limits were accepted: {candidate}")
+    valid_upper = {
+        **before,
+        "research_rounds": 10,
+        "model_calls": 20,
+        "session_duration_minutes": 120,
+        "output_tokens_per_call": 16384,
+        "maximum_estimated_cost_usd": 100,
+    }
+    assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
+    research_sessions.save_limits(str(path), before)
     assert research_sessions.get_limits(str(path)) == before
+
+
+async def test_legacy_limits_are_preserved(path: Path):
+    view, strategy, credential, _ = await setup(path)
+    legacy = {
+        **research_sessions.DEFAULT_LIMITS,
+        "session_duration_minutes": 180,
+        "maximum_estimated_cost_usd": 500.0,
+    }
+    (path / "research-sessions").mkdir(mode=0o700)
+    limits_file = path / "research-sessions" / "limits.json"
+    limits_file.write_text(json.dumps(legacy), encoding="utf-8")
+    assert research_sessions.get_limits(str(path)) == legacy
+    try:
+        research_sessions.save_limits(str(path), legacy)
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("legacy limits outside current bounds were silently accepted")
+    assert research_sessions.get_limits(str(path)) == legacy
+    try:
+        await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+    except ProjectError as exc:
+        assert "120" in str(exc) or "100" in str(exc)
+    else:
+        raise AssertionError("a new session started with legacy limits outside current bounds")
+    assert research_sessions.list_sessions(str(path)) == []
+
+
+def test_outcome_classification():
+    artifact = {
+        "id": "artifact-1",
+        "claim_or_question": "A bounded useful result",
+        "skeptic_response": "No material objection remains in this review.",
+        "open_obligations": [],
+        "coordinator_decision": "stop_productive_conclusion",
+    }
+    positive = research_sessions._outcome({"status": "completed", "artifacts": [artifact]})
+    assert positive["assessment"] == "positive" and positive["basis_artifact_ids"] == ["artifact-1"]
+    assert any("unverified" in caveat.lower() for caveat in positive["caveats"])
+    negative = research_sessions._outcome(
+        {
+            "status": "completed",
+            "artifacts": [{**artifact, "coordinator_decision": "stop_decisive_counterexample"}],
+        }
+    )
+    assert negative["assessment"] == "negative"
+    failed_partial = research_sessions._outcome(
+        {"status": "failed", "artifacts": [{**artifact, "coordinator_decision": "continue"}]}
+    )
+    assert failed_partial["assessment"] == "mixed" and any(
+        "incomplete" in caveat.lower() for caveat in failed_partial["caveats"]
+    )
+    pending = research_sessions._outcome({"status": "running", "artifacts": []})
+    assert pending["assessment"] == "pending" and pending["provisional"]
+
+
+async def test_remove_terminal_and_monotonic_number(path: Path):
+    view, strategy, credential, config = await setup(path)
+    outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+
+    async def handler(request):
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    async def start():
+        return await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        first = await start()
+        finished = await wait_for(path, first["id"])
+        assert finished["session_number"] == 1 and finished["status"] == "completed"
+        assert finished["outcome"]["assessment"] == "positive"
+        try:
+            research_sessions.remove_session(str(path), first["id"], "stale-revision")
+        except ProjectError as exc:
+            assert "changed" in str(exc).lower()
+        else:
+            raise AssertionError("stale session removal was accepted")
+        removed = research_sessions.remove_session(str(path), first["id"], finished["updated_at"])
+        assert removed == {"removed": True, "id": first["id"], "session_number": 1}
+        assert research_sessions.list_sessions(str(path)) == []
+        assert (path / "project.json").exists()
+        assert research_sessions.get_limits(str(path)) == research_sessions.DEFAULT_LIMITS
+        outputs[:] = [investigation(2), skeptic(2, "stop", "productive_conclusion")]
+        second = await start()
+        assert second["session_number"] == 2
+        await research_sessions.control_session(str(path), second["id"], "stop")
 
 
 async def test_single_project_admission(path: Path):
@@ -626,10 +768,29 @@ def main():
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
         test_limits_validation(root / "invalid-limits.sigma")
+        asyncio.run(test_legacy_limits_are_preserved(root / "legacy-limits.sigma"))
         asyncio.run(test_single_project_admission(root / "single-session.sigma"))
         asyncio.run(test_response_transport_and_parsed_bounds(root / "parsed.sigma"))
         asyncio.run(test_changed_bindings_pause_before_provider(root / "binding.sigma"))
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
+        asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
+        test_outcome_classification()
+        assert research_sessions.coordinate_decision(
+            "stop", "recoverable_objection", "Test the omitted boundary case", [], 1, 3, 2, 6
+        ) == ("revise", "Test the omitted boundary case")
+        assert research_sessions.coordinate_decision(
+            "stop", "decisive_counterexample", "", [], 1, 3, 2, 6
+        ) == ("stop_decisive_counterexample", "")
+        assert research_sessions.coordinate_decision("stop", "no_progress", "", [], 1, 3, 2, 6) == (
+            "stop_no_progress",
+            "",
+        )
+        assert research_sessions.coordinate_decision(
+            "stop", "productive_conclusion", "", [], 1, 3, 2, 6
+        ) == ("stop_productive_conclusion", "")
+        assert research_sessions.coordinate_decision(
+            "continue", "recoverable_objection", "Next test", [], 3, 3, 6, 6
+        ) == ("stop_budget_exhausted", "")
     print("Persistent research session scenarios passed.")
 
 

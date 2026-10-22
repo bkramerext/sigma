@@ -192,10 +192,19 @@ def main():
             assert client.get(limits_url, params={"path": str(path)}).json() == changed_limits
             assert (
                 client.put(
-                    limits_url, json={"path": str(path), **changed_limits, "model_calls": 9}
+                    limits_url, json={"path": str(path), **changed_limits, "model_calls": 3}
                 ).status_code
-                == 422
+                == 400
             )
+            for invalid in (
+                {**defaults, "research_rounds": 11, "model_calls": 20},
+                {**defaults, "session_duration_minutes": 121},
+                {**defaults, "output_tokens_per_call": 16385},
+                {**defaults, "maximum_estimated_cost_usd": 0.001},
+            ):
+                assert (
+                    client.put(limits_url, json={"path": str(path), **invalid}).status_code == 422
+                )
         expected = asdict(project_settings(inspect_project(path).project))
         result = subprocess.run(
             [
