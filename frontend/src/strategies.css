@@ -206,8 +206,6 @@
 .workspace-page .proposal-heading-row .proposal-heading-save:focus-visible,
 .workspace-page .proposal-heading-row .proposal-heading-generate:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
-.workspace-page .strategy-form .proposal-heading-row button.proposal-heading-save { min-height: 34px; padding: 7px 13px; border: 1px solid #e4b57b; border-radius: 5px; background: linear-gradient(115deg, #f0ca94, #bb8247); color: #241609; font-weight: 700; text-decoration: none; }
-.workspace-page .strategy-form .proposal-heading-row button.proposal-heading-save:hover:not(:disabled) { background: #f6d4a1; color: #241609; }
 .workspace-page .proposal-dialog .generating-status {
   display: inline-flex; align-items: center; gap: 7px;
   color: #cd9270;
