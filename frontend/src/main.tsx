@@ -676,7 +676,7 @@ function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
 }
 
 function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
-  path: string; initialDraft?: { title: string; approach: string }; onSaved: (view: ProjectView) => void; onCancel: () => void;
+  path: string; initialDraft?: { title: string; approach: string; summary?: string }; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const submitting = useRef(false);
   const [title, setTitle] = useState(initialDraft?.title ?? '');
@@ -687,7 +687,7 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   useEffect(() => { titleInput.current?.focus(); }, []);
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
-    try { onSaved(await post<ProjectView>('strategies', { path, title, approach })); }
+    try { onSaved(await post<ProjectView>('strategies', { path, title, approach, summary: initialDraft?.summary ?? '' })); }
     catch (error) { setError(errorMessage(error)); }
     finally { submitting.current = false; setBusy(false); }
   }
@@ -896,7 +896,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [closing, setClosing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [manualDraft, setManualDraft] = useState<{ title: string; approach: string }>();
+  const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const [investigationEditSignal, setInvestigationEditSignal] = useState(0);
   const editProjectButton = useRef<HTMLButtonElement>(null);
@@ -1040,7 +1040,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
             </div>
           </details>
           <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
-          <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => { if (ordering || dragId || editing || generating || projectEditing) return; if (mode === 'fork') { setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
+          <StrategyCommands strategy={strategy} onCommand={(mode, strategy) => { if (ordering || dragId || editing || generating || projectEditing) return; if (mode === 'fork') { setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
