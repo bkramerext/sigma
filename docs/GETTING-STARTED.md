@@ -35,6 +35,8 @@ Scheduling, reports and forks are unavailable; the UI explains their status. Opt
 ./sigma open projects/rh.sigma
 ./sigma inspect projects/rh.sigma
 ./sigma events projects/rh.sigma
+./sigma agentic-runs /path/project.sigma
+./sigma agentic-runs /path/project.sigma RUN_ID
 ./sigma new-strategy /tmp/example.sigma --title 'Idea' --approach 'Test this hypothesis'
 ./sigma strategies /tmp/example.sigma
 ./sigma edit-strategy /tmp/example.sigma STRATEGY_ID --title 'Revised idea' --approach 'Updated description'
@@ -44,6 +46,14 @@ Scheduling, reports and forks are unavailable; the UI explains their status. Opt
 
 Successful commands print JSON to stdout (exit 0). Project errors print `{"error":"..."}` to stderr (exit 2); argparse syntax errors also exit 2. `close` is stateless. `strategies` lists the active pool; `inspect` retains removed
 records and all audit events. Edit/remove commands return the updated project. Only the canonical RH seed initializes implicitly; other projects require `create` (managed location) or `init` (explicit directory). Both accept `--research-mode default|mathematical`, defaulting to `default`.
+
+Agentic run evidence is saved under `agentic-runs/` inside the project directory.
+`agentic-runs PATH` lists retained run IDs and terminal states; adding a run ID
+prints the complete readable JSON record. The matching local API is
+`GET /api/projects/proposals/agentic/runs?path=PATH` (add `&run_id=ID` to export
+one record). Evidence is bounded to the newest 32 runs and 8 MB total per project;
+individual files are capped at 512 KB. Sample source projects cannot receive
+evidence; open a Sample copy first.
 
 ## API
 

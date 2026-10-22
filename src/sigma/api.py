@@ -13,6 +13,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma import chatgpt_auth
 from sigma.agentic import agentic_events
+from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
@@ -291,6 +292,12 @@ async def agentic_proposal_view(body: ProposalRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/projects/proposals/agentic/runs")
+def agentic_runs_view(path: str, run_id: str | None = None):
+    """List saved run metadata, or export one complete validated evidence record."""
+    return get_run(path, run_id) if run_id else {"runs": list_runs(path)}
 
 
 @app.get("/api/projects/text")

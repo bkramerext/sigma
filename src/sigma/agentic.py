@@ -13,6 +13,8 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from sigma.agentic_evidence import now as evidence_now
+from sigma.agentic_evidence import save as save_evidence
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, ProjectView, Provenance, inspect_project
@@ -277,6 +279,9 @@ async def agentic_events(
     """Yield validated, ordered public events; never mutate project research."""
     run_id = uuid4().hex
     sequence = 0
+    evidence: dict[str, Any] | None = None
+    current_step: dict[str, Any] | None = None
+    finalized = False
 
     def event(event_type: EventType, **kwargs: Any) -> dict[str, Any]:
         nonlocal sequence
@@ -285,10 +290,168 @@ async def agentic_events(
             type=event_type, sequence=sequence, run_id=run_id, **kwargs
         ).model_dump(exclude_none=True)
 
-    if not _gate.acquire(blocking=False):
-        yield event(
-            "run.failed", summary="A strategy generation run is already active. Wait or cancel it."
+    def save_progress() -> None:
+        if evidence is not None:
+            save_evidence(path, evidence)
+
+    def save_unstarted(status: str, summary: str) -> str | None:
+        """Persist preflight failures and cancellations without provider inputs."""
+        nonlocal evidence, finalized
+        try:
+            view = inspect_project(path)
+            corpus = [
+                {
+                    "id": strategy.id,
+                    "title": strategy.title,
+                    "approach": strategy.approach,
+                    "active": strategy.removed_at is None,
+                    "stage": strategy.stage.value,
+                }
+                for strategy in view.project.strategies
+            ]
+            instructions = {"explore": EXPLORE, "challenge": CHALLENGE, "revise": REVISE}
+            evidence = {
+                "schema_version": 1,
+                "run_id": run_id,
+                "started_at": evidence_now(),
+                "finished_at": evidence_now(),
+                "project_id": view.project.id,
+                "context": {
+                    "provider_input": None,
+                    "provider_input_status": "not sent",
+                    "problem": view.project.problem,
+                    "problem_sha256": hashlib.sha256(view.project.problem.encode()).hexdigest(),
+                    "strategy_corpus": corpus,
+                    "strategy_corpus_sha256": hashlib.sha256(
+                        json.dumps(corpus, ensure_ascii=False, sort_keys=True).encode()
+                    ).hexdigest(),
+                    "starting_point": seed.strip(),
+                    "starting_point_sha256": hashlib.sha256(seed.strip().encode()).hexdigest(),
+                },
+                "provider": {
+                    "name": "openai",
+                    "mode": None,
+                    "model": view.project.ai_model,
+                    "reasoning_effort": view.project.reasoning_effort,
+                },
+                "protocol": {
+                    "instructions": {
+                        role: hashlib.sha256(text.encode()).hexdigest()
+                        for role, text in instructions.items()
+                    },
+                    "schema_version": 1,
+                    "schemas": {
+                        "candidate": hashlib.sha256(
+                            json.dumps(Candidate.model_json_schema(), sort_keys=True).encode()
+                        ).hexdigest(),
+                        "review": hashlib.sha256(
+                            json.dumps(Review.model_json_schema(), sort_keys=True).encode()
+                        ).hexdigest(),
+                    },
+                },
+                "steps": [],
+                "history": [],
+                "timeline": [],
+                "terminal": {"status": status, "summary": summary},
+                "final_draft": None,
+            }
+            save_evidence(path, evidence)
+            finalized = True
+            return None
+        except (ProjectError, OSError) as exc:
+            finalized = True
+            return str(exc)
+
+    def start_step(role: str, attempt: int, revision: int, calls: int) -> None:
+        nonlocal current_step
+        if evidence is None:
+            return
+        current_step = {
+            "index": len(evidence["steps"]) + 1,
+            "role": role,
+            "attempt": attempt,
+            "revision": revision,
+            "call_index": calls + 1,
+            "status": "started",
+            "started_at": evidence_now(),
+            "output": None,
+        }
+        evidence["steps"].append(current_step)
+        evidence["timeline"].append(
+            {
+                "type": "activity",
+                "step_index": current_step["index"],
+                "role": role,
+                "attempt": attempt,
+                "revision": revision,
+                "call_index": calls + 1,
+            }
         )
+        save_progress()
+
+    def finish_step(output: Candidate | Review, **metadata: Any) -> None:
+        nonlocal current_step
+        if current_step is not None:
+            current_step.update(
+                status="completed",
+                completed_at=evidence_now(),
+                output=output.model_dump(),
+                **metadata,
+            )
+        current_step = None
+        save_progress()
+
+    def add_decision(outcome: str, summary: str, **metadata: Any) -> None:
+        if evidence is not None:
+            decision = {
+                "index": len(evidence["history"]) + 1,
+                "type": "decision",
+                "outcome": outcome,
+                "summary": summary,
+                "timestamp": evidence_now(),
+                **metadata,
+            }
+            evidence["history"].append(decision)
+            evidence["timeline"].append({"type": "decision", **decision})
+            save_progress()
+
+    def persist_terminal(
+        status: str, summary: str, draft: dict[str, Any] | None = None
+    ) -> str | None:
+        nonlocal finalized
+        if evidence is None:
+            finalized = True
+            return None
+        if current_step is not None and current_step["status"] == "started":
+            current_step.update(status=status, finished_at=evidence_now())
+        evidence["finished_at"] = evidence_now()
+        evidence["terminal"] = {"status": status, "summary": summary}
+        if draft is not None:
+            evidence["final_draft"] = draft
+        try:
+            save_evidence(path, evidence)
+        except (ProjectError, OSError) as exc:
+            finalized = True
+            return str(exc)
+        finalized = True
+        return None
+
+    def failed(summary: str) -> dict[str, Any]:
+        storage_error = (
+            save_unstarted("failed", summary)
+            if evidence is None
+            else persist_terminal("failed", summary)
+        )
+        if storage_error:
+            summary = f"{summary} Evidence could not be saved: {storage_error}"
+        return event("run.failed", summary=summary)
+
+    if not _gate.acquire(blocking=False):
+        summary = "A strategy generation run is already active. Wait or cancel it."
+        storage_error = save_unstarted("failed", summary)
+        if storage_error:
+            summary += f" Evidence could not be saved: {storage_error}"
+        yield event("run.failed", summary=summary)
         return
     try:
         async with asyncio.timeout(OVERALL_SECONDS):
@@ -301,10 +464,65 @@ async def agentic_events(
                     "AI account/billing mode changed. Review the connection and retry."
                 )
             config = await configuration(view=view, context=binding)
-            if not config["available"]:
-                raise ProjectError(config["message"])
             _, context = context_for(path, seed, view)
             project_data = json.loads(context)
+            corpus = [
+                {
+                    "id": strategy.id,
+                    "title": strategy.title,
+                    "approach": strategy.approach,
+                    "active": strategy.removed_at is None,
+                    "stage": strategy.stage.value,
+                }
+                for strategy in view.project.strategies
+            ]
+            instruction_text = {"explore": EXPLORE, "challenge": CHALLENGE, "revise": REVISE}
+            evidence = {
+                "schema_version": 1,
+                "run_id": run_id,
+                "started_at": evidence_now(),
+                "finished_at": None,
+                "project_id": view.project.id,
+                "context": {
+                    "provider_input": project_data,
+                    "provider_input_sha256": hashlib.sha256(
+                        json.dumps(project_data, ensure_ascii=False, sort_keys=True).encode()
+                    ).hexdigest(),
+                    "strategy_corpus": corpus,
+                    "strategy_corpus_sha256": hashlib.sha256(
+                        json.dumps(corpus, ensure_ascii=False, sort_keys=True).encode()
+                    ).hexdigest(),
+                },
+                "provider": {
+                    "name": "openai",
+                    "mode": binding.get("mode"),
+                    "model": config.get("model"),
+                    "reasoning_effort": config.get("reasoning_effort"),
+                },
+                "protocol": {
+                    "instructions": {
+                        role: hashlib.sha256(text.encode()).hexdigest()
+                        for role, text in instruction_text.items()
+                    },
+                    "schema_version": 1,
+                    "schemas": {
+                        "candidate": hashlib.sha256(
+                            json.dumps(Candidate.model_json_schema(), sort_keys=True).encode()
+                        ).hexdigest(),
+                        "review": hashlib.sha256(
+                            json.dumps(Review.model_json_schema(), sort_keys=True).encode()
+                        ).hexdigest(),
+                    },
+                },
+                "steps": [],
+                "history": [],
+                "timeline": [],
+                "terminal": None,
+                "final_draft": None,
+            }
+            save_progress()
+            if not config["available"]:
+                raise ProjectError(config["message"])
             yield event(
                 "run.started", max_calls=MAX_CALLS, summary="Bounded strategy exploration started"
             )
@@ -313,6 +531,7 @@ async def agentic_events(
             for attempt in range(1, MAX_ATTEMPTS + 1):
                 if calls >= MAX_CALLS:
                     raise ProjectError("Six-call run limit reached. Nothing was saved.")
+                start_step("explore", attempt, 0, calls)
                 yield event(
                     "activity.started",
                     kind="explore",
@@ -330,6 +549,7 @@ async def agentic_events(
                 )
                 calls += 1
                 assert isinstance(candidate, Candidate)
+                finish_step(candidate)
                 yield event(
                     "activity.completed",
                     kind="explore",
@@ -339,6 +559,7 @@ async def agentic_events(
                 for revision in range(2):
                     if calls >= MAX_CALLS:
                         raise ProjectError("Six-call run limit reached. Nothing was saved.")
+                    start_step("challenge", attempt, revision + 1, calls)
                     yield event(
                         "activity.started",
                         kind="challenge",
@@ -354,7 +575,19 @@ async def agentic_events(
                     )
                     calls += 1
                     assert isinstance(review, Review)
-                    assessment = "overlapping" if _duplicate(candidate, view) else review.assessment
+                    duplicate = _duplicate(candidate, view)
+                    assessment = "overlapping" if duplicate else review.assessment
+                    override_reason = (
+                        "Local title/three-word-gram overlap check overrode the reviewer assessment."
+                        if duplicate and review.assessment != "overlapping"
+                        else None
+                    )
+                    finish_step(
+                        review,
+                        assessment=review.assessment,
+                        effective_assessment=assessment,
+                        override_reason=override_reason,
+                    )
                     yield event(
                         "activity.completed",
                         kind="challenge",
@@ -370,10 +603,12 @@ async def agentic_events(
                             raise ProjectError(
                                 "Project changed during generation. Reopen it and start a fresh run."
                             )
-                        yield event(
+                        summary = "Distinct candidate ready for human review; proof obligations remain unverified"
+                        add_decision("present", summary, attempt=attempt, revision=revision + 1)
+                        decision_event = event(
                             "decision",
                             outcome="present",
-                            summary="Distinct candidate ready for human review; proof obligations remain unverified",
+                            summary=summary,
                         )
                         draft = Proposal.model_validate(
                             {
@@ -384,7 +619,7 @@ async def agentic_events(
                         provenance = asdict(
                             Provenance("openai", config["model"], config["reasoning_effort"])
                         )
-                        yield event(
+                        completion = event(
                             "run.completed",
                             draft=draft.model_dump(),
                             provenance=provenance,
@@ -393,15 +628,30 @@ async def agentic_events(
                             ),
                             summary=review.public_summary,
                         )
+                        evidence["final_candidate"] = candidate.model_dump()
+                        storage_error = persist_terminal(
+                            "completed", review.public_summary, draft.model_dump()
+                        )
+                        if storage_error:
+                            yield event(
+                                "run.failed",
+                                summary=f"Candidate was not presented because evidence could not be saved: {storage_error}",
+                            )
+                            return
+                        yield decision_event
+                        yield completion
                         return
                     if assessment == "distinct" and review.revision_needed and revision == 0:
                         if calls >= MAX_CALLS:
                             raise ProjectError("Six-call run limit reached. Nothing was saved.")
+                        summary = "Reviewer requested a targeted revision"
+                        add_decision("revise", summary, attempt=attempt, revision=revision + 1)
                         yield event(
                             "decision",
                             outcome="revise",
-                            summary="Reviewer requested a targeted revision",
+                            summary=summary,
                         )
+                        start_step("revise", attempt, revision + 1, calls)
                         yield event(
                             "activity.started",
                             kind="revise",
@@ -421,6 +671,7 @@ async def agentic_events(
                         )
                         calls += 1
                         assert isinstance(revised, Candidate)
+                        finish_step(revised)
                         candidate = revised
                         yield event(
                             "activity.completed",
@@ -434,30 +685,60 @@ async def agentic_events(
                         "review": review.model_dump(),
                         "assessment": assessment,
                     }
+                    prior_critique["override_reason"] = override_reason
                     break
                 if attempt < MAX_ATTEMPTS:
+                    summary = "Reviewer did not support this approach; trying a different mechanism"
+                    add_decision("retry", summary, attempt=attempt)
                     yield event(
                         "decision",
                         outcome="retry",
-                        summary="Reviewer did not support this approach; trying a different mechanism",
+                        summary=summary,
                     )
                 else:
+                    summary = "No sufficiently distinct, defensible candidate emerged"
+                    add_decision("stop", summary, attempt=attempt)
                     yield event(
                         "decision",
                         outcome="stop",
-                        summary="No sufficiently distinct, defensible candidate emerged",
+                        summary=summary,
                     )
-                    yield event(
+                    stopped = event(
                         "run.stopped",
                         summary="No viable strategy to present within 2 attempts. Nothing was saved.",
                     )
+                    storage_error = persist_terminal(
+                        "stopped", "No viable strategy to present within 2 attempts."
+                    )
+                    if storage_error:
+                        yield event(
+                            "run.failed",
+                            summary=f"Run stopped without a candidate; evidence could not be saved: {storage_error}",
+                        )
+                    else:
+                        yield stopped
                     return
             raise AssertionError("Unreachable coordinator state")
     except ProjectError as exc:
-        yield event("run.failed", summary=str(exc))
+        yield failed(str(exc))
     except TimeoutError:
-        yield event(
-            "run.failed", summary="The 120-second run limit was reached. Nothing was saved."
-        )
+        yield failed("The 120-second run limit was reached. Nothing was saved.")
+    except asyncio.CancelledError:
+        if evidence is None:
+            save_unstarted("cancelled", "Run cancelled before completion; no strategy was saved.")
+        else:
+            persist_terminal("cancelled", "Run cancelled before completion; no strategy was saved.")
+        raise
     finally:
+        if not finalized:
+            # Covers async-generator close and browser disconnect, when no terminal
+            # event can be delivered to the disconnected client.
+            if evidence is None:
+                save_unstarted(
+                    "cancelled", "Client disconnected or closed the run before completion."
+                )
+            else:
+                persist_terminal(
+                    "cancelled", "Client disconnected or closed the run before completion."
+                )
         _gate.release()

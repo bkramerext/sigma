@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import asdict
 
+from sigma.agentic_evidence import get_run, list_runs
 from sigma.local_config import load_local_config
 from sigma.projects import (
     ProjectError,
@@ -84,6 +85,11 @@ def main() -> None:
     text.add_argument("path")
     text.add_argument("--scope", choices=["project", "strategy"], required=True)
     text.add_argument("--strategy-id")
+    runs = commands.add_parser(
+        "agentic-runs", help="List saved agentic generation evidence or export one run as JSON"
+    )
+    runs.add_argument("path")
+    runs.add_argument("run_id", nargs="?", help="Run ID to export as a complete JSON record")
     save_text = commands.add_parser("save-text", help="Save an authored Plain or Markdown source")
     save_text.add_argument("path")
     save_text.add_argument("--scope", choices=["project", "strategy"], required=True)
@@ -156,6 +162,10 @@ def main() -> None:
             result = {"strategies": [asdict(s) for s in list_strategies(args.path)]}
         elif args.command == "text":
             result = inspect_text(args.path, args.scope, args.strategy_id)
+        elif args.command == "agentic-runs":
+            result = (
+                get_run(args.path, args.run_id) if args.run_id else {"runs": list_runs(args.path)}
+            )
         elif args.command == "save-text":
             result = asdict(
                 save_source(

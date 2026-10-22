@@ -3,8 +3,11 @@
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+from sigma.agentic_evidence import save as save_agentic_evidence
 
 
 def cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -58,10 +61,31 @@ def main() -> None:
         assert reopened["strategies"][0]["title"] == "Renamed"
         assert reopened["events"][-1]["kind"] == "strategy.removed"
         assert cli("remove-strategy", path, strategy["id"]).returncode == 2
+        run_id = "a" * 32
+        save_agentic_evidence(
+            path,
+            {
+                "schema_version": 1,
+                "run_id": run_id,
+                "started_at": datetime.now(UTC).isoformat(),
+                "finished_at": datetime.now(UTC).isoformat(),
+                "project_id": identity,
+                "steps": [],
+                "history": [],
+                "timeline": [],
+                "terminal": {"status": "stopped", "summary": "Fixture"},
+            },
+        )
+        listed_runs = cli("agentic-runs", path)
+        assert listed_runs.returncode == 0, listed_runs.stderr
+        assert json.loads(listed_runs.stdout)["runs"][0]["run_id"] == run_id
+        exported_run = cli("agentic-runs", path, run_id)
+        assert exported_run.returncode == 0, exported_run.stderr
+        assert json.loads(exported_run.stdout)["terminal"]["summary"] == "Fixture"
         result = cli("close")
         assert result.returncode == 0 and json.loads(result.stdout) == {"closed": True}
     print(
-        "PASS CLI lifecycle, strategy create/edit/remove/list/reopen, JSON output and safe failure"
+        "PASS CLI lifecycle, strategy create/edit/remove/list/reopen, agentic evidence list/export and safe failure"
     )
 
 

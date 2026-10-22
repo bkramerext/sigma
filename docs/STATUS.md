@@ -1245,3 +1245,31 @@ agentic cancellation/retry coverage; Ruff check and format, Pyright, frontend
 typecheck, and the production build also passed. No stabilization fixes were
 needed. FastAPI's TestClient emitted the existing Starlette deprecation warning
 about `httpx`; it did not affect the results.
+
+## A16.1: durable agentic generation evidence (2026-10-22)
+
+The `/api/projects/proposals/agentic` run now stores a private JSON record at
+`<project>.sigma/agentic-runs/<run-id>.json`. It captures the exact validated
+Explorer/Critic/revision outputs, ordered activity references and coordinator
+decisions, including local overlap overrides and reasons. Each record binds the
+public provider input (problem, strategy corpus and starting point), project ID,
+nonsecret digests, selected model/thinking/provider mode, prompt/schema digests,
+final unsaved draft when present, and an explicit terminal disposition. A step
+interrupted after its start is retained with no fabricated output. Authentication
+identity, tokens, headers, provider envelopes and receipts are excluded.
+
+Records are atomically published with owner-only permissions, isolated to the
+project copy, and retained within 32 runs, 8 MB per project and 512 KB per file.
+Sample source directories reject writes. `./sigma agentic-runs PATH` lists runs;
+adding a run ID prints the full JSON artifact. The API provides matching list and
+export GETs. No strategy document schema or human-save behavior changed.
+
+Actual verification: `./sigma test` passed all scenarios, including new
+`tests/agentic_evidence.py` retention/security checks and expanded
+`tests/agentic.py` output/lifecycle/storage checks; Ruff check/format, Pyright,
+frontend typecheck and production build passed. Real Chrome
+`uv run --with playwright python browser_checks/a15_generate.py` passed against
+the isolated mock provider, confirming the existing A15 generation flow remains
+intact. No live model calls were made. Scenario artifacts are created in
+temporary projects and removed with the test directory; a real run is saved at
+`<project>.sigma/agentic-runs/<run-id>.json`.

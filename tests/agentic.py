@@ -6,13 +6,16 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import httpx
 from pydantic import ValidationError
 
 from sigma import agentic, chatgpt_auth
-from sigma.api import app
-from sigma.projects import create_strategy, inspect_project
+from sigma.agentic_evidence import get_run, list_runs
+from sigma.agentic_evidence import save as save_evidence
+from sigma.api import agentic_runs_view, app
+from sigma.projects import ProjectError, create_strategy, inspect_project
 from sigma.proposals import accepted_provenance
 from sigma.samples import open_sample_project, sample_projects
 
@@ -122,6 +125,21 @@ async def main_async(root: Path):
     assert [call["role"] for call in calls] == ["strategy_explore", "strategy_challenge"]
     assert events[-1]["type"] == "run.completed"
     assert events[-1]["draft"]["title"] == CANDIDATE["title"]
+    evidence = get_run(path, events[-1]["run_id"])
+    assert evidence["terminal"]["status"] == "completed"
+    assert evidence["context"]["provider_input"]["starting_point"] == ""
+    assert evidence["context"]["provider_input"]["research_problem"] == view.project.problem
+    assert evidence["steps"][0]["output"] == CANDIDATE
+    assert evidence["steps"][1]["output"] == DISTINCT
+    assert [step["call_index"] for step in evidence["steps"]] == [1, 2]
+    assert [item["type"] for item in evidence["timeline"]] == ["activity", "activity", "decision"]
+    assert evidence["final_candidate"] == CANDIDATE
+    assert evidence["final_draft"]["title"] == CANDIDATE["title"]
+    assert "receipt" not in json.dumps(evidence) and "fixture-token" not in json.dumps(evidence)
+    # Re-read by run ID demonstrates the file-backed record survives service use/restart.
+    assert get_run(path, events[-1]["run_id"])["steps"] == evidence["steps"]
+    assert agentic_runs_view(path)["runs"][0]["run_id"] == events[-1]["run_id"]
+    assert agentic_runs_view(path, events[-1]["run_id"])["final_candidate"] == CANDIDATE
     assert any(event["type"] == "activity.started" for event in events)
     assert any(event["type"] == "decision" and event["outcome"] == "present" for event in events)
     assert inspect_project(path).project.strategies == ()
@@ -160,6 +178,10 @@ async def main_async(root: Path):
     ]
     assert any(event.get("outcome") == "retry" for event in events)
     assert events[-1]["type"] == "run.completed"
+    first_review = get_run(path, events[-1]["run_id"])["steps"][1]
+    assert first_review["assessment"] == "distinct"
+    assert first_review["effective_assessment"] == "overlapping"
+    assert first_review["override_reason"]
     review_revision = {
         **DISTINCT,
         "revision_needed": True,
@@ -177,6 +199,10 @@ async def main_async(root: Path):
     assert any(event.get("outcome") == "revise" for event in events)
     events, calls = await exercise(path, [CANDIDATE, OVERLAP, CANDIDATE, OVERLAP], before)
     assert events[-1]["type"] == "run.stopped" and len(calls) == 4
+    stopped_trace = get_run(path, events[-1]["run_id"])
+    assert stopped_trace["terminal"]["status"] == "stopped"
+    assert stopped_trace["steps"][1]["effective_assessment"] == "overlapping"
+    assert stopped_trace["steps"][1]["override_reason"] is None
     events, calls = await exercise(
         path,
         [ALTERNATIVE, review_revision, ALTERNATIVE, OVERLAP, ALTERNATIVE, review_revision],
@@ -202,6 +228,10 @@ async def main_async(root: Path):
     ):
         events = await collect(path)
         assert events[-1]["type"] == "run.failed"
+        malformed_trace = get_run(path, events[-1]["run_id"])
+        assert malformed_trace["terminal"]["status"] == "failed"
+        assert malformed_trace["steps"][-1]["status"] == "failed"
+        assert malformed_trace["steps"][-1]["output"] is None
     assert not agentic._gate.locked()
     assert (Path(path) / "project.json").read_bytes() == before
     print("PASS malformed provider output fails with terminal event and releases run gate")
@@ -239,6 +269,7 @@ async def main_async(root: Path):
     ):
         refused = await collect(path)
     assert refused[-1]["type"] == "run.failed" and "declined" in refused[-1]["summary"]
+    assert get_run(path, refused[-1]["run_id"])["steps"][-1]["status"] == "failed"
 
     with patch(
         "sigma.agentic.auth_context",
@@ -248,6 +279,9 @@ async def main_async(root: Path):
             event async for event in agentic.agentic_events(path, expected_binding="original")
         ]
     assert events[-1]["type"] == "run.failed" and "account/billing" in events[-1]["summary"]
+    preflight_trace = get_run(path, events[-1]["run_id"])
+    assert preflight_trace["terminal"]["status"] == "failed"
+    assert preflight_trace["context"]["provider_input_status"] == "not sent"
     events = [event async for event in agentic.agentic_events(path, expected_project_id="wrong")]
     assert events[-1]["type"] == "run.failed" and "identity" in events[-1]["summary"]
 
@@ -264,6 +298,16 @@ async def main_async(root: Path):
         return REAL_CLIENT(transport=httpx.MockTransport(pending_handler), **kwargs)
 
     with patch("sigma.agentic.httpx.AsyncClient", side_effect=pending_client):
+        immediately_closed = agentic.agentic_events(path)
+        closed_start = await anext(immediately_closed)
+        assert closed_start["type"] == "run.started"
+        assert (await anext(immediately_closed))["type"] == "activity.started"
+        await immediately_closed.aclose()
+        incomplete = get_run(path, closed_start["run_id"])
+        assert incomplete["terminal"]["status"] == "cancelled"
+        assert incomplete["steps"][-1]["status"] == "cancelled"
+        assert incomplete["steps"][-1]["output"] is None
+
         running = agentic.agentic_events(path)
         first = await anext(running)
         assert first["type"] == "run.started"
@@ -271,6 +315,7 @@ async def main_async(root: Path):
         assert (
             duplicate[-1]["type"] == "run.failed" and "already active" in duplicate[-1]["summary"]
         )
+        assert get_run(path, duplicate[-1]["run_id"])["terminal"]["status"] == "failed"
         assert (await anext(running))["type"] == "activity.started"
         pending = asyncio.create_task(anext(running))
         await asyncio.wait_for(started.wait(), 2)
@@ -281,6 +326,9 @@ async def main_async(root: Path):
             pass
         await running.aclose()
         assert not agentic._gate.locked()
+        cancelled_trace = get_run(path, first["run_id"])
+        assert cancelled_trace["terminal"]["status"] == "cancelled"
+        assert cancelled_trace["steps"][-1]["status"] == "cancelled"
         started.clear()
         with patch("sigma.agentic.CALL_SECONDS", 0.01):
             timeout_events = await collect(path)
@@ -288,6 +336,7 @@ async def main_async(root: Path):
             timeout_events[-1]["type"] == "run.failed"
             and "timed out" in timeout_events[-1]["summary"]
         )
+        assert get_run(path, timeout_events[-1]["run_id"])["terminal"]["status"] == "failed"
         assert not agentic._gate.locked()
     assert (Path(path) / "project.json").read_bytes() == before
     print(
@@ -316,6 +365,13 @@ async def main_async(root: Path):
             f"event: {item['type']}\ndata: {json.dumps(item)}\n\n" for item in stream_events
         )
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=content)
+
+    def storage_handler(request):
+        if request.method == "GET":
+            return httpx.Response(200, json={"object": "list", "data": [{"id": MODEL}]})
+        payload = json.loads(request.content)
+        output = CANDIDATE if payload["text"]["format"]["name"] == "strategy_explore" else DISTINCT
+        return httpx.Response(200, json=provider_output(output))
 
     with (
         patch("sigma.agentic.auth_context", new=AsyncMock(return_value=binding)),
@@ -369,7 +425,39 @@ async def main_async(root: Path):
         await queue.put({"type": "http.disconnect"})
         await asyncio.wait_for(serving, 2)
         assert not agentic._gate.locked()
+    assert any(item["status"] == "cancelled" for item in list_runs(path))
     print("PASS ASGI browser disconnect cancels active agentic provider work")
+
+    # Storage failure cannot present an unsaved draft as a successful run.
+    with (
+        patch("sigma.agentic.save_evidence", side_effect=ProjectError("fixture disk failure")),
+        patch(
+            "sigma.agentic.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(storage_handler),
+                **kwargs,
+            ),
+        ),
+    ):
+        storage_failed = await collect(path)
+    assert storage_failed[-1]["type"] == "run.failed"
+    assert "evidence could not be saved" in storage_failed[-1]["summary"].lower()
+    assert inspect_project(path).project.strategies[0].title == CANDIDATE["title"]
+    source_before = SOURCE.read_bytes()
+    source_id = json.loads(source_before)["id"]
+    try:
+        save_evidence(
+            str(SOURCE.parent),
+            {"schema_version": 1, "run_id": uuid4().hex, "project_id": source_id},
+        )
+    except ProjectError as exc:
+        assert "immutable" in str(exc)
+    else:
+        raise AssertionError("Agentic evidence modified a Sample source project")
+    assert SOURCE.read_bytes() == source_before
+    print(
+        "PASS durable run evidence round-trip, failed/incomplete work, storage failure and immutable Sample source"
+    )
 
 
 def main():

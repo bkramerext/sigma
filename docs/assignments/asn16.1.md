@@ -1,6 +1,6 @@
 # A16.1: Preserve agentic generation evidence
 
-**Status:** Ready for Codex. **Priority:** Complete before A16 real-model quality trials. **Scope:** Capture and inspect evidence from strategy-generation runs, not A17's general research-artifact/provenance system.
+**Status:** Implemented and verified. **Priority:** Complete before A16 real-model quality trials. **Scope:** Capture and inspect evidence from strategy-generation runs, not A17's general research-artifact/provenance system.
 
 ## Why
 
