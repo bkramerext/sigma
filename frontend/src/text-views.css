@@ -145,3 +145,6 @@
   width: auto; margin-left: -2px; text-align: left;
 }
 
+
+/* Tighten only the Investigation heading-to-description spacing. */
+.workspace-page .project-text-views { padding-top: 24px; }
