@@ -858,8 +858,8 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
       {result && <fieldset disabled={busy || saving} className="proposal-review">
         <legend>Unsaved draft · Review before accepting</legend>
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
-        <label htmlFor="proposal-summary">One-line preview</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
-        <label htmlFor="proposal-approach">Proposed solution</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
+        <label htmlFor="proposal-summary">Description</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
+        <label htmlFor="proposal-approach">Plan</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
         <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; it does not establish viability.</p>
       </fieldset>}
     </form>
