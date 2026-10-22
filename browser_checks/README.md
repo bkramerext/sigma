@@ -101,8 +101,9 @@ Start a fresh `provider_fixture:app` on port 8002 and keep the normal UI on
 5173, then run `uv run --with playwright python browser_checks/a15_generate.py`.
 It verifies one bounded request from an empty counting project with an empty
 starting point, an editable unsaved draft, cancellation without mutation,
-provider failure and its single dismissible toast, in-flight cancellation,
-explicit save/reopen, existing-strategy context and immutable sample source.
+provider failure and its single dismissible toast, immediate retry while the
+cancelled provider fixture is still delayed, explicit save/reopen,
+existing-strategy context and immutable sample source.
 The provider is entirely mocked. Review captures are
 `/tmp/sigma-a15-review-1440.png` and `-390.png`.
 

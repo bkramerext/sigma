@@ -720,6 +720,8 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
 }) {
   const composer = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
+  const activeRequestId = useRef<string | null>(null);
+  const cancellationPending = useRef(false);
   const submitting = useRef(false);
   const [config, setConfig] = useState<{ available: boolean; provider: string; mode: string; binding: string; project_id: string; model: string; reasoning_effort: string; message: string } | null>(null);
   const [seed, setSeed] = useState('');
@@ -730,6 +732,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
   const [summary, setSummary] = useState('');
   const [approach, setApproach] = useState('');
   const [busy, setBusy] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -744,7 +747,31 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
     return () => controller.abort();
   }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
   const needsConnection = ai.info?.mode !== 'api_key' && ['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected');
-  function cancel() { if (saving) return; if (busy) { request.current?.abort(); setBusy(false); submitting.current = false; setError('Request cancelled. The provider may already have processed it; nothing was saved. You can retry.'); return; } lifetime.current.abort(); onCancel(); }
+  async function cancel() {
+    if (saving || cancelling) return;
+    if (busy) {
+      const requestId = activeRequestId.current;
+      request.current?.abort();
+      if (!requestId) {
+        if (ai.connecting) ai.cancelSignIn();
+        setError('Request cancelled. Nothing was saved.');
+        return;
+      }
+      cancellationPending.current = true; setCancelling(true); setError('');
+      try {
+        await post<{ cancelled: boolean }>('proposals/cancel', { request_id: requestId });
+        setError('Request cancelled. The provider may already have processed it; nothing was saved. You can retry.');
+        activeRequestId.current = null;
+      } catch (error) {
+        setError(`Could not confirm cancellation. Retry cancellation before generating again. ${errorMessage(error)}`);
+      } finally {
+        cancellationPending.current = false; setCancelling(false);
+        if (!activeRequestId.current) { submitting.current = false; setBusy(false); }
+      }
+      return;
+    }
+    lifetime.current.abort(); onCancel();
+  }
   async function generate() {
     if (submitting.current) return; submitting.current = true;
     const controller = new AbortController(); request.current = controller; setBusy(true); setError('');
@@ -759,14 +786,20 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
       if (latest.project_id !== projectId) throw new Error('Project identity changed during sign-in. Reopen it before generating; your text is retained.');
       if (!latest.available) throw new Error(latest.message);
       if (lifetime.current.signal.aborted) return;
-      const next = await post<ProposalResult>('proposals', { path, seed, expected_binding: latest.binding, expected_project_id: projectId }, controller.signal);
+      const requestId = crypto.randomUUID(); activeRequestId.current = requestId;
+      const next = await post<ProposalResult>('proposals', { path, seed, expected_binding: latest.binding, expected_project_id: projectId, request_id: requestId }, controller.signal);
       if (controller.signal.aborted) return;
       if (!next?.draft || !next.receipt || !next.provenance || !['title', 'summary', 'approach', 'first_tests', 'assumptions', 'failure_modes'].every(key => typeof next.draft[key as keyof ProposalResult['draft']] === 'string')) throw new Error('The local server returned an incomplete strategy draft. Nothing was saved.');
       setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary);
       setApproach(`${next.draft.approach}\n\nFirst tests\n${next.draft.first_tests}\n\nAssumptions\n${next.draft.assumptions}\n\nWays this could fail\n${next.draft.failure_modes}`);
       requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
     } catch (error) { if (!controller.signal.aborted) setError(errorMessage(error)); }
-    finally { if (request.current === controller) { submitting.current = false; setBusy(false); request.current = null; } }
+    finally { if (request.current === controller) {
+      request.current = null;
+      if (!cancellationPending.current) {
+        submitting.current = false; setBusy(false); activeRequestId.current = null;
+      }
+    } }
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current || !result) return; submitting.current = true; setSaving(true); setError('');
@@ -775,7 +808,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
     finally { submitting.current = false; setSaving(false); }
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
     {!busy && <p id="proposal-help" className="hint">Generate one proposed direction and review the editable, unsaved draft before saving. Model suggestions are not independently reviewed or verified.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}

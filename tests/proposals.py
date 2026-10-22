@@ -179,8 +179,11 @@ async def check(path):
             await rejects(proposals.generate_proposal(str(path), consent=True))
             assert (path / "project.json").read_bytes() == snapshot
 
+    request_started = asyncio.Event()
+
     async def slow(request):
-        await asyncio.sleep(1)
+        request_started.set()
+        await asyncio.sleep(30)
         return httpx.Response(200, json=response())
 
     def slow_client(**kwargs):
@@ -188,13 +191,12 @@ async def check(path):
 
     with patch("sigma.proposals.httpx.AsyncClient", side_effect=slow_client):
         pending = asyncio.create_task(proposals.generate_proposal(str(path), consent=True))
-        await asyncio.sleep(0.01)
+        await asyncio.wait_for(request_started.wait(), timeout=2)
         await rejects(proposals.generate_proposal(str(path), consent=True))
-        pending.cancel()
-        try:
-            await pending
-        except asyncio.CancelledError:
-            pass
+        request_id = "test-cancel-request"
+        proposals.register_request(request_id, pending)
+        assert await proposals.cancel_request(request_id)
+        proposals.unregister_request(request_id, pending)
         assert not proposals._gate.locked()
         with patch("sigma.proposals.TIMEOUT_SECONDS", 0.01):
             await rejects(proposals.generate_proposal(str(path), consent=True))

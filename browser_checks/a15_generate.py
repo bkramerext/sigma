@@ -21,12 +21,21 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     generation_requests = []
+    cancellation_requests = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on(
         "request",
         lambda request: (
             generation_requests.append(request.url)
             if request.url.endswith("/api/projects/proposals")
+            else None
+        ),
+    )
+    page.on(
+        "request",
+        lambda request: (
+            cancellation_requests.append(request.url)
+            if request.url.endswith("/api/projects/proposals/cancel")
             else None
         ),
     )
@@ -87,12 +96,8 @@ with sync_playwright() as playwright:
     dialog.get_by_role("button", name="Cancel request", exact=True).click()
     expect(dialog.locator('[role="alert"]')).to_contain_text("Request cancelled")
     assert state.read_bytes() == before
-    dialog.get_by_role("button", name="Cancel", exact=True).click()
-    # Playwright's forwarding route can outlive the browser-side abort briefly;
-    # the fixture completes its bounded delay before the next request starts.
-    page.wait_for_timeout(2200)
-
-    dialog = open_generate()
+    assert len(cancellation_requests) == 1
+    dialog.get_by_label("Starting point (optional)").fill("retry-after-cancel")
     dialog.get_by_role("button", name="Generate", exact=True).click()
     expect(dialog.get_by_label("Title", exact=True)).to_have_value("Terminal-symbol recurrence")
     dialog.get_by_label("Title", exact=True).fill("Human accepted recurrence")
@@ -115,7 +120,7 @@ with sync_playwright() as playwright:
     assert source.read_bytes() == original
     assert not errors, errors
     print(
-        "PASS real Chrome A15: one bounded request, zero-strategy empty-seed draft, accurate single-call disclosure, cancel without mutation, explicit save/reopen, different existing-context proposal, immutable sample source"
+        "PASS real Chrome A15: one bounded request, zero-strategy empty-seed draft, accurate single-call disclosure, cancellation with immediate retry, explicit save/reopen, different existing-context proposal, immutable sample source"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

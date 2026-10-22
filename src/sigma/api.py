@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from dataclasses import asdict
+from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -30,7 +31,14 @@ from sigma.projects import (
     reorder_strategies,
     update_project,
 )
-from sigma.proposals import accepted_provenance, configuration, generate_proposal
+from sigma.proposals import (
+    accepted_provenance,
+    cancel_request,
+    configuration,
+    generate_proposal,
+    register_request,
+    unregister_request,
+)
 from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
@@ -211,6 +219,11 @@ class ProposalRequest(OpenRequest):
     seed: str = ""
     expected_binding: str | None = None
     expected_project_id: str | None = None
+    request_id: UUID | None = None
+
+
+class ProposalCancelRequest(BaseModel):
+    request_id: UUID
 
 
 @app.get("/api/projects/proposals/config")
@@ -234,6 +247,14 @@ async def proposal_view(body: ProposalRequest, request: Request):
             expected_project_id=body.expected_project_id,
         )
     )
+    request_id = str(body.request_id) if body.request_id else None
+    if request_id:
+        try:
+            register_request(request_id, task)
+        except ProjectError:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
     connection = asyncio.create_task(disconnected())
     try:
         done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
@@ -247,6 +268,14 @@ async def proposal_view(body: ProposalRequest, request: Request):
             if not pending.done():
                 pending.cancel()
         await asyncio.gather(task, connection, return_exceptions=True)
+        if request_id:
+            unregister_request(request_id, task)
+
+
+@app.post("/api/projects/proposals/cancel")
+async def cancel_proposal(body: ProposalCancelRequest):
+    await cancel_request(str(body.request_id))
+    return {"cancelled": True}
 
 
 @app.post("/api/projects/proposals/agentic")

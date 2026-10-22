@@ -1150,6 +1150,22 @@ settings instead of a manual-continuation path.
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff
 check and format, Pyright, frontend typecheck and production build.
 
+## Immediate retry after cancelling generation (2026-10-21)
+
+The Generate dialog now sends a request ID and explicitly asks the API to cancel
+the server-side generation task when the user cancels. This releases SIGMA's
+single-request slot without waiting for the provider's normal completion; the
+provider may still process or bill a request already received. The dialog keeps
+Generate disabled until cancellation is confirmed, then allows an immediate
+new intentional request. A short-lived cancellation tombstone handles a cancel
+that reaches the API just before its proposal POST.
+
+Actual verification: `./sigma test` passed all scenarios, Ruff, Pyright,
+frontend typecheck and production build. Real Chrome
+`uv run --with playwright python browser_checks/a15_generate.py` passed with an
+immediate Generate retry after cancelling a deliberately delayed mock request;
+no live provider call was made.
+
 ## Project and Strategies heading controls (2026-10-21)
 
 The project heading is simply **Project**. Its text and Settings controls share

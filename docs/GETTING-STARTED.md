@@ -163,8 +163,10 @@ one-line preview and full approach (including first tests, assumptions and ways
 the idea might fail). Save strategy is the only persistence action; it records an
 AI-assisted suggestion accepted/edited by a human, with returned provider/model and the requested thinking level.
 Cancel leaves project files unchanged. Failed generation or acceptance retains
-existing draft edits. Cancelling a request closes the local connection; provider
-processing/billing may already have occurred. No automatic retries.
+existing draft edits. Cancelling a request asks SIGMA to cancel the active
+provider transport so the next explicit Generate can start without waiting for
+the previous request's full deadline; provider processing/billing may already
+have occurred. No automatic retries.
 
 Operational limits: one proposal request at a time per API process; 60-second
 whole HTTP operation deadline; 48,000-character full JSON context (reject rather
