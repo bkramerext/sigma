@@ -677,7 +677,7 @@ function SplitStrategyAction({ buttonRef, disabled, onManual, onAI }: {
   }, []);
   function choose(action: () => void) { if (disabled) return; if (menu.current) menu.current.open = false; action(); }
   return <div className="new-strategy-split">
-    <button className="primary-action" ref={buttonRef} disabled={disabled} onClick={() => choose(onManual)} title="Write manually">New Strategy</button>
+    <button className="copper-button" ref={buttonRef} disabled={disabled} onClick={() => choose(onManual)} title="Write manually">New Strategy</button>
     <details ref={menu} onKeyDown={event => { if (event.key === 'Escape' && menu.current) { event.preventDefault(); menu.current.open = false; menu.current.querySelector('summary')?.focus(); } }}>
       <summary aria-label="New Strategy options" aria-disabled={disabled} onClick={event => { if (disabled) event.preventDefault(); }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
       <div className="strategy-choice-menu" aria-label="Choose how to create a strategy">
