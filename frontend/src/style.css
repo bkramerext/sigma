@@ -240,42 +240,16 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-topline { height: 52px; }
 .home-page .home-hero { margin-top: 12px; }
 
-/* Full-size display: preserve the approved central composition. */
+/* Anchor the beam artwork to the viewport, independent of its dimensions. */
 .home-page .home-slogan {
-  top: calc(clamp(190px, 25vh, 260px) + 70px);
+  position: fixed;
+  top: 300px;
   left: 50%;
   right: auto;
-  width: min(68vw, 850px);
+  width: min(850px, calc(100vw - 32px));
+  height: auto;
+  margin: 0;
   transform: translateX(-50%);
-}
-
-/* Laptop widths: keep the slogan in the open area to the right of the catalog. */
-@media (min-width: 1301px) and (max-width: 1800px) {
-  .home-page .home-slogan {
-    top: clamp(290px, 36vh, 390px);
-    left: auto;
-    right: clamp(24px, 3vw, 64px);
-    width: min(45vw, 690px);
-    transform: none;
-  }
-}
-
-/* Narrow windows: place the artwork after the catalog, never over project rows. */
-@media (max-width: 1300px) {
-  .home-page .home-slogan {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    width: min(85vw, 700px);
-    transform: none;
-    margin: 48px auto 0;
-  }
-}
-@media (max-width: 700px) {
-  .home-page .home-topline { height: 52px; }
-  .home-page .home-slogan { width: min(94vw, 480px); margin-top: 32px; }
-  .home-page .home-hero { margin-top: 12px; }
 }
 
 /* Compact Home project navigation. The artwork is independent of this column. */
@@ -328,15 +302,6 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects .home-catalog .home-empty { padding: 8px 0 0; }
 .home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
 
-/* Keep the approved slogan clear of the compact left-side navigation. */
-@media (min-width: 1301px) {
-  .home-page .home-slogan {
-    left: auto;
-    right: clamp(24px, 3vw, 64px);
-    width: min(45vw, 850px);
-    transform: none;
-  }
-}
 @media (max-width: 700px) {
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
