@@ -62,8 +62,63 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 
-function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef }: {
-  path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string;
+function ExportProjectDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const submitting = useRef(false);
+  const defaultName = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 80) || 'project'}.json`;
+  const [filename, setFilename] = useState(defaultName);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { dialog.current?.showModal(); input.current?.focus(); input.current?.select(); }, []);
+  function cancel() { if (!submitting.current) onCancel(); }
+  async function exportFile(event: FormEvent) {
+    event.preventDefault();
+    if (submitting.current) return;
+    const chosen = filename.trim();
+    if (!chosen || chosen === '.' || chosen === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(chosen)) {
+      setError('Enter a valid filename without path separators or reserved characters.');
+      return;
+    }
+    const downloadName = /\.json$/i.test(chosen) ? chosen : `${chosen}.json`;
+    submitting.current = true; setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/export?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
+      }
+      const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[] };
+      if (result.export_version !== 1 || !result.project || !Array.isArray(result.agentic_runs)) throw new Error('Invalid project export response');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2) + '\n'], { type: 'application/json' }));
+      try {
+        const link = document.createElement('a');
+        link.href = url; link.download = downloadName;
+        document.body.appendChild(link); link.click(); link.remove();
+      } finally { URL.revokeObjectURL(url); }
+      onCancel();
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  return <dialog ref={dialog} className="project-settings-dialog export-project-dialog" aria-labelledby="export-project-heading" aria-describedby="export-project-help"
+    onCancel={event => { event.preventDefault(); cancel(); }}>
+    <form onSubmit={exportFile}>
+      <header className="settings-header"><h2 id="export-project-heading">Export Project</h2>
+        <div className="settings-actions"><button type="submit" disabled={busy || !filename.trim()}>{busy ? 'Exporting…' : 'Export'}</button><button type="button" className="settings-cancel" disabled={busy} onClick={cancel}>Cancel</button></div>
+      </header>
+      <div className="settings-body">
+        <p id="export-project-help" className="export-project-help">Download the project and its retained agentic run evidence as JSON.</p>
+        <label htmlFor="export-project-filename">Filename</label>
+        <input ref={input} id="export-project-filename" value={filename} maxLength={180} required disabled={busy} spellCheck={false}
+          onChange={event => { setFilename(event.target.value); setError(''); }}/>
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+    </form>
+  </dialog>;
+}
+
+function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef }: {
+  path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
   contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
@@ -75,7 +130,8 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const [editingFromRendered, setEditingFromRendered] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportTrigger = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
   const bodyTrigger = useRef<HTMLElement>(null);
@@ -136,26 +192,9 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   const renderTooltip = rendering ? 'Converting to markdown' : selected === 'rendered' ? 'Show plain text' : 'Convert to markdown';
   const renderTooltipId = `sigma-render-tooltip-${scope}-${strategyId ?? 'project'}`;
-  async function exportProject() {
-    if (exporting) return;
-    setExporting(true); setError('');
-    try {
-      const response = await fetch(`/api/projects/export?${new URLSearchParams({ path })}`, { cache: 'no-store' });
-      if (!response.ok) {
-        const detail = await response.json().catch(() => null);
-        throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
-      }
-      const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[] };
-      if (result.export_version !== 1 || !result.project || !Array.isArray(result.agentic_runs)) throw new Error('Invalid project export response');
-      const filename = (result.project.title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 80) || 'project';
-      const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2) + '\n'], { type: 'application/json' }));
-      try {
-        const link = document.createElement('a');
-        link.href = url; link.download = `sigma-${filename}.json`;
-        document.body.appendChild(link); link.click(); link.remove();
-      } finally { URL.revokeObjectURL(url); }
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { setExporting(false); }
+  function closeExport() {
+    setExportOpen(false);
+    requestAnimationFrame(() => exportTrigger.current?.focus());
   }
   const viewActions = <>
     {mathematical && <span className="sigma-render-tooltip-wrap">
@@ -169,7 +208,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
       }}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
       <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
     </span>}
-    {scope === 'project' && !editing && <button type="button" className="text-view-link" disabled={exporting} onClick={() => void exportProject()}>{exporting ? 'Exporting…' : 'Export'}</button>}
+    {scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="text-view-link" onClick={() => setExportOpen(true)}>Export</button>}
     {editing ? <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" disabled={busy || !draft.trim()}>Save</button>
       <button type="button" className="text-view-link" disabled={busy} onClick={cancelBodyEdit}>Cancel</button>
@@ -177,6 +216,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     {onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link" disabled={settingsDisabled} onClick={onSettings}>Settings</button>}
   </>;
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
+    {scope === 'project' && exportOpen && <ExportProjectDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && <h2 className="investigation-heading">Project</h2>}
       {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
@@ -979,7 +1019,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame}>
     <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-      <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton}/>
+      <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} onSettings={() => setProjectEditing(true)} settingsDisabled={closing || ordering || !!dragId || editing || generating} settingsButtonRef={editProjectButton}/>
     </div>
     <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
