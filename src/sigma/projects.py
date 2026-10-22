@@ -67,9 +67,15 @@ class StageChange:
 class ProjectSettings:
     title: str
     problem: str
-    research_mode: ResearchMode
+    investigation_type: ResearchMode
     ai_model: str
     reasoning_effort: str
+
+
+    @property
+    def research_mode(self) -> ResearchMode:
+        """Compatibility alias for existing integrations."""
+        return self.investigation_type
 
 
 @dataclass(frozen=True)
@@ -79,10 +85,13 @@ class ProjectChange:
 
 
 def _settings(raw: Any) -> ProjectSettings:
+    if isinstance(raw, dict) and "research_mode" in raw and "investigation_type" not in raw:
+        raw = {**raw, "investigation_type": raw["research_mode"]}
+        del raw["research_mode"]
     if not isinstance(raw, dict) or set(raw) != {
         "title",
         "problem",
-        "research_mode",
+        "investigation_type",
         "ai_model",
         "reasoning_effort",
     }:
@@ -94,7 +103,7 @@ def _settings(raw: Any) -> ProjectSettings:
     return ProjectSettings(
         _text(raw["title"], "Project name", 200),
         _text(raw["problem"], "Research problem", 20000),
-        _research_mode(raw["research_mode"]),
+        _research_mode(raw["investigation_type"]),
         raw["ai_model"],
         raw["reasoning_effort"],
     )
@@ -133,10 +142,16 @@ class Project:
     problem: str
     events: tuple[Event, ...]
     strategies: tuple[Strategy, ...] = ()
-    research_mode: ResearchMode = ResearchMode.DEFAULT
+    investigation_type: ResearchMode = ResearchMode.DEFAULT
     active_order: tuple[str, ...] = ()
     ai_model: str = "gpt-6.1-sol"
     reasoning_effort: str = "high"
+
+
+    @property
+    def research_mode(self) -> ResearchMode:
+        """Compatibility alias for existing integrations."""
+        return self.investigation_type
 
 
 @dataclass(frozen=True)
@@ -192,7 +207,7 @@ def _decode(raw: Any) -> Project:
     if version >= 2:
         fields.add("strategies")
     if version >= 4:
-        fields.add("research_mode")
+        fields.add("investigation_type" if "investigation_type" in raw else "research_mode")
     if version >= 5:
         fields.add("active_order")
     if version >= 6:
@@ -203,13 +218,13 @@ def _decode(raw: Any) -> Project:
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise ProjectError(f"Project {key} must be a nonempty string")
     UUID(raw["id"])
-    mode = _research_mode(raw.get("research_mode", "default"))
+    mode = _research_mode(raw.get("investigation_type", raw.get("research_mode", "default")))
     settings = (
         _settings(
             {
                 "title": raw["title"],
                 "problem": raw["problem"],
-                "research_mode": mode,
+                "investigation_type": mode,
                 "ai_model": raw.get("ai_model", legacy_model()),
                 "reasoning_effort": raw.get("reasoning_effort", "high"),
             }
@@ -395,7 +410,9 @@ def _decode(raw: Any) -> Project:
             if not isinstance(change, dict) or set(change) != {"previous", "current"}:
                 raise ProjectError("Invalid project edit event")
             next_change = ProjectChange(_settings(change["previous"]), _settings(change["current"]))
-            if asdict(next_change) != change:
+            # Normalize legacy event keys before checking their canonical contents.
+            normalized_change = {key: {("investigation_type" if field == "research_mode" else field): val for field, val in value.items()} for key, value in change.items()}
+            if asdict(next_change) != normalized_change:
                 raise ProjectError("Project change text must be canonical")
             if next_change.previous == next_change.current or (
                 project_change and project_change.current != next_change.previous
@@ -534,7 +551,7 @@ def initialize_project(
             title.strip(),
             problem.strip(),
             (Event(1, "project.initialized", datetime.now(UTC).isoformat()),),
-            research_mode=mode,
+            investigation_type=mode,
             ai_model=resolved_model,
             reasoning_effort=reasoning_effort,
         )
@@ -942,7 +959,7 @@ def project_settings(project: Project) -> ProjectSettings:
     return ProjectSettings(
         project.title,
         project.problem,
-        project.research_mode,
+        project.investigation_type,
         project.ai_model,
         project.reasoning_effort,
     )
@@ -962,7 +979,7 @@ def update_project(
         {
             "title": title,
             "problem": problem,
-            "research_mode": research_mode,
+            "investigation_type": research_mode,
             "ai_model": ai_model,
             "reasoning_effort": reasoning_effort,
         }
@@ -990,7 +1007,7 @@ def update_project(
             schema_version=max(6, project.schema_version),
             title=wanted.title,
             problem=wanted.problem,
-            research_mode=wanted.research_mode,
+            investigation_type=wanted.investigation_type,
             ai_model=wanted.ai_model,
             reasoning_effort=wanted.reasoning_effort,
             events=(
