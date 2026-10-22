@@ -48,7 +48,7 @@
 .workspace-page .text-views { position: relative; }
 .workspace-page .text-view-controls { justify-content: flex-start; }
 .workspace-page .project-text-views .text-view-controls { position: static; order: 0; display: flex; width: 100%; align-items: center; justify-content: space-between; margin: 0 0 8px; padding: 0; }
-.workspace-page .project-text-views .project-text-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.workspace-page .project-text-views .project-text-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-left: 0; }
 .workspace-page .text-view-controls .sigma-render-toggle {
   display: inline-grid; place-items: center;
   width: 32px; height: 32px; min-width: 32px; min-height: 32px;
@@ -177,4 +177,3 @@
   display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 18px;
   margin: 0 0 8px; padding: 0;
 }
-.workspace-page .project-text-views .project-text-actions { margin-left: 0; }
