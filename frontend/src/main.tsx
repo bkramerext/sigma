@@ -103,7 +103,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
-  useEffect(() => { if (editSignal && scope === 'project' && data?.plain?.current && !busy) beginBodyEdit(selected === 'rendered'); }, [editSignal]);
+  useEffect(() => { if (editSignal && scope === 'project' && version?.current && !busy) beginBodyEdit(selected === 'rendered'); }, [editSignal]);
   function cancelBodyEdit() {
     setEditing(false);
     if (editingFromRendered) chooseView('rendered');
