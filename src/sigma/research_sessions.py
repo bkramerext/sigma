@@ -537,7 +537,7 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
         record = _read(path, session_id)
         if record.get("updated_at") != expected_updated_at:
             raise ProjectError("Session changed; refresh its status before removing it")
-        if record.get("status") not in {"completed", "stopped", "failed"}:
+        if record.get("status") not in {"completed", "ended", "stopped", "failed"}:
             raise ProjectError("Only ended, stopped, or failed sessions can be removed")
         task = _tasks.get(session_id)
         if task is not None and not task.done():
@@ -1004,7 +1004,7 @@ async def _worker(session_id: str, path: str) -> None:
             record["updated_at"] = _now()
             _save(path, record)
             if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
-                record["status"] = "completed"
+                record["status"] = "ended"
                 record["message"] = (
                     "Configured model-call limit reached. Findings are unverified research notes."
                 )
@@ -1192,7 +1192,7 @@ async def _worker(session_id: str, path: str) -> None:
             record["cycle"] = cycle_num
             record["current_question"] = next_question
             if decision.startswith("stop_") and decision != "stop_budget_exhausted":
-                record["status"] = "completed"
+                record["status"] = "ended"
                 record["current_action"] = "Completed"
                 record["message"] = {
                     "stop_decisive_counterexample": "The Skeptic reported a decisive counterexample; saved notes remain unverified.",
@@ -1202,7 +1202,7 @@ async def _worker(session_id: str, path: str) -> None:
             elif cycle_num >= record.get("cycle_limit", 3) or record["calls_used"] >= record.get(
                 "call_limit", CALL_LIMIT
             ):
-                record["status"] = "completed"
+                record["status"] = "ended"
                 record["current_action"] = "Completed · budget exhausted"
                 record["message"] = (
                     "Configured research-round or model-call limit reached. Findings are unverified research notes."
@@ -1217,7 +1217,7 @@ async def _worker(session_id: str, path: str) -> None:
             if record["status"] == "ended":
                 record["terminal_reason"] = decision
             _save(path, record)
-            if record["status"] == "completed":
+            if record["status"] == "ended":
                 return
     except asyncio.CancelledError:
         try:
