@@ -1,9 +1,9 @@
-"""Portable, lazy Plain/Markdown representations alongside project.json.
+"""Portable, lazy Plain/Markdown representations alongside investigation.json.
 
-The project document remains the authority for the current body. A locked,
+The investigation document remains the authority for the current body. A locked,
 versioned companion stores format identity and prior/derived bodies. Companion
-metadata is written before an authored project edit, so a crash cannot label
-an old project body as a new source; unused future metadata is harmless.
+metadata is written before an authored investigation edit, so a crash cannot label
+an old investigation body as a new source; unused future metadata is harmless.
 """
 
 import fcntl
@@ -18,15 +18,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from sigma.projects import (
-    Project,
-    ProjectError,
-    ProjectView,
+from sigma.investigations import (
+    Investigation,
+    InvestigationError,
+    InvestigationView,
     _stage,
     edit_strategy,
-    inspect_project,
-    project_settings,
-    update_project,
+    inspect_investigation,
+    investigation_settings,
+    update_investigation,
 )
 
 Format = Literal["plain", "markdown"]
@@ -40,53 +40,71 @@ def digest(body: str) -> str:
 
 def _format(value: str) -> Format:
     if value not in {"plain", "markdown"}:
-        raise ProjectError("Text format must be plain or markdown")
+        raise InvestigationError("Text format must be plain or markdown")
     return value  # type: ignore[return-value]
 
 
-def _body(project: Project, key: str) -> str:
-    if key == "project":
-        return project.problem
+def _scope(value: str) -> str:
+    """Accept the former project scope for existing clients and stored preferences."""
+    return "investigation" if value == "project" else value
+
+
+def _body(investigation: Investigation, key: str) -> str:
+    if key == "investigation":
+        return investigation.problem
     if not key.startswith("strategy:"):
-        raise ProjectError("Text scope must be a project or strategy")
-    strategy = next((item for item in project.strategies if item.id == key[9:]), None)
+        raise InvestigationError("Text scope must be an investigation or strategy")
+    strategy = next((item for item in investigation.strategies if item.id == key[9:]), None)
     if strategy is None:
-        raise ProjectError("Strategy not found in this project")
+        raise InvestigationError("Strategy not found in this investigation")
     return strategy.approach
 
 
-def _empty(project: Project) -> dict[str, Any]:
-    return {"schema_version": 1, "project_id": project.id, "entries": {}}
+def _empty(investigation: Investigation) -> dict[str, Any]:
+    return {"schema_version": 2, "investigation_id": investigation.id, "entries": {}}
 
 
-def _load(path: Path, project: Project) -> dict[str, Any]:
+def _load(path: Path, investigation: Investigation) -> dict[str, Any]:
     state = path / STATE
     if not state.exists() and not state.is_symlink():
-        return _empty(project)
+        return _empty(investigation)
     if state.is_symlink() or not state.is_file():
-        raise ProjectError("Text representations must be a regular file")
+        raise InvestigationError("Text representations must be a regular file")
     try:
         raw = json.loads(state.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise ProjectError("Text representations are corrupt") from exc
+        raise InvestigationError("Text representations are corrupt") from exc
+    if not isinstance(raw, dict) or type(raw.get("schema_version")) is not int:
+        raise InvestigationError("Text representations do not match this investigation")
+    if raw["schema_version"] == 1 and set(raw) == {
+        "schema_version",
+        "project_id",
+        "entries",
+    }:
+        if raw["project_id"] != investigation.id or not isinstance(raw["entries"], dict):
+            raise InvestigationError("Legacy text representations do not match this investigation")
+        entries = dict(raw["entries"])
+        if "project" in entries:
+            if "investigation" in entries:
+                raise InvestigationError("Legacy text representation scopes conflict")
+            entries["investigation"] = entries.pop("project")
+        raw = {"schema_version": 2, "investigation_id": raw["project_id"], "entries": entries}
     if (
-        not isinstance(raw, dict)
-        or set(raw) != {"schema_version", "project_id", "entries"}
-        or type(raw["schema_version"]) is not int
-        or raw["schema_version"] != 1
-        or raw["project_id"] != project.id
+        set(raw) != {"schema_version", "investigation_id", "entries"}
+        or raw["schema_version"] != 2
+        or raw["investigation_id"] != investigation.id
         or not isinstance(raw["entries"], dict)
     ):
-        raise ProjectError("Text representations do not match this project")
+        raise InvestigationError("Text representations do not match this investigation")
     for key, entry in raw["entries"].items():
-        if not isinstance(key, str) or (key != "project" and not key.startswith("strategy:")):
-            raise ProjectError("Invalid text representation scope")
+        if not isinstance(key, str) or (key != "investigation" and not key.startswith("strategy:")):
+            raise InvestigationError("Invalid text representation scope")
         if not isinstance(entry, dict) or set(entry) != {"sources", "versions"}:
-            raise ProjectError("Invalid text representation entry")
+            raise InvestigationError("Invalid text representation entry")
         if not isinstance(entry["sources"], list) or not isinstance(entry["versions"], dict):
-            raise ProjectError("Invalid text representation history")
+            raise InvestigationError("Invalid text representation history")
         if set(entry["versions"]) != {"plain", "markdown"}:
-            raise ProjectError("Invalid text representation formats")
+            raise InvestigationError("Invalid text representation formats")
         for source in entry["sources"]:
             if (
                 not isinstance(source, dict)
@@ -94,15 +112,15 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
                 or not isinstance(source["digest"], str)
                 or not re.fullmatch(r"[0-9a-f]{64}", source["digest"])
             ):
-                raise ProjectError("Invalid source revision")
+                raise InvestigationError("Invalid source revision")
             _format(source["format"])
             try:
                 datetime.fromisoformat(source["timestamp"])
             except (ValueError, TypeError) as exc:
-                raise ProjectError("Invalid source timestamp") from exc
+                raise InvestigationError("Invalid source timestamp") from exc
         for versions in entry["versions"].values():
             if not isinstance(versions, list):
-                raise ProjectError("Invalid text versions")
+                raise InvestigationError("Invalid text versions")
             for version in versions:
                 if not isinstance(version, dict) or set(version) != {
                     "body",
@@ -113,30 +131,30 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
                     "provenance",
                     "warnings",
                 }:
-                    raise ProjectError("Invalid text version")
-                limit = 20000 if key == "project" else 10000
+                    raise InvestigationError("Invalid text version")
+                limit = 20000 if key == "investigation" else 10000
                 if (
                     not isinstance(version["body"], str)
                     or not version["body"].strip()
                     or len(version["body"]) > limit
                 ):
-                    raise ProjectError("Invalid text body")
+                    raise InvestigationError("Invalid text body")
                 if version["kind"] not in {"authored", "ai_derived"} or version[
                     "source_format"
                 ] not in {"plain", "markdown"}:
-                    raise ProjectError("Invalid text origin")
+                    raise InvestigationError("Invalid text origin")
                 if not isinstance(version["source_digest"], str) or not re.fullmatch(
                     r"[0-9a-f]{64}", version["source_digest"]
                 ):
-                    raise ProjectError("Invalid text source digest")
+                    raise InvestigationError("Invalid text source digest")
                 try:
                     datetime.fromisoformat(version["created_at"])
                 except (ValueError, TypeError) as exc:
-                    raise ProjectError("Invalid text version timestamp") from exc
+                    raise InvestigationError("Invalid text version timestamp") from exc
                 if not isinstance(version["warnings"], list) or any(
                     not isinstance(note, str) or len(note) > 300 for note in version["warnings"]
                 ):
-                    raise ProjectError("Invalid text conversion notes")
+                    raise InvestigationError("Invalid text conversion notes")
                 attribution = version["provenance"]
                 if version["kind"] == "ai_derived":
                     if (
@@ -148,20 +166,20 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
                         or not isinstance(attribution["reasoning_effort"], str)
                         or not attribution["reasoning_effort"]
                     ):
-                        raise ProjectError("Invalid conversion attribution")
+                        raise InvestigationError("Invalid conversion attribution")
                 elif attribution is not None:
-                    raise ProjectError("Authored text cannot claim AI conversion")
+                    raise InvestigationError("Authored text cannot claim AI conversion")
     return raw
 
 
-def _save(path: Path, project: Project, raw: dict[str, Any]) -> None:
-    # Publish atomically under the caller's project lock.
+def _save(path: Path, investigation: Investigation, raw: dict[str, Any]) -> None:
+    # Publish atomically under the caller's investigation lock.
     contents = (json.dumps(raw, ensure_ascii=False, indent=2) + "\n").encode()
     staged = _stage(path, contents)
     try:
         state = path / STATE
         if state.is_symlink():
-            raise ProjectError("Text representations must not be a symlink")
+            raise InvestigationError("Text representations must not be a symlink")
         os.replace(staged, state)
     finally:
         staged.unlink(missing_ok=True)
@@ -179,7 +197,7 @@ def _source_format(entry: dict[str, Any] | None, body: str) -> Format:
             if item["digest"] == digest(body):
                 return _format(item["format"])
         if entry["sources"]:
-            raise ProjectError(
+            raise InvestigationError(
                 "Text source changed outside a representation-aware save; reopen and choose its format"
             )
     return "plain"
@@ -209,14 +227,14 @@ def _record_source(entry: dict[str, Any], old: str, new: str, fmt: Format) -> No
 
 
 def sync_source_changes(
-    path: Path, before: Project, after: Project, text_edit: tuple[str, str] | None
+    path: Path, before: Investigation, after: Investigation, text_edit: tuple[str, str] | None
 ) -> None:
-    """Called with the stable project write lock, before publishing an edit."""
+    """Called with the stable investigation write lock, before publishing an edit."""
     state = path / STATE
     if not state.exists() and text_edit is None:
         return
     raw = _load(path, before)
-    keys = ["project", *(f"strategy:{item.id}" for item in before.strategies)]
+    keys = ["investigation", *(f"strategy:{item.id}" for item in before.strategies)]
     changed = False
     for key in keys:
         old = _body(before, key)
@@ -234,16 +252,17 @@ def sync_source_changes(
 
 
 def inspect_text(value: str | Path, scope: str, strategy_id: str | None = None) -> dict[str, Any]:
-    view = inspect_project(value)
+    scope = _scope(scope)
+    view = inspect_investigation(value)
     key = (
-        "project"
-        if scope == "project"
+        "investigation"
+        if scope == "investigation"
         else f"strategy:{strategy_id}"
         if scope == "strategy" and strategy_id
         else ""
     )
-    source = _body(view.project, key)
-    entry = _load(Path(view.path), view.project)["entries"].get(key)
+    source = _body(view.investigation, key)
+    entry = _load(Path(view.path), view.investigation)["entries"].get(key)
     source_format = _source_format(entry, source)
     source_digest = digest(source)
     formats: dict[str, Any] = {}
@@ -259,7 +278,10 @@ def inspect_text(value: str | Path, scope: str, strategy_id: str | None = None) 
                 None,
             )
             formats[fmt] = {
-                **(stored or _authored(source, source_format, view.project.events[-1].timestamp)),
+                **(
+                    stored
+                    or _authored(source, source_format, view.investigation.events[-1].timestamp)
+                ),
                 "current": True,
             }
         else:
@@ -293,22 +315,23 @@ def save_source(
     fmt: str,
     expected_digest: str,
     strategy_id: str | None = None,
-) -> ProjectView:
+) -> InvestigationView:
+    scope = _scope(scope)
     fmt = _format(fmt)
-    view = inspect_project(value)
+    view = inspect_investigation(value)
     key = (
-        "project"
-        if scope == "project"
+        "investigation"
+        if scope == "investigation"
         else f"strategy:{strategy_id}"
         if scope == "strategy" and strategy_id
         else ""
     )
-    current = _body(view.project, key)
+    current = _body(view.investigation, key)
     if digest(current) != expected_digest:
-        raise ProjectError("Text changed elsewhere. Reopen it before saving")
-    if scope == "project":
-        settings = project_settings(view.project)
-        return update_project(
+        raise InvestigationError("Text changed elsewhere. Reopen it before saving")
+    if scope == "investigation":
+        settings = investigation_settings(view.investigation)
+        return update_investigation(
             value,
             settings.title,
             body,
@@ -318,7 +341,7 @@ def save_source(
             asdict(settings),
             fmt,
         )
-    strategy = next(item for item in view.project.strategies if item.id == strategy_id)
+    strategy = next(item for item in view.investigation.strategies if item.id == strategy_id)
     return edit_strategy(value, strategy.id, strategy.title, body, fmt, expected_digest)
 
 
@@ -327,7 +350,7 @@ def _lock(path: Path):
     lock = os.fdopen(fd, "rb")
     if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
         lock.close()
-        raise ProjectError("Project write lock must be a regular file")
+        raise InvestigationError("Investigation write lock must be a regular file")
     fcntl.flock(lock, fcntl.LOCK_EX)
     return lock
 
@@ -343,7 +366,8 @@ def store_conversion(
     provenance: dict[str, str | None],
     warnings: list[str],
 ) -> dict[str, Any]:
-    view = inspect_project(value)
+    scope = _scope(scope)
+    view = inspect_investigation(value)
     path = Path(view.path)
     with _lock(path):
         current = inspect_text(path, scope, strategy_id)
@@ -351,21 +375,21 @@ def store_conversion(
             current["source_digest"] != expected_digest
             or current["source_format"] != expected_format
         ):
-            raise ProjectError(
+            raise InvestigationError(
                 "Source changed during conversion. Previous text was kept; retry from the current source"
             )
-        latest_project = inspect_project(path).project
-        if latest_project.id != view.project.id or (
-            latest_project.ai_model,
-            latest_project.reasoning_effort,
+        latest_investigation = inspect_investigation(path).investigation
+        if latest_investigation.id != view.investigation.id or (
+            latest_investigation.ai_model,
+            latest_investigation.reasoning_effort,
         ) != (provenance["model"], provenance["reasoning_effort"]):
-            raise ProjectError(
-                "Project model/Thinking changed during conversion; nothing was saved"
+            raise InvestigationError(
+                "Investigation model/Thinking changed during conversion; nothing was saved"
             )
         if current[target] and current[target]["current"]:
             return current
-        raw = _load(path, latest_project)
-        key = "project" if scope == "project" else f"strategy:{strategy_id}"
+        raw = _load(path, latest_investigation)
+        key = "investigation" if scope == "investigation" else f"strategy:{strategy_id}"
         entry = _entry(raw, key)
         if not entry["sources"]:
             entry["sources"].append(
@@ -386,5 +410,5 @@ def store_conversion(
                 "warnings": warnings,
             }
         )
-        _save(path, latest_project, raw)
+        _save(path, latest_investigation, raw)
     return inspect_text(path, scope, strategy_id)

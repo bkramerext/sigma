@@ -1,18 +1,18 @@
-# SPEC-001: Browser-first project lifecycle
+# SPEC-001: Browser-first investigation lifecycle
 
 Status: Implemented
 
 ## Goal
 
-Open the source-controlled `projects/rh.sigma/` seed in a local browser, showing project identity, problem, and history. Preserve identity on reopen.
+Open the source-controlled `investigations/rh.sigma/` seed in a local browser, showing investigation identity, problem, and history. Preserve identity on reopen.
 
 ## Contract
 
-- A project is a `.sigma/` directory. Codex chooses safe storage and initialization; never overwrite existing research.
+- An investigation is a `.sigma/` directory. Codex chooses safe storage and initialization; never overwrite existing research.
 - Typed shared Python services support init, open, inspect, close, and event listing. Browser, FastAPI, CLI, and scenarios are peer adapters.
-- Reject invalid/corrupt/incompatible projects without modifying them. Initialization must avoid partial publication.
+- Reject invalid/corrupt/incompatible investigations without modifying them. Initialization must avoid partial publication.
 - Browser supports path selection, open, close/switch, details/history, and visible errors.
-- CLI provides machine-readable project commands.
+- CLI provides machine-readable investigation commands.
 - Executable scenarios verify initialization, persistence, immutable reads, failures, and event ordering.
 
 ## Verification

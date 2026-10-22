@@ -8,10 +8,10 @@ from urllib.parse import quote
 
 from playwright.sync_api import expect, sync_playwright
 
-from sigma.projects import create_strategy, initialize_project
+from sigma.investigations import create_strategy, initialize_investigation
 
 path = str(Path(mkdtemp(prefix="sigma-a7-check-")) / "research.sigma")
-initialize_project(
+initialize_investigation(
     path,
     "Research directions",
     "Compare approaches to a bounded mathematical question. Evidence and finite tests are not proofs.",
@@ -27,7 +27,7 @@ for title, approach in [
     ("Integral transforms", "Test whether representations yield new inequalities."),
 ]:
     create_strategy(path, title, approach)
-state = Path(path) / "project.json"
+state = Path(path) / "investigation.json"
 with sync_playwright() as p:
     browser = p.chromium.launch(
         executable_path=os.environ.get(
@@ -47,11 +47,11 @@ with sync_playwright() as p:
             response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8001"))
         ),
     )
-    page.goto("http://127.0.0.1:5173/project?path=" + quote(path))
+    page.goto("http://127.0.0.1:5173/investigation?path=" + quote(path))
     expect(page.get_by_role("heading", name="Research directions", exact=True)).to_be_visible()
     rows = page.locator(".strategy-row")
     assert rows.count() == 4
-    intro = page.locator(".project-intro")
+    intro = page.locator(".investigation-intro")
     new_strategy = page.get_by_role("button", name="New Strategy", exact=True)
     heading_box = page.get_by_role("heading", name="Strategies", exact=True).bounding_box()
     button_box = new_strategy.bounding_box()
@@ -69,19 +69,19 @@ with sync_playwright() as p:
         )
         < 2
     )
-    divider = page.get_by_role("separator", name="Resize project description")
-    controls_box = page.locator(".project-text-views .text-view-controls").bounding_box()
+    divider = page.get_by_role("separator", name="Resize investigation description")
+    controls_box = page.locator(".investigation-text-views .text-view-controls").bounding_box()
     divider_box = divider.bounding_box()
     assert controls_box and divider_box
     assert 0 <= divider_box["y"] - (controls_box["y"] + controls_box["height"]) <= 16
-    sidebar = page.get_by_role("navigation", name="Project navigation")
+    sidebar = page.get_by_role("navigation", name="Investigation navigation")
     expanded_width = sidebar.bounding_box()["width"]
     page.get_by_role("button", name="Collapse sidebar").click()
     expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
     assert sidebar.bounding_box()["width"] < expanded_width / 2
     assert page.get_by_role("link", name="Strategies").is_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    page.screenshot(path="/tmp/sigma-project-sidebar-collapsed-1672.png", full_page=True)
+    page.screenshot(path="/tmp/sigma-investigation-sidebar-collapsed-1672.png", full_page=True)
     page.reload()
     expect(page.get_by_role("button", name="Expand sidebar")).to_be_visible()
     page.get_by_role("button", name="Expand sidebar").click()
@@ -103,7 +103,7 @@ with sync_playwright() as p:
     page.set_viewport_size({"width": 1672, "height": 941})
     description.evaluate("e => e.value = e.dataset.original")
     description.evaluate("e => e.scrollTop = 0")
-    page.locator(".project-intro").get_by_role("button", name="Cancel").click()
+    page.locator(".investigation-intro").get_by_role("button", name="Cancel").click()
     resizer = divider
     resizer.focus()
     original_height = intro.bounding_box()["height"]
@@ -193,7 +193,7 @@ with sync_playwright() as p:
     expect(rows.nth(1)).to_have_attribute("data-strategy-id", first_id)
     # Failed order save reverts preview.
     page.route(
-        "**/api/projects/strategies/reorder",
+        "**/api/investigations/strategies/reorder",
         lambda route: route.fulfill(
             status=400, content_type="application/json", body='{"error":"Injected reorder failure"}'
         ),
@@ -204,7 +204,7 @@ with sync_playwright() as p:
     grip.press("Enter")
     expect(page.get_by_role("alert")).to_have_text("Injected reorder failure")
     expect(rows.nth(1)).to_have_attribute("data-strategy-id", first_id)
-    page.unroute("**/api/projects/strategies/reorder")
+    page.unroute("**/api/investigations/strategies/reorder")
     # Touch is a real Chrome touch sequence, through pointer capture on the grip.
     page.set_viewport_size({"width": 390, "height": 844})
     grip.scroll_into_view_if_needed()
@@ -300,7 +300,7 @@ with sync_playwright() as p:
         page.screenshot(path=f"/tmp/sigma-a7-ai-review-{w}.png", full_page=True)
     dialog.get_by_label("Title", exact=True).fill("Human revised moment idea")
     page.route(
-        "**/api/projects/strategies",
+        "**/api/investigations/strategies",
         lambda route: route.fulfill(
             status=400,
             content_type="application/json",
@@ -311,7 +311,7 @@ with sync_playwright() as p:
     expect(dialog.get_by_role("alert")).to_have_text("Injected acceptance failure")
     expect(dialog.get_by_label("Title", exact=True)).to_have_value("Human revised moment idea")
     assert state.read_bytes() == before
-    page.unroute("**/api/projects/strategies")
+    page.unroute("**/api/investigations/strategies")
     dialog.get_by_role("button", name="Save strategy", exact=True).click()
     expect(
         page.get_by_role("heading", name="Human revised moment idea", exact=True)

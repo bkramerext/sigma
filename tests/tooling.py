@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, Mock, call, patch
 
-from sigma.projects import ROOT
+from sigma.investigations import ROOT
 from sigma.tooling import run_tooling
 from sigma.ui import run_shutdown, run_ui, stop_servers
 from sigma.ui_instance import Instance

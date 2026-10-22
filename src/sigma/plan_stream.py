@@ -7,8 +7,8 @@ from typing import Any
 
 import httpx
 
+from sigma.investigations import InvestigationError
 from sigma.openai_connection import inference_failure
-from sigma.projects import ProjectError
 
 MAX_STREAM_BYTES = 1000000
 MAX_EVENTS = 4096
@@ -158,12 +158,12 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
                         r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", value
                     ):
                         details.append(f"{key}: {value}")
-            raise ProjectError(
+            raise InvestigationError(
                 f"ChatGPT rejected the request ({', '.join(details)}). "
                 "Account retained; no automatic billing fallback occurred."
             )
-        raise ProjectError(f"{message} No strategy was saved.")
-    raise ProjectError(
+        raise InvestigationError(f"{message} No strategy was saved.")
+    raise InvestigationError(
         f"OpenAI API request failed (HTTP {status}). Check API model permissions or separate API billing; no fallback or strategy save occurred."
     )
 
@@ -184,7 +184,9 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
     async for chunk in response.aiter_bytes():
         byte_count += len(chunk)
         if byte_count > MAX_STREAM_BYTES:
-            raise ProjectError("Provider stream exceeded the byte limit; no strategy was saved.")
+            raise InvestigationError(
+                "Provider stream exceeded the byte limit; no strategy was saved."
+            )
         buffer += decoder.decode(chunk)
         buffer = buffer.replace("\r\n", "\n")
         while "\n\n" in buffer:
@@ -230,11 +232,11 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
                 if kind == "response.failed":
                     failure(400, raw, "chatgpt", guard)
                 if kind == "response.incomplete":
-                    raise ProjectError(
+                    raise InvestigationError(
                         "ChatGPT returned an incomplete response. Retry explicitly; no strategy was saved."
                     )
                 if raw.get("status") != "completed" or refused:
-                    raise ProjectError(
+                    raise InvestigationError(
                         "ChatGPT declined or did not complete this proposal; no strategy was saved."
                     )
                 terminal = raw
@@ -248,7 +250,7 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
                 refused = True
     buffer += decoder.decode(b"", final=True)
     if buffer.strip() or terminal is None:
-        raise ProjectError(
+        raise InvestigationError(
             "ChatGPT stream ended without a valid response.completed. No strategy was saved."
         )
     if deltas:

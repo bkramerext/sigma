@@ -1,4 +1,4 @@
-/* Shared copper actions and AI status across Home and project workspaces. */
+/* Shared copper actions and AI status across Home and investigation workspaces. */
 :is(.home-page, .workspace-page) {
   --copper-deep: #75402f;
   --copper: #a96548;

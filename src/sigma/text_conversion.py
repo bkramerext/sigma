@@ -8,9 +8,9 @@ import re
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sigma.investigations import InvestigationError, inspect_investigation
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
-from sigma.projects import ProjectError, inspect_project
 from sigma.proposals import MAX_RESPONSE, configuration
 from sigma.text_views import Format, _format, inspect_text, store_conversion
 
@@ -51,7 +51,7 @@ async def convert_text(
             path, scope, target, strategy_id, expected_digest, expected_binding
         )
     except TimeoutError as exc:
-        raise ProjectError("Text conversion timed out; source text was kept") from exc
+        raise InvestigationError("Text conversion timed out; source text was kept") from exc
 
 
 async def _convert_text(
@@ -64,42 +64,46 @@ async def _convert_text(
 ) -> dict:
     target_format = _format(target)
     if _gate.locked():
-        raise ProjectError("A text conversion is already active. Wait or cancel it")
+        raise InvestigationError("A text conversion is already active. Wait or cancel it")
     async with _gate:
         async with asyncio.timeout(CALL_SECONDS + 5):
-            view = inspect_project(path)
+            view = inspect_investigation(path)
             source = inspect_text(path, scope, strategy_id)
             if expected_digest is not None and source["source_digest"] != expected_digest:
-                raise ProjectError("Text changed since this view opened. Refresh before converting")
+                raise InvestigationError(
+                    "Text changed since this view opened. Refresh before converting"
+                )
             if target_format == source["source_format"]:
                 return source
             if source[target_format] and source[target_format]["current"]:
                 return source
             source_format: Format = source["source_format"]
             source_body: str = source[source_format]["body"]
-            limit = 20000 if scope == "project" else 10000
+            limit = 20000 if scope == "investigation" else 10000
             if len(source_body) > limit:
-                raise ProjectError("Source text exceeds the conversion limit")
+                raise InvestigationError("Source text exceeds the conversion limit")
             binding = await auth_context()
             if expected_binding is not None and expected_binding != binding["identity"]:
-                raise ProjectError(
+                raise InvestigationError(
                     "AI account/billing mode changed. Review the connection and retry"
                 )
             config = await configuration(view=view, context=binding)
             if not config["available"]:
-                raise ProjectError(config["message"])
+                raise InvestigationError(config["message"])
             context = json.dumps(
                 {
                     "source_format": source_format,
                     "target_format": target_format,
-                    "research_mode": view.project.research_mode.value,
-                    "topic": view.project.title[:200],
+                    "research_mode": view.investigation.research_mode.value,
+                    "topic": view.investigation.title[:200],
                     "text": source_body,
                 },
                 ensure_ascii=False,
             )
             if len(context) > 24000:
-                raise ProjectError("Text conversion context exceeds the limit; nothing was sent")
+                raise InvestigationError(
+                    "Text conversion context exceeds the limit; nothing was sent"
+                )
             payload: dict = {
                 "model": config["model"],
                 "store": False,
@@ -160,7 +164,9 @@ async def _convert_text(
                             async for chunk in response.aiter_bytes():
                                 data.extend(chunk)
                                 if len(data) > MAX_RESPONSE:
-                                    raise ProjectError("Conversion response exceeded the limit")
+                                    raise InvestigationError(
+                                        "Conversion response exceeded the limit"
+                                    )
                             try:
                                 raw = json.loads(data)
                             except ValueError:
@@ -172,7 +178,7 @@ async def _convert_text(
                         async for chunk in response.aiter_bytes():
                             data.extend(chunk)
                             if len(data) > MAX_RESPONSE:
-                                raise ProjectError("Conversion response exceeded the limit")
+                                raise InvestigationError("Conversion response exceeded the limit")
                         try:
                             raw = json.loads(data)
                         except ValueError:
@@ -184,7 +190,7 @@ async def _convert_text(
                     or raw.get("status") != "completed"
                     or raw.get("model") != config["model"]
                 ):
-                    raise ProjectError("Provider did not complete with the selected model")
+                    raise InvestigationError("Provider did not complete with the selected model")
                 parts = [
                     part
                     for item in raw.get("output", [])
@@ -192,7 +198,9 @@ async def _convert_text(
                     for part in item.get("content", [])
                 ]
                 if any(part.get("type") == "refusal" for part in parts):
-                    raise ProjectError("Provider declined the conversion; source text was kept")
+                    raise InvestigationError(
+                        "Provider declined the conversion; source text was kept"
+                    )
                 texts = [part["text"] for part in parts if part.get("type") == "output_text"]
                 if len(texts) != 1:
                     # Report shape, never text or credentials. This distinguishes
@@ -206,12 +214,12 @@ async def _convert_text(
                         f"(content types: {', '.join(kinds[:8]) or 'none'})"
                     )
                 result = Converted.model_validate_json(texts[0])
-            except ProjectError:
+            except InvestigationError:
                 raise
             except (TimeoutError, httpx.TimeoutException) as exc:
-                raise ProjectError("Text conversion timed out; source text was kept") from exc
+                raise InvestigationError("Text conversion timed out; source text was kept") from exc
             except httpx.HTTPError as exc:
-                raise ProjectError(
+                raise InvestigationError(
                     "Could not reach OpenAI for conversion; source text was kept"
                 ) from exc
             except (ValueError, KeyError, TypeError, AttributeError, ValidationError) as exc:
@@ -223,7 +231,7 @@ async def _convert_text(
                 else:
                     detail = f"{type(exc).__name__}: {exc}"
 
-                raise ProjectError(
+                raise InvestigationError(
                     f"Provider returned malformed conversion output ({detail}); source text was kept"
                 ) from exc
             body = result.body
@@ -232,29 +240,29 @@ async def _convert_text(
                 or len(body) > limit
                 or len(body.strip()) < max(1, len(source_body.strip()) // 5)
             ):
-                raise ProjectError("Conversion appears incomplete; source text was kept")
+                raise InvestigationError("Conversion appears incomplete; source text was kept")
             if target_format == "plain" and re.search(
                 r"\\(?:frac|geq?|leq?|lim|to|infty|sum|begin|end)\b|\$\$?", body
             ):
-                raise ProjectError(
+                raise InvestigationError(
                     "Plain conversion still contains LaTeX markup; source text was kept"
                 )
             if len(result.warnings) > 5 or any(
                 not note.strip() or len(note) > 300 for note in result.warnings
             ):
-                raise ProjectError("Provider returned invalid conversion notes")
+                raise InvestigationError("Provider returned invalid conversion notes")
             again = await auth_context()
             if again["identity"] != binding["identity"] or again["mode"] != binding["mode"]:
-                raise ProjectError(
+                raise InvestigationError(
                     "AI account/billing mode changed during conversion; nothing was saved"
                 )
-            latest = inspect_project(path).project
+            latest = inspect_investigation(path).investigation
             if (latest.ai_model, latest.reasoning_effort) != (
                 config["model"],
                 config["reasoning_effort"],
             ):
-                raise ProjectError(
-                    "Project model/Thinking changed during conversion; nothing was saved"
+                raise InvestigationError(
+                    "Investigation model/Thinking changed during conversion; nothing was saved"
                 )
             return store_conversion(
                 path,

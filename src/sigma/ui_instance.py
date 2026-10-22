@@ -14,7 +14,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from sigma.projects import ROOT
+from sigma.investigations import ROOT
 
 STATE_ROOT = Path("/tmp")
 

@@ -1,4 +1,4 @@
-"""Discover shipped projects and open each as one persistent managed project."""
+"""Discover shipped investigations and open each as one persistent managed investigation."""
 
 import json
 import os
@@ -6,22 +6,23 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from sigma.projects import (
+from sigma.investigations import (
     ROOT,
     STATE,
-    ProjectError,
-    ProjectView,
+    InvestigationError,
+    InvestigationView,
     _decode,
     _stage,
-    inspect_project,
-    projects_root,
+    _uses_checkout_root,
+    inspect_investigation,
+    investigations_root,
 )
 
 EXAMPLES = ROOT / "examples"
 
 
 @dataclass(frozen=True)
-class StockProject:
+class StockInvestigation:
     id: str
     title: str
     problem: str
@@ -29,9 +30,9 @@ class StockProject:
     strategy_count: int
 
 
-def _projects() -> list[tuple[str, Path]]:
+def _investigations() -> list[tuple[str, Path]]:
     if not EXAMPLES.is_dir() or EXAMPLES.is_symlink():
-        raise ProjectError("Stock Projects catalog is unavailable.")
+        raise InvestigationError("Stock Investigations catalog is unavailable.")
     return [
         (directory.name, directory / STATE)
         for directory in sorted(
@@ -41,63 +42,69 @@ def _projects() -> list[tuple[str, Path]]:
     ]
 
 
-def _load(identifier: str) -> tuple[bytes, dict[str, Any], StockProject]:
-    match = next(((name, path) for name, path in _projects() if name == identifier), None)
+def _load(identifier: str) -> tuple[bytes, dict[str, Any], StockInvestigation]:
+    match = next(((name, path) for name, path in _investigations() if name == identifier), None)
     if match is None or match[1].is_symlink():
-        raise ProjectError("Stock project was not found.")
+        raise InvestigationError("Stock investigation was not found.")
     try:
         contents = match[1].read_bytes()
         raw = json.loads(contents)
-        project = _decode(raw)
+        investigation = _decode(raw)
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        raise ProjectError(f"Stock project {identifier} is unavailable: {exc}") from exc
+        raise InvestigationError(f"Stock investigation {identifier} is unavailable: {exc}") from exc
     return (
         contents,
         raw,
-        StockProject(
+        StockInvestigation(
             identifier,
-            project.title,
-            project.problem,
-            project.investigation_type.value,
-            len(project.active_order),
+            investigation.title,
+            investigation.problem,
+            investigation.investigation_type.value,
+            len(investigation.active_order),
         ),
     )
 
 
 def _destination(identifier: str) -> Path:
-    root = projects_root()
+    root = investigations_root()
     if root.is_relative_to(EXAMPLES):
-        raise ProjectError("Stock projects cannot be installed inside the source catalog.")
+        raise InvestigationError(
+            "Stock investigations cannot be installed inside the source catalog."
+        )
+    legacy = ROOT / "projects" / f"{identifier}.sigma"
+    if _uses_checkout_root() and os.path.lexists(legacy):
+        return legacy
     return root / f"{identifier}.sigma"
 
 
-def stock_projects() -> dict[str, list[dict[str, Any]]]:
+def stock_investigations() -> dict[str, list[dict[str, Any]]]:
     listed = []
-    for name, _ in _projects():
+    for name, _ in _investigations():
         _, raw, stock = _load(name)
         destination = _destination(name)
         if destination.exists() or destination.is_symlink():
             try:
-                view = inspect_project(destination)
-                if view.project.id == raw["id"]:
-                    stock = StockProject(
+                view = inspect_investigation(destination)
+                if view.investigation.id == raw["id"]:
+                    stock = StockInvestigation(
                         name,
-                        view.project.title,
-                        view.project.problem,
-                        view.project.investigation_type.value,
-                        len(view.project.active_order),
+                        view.investigation.title,
+                        view.investigation.problem,
+                        view.investigation.investigation_type.value,
+                        len(view.investigation.active_order),
                     )
-            except ProjectError:
+            except InvestigationError:
                 pass  # Opening the row reports a precise conflict; other rows remain usable.
         listed.append(asdict(stock))
-    return {"projects": listed}
+    # Keep the former response key during the API transition.
+    return {"investigations": listed, "projects": listed}
 
 
-def stock_project_ids() -> set[str]:
-    return {_load(name)[1]["id"] for name, _ in _projects()}
+def stock_investigation_ids() -> set[str]:
+    return {_load(name)[1]["id"] for name, _ in _investigations()}
 
 
-def open_stock_project(identifier: str) -> ProjectView:
+def open_stock_investigation(identifier: str) -> InvestigationView:
     """Install once with the canonical identity; subsequent opens preserve user edits."""
     contents, raw, _ = _load(identifier)
     destination = _destination(identifier)
@@ -112,14 +119,14 @@ def open_stock_project(identifier: str) -> ProjectView:
         if reserved:
             staged = _stage(destination, contents)
             os.link(staged, destination / STATE)
-        view = inspect_project(destination)
-        if view.project.id != raw["id"]:
-            raise ProjectError(
-                f"A different project occupies {destination}; existing research was not changed."
+        view = inspect_investigation(destination)
+        if view.investigation.id != raw["id"]:
+            raise InvestigationError(
+                f"A different investigation occupies {destination}; existing research was not changed."
             )
         return view
     except OSError as exc:
-        raise ProjectError(f"Cannot open stock project: {exc}") from exc
+        raise InvestigationError(f"Cannot open stock investigation: {exc}") from exc
     finally:
         if staged is not None:
             staged.unlink(missing_ok=True)

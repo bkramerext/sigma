@@ -13,8 +13,8 @@ from urllib.error import URLError
 from urllib.request import urlopen
 from uuid import uuid4
 
+from sigma.investigations import ROOT
 from sigma.local_config import load_local_config
-from sigma.projects import ROOT
 from sigma.ui_instance import Instance
 from sigma.ui_orphans import recover_orphans
 

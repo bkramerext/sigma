@@ -8,7 +8,7 @@ import sys
 from contextlib import nullcontext
 from tempfile import TemporaryDirectory
 
-from sigma.projects import ROOT
+from sigma.investigations import ROOT
 
 
 def run_tooling(command: str) -> int:
@@ -34,10 +34,10 @@ def run_tooling(command: str) -> int:
         python = ["uv", "run", "--locked", "--no-sync"]
         steps = [
             [*python, "python", "tests/lifecycle.py"],
-            [*python, "python", "tests/project_creation.py"],
+            [*python, "python", "tests/investigation_creation.py"],
             [*python, "python", "tests/recents.py"],
             [*python, "python", "tests/example_math.py"],
-            [*python, "python", "tests/project_settings.py"],
+            [*python, "python", "tests/investigation_settings.py"],
             [*python, "python", "tests/model_connection.py"],
             [*python, "python", "tests/chatgpt.py"],
             [*python, "python", "tests/chatgpt_restart.py"],

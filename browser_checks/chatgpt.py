@@ -59,9 +59,9 @@ with sync_playwright() as p:
     page.goto("http://127.0.0.1:5173/")
     expect(page.get_by_role("status").filter(has_text="Connect AI")).to_be_visible()
     assert stats()["generated"] == 0
-    page.get_by_role("button", name="New Project", exact=True).click()
+    page.get_by_role("button", name="New Investigation", exact=True).click()
     dialog = page.get_by_role("dialog")
-    dialog.get_by_label("Project name", exact=True).fill("SIWC browser " + uuid4().hex[:8])
+    dialog.get_by_label("Investigation name", exact=True).fill("SIWC browser " + uuid4().hex[:8])
     dialog.get_by_label("Research problem", exact=True).fill(
         "Compare necessary moment constraints without claiming a proof."
     )
@@ -76,7 +76,7 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Save strategy", exact=True).click()
     expect(page.get_by_role("heading", name="Manual without account", exact=True)).to_be_visible()
     assert stats()["generated"] == 0
-    before = (path / "project.json").read_bytes()
+    before = (path / "investigation.json").read_bytes()
 
     def open_generate():
         page.get_by_label("New Strategy options", exact=True).click()
@@ -117,7 +117,7 @@ with sync_playwright() as p:
         json.loads(sent[0]["content"])["starting_point"]
         == "Preserve this nonempty seed through sign-in"
     )
-    assert (path / "project.json").read_bytes() == before
+    assert (path / "investigation.json").read_bytes() == before
     expect(dialog.get_by_text("You're using your ChatGPT plan", exact=True)).to_be_visible()
     dialog.get_by_role("button", name="Got it", exact=True).click()
     dialog.get_by_label("Title", exact=True).fill("Human acceptance after verified plan flow")
@@ -126,7 +126,7 @@ with sync_playwright() as p:
         page.get_by_role("heading", name="Human acceptance after verified plan flow", exact=True)
     ).to_be_visible()
     assert stats()["generated"] == 1
-    saved = json.loads((path / "project.json").read_text())
+    saved = json.loads((path / "investigation.json").read_text())
     assert len(saved["strategies"]) == 2 and saved["schema_version"] == 6
     assert saved["strategies"][-1]["provenance"]["model"] == "gpt-6.1-sol-fixture-returned"
     assert "access_token" not in json.dumps(saved)
@@ -152,7 +152,7 @@ with sync_playwright() as p:
     assert stats()["generated"] == previous_count
     page.keyboard.press("Escape")
     expect(page.get_by_label("AI connection settings", exact=True)).to_be_focused()
-    before = (path / "project.json").read_bytes()
+    before = (path / "investigation.json").read_bytes()
     for state, label in (
         ("offline", "ChatGPT temporarily unavailable"),
         ("limited", "ChatGPT usage limit reached"),
@@ -179,9 +179,9 @@ with sync_playwright() as p:
     control("expired")
     page.reload()
     expect(page.get_by_role("status").filter(has_text="Reconnect ChatGPT")).to_be_visible()
-    assert (path / "project.json").read_bytes() == before and stats()["generated"] == previous_count
+    assert (path / "investigation.json").read_bytes() == before and stats()["generated"] == previous_count
     assert not errors, errors
     print(
-        "PASS header account menu/switch without inference, no billing fallback, explicit API mode, outage/limit/permission/expiry states, keyboard focus, no project mutation/JS errors, 1280/1440/390/320px"
+        "PASS header account menu/switch without inference, no billing fallback, explicit API mode, outage/limit/permission/expiry states, keyboard focus, no investigation mutation/JS errors, 1280/1440/390/320px"
     )
     browser.close()

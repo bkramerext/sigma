@@ -80,7 +80,7 @@ async def handler(request):
         body["text"]["format"]["name"].startswith("strategy_")
         and body["text"]["format"]["name"] != "strategy_proposal"
     )
-    seed = (context["project"] if agentic else context)["starting_point"]
+    seed = (context["investigation"] if agentic else context)["starting_point"]
     if seed == "timeout-fixture":
         await asyncio.sleep(2)
     if seed == "error-fixture":
@@ -95,10 +95,10 @@ async def handler(request):
         "assumptions": "Justify convergence and distinguish finite checks from a universal bound.",
         "failure_modes": "Necessary inequalities may be too weak; sampled positivity does not prove the conjecture.",
     }
-    counting = agentic and context["project"]["research_problem"].startswith(
+    counting = agentic and context["investigation"]["research_problem"].startswith(
         "For each integer n >= 0"
     )
-    previous = context["project"]["existing_strategies"] if counting else []
+    previous = context["investigation"]["existing_strategies"] if counting else []
     if counting:
         if previous:
             draft = {

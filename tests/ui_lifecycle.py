@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-from sigma.projects import ROOT
+from sigma.investigations import ROOT
 from sigma.ui import check_ports
 from sigma.ui_instance import Instance, identity
 
@@ -76,7 +76,7 @@ def get(path, origin=None):
 def snapshot():
     return {
         str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in (ROOT / "projects").rglob("*")
+        for p in (ROOT / "investigations").rglob("*")
         if p.is_file()
     }
 
@@ -97,10 +97,10 @@ def main():
         (root / "frontend/node_modules").symlink_to(
             ROOT / "frontend/node_modules", target_is_directory=True
         )
-        for name in ("sigma", "pyproject.toml", "uv.lock"):
+        for name in ("sigma", "pyinvestigation.toml", "uv.lock"):
             shutil.copy2(ROOT / name, root / name)
-        (root / "projects").mkdir()
-        (root / "projects/untouched.txt").write_text("research sentinel")
+        (root / "investigations").mkdir()
+        (root / "investigations/untouched.txt").write_text("research sentinel")
         fixtures = base / "fixtures"
         fixtures.mkdir()
         (fixtures / "sitecustomize.py").write_text(FIXTURE)
@@ -117,7 +117,7 @@ def main():
             SIGMA_STATE_DIR=str(base / "state"),
         )
         subprocess.run(
-            ["uv", "sync", "--locked", "--project", str(root)],
+            ["uv", "sync", "--locked", "--investigation", str(root)],
             env=env,
             check=True,
             stdout=subprocess.DEVNULL,
@@ -195,10 +195,10 @@ def main():
                 page = browser.new_page()
                 page.goto("http://127.0.0.1:5173/")
                 expect(page.get_by_text("OpenAI API · key billing", exact=True)).to_be_visible()
-                page.get_by_role("button", name="New Project", exact=True).click()
+                page.get_by_role("button", name="New Investigation", exact=True).click()
                 expect(
                     page.get_by_role("dialog").get_by_role(
-                        "heading", name="New Project", exact=True
+                        "heading", name="New Investigation", exact=True
                     )
                 ).to_be_visible()
                 browser.close()
@@ -241,12 +241,12 @@ def main():
             ready(owner, ownerlog)
             other = base / "different-checkout"
             other.mkdir()
-            for name in ("sigma", "pyproject.toml", "uv.lock"):
+            for name in ("sigma", "pyinvestigation.toml", "uv.lock"):
                 shutil.copy2(root / name, other / name)
             shutil.copytree(root / "src", other / "src")
             (other / "frontend").symlink_to(root / "frontend", target_is_directory=True)
             subprocess.run(
-                ["uv", "sync", "--locked", "--project", str(other)],
+                ["uv", "sync", "--locked", "--investigation", str(other)],
                 env=env,
                 check=True,
                 stdout=subprocess.DEVNULL,
@@ -297,7 +297,7 @@ def main():
             print(
                 "PASS SIGKILL crash/stale socket recovery, pipe-guardian cleanup and rapid simultaneous launches"
             )
-            assert (root / "projects/untouched.txt").read_text() == "research sentinel"
+            assert (root / "investigations/untouched.txt").read_text() == "research sentinel"
             for log in logs:
                 assert (
                     "launcher-fixture-one" not in log.read_text()
@@ -319,7 +319,7 @@ def main():
                     assert state.name == identity(checkout)[:24]
                     shutil.rmtree(state)
     assert snapshot() == before
-    print("PASS no key output, provider fixture GET-only, no project changes")
+    print("PASS no key output, provider fixture GET-only, no investigation changes")
 
 
 if __name__ == "__main__":

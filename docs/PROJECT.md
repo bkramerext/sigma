@@ -2,7 +2,7 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
-A local-first research workspace for exploring competing approaches to difficult problems. The Riemann Hypothesis is the initial project, not a claimed solution.
+A local-first research workspace for exploring competing approaches to difficult problems. The Riemann Hypothesis is the initial investigation, not a claimed solution.
 
 ## Research model
 
@@ -15,6 +15,6 @@ A local-first research workspace for exploring competing approaches to difficult
 
 Python/uv, FastAPI, argparse CLI, React/TypeScript/Vite. Browser, CLI, and executable scenarios share typed application services.
 
-**Working now:** local project lifecycle, separate project workspace, and persistent human-authored strategies. **Not yet implemented:** agents, scheduling, evaluation, reports, or forks.
+**Working now:** local investigation lifecycle, separate investigation workspace, and persistent human-authored strategies. **Not yet implemented:** agents, scheduling, evaluation, reports, or forks.
 
 See [Getting Started](GETTING-STARTED.md) to run, [STATUS](STATUS.md) for verification, [DECISIONS](DECISIONS.md) for storage, and [BRAINSTORM](BRAINSTORM.md) for future ideas.

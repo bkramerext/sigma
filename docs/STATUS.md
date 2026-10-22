@@ -996,3 +996,22 @@ listeners, changed process identity and SIGKILL escalation, and runs in
 `./sigma test`. The isolated tests passed in the assistant's Python
 environment, but end-to-end behavior on the user's macOS machine is not yet
 verified.
+
+## A14.1 — Investigation terminology migration
+
+Investigation is now the canonical UI, Python module/service, CLI, API and storage
+term. New state lives under `investigations/` as `investigation.json` schema v7;
+first-write migration reads legacy `project.json` without changing it, then backs
+up exact prior bytes before publishing. IDs, strategies, event history, ordering,
+settings and source text remain intact. Existing `projects/` directories and old
+checkout paths remain openable, including the moved RH seed.
+
+The `/api/projects` and `/project` routes, `sigma.projects` Python exports,
+`SIGMA_PROJECTS_ROOT`, old API keys, and prior local-storage keys remain explicit
+compatibility aliases. Historical `project.*` event names and payload keys are
+preserved. Recent Investigations retains its six-entry order and Remove behavior.
+
+Validation passed: `./sigma test` (all scenarios, Ruff, Pyright, frontend typecheck/build).
+The lifecycle scenario covers legacy read-only access, exact v6 backup on first
+write, v7 migration, repeat-write idempotence, preserved historical event names,
+and the legacy API route/payload.

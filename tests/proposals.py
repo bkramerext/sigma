@@ -12,7 +12,12 @@ from fastapi.testclient import TestClient
 
 from sigma import chatgpt_auth, proposals
 from sigma.api import app
-from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
+from sigma.investigations import (
+    InvestigationError,
+    create_strategy,
+    initialize_investigation,
+    inspect_investigation,
+)
 
 DRAFT = {
     "title": "Moment positivity obstruction",
@@ -43,7 +48,7 @@ def response(draft=None):
 async def rejects(awaitable, contains=None):
     try:
         await awaitable
-    except ProjectError as exc:
+    except InvestigationError as exc:
         if contains is not None:
             assert contains in str(exc), str(exc)
         return
@@ -52,7 +57,7 @@ async def rejects(awaitable, contains=None):
 
 async def check(path):
     await chatgpt_auth.select("api_key")
-    before = (path / "project.json").read_bytes()
+    before = (path / "investigation.json").read_bytes()
     calls = []
 
     async def handler(request):
@@ -85,12 +90,12 @@ async def check(path):
         first = await proposals.generate_proposal(str(path), consent=True)
         second = await proposals.generate_proposal(str(path), "Try a necessary condition", True)
         assert len(calls) == 2
-        assert (path / "project.json").read_bytes() == before
+        assert (path / "investigation.json").read_bytes() == before
         provenance = proposals.accepted_provenance(first["receipt"], str(path))
         assert provenance.model == "gpt-4.1-fixture"
         with TestClient(app) as api:
             accepted = api.post(
-                "/api/projects/strategies",
+                "/api/investigations/strategies",
                 json={
                     "path": str(path),
                     "title": "Human edited proposal",
@@ -101,11 +106,12 @@ async def check(path):
             )
             assert accepted.status_code == 201, accepted.text
             assert (
-                accepted.json()["project"]["strategies"][-1]["provenance"]["provider"] == "openai"
+                accepted.json()["investigation"]["strategies"][-1]["provenance"]["provider"]
+                == "openai"
             )
             assert (
                 api.post(
-                    "/api/projects/strategies",
+                    "/api/investigations/strategies",
                     json={"path": str(path), "title": "X", "approach": "Y", "receipt": "forged"},
                 ).status_code
                 == 400
@@ -135,9 +141,9 @@ async def check(path):
             return REAL_CLIENT(transport=httpx.MockTransport(lambda request: fixture), **kwargs)
 
         with patch("sigma.proposals.httpx.AsyncClient", side_effect=failed_client):
-            snapshot = (path / "project.json").read_bytes()
+            snapshot = (path / "investigation.json").read_bytes()
             await rejects(proposals.generate_proposal(str(path), consent=True))
-            assert (path / "project.json").read_bytes() == snapshot
+            assert (path / "investigation.json").read_bytes() == snapshot
 
     async def slow(request):
         await asyncio.sleep(1)
@@ -189,8 +195,8 @@ async def check(path):
         "http_version": "1.1",
         "method": "POST",
         "scheme": "http",
-        "path": "/api/projects/proposals",
-        "raw_path": b"/api/projects/proposals",
+        "path": "/api/investigations/proposals",
+        "raw_path": b"/api/investigations/proposals",
         "query_string": b"",
         "root_path": "",
         "headers": [(b"host", b"testserver"), (b"content-type", b"application/json")],
@@ -234,10 +240,12 @@ def main():
         ),
     ):
         path = Path(directory) / "proposal.sigma"
-        initialize_project(path, "Proposal fixture", "A real mathematical question", "mathematical")
+        initialize_investigation(
+            path, "Proposal fixture", "A real mathematical question", "mathematical"
+        )
         create_strategy(path, "Existing direction", "Existing full content")
         asyncio.run(check(path))
-        assert inspect_project(path).project.strategies[0].provenance is None
+        assert inspect_investigation(path).investigation.strategies[0].provenance is None
 
 
 if __name__ == "__main__":

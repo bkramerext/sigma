@@ -11,13 +11,13 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from sigma.api import app
-from sigma.projects import (
-    ProjectError,
+from sigma.investigations import (
+    InvestigationError,
     change_stage,
     create_strategy,
     edit_strategy,
-    initialize_project,
-    inspect_project,
+    initialize_investigation,
+    inspect_investigation,
     list_strategies,
     remove_strategy,
     reorder_strategies,
@@ -27,7 +27,7 @@ from sigma.projects import (
 def rejects(action):
     try:
         action()
-    except ProjectError:
+    except InvestigationError:
         return
     raise AssertionError("Expected safe rejection")
 
@@ -37,11 +37,11 @@ def main():
         root = Path(directory)
         for version in (1, 2, 3, 4):
             path = root / f"v{version}.sigma"
-            initialize_project(path, "Research", "Truthful stages")
+            initialize_investigation(path, "Research", "Truthful stages")
             if version > 1:
                 create_strategy(path, "First", "Full first approach")
                 create_strategy(path, "Second", "Full second approach")
-            raw = json.loads((path / "project.json").read_bytes())
+            raw = json.loads((path / "investigation.json").read_bytes())
             raw["schema_version"] = version
             raw.pop("active_order", None)
             for item in raw.get("strategies", []):
@@ -57,32 +57,33 @@ def main():
             if version == 2:
                 for s in raw["strategies"]:
                     del s["removed_at"]
-            (path / "project.json").write_text(json.dumps(raw))
-            before = (path / "project.json").read_bytes()
-            project = inspect_project(path).project
-            assert project.active_order == tuple(s.id for s in project.strategies)
-            assert all(s.stage == "draft" for s in project.strategies)
-            assert (path / "project.json").read_bytes() == before
+            (path / "investigation.json").write_text(json.dumps(raw))
+            before = (path / "investigation.json").read_bytes()
+            original = before
+            investigation = inspect_investigation(path).investigation
+            assert investigation.active_order == tuple(s.id for s in investigation.strategies)
+            assert all(s.stage == "draft" for s in investigation.strategies)
+            assert (path / "investigation.json").read_bytes() == before
             if version == 1:
                 create_strategy(path, "First", "Full approach")
-                before = (path / "project.json").read_bytes()
-                backup_version = 2
+                before = original
+                backup_version = 1
             else:
                 backup_version = version
             first = list_strategies(path)[0]
             changed = change_stage(path, first.id, "exploring")
-            assert changed.project.schema_version == 5
-            assert (path / f"project.v{backup_version}.json").read_bytes() == before
-            stage_change = changed.project.events[-1].stage_change
+            assert changed.investigation.schema_version == 7
+            assert (path / f"investigation.v{backup_version}.json").read_bytes() == before
+            stage_change = changed.investigation.events[-1].stage_change
             assert stage_change is not None and stage_change.previous == "draft"
             assert list_strategies(path)[0].created_at == first.created_at
-            assert inspect_project(path) == changed
+            assert inspect_investigation(path) == changed
         print(
             "PASS v1/v2/v3/v4 no-write reads, creation-order/Draft defaults and exact v5 migration backups"
         )
 
         path = root / "tracking.sigma"
-        initialize_project(path, "Tracking", "Keep history")
+        initialize_investigation(path, "Tracking", "Keep history")
         for name in ("A", "B", "C"):
             create_strategy(path, name, f"Full {name} approach")
         ids = [s.id for s in list_strategies(path)]
@@ -93,28 +94,30 @@ def main():
         view = reorder_strategies(path, wanted, old)
         assert [s.id for s in list_strategies(path)] == wanted
         assert [
-            s.id for s in view.project.strategies
+            s.id for s in view.investigation.strategies
         ] == ids  # Durable creation order never changes.
-        before = (path / "project.json").read_bytes()
+        before = (path / "investigation.json").read_bytes()
         reorder_strategies(path, wanted, wanted)
         change_stage(path, wanted[0], "draft")
-        assert (path / "project.json").read_bytes() == before
+        assert (path / "investigation.json").read_bytes() == before
         for invalid in ([removed_id, wanted[0]], [wanted[0]] * 2, ["unknown"], []):
             rejects(lambda invalid=invalid: reorder_strategies(path, invalid, wanted))
         rejects(lambda: reorder_strategies(path, old, old))
         rejects(lambda: change_stage(path, removed_id, "ready"))
         rejects(lambda: change_stage(path, wanted[0], "evaluated"))
-        assert (path / "project.json").read_bytes() == before
+        assert (path / "investigation.json").read_bytes() == before
         for operation in (
             lambda: reorder_strategies(path, old, wanted),
             lambda: change_stage(path, wanted[0], "hold"),
         ):
-            with patch("sigma.projects.os.replace", side_effect=OSError("Injected disk error")):
+            with patch(
+                "sigma.investigations.os.replace", side_effect=OSError("Injected disk error")
+            ):
                 rejects(operation)
-            assert (path / "project.json").read_bytes() == before
+            assert (path / "investigation.json").read_bytes() == before
         edit_strategy(path, wanted[0], "Renamed", "Edited full approach")
         assert [s.id for s in list_strategies(path)] == wanted
-        added = create_strategy(path, "D", "New joins at end").project.strategies[-1]
+        added = create_strategy(path, "D", "New joins at end").investigation.strategies[-1]
         assert [s.id for s in list_strategies(path)] == [*wanted, added.id]
         print(
             "PASS active-only reorder, no-op, removed history, stable identities, reload, stale order and failed writes"
@@ -125,7 +128,7 @@ def main():
         def racing_order():
             try:
                 return reorder_strategies(path, list(reversed(current)), current)
-            except ProjectError:
+            except InvestigationError:
                 return None
 
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -138,7 +141,7 @@ def main():
             results = [j.result() for j in jobs]
         assert sum(r is not None for r in results[:2]) == 1
         assert list_strategies(path)[-1].stage == "ready"
-        snapshot = (path / "project.json").read_bytes()
+        snapshot = (path / "investigation.json").read_bytes()
         raw = json.loads(snapshot)
         corrupt = root / "corrupt.sigma"
         corrupt.mkdir()
@@ -153,23 +156,23 @@ def main():
         ):
             bad = json.loads(json.dumps(raw))
             mutation(bad)
-            (corrupt / "project.json").write_text(json.dumps(bad))
-            rejects(lambda: inspect_project(corrupt))
+            (corrupt / "investigation.json").write_text(json.dumps(bad))
+            rejects(lambda: inspect_investigation(corrupt))
         print(
             "PASS concurrent order/stage/edit persistence and strict corrupt history/metadata rejection"
         )
         with TestClient(app) as client:
             body = {"path": str(path), "strategy_id": current[0], "stage": "hold"}
-            assert client.post("/api/projects/strategies/stage", json=body).status_code == 200
-            active = list(inspect_project(path).project.active_order)
+            assert client.post("/api/investigations/strategies/stage", json=body).status_code == 200
+            active = list(inspect_investigation(path).investigation.active_order)
             response = client.post(
-                "/api/projects/strategies/reorder",
+                "/api/investigations/strategies/reorder",
                 json={"path": str(path), "order": active[::-1], "expected_order": active},
             )
             assert response.status_code == 200
             assert (
                 client.post(
-                    "/api/projects/strategies/stage", json={**body, "stage": "evaluated"}
+                    "/api/investigations/strategies/stage", json={**body, "stage": "evaluated"}
                 ).status_code
                 == 400
             )

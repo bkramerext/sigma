@@ -1,0 +1,101 @@
+/* Shared Create/Edit surface; no changes to accepted artwork or strategy rows. */
+.investigation-settings-dialog { color-scheme: dark; color: #dce7f0; background: #07111e; border: 1px solid #9d784c; border-radius: 8px; width: min(520px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 26px; box-shadow: 0 24px 80px #000a; }
+.investigation-settings-dialog::backdrop { background: #01050bb0; }
+.investigation-settings-dialog h2 { color: #edc38d; font: 400 28px/1.25 Georgia, serif; margin: 0 0 10px; }
+.investigation-settings-dialog #investigation-settings-help { font-size: 13px; line-height: 1.6; color: #afbecd; margin: 0 0 22px; }
+.investigation-settings-dialog fieldset { margin: 0; }
+.investigation-settings-dialog label { display: block; color: #e2c49e; font-size: 12px; margin: 16px 0 8px; }
+.investigation-settings-dialog label:first-child { margin-top: 0; }
+.investigation-settings-dialog input, .investigation-settings-dialog textarea, .investigation-settings-dialog select { display: block; width: 100%; padding: 10px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; margin-bottom: 0; }
+.investigation-settings-dialog textarea { resize: vertical; }
+.investigation-settings-dialog .settings-hint { font-size: 11px; line-height: 1.6; color: #aab9c7; margin: 8px 0 0; }
+.investigation-settings-dialog .investigation-destination { font-size: 11px; line-height: 1.6; color: #aab9c7; margin: 20px 0 0; padding-top: 14px; border-top: 1px solid #35404a; }
+.investigation-settings-dialog .investigation-destination span, .investigation-settings-dialog .investigation-destination code, .investigation-settings-dialog .investigation-destination small { display: block; overflow-wrap: anywhere; }
+.investigation-settings-dialog .investigation-destination span { color: #ccb18d; }
+.investigation-settings-dialog .investigation-destination small { margin-top: 5px; font-size: 11px; }
+.investigation-settings-dialog .settings-actions { display: flex; gap: 12px; align-items: center; margin-top: 24px; }
+.investigation-settings-dialog .settings-actions button { padding: 12px 16px; font-size: 13px; color: #1e1409; background: linear-gradient(112deg, #b98149, #edc48b 52%, #bd874e); border: 1px solid #dfb476; }
+.investigation-settings-dialog .settings-actions .settings-cancel { color: #c2ced9; background: transparent; border-color: transparent; box-shadow: none; }
+.investigation-settings-dialog button:disabled { opacity: .6; cursor: not-allowed; }
+.investigation-settings-dialog :focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.workspace-page .investigation-name-line { display: flex; align-items: flex-start; gap: 8px; }
+.workspace-page .investigation-name-line h1 { min-width: 0; overflow-wrap: anywhere; }
+.workspace-page .edit-investigation-button { flex: 0 0 44px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; margin-top: 1px; border-color: transparent; background: transparent; color: #c7a16d; border-radius: 5px; }
+.investigation-settings-dialog a { color: #e4b87f; }
+/* Status uses existing header/empty sky space without moving Home's hero. */
+.home-page .home-topline { position: relative; }
+.home-page .home-topline > .api-connection { position: absolute; top: 24px; right: 0; width: 230px; }
+@media (max-width: 700px) {
+ .investigation-settings-dialog { padding: 22px; }
+ .workspace-page .investigation-name-line { order: -2; }
+ .workspace-page .investigation-name-line h1 { font-size: 30px; }
+ .home-page .home-topline > .api-connection { top: 76px; width: 132px; min-width: 0; max-width: 150px; }
+}
+/* A9: one form, persistent title/actions, one scrolling body. */
+.investigation-settings-dialog { padding: 0; overflow: hidden; }
+.investigation-settings-dialog > form { display: flex; flex-direction: column; max-height: calc(100dvh - 42px); margin: 0; min-height: 0; }
+.investigation-settings-dialog .settings-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 14px; padding: 20px 24px 16px; border-bottom: 1px solid #35404a; }
+.investigation-settings-dialog .settings-header h2 { font-size: 25px; margin: 0; }
+.investigation-settings-dialog .settings-header .settings-actions { margin: 0; gap: 6px; flex: 0 1 auto; }
+.investigation-settings-dialog .settings-header button { padding: 9px 11px; min-height: 40px; overflow-wrap: anywhere; }
+.investigation-settings-dialog .settings-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 24px 24px; }
+@media (max-width: 560px) {
+ .investigation-settings-dialog .settings-header { flex-wrap: wrap; gap: 10px; padding: 16px 18px 12px; }
+ .investigation-settings-dialog .settings-header h2 { width: 100%; font-size: 24px; }
+ .investigation-settings-dialog .settings-header .settings-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+ .investigation-settings-dialog .settings-body { padding: 16px 18px 20px; }
+}
+
+/* Keep the New Investigation form visible at laptop heights while retaining mobile scroll. */
+.home-page .new-investigation-dialog .settings-header { padding-top: 17px; padding-bottom: 14px; }
+.home-page .new-investigation-dialog .settings-body { padding-top: 16px; padding-bottom: 19px; }
+.home-page .new-investigation-dialog #investigation-settings-help { margin-bottom: 16px; }
+.home-page .new-investigation-dialog label { margin-top: 14px; margin-bottom: 7px; }
+.home-page .new-investigation-dialog .settings-hint { margin-top: 7px; }
+.home-page .new-investigation-dialog .investigation-destination { margin-top: 16px; padding-top: 12px; }
+@media (max-height: 820px) and (min-width: 701px) {
+ .home-page .new-investigation-dialog .settings-body { padding-bottom: 14px; }
+ .home-page .new-investigation-dialog #investigation-settings-help { margin-bottom: 10px; }
+ .home-page .new-investigation-dialog label { margin-top: 8px; margin-bottom: 5px; }
+ .home-page .new-investigation-dialog input, .home-page .new-investigation-dialog select, .home-page .new-investigation-dialog textarea { padding-top: 8px; padding-bottom: 8px; }
+ .home-page .new-investigation-dialog textarea { height: 90px; }
+}
+
+/* Header actions use the same understated links as strategy editing. */
+.investigation-settings-dialog .settings-header { justify-content: flex-start; gap: 18px; }
+.investigation-settings-dialog .settings-header .settings-actions { gap: 14px; }
+.investigation-settings-dialog .settings-header .settings-actions button,
+.investigation-settings-dialog .settings-header .settings-actions .settings-cancel {
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.investigation-settings-dialog .settings-header .settings-actions button:hover:not(:disabled) {
+  background: transparent; color: #f3cd9e; border: 0; box-shadow: none;
+}
+.investigation-settings-dialog .settings-header .settings-actions button:disabled { opacity: .5; cursor: default; }
+
+/* New Investigation Create is a plain underlined action, never a copper-filled button. */
+.home-page .new-investigation-dialog .settings-header .settings-actions button[type="submit"],
+.new-investigation-dialog .settings-header .settings-actions button[type="submit"] {
+  width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.home-page .new-investigation-dialog .settings-header .settings-actions button[type="submit"]:hover:not(:disabled),
+.new-investigation-dialog .settings-header .settings-actions button[type="submit"]:hover:not(:disabled) {
+  background: transparent; box-shadow: none; border: 0; color: #f3cd9e;
+}
+
+/* The global Home disabled rule must not turn the Create link into a filled button. */
+.home-page .new-investigation-dialog .settings-header .settings-actions button[type="submit"]:disabled {
+  background: transparent;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  color: #d9b17e;
+  opacity: .5;
+  cursor: default;
+}

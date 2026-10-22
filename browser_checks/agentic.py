@@ -1,4 +1,4 @@
-"""Real Chrome A14 stock-project path against the isolated provider fixture."""
+"""Real Chrome A14 stock-investigation path against the isolated provider fixture."""
 
 import json
 import os
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-source = Path("examples/counting-constrained-binary-strings/project.json")
+source = Path("examples/counting-constrained-binary-strings/investigation.json")
 original = source.read_bytes()
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -27,14 +27,14 @@ with sync_playwright() as playwright:
         ),
     )
     page.goto("http://127.0.0.1:5173")
-    panel = page.get_by_role("tabpanel", name="Stock Projects")
+    panel = page.get_by_role("tabpanel", name="Stock Investigations")
     panel.get_by_role("button", name="Open Counting Constrained Binary Strings").click()
     expect(
         page.get_by_role("heading", name="Counting Constrained Binary Strings", exact=True)
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(0)
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
-    state = Path(path) / "project.json"
+    state = Path(path) / "investigation.json"
     before = state.read_bytes()
     assert before == original
 

@@ -347,3 +347,20 @@ start in place and save only when requested; Rendered activates the Markdown
 source editor. Other project options remain in Project Settings. Home stores
 only the last opened path as a convenience pointer and validates it on display;
 the sidebar collapse preference is kept locally across navigation.
+
+## A14.1: Investigation terminology and compatibility
+
+Investigation is the canonical name for SIGMA's top-level research object. New
+storage uses `investigations/<name>.sigma/investigation.json`, schema v7, and
+`investigation.initialized` / `investigation.updated` for new audit events.
+Legacy `project.json` loads read-only; the first real mutation preserves an exact
+`investigation.vN.json` backup and publishes the investigation document. Repeated
+opens/writes do not duplicate state, and conflicting old/new documents fail
+without overwriting either. Historical `project.*` event names/keys stay intact.
+
+Compatibility is deliberate: `sigma.projects` re-exports the former Python API;
+`/api/projects` and `/project` remain aliases; old API payload fields and recent
+keys are returned alongside canonical investigation fields; `SIGMA_PROJECTS_ROOT`
+remains an environment alias; old checkout paths resolve after the seed move; and
+old local-storage keys remain read/write. These aliases protect existing clients,
+bookmarks and user preferences while new code uses investigation terminology.
