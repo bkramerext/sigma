@@ -66,6 +66,11 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_label("Starting point (optional)")).to_have_value("")
     dialog.get_by_role("button", name="Generate", exact=True).click()
     expect(dialog.get_by_label("Title", exact=True)).to_have_value("Terminal-symbol recurrence")
+    solution = dialog.get_by_label("Proposed solution", exact=True).input_value()
+    assert solution.strip()
+    assert "First tests" not in solution
+    assert "Ways this could fail" not in solution
+    assert "Assumptions" not in solution
     expect(dialog).to_contain_text("not independently reviewed or verified")
     assert dialog.locator(".agentic-activity").count() == 0
     assert len(generation_requests) == 1
