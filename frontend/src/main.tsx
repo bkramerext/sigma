@@ -580,7 +580,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }} title={renderTooltip}><span aria-hidden="true">{rendering ? "⌛" : "Σ"}</span></button>
+      }} title={renderTooltip}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="0 0 208 128" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="5" width="198" height="118" rx="12" stroke="currentColor" strokeWidth="10"/><path d="M30 95V33h20l20 25 20-25h20v62H90V62L70 87 50 62v33H30Z" fill="currentColor"/><path d="M135 33v38h-18l28 28 28-28h-18V33h-20Z" fill="currentColor"/></svg>}</button>
       <span id={renderTooltipId} className="sigma-render-tooltip" role="tooltip">{renderTooltip}</span>
     </TooltipWrap>}
 
