@@ -1008,7 +1008,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
             <div className="strategy-expanded"><TextViews mathematical={project.research_mode === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
-              <p className="strategy-byline">{strategy.provenance ? `AI-assisted suggestion · ${strategy.provenance.provider} / ${strategy.provenance.model}${strategy.provenance.reasoning_effort ? ` · ${thinkingLabels[strategy.provenance.reasoning_effort] ?? strategy.provenance.reasoning_effort} thinking` : ''} · Accepted/edited by a human` : 'Human-authored'} · <time dateTime={strategy.created_at}>{dateLabel(strategy.created_at)}</time></p>
               <code className="strategy-identity">{strategy.id}</code>
             </div>
           </details>
