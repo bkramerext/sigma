@@ -1030,7 +1030,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
       <button type="button" className="text-view-link" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className="strategy-row-disclosure" aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
-      <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
+      <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} title={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) setEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
       {commands}
     </div>}
@@ -1043,9 +1043,9 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
 }) {
   return <span className="strategy-inline-commands">
     <button type="button" className="text-view-link" disabled={disabled}
-      onClick={() => onCommand('fork', strategy)}>Fork</button>
+      title="Fork strategy" onClick={() => onCommand('fork', strategy)}>Fork</button>
     <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
-      onClick={() => onCommand('remove', strategy)}>Remove</button>
+      title="Remove strategy" onClick={() => onCommand('remove', strategy)}>Remove</button>
   </span>;
 }
 
@@ -1528,7 +1528,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
             <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
           </div>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
-            aria-label={`Reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
+            aria-label={`Reorder ${strategy.title}`} title={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
             onKeyDown={event => { if (event.key === 'Escape' && drag.current) { event.preventDefault(); cancelDrag(); }
               else if (event.key === ' ' && !drag.current) { event.preventDefault(); pickup(strategy.id, null); }
