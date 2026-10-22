@@ -585,3 +585,11 @@
 .workspace-page .strategy-process-controls .session-start-link:focus-visible {
   outline: 2px solid #edbc77; outline-offset: 3px;
 }
+
+/* Session title and lifecycle action must occupy one line, not grid rows. */
+.workspace-page .session-row-heading .session-heading-title-line {
+  display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap;
+}
+.workspace-page .session-heading-title-line .session-remove-link {
+  flex: 0 0 auto; margin: 0; padding: 2px 0;
+}
