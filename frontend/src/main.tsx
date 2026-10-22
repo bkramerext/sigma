@@ -1178,7 +1178,7 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   }
   return <form className="strategy-form" aria-labelledby="new-strategy-heading" onSubmit={save}
     onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); onCancel(); } }}>
-    <div className="new-strategy-heading-row"><h3 id="new-strategy-heading">New strategy</h3><div className="new-strategy-heading-actions"><button type="submit" className="text-view-link" disabled={busy}>{busy ? "Saving…" : "Save"}</button><button type="button" className="text-view-link" disabled={busy} onClick={onCancel}>Cancel</button></div></div>
+    <div className="new-strategy-heading-row"><h3 id="new-strategy-heading">{initialDraft ? "Forked strategy" : "New strategy"}</h3><div className="new-strategy-heading-actions"><button type="submit" className="text-view-link" disabled={busy}>{busy ? "Saving…" : "Save"}</button><button type="button" className="text-view-link" disabled={busy} onClick={onCancel}>Cancel</button></div></div>
     <p className="hint">Capture an idea and the approach you want to investigate.</p>
     <fieldset disabled={busy}>
       <label htmlFor="strategy-title">Title</label>
