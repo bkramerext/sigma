@@ -649,7 +649,7 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   }
   return <form className="strategy-form" aria-labelledby="new-strategy-heading" onSubmit={save}
     onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); onCancel(); } }}>
-    <h3 id="new-strategy-heading">New strategy</h3>
+    <div className="new-strategy-heading-row"><h3 id="new-strategy-heading">New strategy</h3><div className="new-strategy-heading-actions"><button type="submit" className="text-view-link" disabled={busy}>{busy ? "Saving…" : "Save"}</button><button type="button" className="text-view-link" disabled={busy} onClick={onCancel}>Cancel</button></div></div>
     <p className="hint">Capture an idea and the approach you want to investigate.</p>
     <fieldset disabled={busy}>
       <label htmlFor="strategy-title">Title</label>
@@ -659,10 +659,6 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
       <textarea id="strategy-approach" value={approach} maxLength={10000} required rows={5}
         onChange={event => setApproach(event.target.value)} />
       {error && <p role="alert" className="error">{error}</p>}
-      <div className="form-actions">
-        <button type="submit">{busy ? 'Saving…' : 'Save strategy'}</button>
-        <button type="button" className="text-button" onClick={onCancel}>Cancel</button>
-      </div>
     </fieldset>
   </form>;
 }
