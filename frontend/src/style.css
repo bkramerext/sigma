@@ -235,3 +235,26 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-current button:hover:not(:disabled) .home-current-arrow {
   border-color: #d6a76e; background: #4b311c; color: #fff0d9;
 }
+
+/* Center the scintillation artwork above the home content; bring the project UI up. */
+.home-page .home-topline {
+  height: clamp(180px, 22vw, 250px);
+}
+.home-page .home-slogan {
+  left: 50%;
+  top: 0;
+  width: min(68vw, 850px);
+  transform: translateX(-50%);
+}
+.home-page .home-hero {
+  margin-top: 12px;
+}
+@media (max-width: 700px) {
+  .home-page .home-topline { height: clamp(120px, 29vw, 170px); }
+  .home-page .home-slogan {
+    left: 50%;
+    top: 0;
+    width: min(94vw, 480px);
+  }
+  .home-page .home-hero { margin-top: 12px; }
+}
