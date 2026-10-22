@@ -623,3 +623,29 @@
 @media (max-width: 900px) {
   .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 36px; }
 }
+
+/* Flat strategy actions immediately after the title pencil. */
+.workspace-page .strategy-title-line .strategy-inline-commands {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .text-view-link {
+  display: inline;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.workspace-page .strategy-title-line .strategy-inline-commands .text-view-link:hover:not(:disabled) {
+  background: transparent;
+  box-shadow: none;
+}
