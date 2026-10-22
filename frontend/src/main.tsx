@@ -1037,7 +1037,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
               {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
             </summary>
             <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
-              <code className="strategy-identity">{strategy.id}</code>
+              
             </div>
           </details>
           <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
