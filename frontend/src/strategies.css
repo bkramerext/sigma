@@ -454,7 +454,8 @@
 .workspace-page .workspace-pane-heading h2 { font: 400 23px/1.3 Georgia, serif; letter-spacing: 0; }
 .workspace-page .project-pane-heading { justify-content: space-between; }
 .workspace-page .project-pane-heading h2 { text-transform: none; }
-.workspace-page .project-pane-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.workspace-page .project-pane-heading { justify-content: flex-start; }
+.workspace-page .project-pane-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: 0; }
 .workspace-page .project-pane-actions .text-view-icon { display: grid; place-items: center; width: 34px; min-width: 34px; height: 34px; min-height: 34px; margin: 0; }
 .workspace-page .project-pane-actions svg { width: 18px; height: 18px; }
 .workspace-page .workspace-section-disclosure { display: inline-flex; align-items: center; gap: 9px; }
@@ -541,4 +542,16 @@
   .workspace-page .edit-project-dialog { width: calc(100vw - 24px); height: calc(100dvh - 24px); }
   .workspace-page .edit-project-dialog .settings-header { padding-inline: 18px; }
   .workspace-page .edit-project-dialog .settings-body { padding-inline: 18px; }
+}
+
+/* Project title actions share the quiet pencil-icon treatment, not outlined buttons. */
+.workspace-page .project-pane-actions .text-view-icon {
+  border: 0; border-radius: 4px; background: transparent; box-shadow: none;
+  padding: 5px; color: inherit; cursor: pointer;
+}
+.workspace-page .project-pane-actions .text-view-icon:hover:not(:disabled) {
+  color: #f1c58d; background: transparent; border-color: transparent; box-shadow: none;
+}
+.workspace-page .project-pane-actions .text-view-icon:focus-visible {
+  outline: 2px solid #edbc77; outline-offset: 3px;
 }
