@@ -588,30 +588,12 @@ function StrategyCommands({ strategy, onCommand }: {
       </svg>
     </summary>
     <div className="command-panel">
-      <details name={`strategy-command-${strategy.id}`}>
-        <summary className="secondary">Scheduling</summary>
-        <p id={`schedule-${strategy.id}`} className="hint">Scheduling controls are not available yet.</p>
-        <ul aria-describedby={`schedule-${strategy.id}`}>
-          {['Pause / Resume'].map(label => <li key={label}>
-            <button className="secondary" disabled aria-describedby={`schedule-${strategy.id}`}>{label}</button>
-          </li>)}
-        </ul>
-      </details>
-      <details name={`strategy-command-${strategy.id}`}>
-        <summary className="secondary">Artifact</summary>
-        <p id={`audit-${strategy.id}`} className="hint">Audit reports are not available yet. They will record investigation steps, evidence and tests, and answers to rubric questions.</p>
-        <button className="secondary" disabled aria-describedby={`audit-${strategy.id}`}>Audit</button>
-        <p id={`artifacts-${strategy.id}`} className="hint">Additional artifact types are not specified yet.</p>
-        <button className="secondary" disabled aria-describedby={`artifacts-${strategy.id}`}>Other artifact types</button>
-      </details>
-      <details name={`strategy-command-${strategy.id}`}>
-        <summary className="secondary">Actions</summary>
-        {(['stage', 'remove'] as const).map(mode => <button key={mode} className="secondary" onClick={() => {
-          if (disclosure.current) disclosure.current.open = false;
-          onCommand(mode, strategy);
-        }}>{mode === 'stage' ? 'Change stage' : 'Remove'}</button>)}
-        <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand("fork", strategy); }}>Fork</button>
-      </details>
+      <button className="secondary" disabled title="Scheduling is not available yet">Pause / Resume</button>
+      <button className="secondary" disabled title="Audit reports are not available yet">Audit</button>
+      <button className="secondary" disabled title="Additional artifact types are not available yet">Other artifact types</button>
+      <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('stage', strategy); }}>Change stage</button>
+      <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
+      <button className="secondary" onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
     </div>
   </details>;
 }
