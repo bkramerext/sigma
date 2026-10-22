@@ -122,6 +122,7 @@
   width: 32px; height: 32px; min-width: 32px; min-height: 32px;
   padding: 4px; text-decoration: none; border: 1px solid transparent; border-radius: 6px;
 }
+.workspace-page .text-view-controls .text-view-icon { border-color: transparent; }
 .workspace-page .text-view-controls .text-view-icon svg { width: 18px; height: 18px; flex: 0 0 18px; }
 /* The pencil, gear and Sigma use the same copper hover as Download. */
 .workspace-page .text-view-controls :is(.text-view-icon, .sigma-render-toggle):hover:not(:disabled) {
