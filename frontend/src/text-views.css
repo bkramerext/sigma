@@ -123,7 +123,7 @@
 /* Align the glyph itself with the description's left edge, not its button box. */
 .workspace-page .text-views > .text-view-controls,
 .workspace-page .project-text-views > .text-view-controls {
-  column-gap: 16px;
+  column-gap: 12px;
 }
 .workspace-page .text-view-controls .sigma-render-toggle {
   width: 24px; min-width: 24px;
