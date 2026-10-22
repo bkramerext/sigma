@@ -555,3 +555,15 @@
 .workspace-page .project-pane-actions .text-view-icon:focus-visible {
   outline: 2px solid #edbc77; outline-offset: 3px;
 }
+
+/* Keep Remove as a quiet text link immediately beside the session title. */
+.workspace-page .session-row-heading .session-remove-link {
+  display: inline; width: auto; min-width: 0; min-height: 0;
+  padding: 0; margin: 0 0 0 10px; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.workspace-page .session-row-heading .session-remove-link:hover:not(:disabled) {
+  background: transparent; box-shadow: none; text-decoration: underline;
+}
+.workspace-page .session-row-heading .session-remove-actions { width: 100%; }
