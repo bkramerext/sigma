@@ -1525,3 +1525,12 @@ confirmed deletion and preservation of session numbers 1 and 3 after removing
 2. Screenshots: `/tmp/sigma-a174-desktop.png` and
 `/tmp/sigma-a174-mobile.png`. Legacy project/session records are not migrated;
 out-of-bound saved limits remain unchanged until explicitly corrected.
+
+
+## Session lifecycle and context continuation (2026-10-22, direct edits)
+
+User-requested lifecycle distinction: Stop now preserves a resumable `stopped` session, while normal terminal research transitions to `ended` (older `completed` records remain readable/removable). Stopped sessions expose Resume and Remove in the title row; running/queued/paused sessions expose Stop, and ended sessions expose Remove. Stop acts without a confirmation prompt. Resume uses the saved session identity, model, strategy, artifacts and remaining call allowance, and excludes time spent stopped from the deadline. Interrupted provider attempts remain recorded and charged against the call budget; explicit resumption may make a new attempt, not recover an uncommitted provider response.
+
+A deterministic context assembler supplies the current strategy, question, two most recent full artifacts, the accumulated obligation ledger and prior artifact IDs to each role. Skeptic also receives the pending Investigator output. It refuses oversized context instead of silently dropping objections; each step records source artifact IDs and obligation count. This is an initial bounded implementation, not semantic retrieval.
+
+**Verification outstanding:** These direct GitHub edits were not executed in a local SIGMA checkout. Run `./sigma test`, frontend typecheck/build and real-browser lifecycle checks before treating this increment as verified. No paid calls were made.
