@@ -58,3 +58,27 @@
   .home-page .catalog-tabs { width: 100%; }
   .home-page .catalog-tabs button { flex: 1; padding-inline: 8px; }
 }
+
+/* Recent investigations: title and underlined Remove share a single line. */
+.home-page .home-recents .recent-entry { flex: 1; min-width: 0; padding: 12px 0; }
+.home-page .home-recents .recent-title-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.home-page .home-recents .recent-title-row .recent-open {
+  flex: 0 1 auto; width: auto; min-height: 0; padding: 0;
+  text-align: left; background: transparent; border: 0; box-shadow: none;
+}
+.home-page .home-recents .recent-title-row .recent-forget,
+.home-page .home-recents .recent-title-row .recent-forget:hover:not(:disabled) {
+  flex: 0 0 auto; width: auto; height: auto; min-height: 0; margin: 0; padding: 0;
+  background: transparent; border: 0; border-radius: 0; box-shadow: none;
+  color: #d69e80; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.home-page .home-recents .recent-title-row .recent-forget:hover:not(:disabled) { color: #ffe1d1; }
+.home-page .home-recents .recent-title-row .recent-forget:disabled { opacity: .5; cursor: default; }
+.home-page .home-recents .recent-entry > small,
+.home-page .home-recents .recent-entry > span { display: block; overflow-wrap: anywhere; }
+.home-page .home-recents .recent-entry > small { font-size: 11px; color: #b6c2ce; margin-top: 4px; }
+.home-page .home-recents .recent-entry > span {
+  font-size: 10px; color: #a6b4c2; white-space: nowrap;
+  text-overflow: ellipsis; overflow: hidden; margin-top: 3px;
+}
