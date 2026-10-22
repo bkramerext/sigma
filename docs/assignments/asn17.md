@@ -10,7 +10,7 @@ Do not add more sophistication to Generate Strategy. A16 supplies candidates; A1
 
 ## User workflow
 
-1. Open an existing project and expand a saved strategy. Show **Investigate** (or **Start investigation**) for that strategy.
+1. Open an existing project. In the dedicated **Research session** pane, choose a saved strategy to investigate. A strategy-row shortcut may preselect it, but is not the primary control.
 2. Starting a session is an explicit user action. Display the selected strategy, model/billing mode, finite budget, and the fact that provider usage may accrue. No implicit model switch or billing fallback.
 3. Start a persistent session. The user may navigate away, close the browser tab, and later return to the project. The session and its recorded results survive browser disconnection. The server, however, must remain running; no claim of execution while the SIGMA application is shut down.
 4. Show session status (queued/running/paused/completed/stopped/failed), recent progress, and a readable list of **research artifacts**. Provide **Pause**, **Resume**, and **Stop**: Pause preserves the remaining budget and current question; Stop is terminal. Both prevent further calls and attempt to cancel in-flight local work. Report that an already-started provider request may still consume allowance.
@@ -39,9 +39,25 @@ Every completed cycle produces a **durable research artifact** containing at lea
 - Enforce finite response/context size, per-call and session deadlines, concurrency gate, cancellation, and errors. Coordinate with existing generation/conversion requests so the first implementation cannot accidentally exceed its intended concurrent provider-work limit. Count attempted provider calls against the session cap, including calls interrupted after dispatch; never assume an interrupted request was free. Never store tokens, headers, raw provider envelopes, or hidden reasoning.
 - On any network-bound UI error, show the existing error toast and recover to an accurate view. A failed or ambiguous request must trigger a read of authoritative session state before offering a retry; never imply work was started, paused, stopped, or saved when it was not.
 
-## Minimal UI
+## Project workspace UX: three vertical panes
 
-Stay within the current Project screen and its visual language. One small session control/status surface and a list of artifacts are sufficient. Each artifact should expose the specific claim, Skeptic's objections, evidence status, and next step; no new dashboard, diagram, complex timeline, or unrelated Home redesign. Existing strategy creation and acceptance must remain unchanged.
+The project workspace should have **three top-level sections in this order**:
+
+1. **Project** (collapsible): the existing project problem, description, Markdown view/editing, and settings. Preserve the existing content and its resizable behavior when expanded; do not rebuild the editor.
+2. **Research session #N** (primary work surface): a separate project-level pane **between Project and Strategies**, with live execution status, controls, recent activity, and research artifacts. It is not nested inside an individual strategy row. The pane remains visible and usable when Project and Strategies are collapsed.
+3. **Strategies** (collapsible): the existing strategy pool, creation/generation, expansion, ordering, stages, and actions. Preserve all behavior when expanded. A session references its chosen strategy by name and ID, with a **View strategy** action that expands Strategies and focuses that row.
+
+**High-level collapse:** Give Project and Strategies independent, accessible top-level disclosure headers. These are distinct from existing nested strategy details and the separate `Project details & history` disclosure. Keep each header, title, and relevant concise count/summary visible when collapsed. Research session remains expanded by default and is the center of attention during work. Do not use collapsing as a substitute for saving: keep drafts, focus, and unsaved edits safe; if unmounting would lose them, retain the component or prevent destructive collapse. Preserve keyboard access, heading hierarchy, sidebar anchor navigation, focus restoration, and mobile layout. The Project header is separate from the global application/header navigation. Avoid nesting interactive controls inside a disclosure `summary` element.
+
+### Research session pane: first-pass controls
+
+- **No session yet:** Show `Research session` with a compact strategy selector listing saved, eligible strategies and a primary **Start investigation** button. No eligible strategies? Explain that the user must first create/accept one and provide a link to expand Strategies. Do not bury the entry point in strategy-row menus.
+- **Session exists:** Title the pane **Research session #N**, numbering sessions monotonically **within the project** (stable across restarts; no reuse). Show the selected strategy title, current status, model/thinking/billing mode, call budget used/remaining, and the **current agent action** (Investigator, Skeptic, or Coordinator). The session number is not the cycle number. The active or most recent session opens by default; a minimal session picker/list allows inspecting earlier sessions without confusing them with the running session.
+- **Running:** **Pause** and **Stop** controls; avoid offering duplicate Start/Resume. **Paused/interrupted:** **Resume** and **Stop**. **Completed/stopped/failed:** read-only results plus **New session** (with strategy selection); never relabel an old session as running. Confirm Stop as terminal, but do not require confirmation for Pause. Disable controls while the request is pending and reconcile authoritative state after ambiguous responses.
+- **Live status:** Show `Cycle X of 3`, `Y of 6 calls used`, last activity timestamp, current role/action, and a short chronological list of **actual persisted events**. Use modest polling while the pane is visible and the backend is reachable; refresh immediately after user actions and when returning to the tab/project. No simulated progress percentages or invented time-to-completion. An accessible status announcement should fire on meaningful transitions, not on every poll. A disconnected/unknown state must not be presented as running with certainty; show last confirmed state and retry/reconnect.
+- **Research artifacts:** Show each completed cycle as a selectable/collapsible artifact entry, with claim, evidence status, Skeptic's objection, open obligations, and coordinator next question. Keep full validated outputs accessible, without forcing the user into raw JSON or overwhelming the live pane. Show an incomplete/interrupted step distinctly from a completed artifact. All artifacts remain readable after a session ends or the application restarts.
+
+**Usability criterion:** In one glance, a user can answer **what is being investigated, whether it is running, what it is doing now, how much of the finite budget remains, and what it has produced**. The next action (Pause, Resume, Stop, or New session) must be unambiguous. Do not add cost dashboards, multiple simultaneous agent cards, separate agent-chat windows, complex timelines, or a global research dashboard in A17.
 
 ## Verification
 
@@ -50,7 +66,7 @@ Stay within the current Project screen and its visual language. One small sessio
 - Browser disconnect and page navigation do not cancel server-side work; closing/reopening the project restores status and artifacts.
 - Simulate backend shutdown/replacement and process restart during a step: reconcile interrupted state, preserve committed artifacts, and require explicit resume; verify no automatic chargeable call. Include duplicate/lost-response start and control requests to prove no duplicate sessions or model calls.
 - Test malformed/refused output, timeout, provider failure, account/model/project change, concurrent start, and persistence failure. No fictitious artifacts and no implicit billing fallback.
-- Real browser check of start, status, artifact inspection, stop/reopen, failure toast and recovery, and accessible controls. No paid model calls in automated tests.
+- Real browser check of the three-pane hierarchy, independent Project/Strategies collapses, preserved unsaved editor state, start from the session pane, accurate live status/polling, artifact inspection, Pause/Resume/Stop, session numbering and history, stop/reopen, failure toast/reconciliation, and accessible controls. No paid model calls in automated tests.
 - Run `./sigma test`, frontend typecheck/build, and relevant browser checks. Record actual results and limitations in `docs/STATUS.md`.
 
 ## Out of scope
