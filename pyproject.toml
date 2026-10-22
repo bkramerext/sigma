@@ -28,7 +28,7 @@ packages = ["src/sigma"]
 line-length = 100
 
 [tool.pyright]
-include = ["src", "scenarios"]
+include = ["src", "tests"]
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"

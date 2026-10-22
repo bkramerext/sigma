@@ -76,7 +76,7 @@ dialog map to the existing title/approach fields and share their length limits.
 ./sigma test
 ```
 
-Runs lifecycle/strategy scenarios, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary projects and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma ui`, and `sigma test` also work.
+Runs the workflow tests, API/CLI checks, launcher checks, Ruff, Pyright, and frontend typecheck/build. Uses temporary projects and makes no paid calls. Real-browser tests are separate. Run `./sigma setup` first; commands can be launched from outside the checkout. With an activated environment, `sigma setup`, `sigma ui`, and `sigma test` also work.
 
 ## Project location
 
@@ -342,7 +342,7 @@ never writes projects; Close Project remains navigation only.
 Tests use explicit no-network fixtures. Live provider billing/quality is
 unverified and no billable request is made by setup. With free 8000/5173 ports,
 run the separate real-process/Chrome regression:
-`uv run --with playwright python scenarios/ui_lifecycle.py`. It uses disposable
+`uv run --with playwright python tests/ui_lifecycle.py`. It uses disposable
 checkouts and fixture credentials, exercises restart/crash/conflicts, and leaves
 normal project files untouched. Chrome is expected at the standard macOS path.
 

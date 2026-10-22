@@ -2,6 +2,17 @@
 
 Updated: 2026-10-21
 
+## Test suite directory migration
+
+Renamed the source-controlled executable checks from `scenarios/` to `tests/`.
+Updated `./sigma test`, Ruff and Pyright scopes, the browser-check fixture import,
+test run instructions, and documented file paths. Test behavior is unchanged;
+the checks remain workflow-oriented and use temporary projects and controlled
+providers.
+
+Verification on 2026-10-21: `./sigma test` passed all scenarios, Ruff, Pyright,
+frontend typecheck and production build after the rename.
+
 ## Text conversion response stabilization
 
 The ChatGPT plan conversion path now accepts either a bounded completed JSON
@@ -174,7 +185,7 @@ Actual verification on 2026-10-20:
   API, CLI and launcher scenarios all passed; Ruff check/format (13 Python files),
   Pyright (0 errors), frontend typecheck and production build passed. Existing
   non-failing Starlette TestClient deprecation warning remains.
-- New `scenarios/project_creation.py` verifies both modes on disk and reopen,
+- New `tests/project_creation.py` verifies both modes on disk and reopen,
   legacy v1/v2/v3 no-write reads, preserved strategy/history semantics, invalid
   modes/fields/names, Unicode naming, collisions, missing/foreign/symlink roots,
   injected publication failures, concurrent files and eight competing creators.
@@ -243,10 +254,10 @@ Actual verification on 2026-10-20:
   API/CLI/launcher scenarios passed, plus Ruff check/format (16 files), Pyright
   (0 errors), frontend typecheck and production build. The existing non-failing
   Starlette TestClient deprecation warning remains.
-- `scenarios/strategy_tracking.py`: v1–v4 no-write reads/defaults, exact backups,
+- `tests/strategy_tracking.py`: v1–v4 no-write reads/defaults, exact backups,
   active-only order, removed history, stable IDs/timestamps, no-ops, failed saves,
   stale order, competing reorder/stage/edit writes, corruption and API/CLI checks.
-- `scenarios/proposals.py`: exact official Responses endpoint/payload, strict
+- `tests/proposals.py`: exact official Responses endpoint/payload, strict
   schema/full context, empty/seeded generation, no mutation until human-edited
   acceptance, signed provenance, unavailable/invalid config, bad/refused/
   incomplete output, rate errors, lexical duplicate, timeout, concurrent requests,
@@ -264,7 +275,7 @@ Actual verification on 2026-10-20:
   leaves project bytes identical. This caught/fixed receive-channel polling that
   missed disconnect events behind middleware. No claim of live provider billing
   cancellation: OpenAI may already have processed a sent request.
-- `uv run ruff check src scenarios browser_checks` and format checks passed.
+- `uv run ruff check src tests browser_checks` and format checks passed.
   Browser fixture/checks are source-controlled and documented separately from
   `sigma test`; they require installed Chrome and Playwright.
 - Compared actual workspace at 1672×941 with the approved reference; inspected
@@ -335,12 +346,12 @@ Actual verification on 2026-10-20:
   proposal/strategy/edit/remove/API/CLI/launcher scenarios passed. Ruff check/format
   (20 files), Pyright (0 errors), frontend typecheck and production build passed.
   Existing non-failing Starlette TestClient deprecation notice remains.
-- `scenarios/project_settings.py`: explicit model/High creation, v1–v5 no-write
+- `tests/project_settings.py`: explicit model/High creation, v1–v5 no-write
   defaults, no-op, exact backups, both mode directions, stable identity/location/
   archived research/order, failed writes, stale editor races, independent strategy
   changes, strict corrupt audit rejection, and API/CLI update/conflict checks.
   Empty/unknown models and unsupported efforts are rejected without creating files.
-- `scenarios/model_connection.py`: valid curated discovery (unreviewed models do
+- `tests/model_connection.py`: valid curated discovery (unreviewed models do
   not escape), coalescing eight calls into one, cache/TTL/Retry, zero accessible
   choices, missing setup, 401, 403, 429, 500, redirect, malformed/oversized responses,
   network failure and timeout. Controlled Responses fixture verifies saved model
@@ -366,7 +377,7 @@ Actual verification on 2026-10-20:
   human acceptance/cancellation and actual HTTP disconnect/slot release all pass.
   Tests use explicitly identified no-network provider fixtures and temporary
   projects, not physical-device or live API-account claims.
-- `uv run ruff check src scenarios browser_checks` and corresponding format check
+- `uv run ruff check src tests browser_checks` and corresponding format check
   passed (24 files). Browser fixture and A8 checks are source-controlled and
   documented separately from the standard suite.
 - Compared current UI with a temporary checkout of actual A7 `2a8f90b`, serving the
@@ -436,15 +447,15 @@ Actual verification:
   ownership scenarios, Ruff check/format (27 files), Pyright (zero errors),
   frontend TypeScript check and production build. Existing non-failing Starlette
   TestClient deprecation notice remains.
-- `scenarios/local_config.py`: missing file, quoted export/single/plain/empty
+- `tests/local_config.py`: missing file, quoted export/single/plain/empty
   values, comments, explicit environment precedence (including disabled AI),
   literal shell/variable syntax without execution/expansion, no key output,
   atomic malformed-file rejection, UTF-8 and unreadable-file safe diagnostics.
-- `scenarios/instance_ownership.py`: canonical alias and changing symlink target,
+- `tests/instance_ownership.py`: canonical alias and changing symlink target,
   different checkout IDs, directory permissions/symlink refusal, non-socket state
   preservation, refused stale-socket recovery, live wrong-identity refusal without
   sending shutdown or removing its endpoint, and no-follow lock protection.
-- `uv run --with playwright python scenarios/ui_lifecycle.py` passed against
+- `uv run --with playwright python tests/ui_lifecycle.py` passed against
   disposable real checkouts and explicit no-network provider fixtures. Started
   actual `./sigma ui` from another working directory; a fresh second invocation
   loaded updated `.env`, verified the new model availability, and let the old
@@ -505,8 +516,8 @@ Actual verification:
 - `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright (zero errors),
   frontend typecheck and production build. Existing non-failing TestClient
   deprecation notice remains. Final frontend build and Ruff check/format over
-  src/scenarios/browser_checks passed (39 Python files); final Pyright passed.
-- `scenarios/chatgpt.py`: real loopback callback and generated RSA-signed OIDC
+  `src`, `tests`, and `browser_checks` passed (39 Python files); final Pyright passed.
+- `tests/chatgpt.py`: real loopback callback and generated RSA-signed OIDC
   fixtures verify PKCE/exact code exchange, stable host/issued client, nonce,
   state, issuer/audience/signature/expiry/subject/client rejection, missing tokens,
   duplicate callback race, cancellation/decline, discovery endpoint validation,
@@ -515,7 +526,7 @@ Actual verification:
   errors, explicit API mode without flag, no billing fallback or sign-in writes,
   project/account binding, terminal refresh and confirmed/unconfirmed revoke.
   Added invalid-grant retry and unreadable-store/manual-default checks passed.
-- `scenarios/chatgpt_restart.py`: two fresh real processes contending for an
+- `tests/chatgpt_restart.py`: two fresh real processes contending for an
   expired rotating session performed exactly one refresh, retained host/account/
   client identity, and atomically stored the replacement with 0600 permissions.
 - Real Chrome `browser_checks/chatgpt.py` passed manual project/strategy creation
@@ -532,7 +543,7 @@ Actual verification:
   mouse/keyboard/touch ordering, draft review/acceptance and actual HTTP
   disconnection/cancellation all remain working. Fixture startup now explicitly
   selects dummy key billing; production never does so automatically.
-- `scenarios/ui_lifecycle.py` passed real fresh-shell restart with updated .env,
+- `tests/ui_lifecycle.py` passed real fresh-shell restart with updated .env,
   explicit persisted key-mode selection, proxy/origin routing, old owner/children
   gone, Ctrl+C/SIGTERM, hard-crash pipe cleanup/stale recovery, rapid launches,
   different checkout and unrelated listener refusal, and unchanged research.
@@ -582,9 +593,9 @@ Actual verification:
 - `./sigma test` passed all existing and new scenarios, API/CLI checks, Ruff,
   Pyright (zero errors), frontend typecheck and production build. Existing
   non-failing TestClient deprecation notice remains. Final targeted recents
-  scenarios, Ruff check/format over src/scenarios/browser_checks (43 files) and
+  scenarios, Ruff check/format over `src`, `tests`, and `browser_checks` (43 files) and
   Pyright passed after the state-path guard and extra failure cases.
-- `scenarios/recents.py`: exact first/second bootstrap, strict seed/event/strategy
+- `tests/recents.py`: exact first/second bootstrap, strict seed/event/strategy
   identity, five creates/four-entry eviction, actual API/CLI accesses, repeated
   opens, Close/inspect/title-refresh byte immutability, renamed/moved/corrupt
   projects, forget/no reseed, concurrent real processes/threads and parallel
@@ -593,7 +604,7 @@ Actual verification:
   corrupt index and failed index replacement preserve research. State permissions
   and refusal of checkout/project-package state locations are checked. The two
   expected index-failure warnings demonstrate secondary-error handling.
-- `scenarios/example_math.py`: independent residue/adjacency DP cross-checked by
+- `tests/example_math.py`: independent residue/adjacency DP cross-checked by
   exhaustive enumeration through n=12 gives a_12=128; recurrence checked through
   n=120. Exact arithmetic in Z[omega] verifies three-step traces, determinant and
   Cayley–Hamilton identities in all phases. The analytic root-of-unity recurrence
@@ -681,7 +692,7 @@ Actual verification:
   mobile hardware.
 - `npm run build` passed TypeScript checking and the Vite production build.
 - `./sigma test` passed lifecycle and project creation scenarios, then stopped
-  in `scenarios/recents.py:204`. Its bad-template check patches
+  in `tests/recents.py:204`. Its bad-template check patches
   `sigma.recents.TEMPLATE`, but `bootstrap_example()` calls `_install(root)` whose
   default `template=TEMPLATE` was bound when the function was defined, so the
   fixture patch is not observed and its assertion fails. This failure occurs in
@@ -844,7 +855,7 @@ horizontal navigation row. Home and approved raster artwork were unchanged.
 Actual verification on 2026-10-21:
 
 - `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright (zero
-  errors), frontend typecheck and production build. `scenarios/agentic.py`
+  errors), frontend typecheck and production build. `tests/agentic.py`
   covers stock zero-pool generation, explicit acceptance/reopen, later-strategy
   context, duplicate retry, skeptical revision, no-proposal and six-call stops,
   malformed/refused output, binding changes, timeouts, duplicate-run guard,
@@ -942,7 +953,7 @@ The new `./sigma shutdown` command uses the same checkout-specific control
 mechanism without starting servers. Offline ownership and CLI-shutdown scenarios
 and opt-in real-process suspended-launcher/shutdown lifecycle checks were added.
 These changes were committed via GitHub and **have not been locally executed or
-verified yet**; run `./sigma test` and the opt-in `scenarios/ui_lifecycle.py`
+verified yet**; run `./sigma test` and the opt-in `tests/ui_lifecycle.py`
 before treating the behavior as verified.
 
 ## Legacy suspended UI startup recovery (2026-10-21, pending local verification)
@@ -980,7 +991,7 @@ identity re-verification) SIGKILL. Unknown or unrelated listeners are untouched.
 
 Both `./sigma shutdown` and `./sigma ui` now invoke that cleanup after
 serializing through the private instance lock. The mock-provider-free offline
-`scenarios/ui_orphans.py` regression covers owned servers, unrelated
+`tests/ui_orphans.py` regression covers owned servers, unrelated
 listeners, changed process identity and SIGKILL escalation, and runs in
 `./sigma test`. The isolated tests passed in the assistant's Python
 environment, but end-to-end behavior on the user's macOS machine is not yet

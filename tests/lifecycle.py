@@ -1,4 +1,4 @@
-"""Run with `uv run python scenarios/lifecycle.py`; offline, temporary projects."""
+"""Run with `uv run python tests/lifecycle.py`; offline, temporary projects."""
 
 import json
 from dataclasses import asdict

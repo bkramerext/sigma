@@ -93,7 +93,7 @@ def main() -> None:
     save_text.add_argument("--expected-digest", required=True)
     commands.add_parser("close")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
-    commands.add_parser("test", help="Run scenarios, API/CLI checks, lint, types and build")
+    commands.add_parser("test", help="Run tests, API/CLI checks, lint, types and build")
     commands.add_parser("ui", help="Start or safely restart this checkout's browser UI")
     commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
     args = parser.parse_args()

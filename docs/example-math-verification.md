@@ -39,7 +39,7 @@ constant times phi^n. Their ratio tends to zero, and the filter yields
 
     a_n / F_(n+2) -> 1/3.
 
-`scenarios/example_math.py` uses exact integer-pair arithmetic in Z[omega] to
+`tests/example_math.py` uses exact integer-pair arithmetic in Z[omega] to
 verify the traces, determinants and matrix identities in all three phases. Its
 DP separately tracks residue and whether the previous index was selected, and
 cross-checks against exhaustive enumeration. No answer, proof, completed stage,

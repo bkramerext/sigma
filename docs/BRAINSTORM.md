@@ -75,9 +75,9 @@ Implemented storage uses versioned JSON; SQLite remains a future option. See [DE
 - **2026-10-21** — User reports that `./sigma ui` sometimes produces no visible result, even after manually killing listeners on ports 8000 and 5173. Investigate the launcher/instance-replacement path and make startup failures and waits explicit and actionable; do not silently hang. Current launcher intends to replace a verified same-checkout SIGMA instance, so verify and fix that behavior rather than assume it works.
 - **2026-10-21** — Add an explicit `./sigma stop-ui` (or similarly discoverable) command to cleanly stop *only* a verified SIGMA-owned instance and its supervised child servers. Do not kill unrelated services using the same ports. Add real startup/restart/stop/crash scenarios and accurate CLI guidance.
 
-## Test suite organization (deferred)
+## Test suite organization
 
-- **2026-10-21** — Rename `scenarios/` to `tests/` as a separate cleanup after current Markdown conversion debugging. Update `./sigma test` command paths, imports, documentation, CI/tooling references, Ruff/Pyright scope and any browser-check references; ensure no behavior changes and the full suite passes. Do not mix this rename into active bug fixes.
+- **Completed 2026-10-21** — Renamed the executable workflow checks from `scenarios/` to `tests/`. Updated the CLI test runner, Python tooling scopes, browser-check fixture import, and documentation. The files remain readable end-to-end workflows over shared application services; only their directory name changed.
 
 ## Network failure UX and state consistency (deferred)
 

@@ -1,6 +1,6 @@
 """Opt-in real-process launcher checks; requires free ports 8000/5173 and Node.
 
-Run: uv run --with playwright python scenarios/ui_lifecycle.py
+Run: uv run --with playwright python tests/ui_lifecycle.py
 All checkouts/configuration/provider responses are disposable controlled fixtures.
 """
 
