@@ -70,6 +70,12 @@ async def check(path):
         assert payload["reasoning"] == {"effort": "high"}
         assert payload["model"] == "gpt-6.1-sol"
         assert payload["max_output_tokens"] == 25000
+        # Generation must propose a candidate answer, leaving viability assessment for later.
+        instructions = payload["instructions"]
+        assert "candidate SOLUTION" in instructions
+        assert "not a plan to investigate" in instructions
+        assert "independent agents to assess its viability later" in instructions
+        assert "other required JSON fields separate" in instructions
         context = json.loads(payload["input"])
         assert context["research_problem"] == "A real mathematical question"
         assert context["research_mode"] == "mathematical"
