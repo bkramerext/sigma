@@ -593,3 +593,8 @@
 .workspace-page .session-heading-title-line .session-remove-link {
   flex: 0 0 auto; margin: 0; padding: 2px 0;
 }
+
+/* Distinct research lifecycle states; Stop is resumable, Ended is terminal. */
+.workspace-page .session-ended i,
+.workspace-page .session-completed i { border-color: #7fa99b; background: #7fa99b; }
+.workspace-page .session-stopped i { border-color: #d6a46b; background: #d6a46b; }
