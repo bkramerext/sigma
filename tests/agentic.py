@@ -78,6 +78,13 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
         assert payload["max_output_tokens"] == 6000
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"].startswith("strategy_")
+        role = payload["text"]["format"]["name"]
+        if role == "strategy_explore":
+            assert "candidate SOLUTION" in payload["instructions"]
+            assert "rather than proposing to study" in payload["instructions"]
+        elif role == "strategy_revise":
+            assert "Revise the actual solution" in payload["instructions"]
+            assert "rather than substituting a plan" in payload["instructions"]
         context = json.loads(payload["input"])
         assert context["project"]["research_problem"].startswith("For each integer n >= 0")
         calls.append({"role": payload["text"]["format"]["name"], "context": context})
