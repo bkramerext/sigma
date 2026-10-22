@@ -785,7 +785,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
     <p id="seed-help" className="hint">A hunch, question, technique, observation or constraint—not an assumption to endorse. Leave empty for an independent direction.</p>
     <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI in one request. Cancelling stops local work; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
-    {busy && <p className="agentic-current" role="status" aria-live="polite"><span aria-hidden="true">⌛</span> Generating one strategy…</p>}
+    <p className="sr-only" role="status" aria-live="polite">{busy ? 'Generating one strategy…' : ''}</p>
     <PlanWelcome/>
     {ai.connecting && <button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button>}
     {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
