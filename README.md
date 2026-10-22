@@ -26,7 +26,7 @@ From the project directory:
 
 ```sh
 ./sigma setup
-./sigma ui
+./sigma start
 ```
 
 The UI opens automatically at **http://127.0.0.1:5173** once both servers are ready. If your browser does not open, visit that address manually. Start with the included example or create your own project, then add a strategy.
