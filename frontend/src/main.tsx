@@ -479,8 +479,8 @@ function Home({ initialPath, onOpen }: {
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
-          <button type="button" ref={openButton} className="home-project-action" onClick={() => setEntry('open')}>Open</button>
           <button type="button" ref={newButton} className="home-project-action" onClick={() => setEntry('new')}>New</button>
+          <button type="button" ref={openButton} className="home-project-action" onClick={() => setEntry('open')}>Open</button>
         </div>
         <HomeCatalog onOpen={onOpen}/>
       </section>
