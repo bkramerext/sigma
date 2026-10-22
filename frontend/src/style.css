@@ -298,10 +298,10 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   border: 0;
 }
 .home-page .home-projects .home-recents li,
-.home-page .home-projects .home-stock li { border: 0; }
+.home-page .home-projects .home-samples li { border: 0; }
 .home-page .home-projects .home-recents .recent-entry { padding: 8px 0; }
 .home-page .home-projects .home-recents .recent-entry > span { display: none; }
-.home-page .home-projects .home-stock .stock-open { padding: 8px 0; }
+.home-page .home-projects .home-samples .sample-open { padding: 8px 0; }
 .home-page .home-projects .home-catalog .home-empty { padding: 8px 0 0; }
 .home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
 

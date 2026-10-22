@@ -1,4 +1,4 @@
-"""Stock examples are templates; opening them creates independent recent projects."""
+"""Sample examples are templates; opening them creates independent recent projects."""
 
 import json
 import tempfile
@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from sigma import projects, recents, stock
+from sigma import projects, recents, samples
 from sigma.projects import (
     STATE,
     ProjectError,
@@ -22,7 +22,7 @@ from sigma.projects import (
 )
 
 
-class StockCopyTests(unittest.TestCase):
+class SampleCopyTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -50,8 +50,8 @@ class StockCopyTests(unittest.TestCase):
         }
         (self.example / STATE).write_text(json.dumps(self.template), encoding="utf-8")
         for target, attribute, value in (
-            (stock, "EXAMPLES", self.examples),
-            (stock, "projects_root", lambda: self.projects),
+            (samples, "EXAMPLES", self.examples),
+            (samples, "projects_root", lambda: self.projects),
             (projects, "projects_root", lambda: self.projects),
             (recents, "state_directory", lambda: self.state),
         ):
@@ -60,8 +60,8 @@ class StockCopyTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def test_opening_twice_creates_two_independent_recent_copies(self):
-        first = stock.open_stock_project("sample")
-        second = stock.open_stock_project("sample")
+        first = samples.open_sample_project("sample")
+        second = samples.open_sample_project("sample")
 
         self.assertEqual(Path(first.path).name, "sample.sigma")
         self.assertEqual(Path(second.path).name, "sample-2.sigma")
@@ -78,12 +78,12 @@ class StockCopyTests(unittest.TestCase):
         self.assertEqual([item["path"] for item in recent], [second.path, first.path])
         self.assertTrue(all(item["available"] for item in recent))
 
-    def test_existing_stock_install_is_preserved(self):
+    def test_existing_sample_install_is_preserved(self):
         existing = self.projects / "sample.sigma"
         existing.mkdir()
         (existing / STATE).write_text(json.dumps(self.template), encoding="utf-8")
 
-        copy = stock.open_stock_project("sample")
+        copy = samples.open_sample_project("sample")
         self.assertEqual(Path(copy.path).name, "sample-2.sigma")
         self.assertEqual(copy.project.title, "Sample Investigation (copy)")
         self.assertEqual(inspect_project(existing).project.id, self.template_id)
@@ -101,9 +101,9 @@ class StockCopyTests(unittest.TestCase):
             asdict(settings),
         )
 
-    def test_rename_rejects_stock_and_recent_titles(self):
-        first = stock.open_stock_project("sample")
-        second = stock.open_stock_project("sample")
+    def test_rename_rejects_sample_and_recent_titles(self):
+        first = samples.open_sample_project("sample")
+        second = samples.open_sample_project("sample")
         for taken in (
             "Sample Investigation",
             "sample investigation",
@@ -121,15 +121,15 @@ class StockCopyTests(unittest.TestCase):
         outside = Path(self.temporary.name) / "external.sigma"
         external = initialize_project(outside, "External work", "Research question")
         recents.record_access(external)
-        copy = stock.open_stock_project("sample")
+        copy = samples.open_sample_project("sample")
         with self.assertRaisesRegex(ProjectError, "already uses"):
             self.rename(copy, "external work")
 
-    def test_new_project_rejects_stock_and_existing_titles(self):
+    def test_new_project_rejects_sample_and_existing_titles(self):
         self.assertTrue(project_destination("sample investigation").exists)
         with self.assertRaisesRegex(ProjectError, "already uses"):
             create_project("Sample Investigation", "New problem")
-        first = stock.open_stock_project("sample")
+        first = samples.open_sample_project("sample")
         self.assertTrue(project_destination(first.project.title).exists)
         with self.assertRaisesRegex(ProjectError, "already uses"):
             create_project(first.project.title, "New problem")
@@ -138,14 +138,14 @@ class StockCopyTests(unittest.TestCase):
         outside = Path(self.temporary.name) / "external.sigma"
         external = initialize_project(outside, "Sample Investigation (copy)", "Research question")
         recents.record_access(external)
-        copied = stock.open_stock_project("sample")
+        copied = samples.open_sample_project("sample")
         self.assertEqual(copied.project.title, "Sample Investigation (copy 1)")
         self.assertEqual(Path(copied.path).name, "sample.sigma")
 
-    def test_stock_catalog_does_not_change_after_copy(self):
-        before = stock.stock_projects()
-        stock.open_stock_project("sample")
-        self.assertEqual(stock.stock_projects(), before)
+    def test_sample_catalog_does_not_change_after_copy(self):
+        before = samples.sample_projects()
+        samples.open_sample_project("sample")
+        self.assertEqual(samples.sample_projects(), before)
 
 
 if __name__ == "__main__":

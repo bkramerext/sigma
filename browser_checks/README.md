@@ -79,11 +79,11 @@ backoff and Retry, and one-time welcome behavior. It makes no provider calls.
 
 Start a fresh `provider_fixture:app` as above, then run
 `uv run --with playwright python browser_checks/recents.py`.
-This check expects a fresh disposable fixture state. It covers the default
-Stock Projects tab, keyboard tab switching, direct stable stock opens without a
-dialog, retained edits, exclusion from Recents, unavailable and forget behavior,
-source-file immutability, and 1280x720, 390x844 and 320x700 layouts. Captures
-are `/tmp/sigma-a11-*.png`.
+This check expects a fresh disposable fixture state. It covers the Samples and
+Recent tabs, Samples as the default selection, keyboard tab switching, direct
+sample opens without a dialog, independent working-copy creation, inclusion of
+that copy in Recents, source-file immutability, and 1280x720, 390x844 and
+320x700 layouts. Captures are `/tmp/sigma-samples-*.png`.
 `settings.py` remains the shared-form persistence/focus regression.
 
 ## A13 project header
@@ -102,7 +102,7 @@ Start a fresh `provider_fixture:app` on port 8002 and keep the normal UI on
 It verifies one bounded request from an empty counting project with an empty
 starting point, an editable unsaved draft, cancellation without mutation,
 provider failure and its single dismissible toast, in-flight cancellation,
-explicit save/reopen, existing-strategy context and immutable stock source.
+explicit save/reopen, existing-strategy context and immutable sample source.
 The provider is entirely mocked. Review captures are
 `/tmp/sigma-a15-review-1440.png` and `-390.png`.
 
@@ -116,12 +116,12 @@ fresh fixture on port 8002.
 Run the normal Vite UI on `127.0.0.1:5173`, then start a fresh isolated mock
 provider (`uv run uvicorn browser_checks.provider_fixture:app --host 127.0.0.1
 --port 8001`). Run `uv run --with playwright python browser_checks/text_views.py`.
-The script opens the stock Nonconsecutive example into the fixture's managed
+The script opens the sample Nonconsecutive example into the fixture's managed
 copy, checks automatic Plain/Markdown conversion on selection, rendered math,
 in-place title/description edits and stale retries,
 cache reuse without conversion requests, desktop/mobile overflow and source
 fixture immutability. It uses no paid provider call. Restart the fixture before
-rerunning, since the script intentionally edits its managed stock copy.
+rerunning, since the script intentionally edits its managed sample copy.
 
 ## A14.2 ChatGPT-plan Markdown conversion regression
 

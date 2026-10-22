@@ -5,7 +5,7 @@ Updated: 2026-10-21
 ## A14.2 ChatGPT-plan Markdown conversion recovery
 
 Reproduced the reported case against the connected ChatGPT-plan transport using
-a disposable copy of the empty-pool Mathematical stock example. The provider
+a disposable copy of the empty-pool Mathematical sample example. The provider
 returned HTTP 200 without a `Content-Type`; the previous conversion code tried
 to parse the untyped body only as JSON, replaced the parse failure with `{}`,
 then described that placeholder as a ChatGPT `other-object` rejection. The
@@ -36,13 +36,13 @@ artifact, exact tooltip and explicit successful retry using a mock provider.
 `./sigma test`, Ruff, Pyright, frontend typecheck/build also passed. The
 existing Starlette TestClient/httpx deprecation notice remains non-failing.
 
-## Stock project test stabilization
+## Sample project test stabilization
 
-Updated the stock catalog scenario to cover the current behavior: each open
+Updated the sample catalog scenario to cover the current behavior: each open
 creates an independent copy with a distinct identity, copied projects enter
 Recents, existing research is preserved, and shipped examples remain unchanged.
-Added the dedicated stock-copy unit tests to `./sigma test` and updated the
-agentic stock scenario to check the same copy semantics. Corrected Ruff import
+Added the dedicated sample-copy unit tests to `./sigma test` and updated the
+agentic sample scenario to check the same copy semantics. Corrected Ruff import
 ordering and formatting issues exposed by the complete run.
 
 Verification on 2026-10-21: `./sigma test` passed all scenarios and unit tests,
@@ -766,16 +766,16 @@ Actual verification:
   existing scenario/application code, unrelated to the Home artwork change; the
   later checks in that command did not run.
 
-## A11 — copper Home controls and stock catalog
+## A11 — copper Home controls and sample catalog
 
-Home now offers Stock Projects and Recent Projects tabs, with Stock selected on
+Home now offers Samples and Recent Projects tabs, with Samples selected on
 entry per the later UI request. The catalog discovers every valid shipped
-investigation and places the Jesus example last. Selecting a Stock row opens the
-project directly with no dialog. On first use it is installed at a stable path
-under the configured projects root with its original identity and bytes. Later
-opens preserve edits, and stock identities stay out of Recents. Existing automatic
-stock recent entries are removed from the index on read; project directories and
-research files are left untouched. The Home buttons use matching navy/copper
+investigation and places the Jesus example last. Selecting a Sample row opens the
+project directly with no dialog, creating an independent working copy with its
+own identity and a distinct path. The original source remains byte-for-byte
+unchanged, and opened copies appear in Recents. Existing automatic sample recent
+entries are removed from the index on read; project directories and research
+files are left untouched. The Home buttons use matching navy/copper
 resting styles, and both hover with the selected tab's copper gradient. Dialogs,
 lists, connection status and Close Project use coordinated copper styling.
 
@@ -785,7 +785,7 @@ Actual verification:
   Pyright (zero errors), frontend typecheck, and production build. The existing
   non-failing Starlette TestClient deprecation notice remains.
 - Real Chrome `browser_checks/recents.py` passed tab keyboard navigation, exact
-  button rest/hover style comparisons, stable direct stock opens, Recent/Forget and
+  button rest/hover style comparisons, stable direct sample opens, Recent/Forget and
   unavailable path behavior, source immutability, no page errors, and 1280px,
   390px and 320px responsive layout checks. The 1280px Home screenshot was
   visually inspected; the controls do not cover the approved artwork. The New
@@ -842,7 +842,7 @@ Actual verification:
   pill styles, live status/dot, disclosure, keyboard focus and Close. Its five
   screenshots under `/tmp/sigma-a13-header-*.png` were inspected at desktop,
   1100px, 700px and mobile widths.
-- Real Chrome `browser_checks/recents.py` passed Home and stock/recent regressions
+- Real Chrome `browser_checks/recents.py` passed Home and sample/recent regressions
   after the shared CSS change. The 390px Home and project screenshots were
   inspected, with the approved Home artwork and project navigation intact.
 
@@ -895,7 +895,7 @@ The ready message also names the FastAPI API server at `127.0.0.1:8000` and
 the Vite UI server at `127.0.0.1:5173`; the tooling scenario asserts both lines.
 
 Home's content wrapper now has no left padding, so approved artwork starts at
-the viewport edge. The Open Project heading, action buttons and stock/recent
+the viewport edge. The Open Project heading, action buttons and sample/recent
 catalog share a deliberate left inset. Real Chrome checks at 1280px and 390px
 confirmed their positions and no horizontal overflow; screenshots were inspected.
 
@@ -923,7 +923,7 @@ Actual verification on 2026-10-21:
 
 - `./sigma test` passed all scenarios, API/CLI checks, Ruff, Pyright (zero
   errors), frontend typecheck and production build. `tests/agentic.py`
-  covers stock zero-pool generation, explicit acceptance/reopen, later-strategy
+  covers sample zero-pool generation, explicit acceptance/reopen, later-strategy
   context, duplicate retry, skeptical revision, no-proposal and six-call stops,
   malformed/refused output, binding changes, timeouts, duplicate-run guard,
   cancellation, ChatGPT-plan streaming and ASGI disconnect, all with mocked
@@ -1013,7 +1013,7 @@ The project title appears once in the header, beside a back arrow; clicking it
 edits the title in place. Other options remain in Project Settings. Home shows
 a Current Project shortcut above “Switch to a new project,” validated through
 the read-only inspect endpoint. The sidebar's collapse preference survives
-leaving and reopening a project. Stock source fixtures and approved artwork
+leaving and reopening a project. Sample source fixtures and approved artwork
 remain unchanged.
 
 A versioned portable `text-representations.json` companion stores format history
@@ -1027,7 +1027,7 @@ format. No live paid conversion was made for verification.
 Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff,
 Pyright (zero errors), frontend typecheck and production build. The A15 offline
 scenario passed mock-provider conversion in both directions, v1–v6 read-only
-migration, stock immutability, cache reuse, stale edits/conflicts, cancellation,
+migration, sample immutability, cache reuse, stale edits/conflicts, cancellation,
 ASGI disconnect, malformed/truncated output, account/model availability and
 ChatGPT-plan streaming. Real Chrome `browser_checks/text_views.py` passed
 literal and rendered inline/display math, working/error/stale states,
@@ -1038,7 +1038,7 @@ Current Project reopen and desktop/390px layouts. Real Chrome
 regressions and sidebar persistence. Real Chrome `browser_checks/settings.py`
 passed in-place title/description editing, separate project settings, retained
 model selection and conflict/error handling; `browser_checks/recents.py`
-passed stock/recent Home navigation. Desktop/mobile screenshots were visually inspected and no
+passed sample/recent Home navigation. Desktop/mobile screenshots were visually inspected and no
 horizontal viewport overflow or page errors occurred. The renderer can display
 an AI conversion faithfully but cannot verify mathematical equivalence; users
 must review derived text before relying on it.
@@ -1103,6 +1103,24 @@ listeners, changed process identity and SIGKILL escalation, and runs in
 `./sigma test`. The isolated tests passed in the assistant's Python
 environment, but end-to-end behavior on the user's macOS machine is not yet
 verified.
+
+## Samples terminology rename (2026-10-21)
+
+The Home catalog now calls the shipped examples **Samples**. Samples is the
+first tab and remains selected by default; Recent follows it. The Python
+catalog module and public handlers were renamed to `sigma.samples` and
+`/api/projects/samples`, including the open route and request field. The Home
+component, CSS classes, browser checks, scenario filenames and documentation
+use the same terminology. Source example directory names and project files
+remain unchanged, so existing project identities and artwork paths are stable.
+
+Actual verification: `./sigma test` passed all scenarios, API/CLI checks, Ruff,
+Pyright, frontend typecheck and production build. Real Chrome
+`browser_checks/recents.py`, `browser_checks/a15_generate.py` and
+`browser_checks/a142.py` passed. `browser_checks/text_views.py` reached the
+opened sample project, then stopped at a stale `.project-eyebrow` selector;
+the current project page uses the “Project description” heading. It needs a
+separate refresh of its project-page assertions.
 
 ## Markdown conversion tooltip (2026-10-21)
 

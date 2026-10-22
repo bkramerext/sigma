@@ -427,23 +427,23 @@ def recent_view():
     return home_projects()
 
 
-@app.get("/api/projects/stock")
-def stock_view():
-    from sigma.stock import stock_projects
+@app.get("/api/projects/samples")
+def samples_view():
+    from sigma.samples import sample_projects
 
-    return stock_projects()
+    return sample_projects()
 
 
-class StockOpenRequest(BaseModel):
+class SampleOpenRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    stock_id: str
+    sample_id: str
 
 
-@app.post("/api/projects/stock/open")
-def stock_open_view(body: StockOpenRequest):
-    from sigma.stock import open_stock_project
+@app.post("/api/projects/samples/open")
+def sample_open_view(body: SampleOpenRequest):
+    from sigma.samples import open_sample_project
 
-    return asdict(open_stock_project(body.stock_id))
+    return asdict(open_sample_project(body.sample_id))
 
 
 class ForgetRecentRequest(BaseModel):

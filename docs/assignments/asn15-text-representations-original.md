@@ -18,7 +18,7 @@ This work is **A15**, a follow-up to A14's completed agentic Generate Strategy p
 
 1. Put a small `View` selector with **Plain · Markdown · Rendered** near the **project research-problem description**. Use the same reusable view component on expanded **strategy approach/description** content. Keep the surrounding workspace layout and typography intact.
 2. Match SIGMA's **dark navy and burnished copper** UI: restrained copper border, copper-highlighted selection/focus and accessible contrast; reuse the existing shared styling/tokens, not new gold/yellow controls. Avoid a large toolbar or a separate page.
-3. For legacy stock projects and existing human-authored descriptions (whose current fields are plain text), initially choose **Plain**, preserving the original characters verbatim. When Markdown is already available, prefer **Rendered** on a fresh display; optionally remember the viewer's last selection locally. Switching displays must not change the underlying content.
+3. For legacy sample projects and existing human-authored descriptions (whose current fields are plain text), initially choose **Plain**, preserving the original characters verbatim. When Markdown is already available, prefer **Rendered** on a fresh display; optionally remember the viewer's last selection locally. Switching displays must not change the underlying content.
 4. When the selected view's stored representation exists **and is current**, show it immediately, without network/provider calls, loading or cost. Rendered draws from current Markdown.
 5. When Markdown/Rendered is requested but only Plain exists, show an understated **Generate Markdown** action explaining that a **single AI conversion request** will be sent using the project's current selected model/thinking/account. Clicking is explicit authorization for that request; merely opening the page or changing the selector does **not** send billable AI traffic.
 6. When Plain is requested but only Markdown exists, offer **Generate Plain** in the same manner. Convert mathematical meaning into simple readable ASCII conventions, not raw TeX tokens or Markdown source.
@@ -36,7 +36,7 @@ This work is **A15**, a follow-up to A14's completed agentic Generate Strategy p
 - For project or strategy edits, preserve existing identity, strategy history, metadata and concurrency safeguards. If the original text changes while a provider call is pending, reject the stale conversion result rather than attach it to a new revision.
 - Plain text already stored in existing project fields remains valid without conversion. Preserve backwards reads of existing project schemas without rewriting on open. On first representation write, migrate safely using the project's existing atomic locking, validation and backup conventions. Choose a clear backward-compatible persistent schema or companion representation structure, document it, and test migration from versions 1–6. Do not create a nonportable browser-only cache.
 - **Important:** All domain consumers, including agentic generation, duplicate/novelty checking, CLI and API, must use the **current authoritative representation**, never an obsolete counterpart. Avoid losing Markdown math when feeding prompts. Legacy consumers requiring plain fields must continue to receive meaningful compatible content or an explicit current-source field; do not silently fall back to stale Plain.
-- Stock `examples/*/project.json` source fixtures are immutable. Converted representations live in the user's managed/opened copy. Reopening a stock project must reuse previously saved conversions without touching or re-converting the source fixture.
+- Sample `examples/*/project.json` source fixtures are immutable. Converted representations live in the user's managed/opened copy. Reopening a sample project must reuse previously saved conversions without touching or re-converting the source fixture.
 
 ## In-place editing of project title and description
 
@@ -70,7 +70,7 @@ This work is **A15**, a follow-up to A14's completed agentic Generate Strategy p
 
 ## Real project example and expected behavior
 
-Use existing stock **Nonconsecutive Subset Sums Modulo 3** as the main regression fixture **without modifying its checked-in ASCII description**. Current source includes:
+Use existing sample **Nonconsecutive Subset Sums Modulo 3** as the main regression fixture **without modifying its checked-in ASCII description**. Current source includes:
 
 ```text
 For each integer n >= 0, let a_n count the subsets S of {1,...,n}
@@ -80,10 +80,10 @@ where F_0=0 and F_1=1 are the Fibonacci numbers.
 ```
 
 After the user selects Markdown/Rendered and explicitly chooses **Generate Markdown**, a *possible correct conversion* should contain LaTeX for `n \\ge 0`, `a_n`, `a_{12}`, the Fibonacci subscripts `F_{n+2}, F_0, F_1` and the ratio `\\frac{a_n}{F_{n+2}}`. The mathematical limit should be preserved faithfully, e.g. `$\\lim_{n\\to\\infty}\\frac{a_n}{F_{n+2}}=\\frac13$`; don't hardcode that exact prose, format or display equation as the universal conversion.
-- **Plain:** shows the unchanged stock ASCII text, *not* escaped LaTeX.
+- **Plain:** shows the unchanged sample ASCII text, *not* escaped LaTeX.
 - **Markdown:** shows the stored literal Markdown and math delimiters.
 - **Rendered:** shows the same Markdown text with genuine mathematical typesetting.
-- After closing and reopening the stock project, both Plain and Markdown still exist, and switching is instant and free.
+- After closing and reopening the sample project, both Plain and Markdown still exist, and switching is instant and free.
 - Independently test the **Markdown → Plain** direction with a Markdown-authoritative fixture; expected Plain conventions are legible and lossy by design but must not look like `\\frac{...}{...}`.
 - Source changes mark previously derived text stale; an in-flight conversion of the prior source cannot overwrite it. The immutable repository fixture remains unchanged.
 

@@ -44,7 +44,7 @@ def provider_output(body: str):
 
 async def main_async(root: Path):
     source_before = SOURCE.read_bytes()
-    path = root / "stock.sigma"
+    path = root / "sample.sigma"
     path.mkdir()
     (path / "project.json").write_bytes(source_before)
     project_before = (path / "project.json").read_bytes()
@@ -226,7 +226,7 @@ async def main_async(root: Path):
         assert (legacy / "project.json").read_bytes() == before
         assert inspect_text(legacy, "project")["markdown"]["current"]
     print(
-        "PASS v1-v6 read-only legacy access, lazy portable cache, stock source immutability, explicit two-way conversion, stale revision and no cached calls"
+        "PASS v1-v6 read-only legacy access, lazy portable cache, sample source immutability, explicit two-way conversion, stale revision and no cached calls"
     )
 
     # A pending conversion must never attach to a later human edit.

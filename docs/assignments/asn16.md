@@ -20,7 +20,7 @@ This assignment owns the *heavy* agentic scope previously described in `docs/ass
 
 ## Acceptance and tests
 
-Use the existing stock fixture `examples/counting-constrained-binary-strings/project.json`, starting with zero strategies. Verify a real Explore → Challenge → Decide path produces a reviewable unsaved draft; cancel leaves zero strategies; explicit save produces one persistent strategy. Run again with that strategy present and verify mechanism-aware overlap checking and an acceptable distinct proposal **or** justified no-viable-proposal outcome.
+Use the existing sample fixture `examples/counting-constrained-binary-strings/project.json`, starting with zero strategies. Verify a real Explore → Challenge → Decide path produces a reviewable unsaved draft; cancel leaves zero strategies; explicit save produces one persistent strategy. Run again with that strategy present and verify mechanism-aware overlap checking and an acceptable distinct proposal **or** justified no-viable-proposal outcome.
 
 Add deterministic mocked-provider backend/API tests for distinct proposal, overlap/retry, targeted revision, exhausted budget, malformed/refused output, cancellation/disconnect, account/model change, timeout and receipt integrity. Add browser tests for truthful progress, reduced motion, cancel, error recovery, editable result, save and reopen. No paid API calls in automated tests. Run `./sigma test`, frontend build/typecheck and relevant browser checks, and report actual results and limitations in `docs/STATUS.md`.
 

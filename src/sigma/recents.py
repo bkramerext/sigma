@@ -141,18 +141,18 @@ def _index():
                     raise ValueError()
                 value = _validate(json.loads(raw))
         original = json.dumps(value, sort_keys=True)
-        # Older releases inserted canonical stock examples in Recents. Keep
+        # Older releases inserted canonical sample examples in Recents. Keep
         # their directories but show only independent user work here.
-        from sigma.stock import stock_project_ids
+        from sigma.samples import sample_project_ids
 
         try:
-            stock_ids = stock_project_ids()
+            sample_ids = sample_project_ids()
         except (ProjectError, OSError, ValueError, TypeError, KeyError):
-            stock_ids = set()
+            sample_ids = set()
         value["entries"] = [
             entry
             for entry in value["entries"]
-            if not entry["included_example"] and entry["id"] not in stock_ids
+            if not entry["included_example"] and entry["id"] not in sample_ids
         ]
         yield value
         _validate(value)
@@ -181,10 +181,10 @@ def _index():
 
 def record_access(view: ProjectView) -> None:
     """A secondary index failure must not turn a successful research write into a retry."""
-    from sigma.stock import stock_project_ids
+    from sigma.samples import sample_project_ids
 
     try:
-        if view.project.id in stock_project_ids():
+        if view.project.id in sample_project_ids():
             return
     except (ProjectError, OSError, ValueError, TypeError, KeyError):
         pass

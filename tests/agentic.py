@@ -1,4 +1,4 @@
-"""Offline, controlled A14 coordinator and stock-project scenarios."""
+"""Offline, controlled A14 coordinator and sample-project scenarios."""
 
 import asyncio
 import json
@@ -14,7 +14,7 @@ from sigma import agentic, chatgpt_auth
 from sigma.api import app
 from sigma.projects import create_strategy, inspect_project
 from sigma.proposals import accepted_provenance
-from sigma.stock import open_stock_project, stock_projects
+from sigma.samples import open_sample_project, sample_projects
 
 MODEL = "gpt-6.1-sol"
 SOURCE = Path("examples/counting-constrained-binary-strings/project.json")
@@ -98,12 +98,12 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
 async def main_async(root: Path):
     await chatgpt_auth.select("api_key")
     source_before = SOURCE.read_bytes()
-    stock = stock_projects()["projects"]
+    sample = sample_projects()["projects"]
     assert any(
         item["id"] == "counting-constrained-binary-strings" and item["strategy_count"] == 0
-        for item in stock
+        for item in sample
     )
-    view = open_stock_project("counting-constrained-binary-strings")
+    view = open_sample_project("counting-constrained-binary-strings")
     assert not view.project.strategies and not view.project.active_order
     path = view.path
     before = (Path(path) / "project.json").read_bytes()
@@ -129,12 +129,12 @@ async def main_async(root: Path):
     assert (
         len(saved.project.strategies) == 1 and saved.project.strategies[0].provenance == provenance
     )
-    independent = open_stock_project("counting-constrained-binary-strings")
+    independent = open_sample_project("counting-constrained-binary-strings")
     assert independent.project.id != view.project.id
     assert not independent.project.strategies
     assert SOURCE.read_bytes() == source_before
     print(
-        "PASS stock zero-pool, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source"
+        "PASS sample zero-pool, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source"
     )
 
     before = (Path(path) / "project.json").read_bytes()

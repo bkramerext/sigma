@@ -864,11 +864,11 @@ def _title_key(title: str) -> str:
 
 
 def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
-    """Include stock, recent (even outside the root), and local saved projects."""
+    """Include sample, recent (even outside the root), and local saved projects."""
     from sigma.recents import recent_projects
-    from sigma.stock import stock_projects
+    from sigma.samples import sample_projects
 
-    names = {_title_key(item["title"]) for item in stock_projects()["projects"]}
+    names = {_title_key(item["title"]) for item in sample_projects()["projects"]}
     for item in recent_projects()["projects"]:
         if item["available"] and item["id"] != exclude_id:
             names.add(_title_key(item["title"]))
@@ -887,7 +887,7 @@ def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
 def _require_available_title(title: str, root: Path, exclude_id: str | None = None) -> None:
     if _title_key(title) in _occupied_titles(root, exclude_id):
         raise ProjectError(
-            "A stock, recent, or saved project already uses that name. Choose another name."
+            "A sample, recent, or saved project already uses that name. Choose another name."
         )
 
 

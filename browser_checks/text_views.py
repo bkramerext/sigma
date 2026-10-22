@@ -1,6 +1,7 @@
 """A15 real Chrome Plain/Markdown/Rendered checks with a mock provider only."""
 
 import os
+import re
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -34,13 +35,17 @@ with sync_playwright() as playwright:
         ),
     )
     page.goto("http://127.0.0.1:5173")
-    panel = page.get_by_role("tabpanel", name="Stock Projects")
+    panel = page.get_by_role("tabpanel", name="Samples")
     panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
     expect(
-        page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3", exact=True)
+        page.get_by_role(
+            "heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy(?: \d+)?\)")
+        )
     ).to_be_visible()
     assert (
-        page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3", exact=True).count()
+        page.get_by_role(
+            "heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy(?: \d+)?\)")
+        ).count()
         == 1
     )
     expect(page.locator(".project-eyebrow")).to_have_text("Project description")
@@ -211,7 +216,9 @@ with sync_playwright() as playwright:
     plain_editor = page.get_by_label("Edit Plain source")
     plain_editor.fill(plain_editor.input_value() + "\n\nA human Plain note.")
     page.locator(".project-intro").get_by_role("button", name="Save text").click()
-    expect(page.get_by_role("button", name="Edit Plain description")).to_contain_text("A human Plain note.")
+    expect(page.get_by_role("button", name="Edit Plain description")).to_contain_text(
+        "A human Plain note."
+    )
     assert source.read_bytes() == original
     assert not errors, errors
     page.unroute_all(behavior="ignoreErrors")

@@ -16,7 +16,7 @@ It has enlarged initial capitals, a copper engraved finish, sharp local reflecti
 
 A copy of the exact approved source image must be added to the repository as `assets/sigma-copper-slogan-reference.png` (original 1672 × 941 PNG). A lossless crop of the same approved image spanning its illuminated lettering/beam is also available from the design handoff as `sigma-copper-slogan-banner.png` (1672 × 490, cropped from y=235 through y=724). Keep original source intact.
 
-**Asset handoff is mandatory.** If the source image is missing, stop and ask for it. Do not fetch a visually similar stock graphic, generate a replacement, or synthesize a near-match. A textual assignment alone cannot transfer a binary image.
+**Asset handoff is mandatory.** If the source image is missing, stop and ask for it. Do not fetch a visually similar sample graphic, generate a replacement, or synthesize a near-match. A textual assignment alone cannot transfer a binary image.
 
 ## Layout and integration
 

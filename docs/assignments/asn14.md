@@ -59,7 +59,7 @@ run.completed {draft, receipt, provenance, public_review_summary}
 
 Events must be ordered, schema-validated and escaped as plain content in the UI. A complete outcome must not be shown before it is generated. Handle stream failures and bad/missing terminal events as failures, not as implicit success.
 
-## A14 happy-path stock project (committed fixture)
+## A14 happy-path sample project (committed fixture)
 
 **The required no-strategies testing project is already checked in at**
 `examples/counting-constrained-binary-strings/project.json`.
@@ -68,11 +68,11 @@ Events must be ordered, schema-validated and escaped as plain content in the UI.
 - **Research mode:** Mathematical
 - **Research problem:** For each integer `n >= 0`, count binary strings of length `n` with no adjacent `1`s, including the empty string when `n = 0`; derive and justify a general formula or recurrence, its initial conditions, and small cases. No method is prescribed.
 - **Initial state:** Exactly **zero strategies**, `strategies: []`, `active_order: []`, and one `project.initialized` event. **Do not pre-populate a recurrence or a proposed strategy.**
-- The stock catalog discovers this project automatically alongside the existing examples. Use its current, stable **open stock project** behavior: first use installs one managed project, later uses reopen the same project and retain human-accepted edits. The canonical source JSON must remain byte-for-byte unchanged. Do not put stock projects into Recent Projects simply because they were discovered/opened.
-- **First happy-path run:** Open this stock project in SIGMA. Verify there are zero strategy rows. Choose **Generate with AI** without a starting point. The application should visibly progress through real explore/challenge/decision events and present an editable, unsaved strategy with a substantive mathematical mechanism. Cancel/reject leaves the pool at zero; saving explicitly creates exactly one persistent strategy with correct attribution and history.
+- The sample catalog discovers this project automatically alongside the existing examples. Use its current, stable **open sample project** behavior: first use installs one managed project, later uses reopen the same project and retain human-accepted edits. The canonical source JSON must remain byte-for-byte unchanged. Do not put sample projects into Recent Projects simply because they were discovered/opened.
+- **First happy-path run:** Open this sample project in SIGMA. Verify there are zero strategy rows. Choose **Generate with AI** without a starting point. The application should visibly progress through real explore/challenge/decision events and present an editable, unsaved strategy with a substantive mathematical mechanism. Cancel/reject leaves the pool at zero; saving explicitly creates exactly one persistent strategy with correct attribution and history.
 - **Second run / difference check:** With one strategy saved, generate again. The coordinator/reviewer must compare the new idea to the saved strategy; don't merely reword the same counting recurrence. Possible different mechanisms include combinatorial position selection or generating functions, but **do not hardcode or bias the generator to produce either**. Show/reject overlapping attempts based on substance rather than literal text.
 - Correctness oracle (for independent tests only; not fed to the agent as a chosen method): counts at `n=0,1,2,5,10` are `1,2,3,13,144`. A candidate's concrete tests should not contradict these values. Explanatory derivations still require proof obligations; numerical agreement alone is not a proof.
-- Validate the committed fixture with SIGMA's real project parser and stock catalog. Add explicit scenario/browser tests for stock enumeration, zero strategies before generation, an unsaved agentic draft, explicit human acceptance, post-save re-open, subsequent novelty challenge and immutable source.
+- Validate the committed fixture with SIGMA's real project parser and sample catalog. Add explicit scenario/browser tests for sample enumeration, zero strategies before generation, an unsaved agentic draft, explicit human acceptance, post-save re-open, subsequent novelty challenge and immutable source.
 
 ## Verification and acceptance
 

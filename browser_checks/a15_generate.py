@@ -37,8 +37,8 @@ with sync_playwright() as playwright:
         ),
     )
     page.goto("http://127.0.0.1:5173")
-    page.get_by_role("tab", name="Stock", exact=True).click()
-    panel = page.get_by_role("tabpanel", name="Stock", exact=True)
+    page.get_by_role("tab", name="Samples", exact=True).click()
+    panel = page.get_by_role("tabpanel", name="Samples", exact=True)
     panel.get_by_role("button", name="Open Counting Constrained Binary Strings").click()
     expect(
         page.get_by_role("heading", name=re.compile(r"Counting Constrained Binary Strings \(copy"))
@@ -115,7 +115,7 @@ with sync_playwright() as playwright:
     assert source.read_bytes() == original
     assert not errors, errors
     print(
-        "PASS real Chrome A15: one bounded request, zero-strategy empty-seed draft, accurate single-call disclosure, cancel without mutation, explicit save/reopen, different existing-context proposal, immutable stock source"
+        "PASS real Chrome A15: one bounded request, zero-strategy empty-seed draft, accurate single-call disclosure, cancel without mutation, explicit save/reopen, different existing-context proposal, immutable sample source"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

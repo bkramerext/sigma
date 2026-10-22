@@ -66,14 +66,14 @@
 .home-page .catalog-tabs button:hover:not([aria-selected="true"]) { background: #182432; color: #f3d2c0; }
 .home-page .catalog-tabs button[aria-selected="true"] { background: var(--copper-gradient); border-color: #ac7054; color: #fff2e9; text-shadow: 0 1px 1px #24120d; }
 .home-page .home-catalog .home-empty { margin: 0; padding: 14px 0 20px; border: 0; max-width: none; }
-.home-page .home-stock li { border-color: #a965483d; }
-.home-page .home-stock ul { list-style: none; padding: 0; margin: 12px 0 0; }
-.home-page .home-stock li { border-bottom: 1px solid #a965483d; }
-.home-page .home-stock strong, .home-page .home-stock small { display: block; }
-.home-page .home-stock strong { color: #e0aa8b; font: 400 17px/1.45 Georgia, serif; overflow-wrap: anywhere; }
-.home-page .home-stock small { color: #b6c2ce; font-size: 11px; font-weight: 400; margin-top: 4px; }
-.home-page .home-stock .stock-open { display: block; width: 100%; min-width: 0; padding: 12px 0; text-align: left; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: #e0aa8b; }
-.home-page .home-stock .stock-open:hover:not(:disabled) { background: #a9654824; }
+.home-page .home-samples li { border-color: #a965483d; }
+.home-page .home-samples ul { list-style: none; padding: 0; margin: 12px 0 0; }
+.home-page .home-samples li { border-bottom: 1px solid #a965483d; }
+.home-page .home-samples strong, .home-page .home-samples small { display: block; }
+.home-page .home-samples strong { color: #e0aa8b; font: 400 17px/1.45 Georgia, serif; overflow-wrap: anywhere; }
+.home-page .home-samples small { color: #b6c2ce; font-size: 11px; font-weight: 400; margin-top: 4px; }
+.home-page .home-samples .sample-open { display: block; width: 100%; min-width: 0; padding: 12px 0; text-align: left; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: #e0aa8b; }
+.home-page .home-samples .sample-open:hover:not(:disabled) { background: #a9654824; }
 @media (max-width: 400px) {
   .home-page .catalog-tabs { width: 100%; }
   .home-page .catalog-tabs button { flex: 1; padding-inline: 8px; }

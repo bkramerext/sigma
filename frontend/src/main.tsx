@@ -376,7 +376,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
 }
 
 type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; available: boolean; error: string | null };
-type StockProject = { id: string; title: string; problem: string; investigation_type: string; strategy_count: number };
+type SampleProject = { id: string; title: string; problem: string; investigation_type: string; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
@@ -419,49 +419,49 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function StockProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
-  const [projects, setProjects] = useState<StockProject[]>([]);
+function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+  const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opening, setOpening] = useState('');
   const pending = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
-    void fetch('/api/projects/stock', { signal: controller.signal }).then(async response => {
+    void fetch('/api/projects/samples', { signal: controller.signal }).then(async response => {
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? 'Stock Projects unavailable.');
+      if (!response.ok) throw new Error(data.error ?? 'Samples unavailable.');
       setProjects(data.projects); setLoading(false);
     }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
     return () => controller.abort();
   }, []);
-  async function open(stock: StockProject) {
-    if (pending.current) return; pending.current = true; setOpening(stock.id); setError('');
-    try { onOpen(await post<ProjectView>('stock/open', { stock_id: stock.id })); }
+  async function open(sample: SampleProject) {
+    if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
+    try { onOpen(await post<ProjectView>('samples/open', { sample_id: sample.id })); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
-  return <div className="empty home-empty home-stock">
-    {loading ? <p role="status">Loading stock projects…</p> : !projects.length && !error && <p>No stock projects are available.</p>}
-    <ul>{projects.map(stock => <li key={stock.id}><button className="stock-open" disabled={!!opening} onClick={() => void open(stock)} aria-label={`Open ${stock.title}`}><strong>{stock.title}</strong><small>{stock.investigation_type === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(stock.strategy_count)}</small></button></li>)}</ul>
+  return <div className="empty home-empty home-samples">
+    {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
+    <ul>{projects.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small>{sample.investigation_type === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(sample.strategy_count)}</small></button></li>)}</ul>
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
 
 function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
-  const [tab, setTab] = useState<'recent' | 'stock'>('recent');
+  const [tab, setTab] = useState<'recent' | 'samples'>('samples');
   const recent = useRef<HTMLButtonElement>(null);
-  const stock = useRef<HTMLButtonElement>(null);
-  function switchTab(next: 'recent' | 'stock') { setTab(next); (next === 'recent' ? recent : stock).current?.focus(); }
+  const samples = useRef<HTMLButtonElement>(null);
+  function switchTab(next: 'recent' | 'samples') { setTab(next); (next === 'recent' ? recent : samples).current?.focus(); }
   return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'recent' ? 'stock' : 'recent'); }
-    if (event.key === 'Home') { event.preventDefault(); switchTab('recent'); }
-    if (event.key === 'End') { event.preventDefault(); switchTab('stock'); }
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
+    if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
+    if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
+    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} onClick={() => setTab('samples')}>Samples</button>
     <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} onClick={() => setTab('recent')}>Recent</button>
-    <button ref={stock} id="stock-tab" role="tab" aria-controls="stock-panel" aria-selected={tab === 'stock'} tabIndex={tab === 'stock' ? 0 : -1} onClick={() => setTab('stock')}>Stock</button>
   </div>
     <div id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
-    <div id="stock-panel" role="tabpanel" aria-labelledby="stock-tab" hidden={tab !== 'stock'}><StockProjects onOpen={onOpen}/></div>
+    <div id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen}/></div>
   </div>;
 }
 

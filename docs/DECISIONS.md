@@ -276,23 +276,22 @@ Home/workspace artwork and strategy layouts remain unchanged. Independent DP,
 exact transfer identities and an analytic recurrence/density derivation live
 outside the unproved example. Mathematical transcript rendering is design-only.
 
-## A11: stock catalog and persistent projects
+## A11: sample catalog and persistent projects
 
-Discover shipped `examples/*/project.json` documents as a read-only catalog. A stock
-selection opens the project directly with no dialog. The application installs it
-once at a stable `<catalog-name>.sigma` path under the configured projects root,
-preserving its project and strategy identities and original bytes. Later
-selections reopen that same path, including any user edits. This keeps the
-source-controlled file intact while allowing the stock project to be run and
-edited as a regular project. Existing same-identity installations are reused;
-different occupants, symlinks and corrupt files are never overwritten or reset.
-A catalog directory with invalid project data is reported unavailable.
+Discover shipped `examples/*/project.json` documents as a read-only catalog. A sample
+selection opens directly with no dialog by creating an independent working copy
+under the configured projects root. Each copy receives its own project identity
+and a distinct path/name, while retaining the sample's strategies and event
+history. This keeps the source-controlled file intact and lets the user run and
+edit the copy as a regular project. Existing files are never overwritten; a
+catalog directory with invalid project data is reported unavailable.
 
-Recents records actual user creates/opens, excluding stock project identities. The old
+Recents records actual user creates/opens, excluding sample project identities. The old
 four-entry index and access ordering remain; reads migrate out legacy automatic
-example entries and canonical stock identities without touching project files.
+example entries and canonical sample identities without touching project files.
 The catalog lists all discoverable shipped projects, with the Jesus example placed last
-as a presentation choice. Home selects Stock by default per the later UI request.
+as a presentation choice. Home presents Samples before Recent and selects Samples
+by default per the later UI request.
 The existing index schema retains its dormant bootstrap metadata for backwards
 compatibility; no startup bootstrap or automatic example installation runs.
 
@@ -321,7 +320,7 @@ Keep the current `project.json` problem and strategy approach fields as the sole
 current authored source consumed by API, CLI, and strategy generation. Store
 format identity, authored revisions, and AI-derived Plain/Markdown revisions in
 an adjacent versioned `text-representations.json`, written with the existing
-project lock and atomic staging. This avoids rewriting v1–v6 or stock fixtures
+project lock and atomic staging. This avoids rewriting v1–v6 or sample fixtures
 when a conversion is first requested. Source revisions are keyed by the exact
 UTF-8 SHA-256 digest; a conversion records source format/digest, time, model,
 provider, thinking level and warnings. Edits promote the saved representation

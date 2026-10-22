@@ -1,4 +1,4 @@
-"""Stock catalog copies, recent-project behavior, collision safety, and API/CLI access."""
+"""Sample catalog copies, recent-project behavior, collision safety, and API/CLI access."""
 
 import json
 import os
@@ -19,12 +19,12 @@ from sigma.projects import (
     open_project,
 )
 from sigma.recents import home_projects, recent_projects, state_directory
-from sigma.stock import open_stock_project, stock_projects
+from sigma.samples import open_sample_project, sample_projects
 
 
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "examples").glob("*/project.json")}
-    catalog = stock_projects()["projects"]
+    catalog = sample_projects()["projects"]
     assert len(catalog) >= 2
     assert {entry["title"] for entry in catalog} >= {
         "Nonconsecutive Subset Sums Modulo 3",
@@ -40,18 +40,18 @@ def check(root: Path, base: Path) -> None:
         location = expanded / f"sample-{number}"
         location.mkdir()
         (location / "project.json").write_bytes(next(iter(sources.values())))
-    with patch("sigma.stock.EXAMPLES", expanded):
-        assert len(stock_projects()["projects"]) == 6
+    with patch("sigma.samples.EXAMPLES", expanded):
+        assert len(sample_projects()["projects"]) == 6
     assert not list(root.iterdir())
 
     selected = next(item for item in catalog if item["investigation_type"] == "mathematical")
     source_path = ROOT / "examples" / selected["id"] / "project.json"
-    first = open_stock_project(selected["id"])
+    first = open_sample_project(selected["id"])
     assert first.path == str(root / f"{selected['id']}.sigma")
     assert first.project.id != json.loads(sources[source_path])["id"]
     assert first.project.title.endswith(" (copy)")
     assert Path(first.path, "project.json").read_bytes() != sources[source_path]
-    second = open_stock_project(selected["id"])
+    second = open_sample_project(selected["id"])
     assert second.path != first.path and second.project.id != first.project.id
     assert second.project.title.endswith(" (copy 1)")
     assert len(list(root.glob("*.sigma"))) == 2
@@ -60,32 +60,32 @@ def check(root: Path, base: Path) -> None:
         first.project.id,
     ]
     edited = create_strategy(first.path, "My addition", "Investigate this case")
-    reopened = open_stock_project(selected["id"])
+    reopened = open_sample_project(selected["id"])
     assert reopened.project.id not in {first.project.id, second.project.id}
     assert len(reopened.project.active_order) == selected["strategy_count"]
-    assert stock_projects()["projects"][0]["strategy_count"] == selected["strategy_count"]
+    assert sample_projects()["projects"][0]["strategy_count"] == selected["strategy_count"]
     assert Path(first.path, "project.json").read_bytes() != sources[source_path]
 
-    other = open_stock_project(catalog[-1]["id"])
+    other = open_sample_project(catalog[-1]["id"])
     assert other.path != first.path and other.project.id != first.project.id
     assert len(list(root.glob("*.sigma"))) == 4
     try:
-        open_stock_project("../../unknown")
-        raise AssertionError("An unknown stock identifier was accepted")
+        open_sample_project("../../unknown")
+        raise AssertionError("An unknown sample identifier was accepted")
     except ProjectError:
         pass
 
     collision = root / f"{selected['id']}.sigma"
-    moved = root / "saved-stock.sigma"
+    moved = root / "saved-sample.sigma"
     collision.rename(moved)
     impostor = create_project(selected["id"], "Different research")
     assert impostor.path == str(collision)
-    additional = open_stock_project(selected["id"])
+    additional = open_sample_project(selected["id"])
     assert additional.path != str(collision)
     assert inspect_project(collision).project == impostor.project
     collision.rename(root / "saved-impostor.sigma")
     moved.rename(collision)
-    last_copy = open_stock_project(selected["id"])
+    last_copy = open_sample_project(selected["id"])
     assert last_copy.project.id != edited.project.id
 
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
@@ -102,14 +102,16 @@ def check(root: Path, base: Path) -> None:
         before = (state_directory() / "recents.json").read_bytes()
         assert len(api.get("/api/projects/recent").json()["projects"]) == 6
         assert (state_directory() / "recents.json").read_bytes() == before
-        assert api.get("/api/projects/stock").json()["projects"] == stock_projects()["projects"]
-        response = api.post("/api/projects/stock/open", json={"stock_id": selected["id"]})
+        assert api.get("/api/projects/samples").json()["projects"] == sample_projects()["projects"]
+        response = api.post("/api/projects/samples/open", json={"sample_id": selected["id"]})
         assert response.status_code == 200
         assert response.json()["path"] != first.path
         assert len(list(root.glob(f"{selected['id']}*.sigma"))) >= 5
-        assert api.post("/api/projects/stock/open", json={"stock_id": "unknown"}).status_code == 400
         assert (
-            api.post("/api/projects/stock/copy", json={"stock_id": selected["id"]}).status_code
+            api.post("/api/projects/samples/open", json={"sample_id": "unknown"}).status_code == 400
+        )
+        assert (
+            api.post("/api/projects/samples/copy", json={"sample_id": selected["id"]}).status_code
             == 404
         )
         assert (
@@ -139,7 +141,7 @@ def check(root: Path, base: Path) -> None:
     assert inspect_project(first.path).project == edited.project
     assert all(path.read_bytes() == original for path, original in sources.items())
     print(
-        "PASS stock discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and six-item LRU"
+        "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and six-item LRU"
     )
 
 
