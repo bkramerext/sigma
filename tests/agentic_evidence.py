@@ -48,6 +48,8 @@ def main() -> None:
         assert all(entry["project_id"] == one.project.id for entry in listed)
         exported = get_run(first, f"{32:032x}")
         assert exported["terminal"]["summary"] == "Fixture run"
+        save(first, {**record(one.project.id, 33), "terminal": None})
+        assert list_runs(first)[0]["status"] == "running"
         try:
             get_run(second, f"{32:032x}")
         except ProjectError as exc:

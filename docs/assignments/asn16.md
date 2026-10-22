@@ -1,6 +1,6 @@
 # A16: Agentic Generate Strategy
 
-**Status:** Ready for implementation. A15 is the validated single-request baseline; A16.1 evidence preservation and project JSON export are in place. A16 itself remains incomplete until the agentic workflow is integrated and verified end-to-end.
+**Status:** Implemented and verified with deterministic fixtures. No live model quality trial was run; automated checks do not make paid or account-billed calls.
 
 ## Goal
 

@@ -83,6 +83,8 @@ async def handler(request):
     seed = (context["project"] if agentic else context)["starting_point"]
     if seed == "timeout-fixture":
         await asyncio.sleep(2)
+    if agentic and seed == "delay-fixture":
+        await asyncio.sleep(3)
     if seed == "error-fixture":
         return httpx.Response(500)
     if agentic:
@@ -97,6 +99,7 @@ async def handler(request):
     }
     project_context = context.get("project", context)
     counting = project_context["research_problem"].startswith("For each integer n >= 0")
+    regions = "maximum number of regions into which" in project_context["research_problem"]
     previous = project_context["existing_strategies"] if counting else []
     if counting:
         if previous:
@@ -117,29 +120,52 @@ async def handler(request):
                 "assumptions": "The empty string counts and n below two needs explicit initial conditions.",
                 "failure_modes": "Missing the forced predecessor or mishandling n=0 invalidates the recurrence.",
             }
-    if agentic and body["text"]["format"]["name"] == "strategy_challenge":
+    if regions:
         draft = {
-            "assessment": "distinct",
-            "public_summary": "The proposed mechanism is distinct; its proof obligations remain open.",
-            "mechanism_comparison": "The candidate uses a different counting mechanism from prior strategies."
-            if counting and previous
-            else "No earlier strategy uses this mechanism."
-            if counting
-            else "The candidate uses moment constraints rather than an existing strategy mechanism.",
-            "objections": [
-                "Prove the mapping and all boundary cases."
-                if counting
-                else "Finite positivity is necessary, not a proof of the full claim."
-            ],
-            "missing_obligations": "Prove the partition or bijection is reversible and exhaustive."
-            if counting
-            else "Justify convergence and show exactly what the necessary inequalities imply.",
-            "revision_needed": False,
+            "title": "Planar graph Euler count",
+            "summary": "Count arrangement regions from vertices and edges of a planar graph.",
+            "approach": "Choose a disk containing every line intersection and truncate each line at its boundary. In a maximizing arrangement every pair intersects at a distinct vertex and no three lines concur. Count the connected planar graph's vertices and edges, including the disk boundary, then apply Euler's formula to obtain the number of interior faces. For arbitrary placements, repeated or missing pairwise intersections reduce the vertex contribution and cannot increase the face count.",
+            "first_tests": "Check n=0,1,2,3 against 1,2,4,7; these cases are checks, not a general proof.",
+            "assumptions": "The disk boundary meets each line in two points and contains all pairwise intersections; general position means no parallel pair and no triple intersection.",
+            "failure_modes": "Miscounting boundary edges or confusing the exterior face with a region changes the Euler calculation.",
         }
+    if agentic and body["text"]["format"]["name"] == "strategy_challenge":
+        if regions:
+            draft = {
+                "assessment": "distinct",
+                "public_summary": "The Euler count offers a distinct route; its graph counts and upper-bound argument need a careful derivation.",
+                "mechanism_comparison": "The saved baseline adds lines and counts new segments; this candidate encodes the arrangement as a planar graph and counts faces with Euler's formula.",
+                "objections": [
+                    "State precisely why each non-general-position coincidence cannot increase the face count."
+                ],
+                "missing_obligations": "Derive the vertex and edge counts, account for the exterior face, and justify the upper bound for arbitrary arrangements.",
+                "revision_needed": False,
+            }
+        else:
+            draft = {
+                "assessment": "distinct",
+                "public_summary": "The proposed mechanism is distinct; its proof obligations remain open.",
+                "mechanism_comparison": "The candidate uses a different counting mechanism from prior strategies."
+                if counting and previous
+                else "No earlier strategy uses this mechanism."
+                if counting
+                else "The candidate uses moment constraints rather than an existing strategy mechanism.",
+                "objections": [
+                    "Prove the mapping and all boundary cases."
+                    if counting
+                    else "Finite positivity is necessary, not a proof of the full claim."
+                ],
+                "missing_obligations": "Prove the partition or bijection is reversible and exhaustive."
+                if counting
+                else "Justify convergence and show exactly what the necessary inequalities imply.",
+                "revision_needed": False,
+            }
     elif agentic:
         draft = {
             **draft,
-            "mechanism": "A position-shift bijection converts the spacing condition into an ordinary subset count."
+            "mechanism": "Euler's formula turns the line arrangement into a planar face count."
+            if regions
+            else "A position-shift bijection converts the spacing condition into an ordinary subset count."
             if counting and previous
             else "A disjoint terminal-symbol partition maps both classes to shorter valid strings."
             if counting

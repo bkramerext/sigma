@@ -1,5 +1,36 @@
 # SIGMA status
 
+## A16 agentic Generate Strategy notebook (2026-10-22)
+
+Connected the project-page Generate Strategy composer to the existing bounded
+Explore → fresh Challenge → coordinator workflow and A16.1 evidence records.
+The UI validates ordered, run-bound SSE events and requires a complete terminal
+result before presenting a draft. It shows one current action, an ordered
+completed ledger, and the Critic's public summary, objections, comparison and
+unresolved obligations. Candidates remain editable and unsaved until explicit
+Save strategy; stopping, provider errors, malformed or incomplete streams and
+cancellation leave strategy data untouched. Browser abort disconnects the
+active stream and allows immediate retry. Error paths use the existing request
+toast. Reduced-motion preference disables the notebook filament animation.
+
+Fixed evidence export to list an active record with `running` status when its
+terminal field is still null during cancellation. Added a regression assertion.
+The browser fixture now includes a mechanism-aware Planar Regions case: its
+Euler face-count strategy is materially distinct from the Sample's saved
+incremental-counting baseline.
+
+Verification on 2026-10-22: `./sigma test` passed all scenarios, Ruff,
+formatting, Pyright (zero errors), frontend typecheck and production build.
+Real Chrome `browser_checks/a16_agentic.py` passed with the isolated mock
+provider. It verified the Maximum Regions baseline and a distinct Euler
+mechanism; Counting Constrained Binary Strings' Explore/Challenge result,
+cancelled-run evidence and immediate retry, editable draft, explicit save and
+reopen, a distinct follow-up candidate, before/after project exports, provider
+error toast recovery, missing-terminal recovery, reduced motion, and unchanged
+Sample source bytes. No real-model calls or paid/account-billed quality trial
+were run; qualitative model effectiveness remains unassessed. The test runner
+continues to emit its existing non-failing Starlette/httpx deprecation notice.
+
 ## Candidate-solution generation and Sample return behavior (2026-10-21)
 
 Generate Strategy now asks the selected model for **one concrete proposed

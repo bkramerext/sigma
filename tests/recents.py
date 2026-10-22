@@ -49,11 +49,11 @@ def check(root: Path, base: Path) -> None:
     first = open_sample_project(selected["id"])
     assert first.path == str(root / f"{selected['id']}.sigma")
     assert first.project.id != json.loads(sources[source_path])["id"]
-    assert first.project.title.endswith(" (copy)")
+    assert first.project.title.endswith(" - Working #1")
     assert Path(first.path, "project.json").read_bytes() != sources[source_path]
     second = open_sample_project(selected["id"])
     assert second.path != first.path and second.project.id != first.project.id
-    assert second.project.title.endswith(" (copy 1)")
+    assert second.project.title.endswith(" - Working #2")
     assert len(list(root.glob("*.sigma"))) == 2
     assert [item["id"] for item in recent_projects()["projects"]] == [
         second.project.id,

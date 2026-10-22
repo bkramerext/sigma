@@ -175,7 +175,7 @@ def list_runs(path_value: str | Path) -> list[dict[str, Any]]:
                 "run_id": record["run_id"],
                 "started_at": record["started_at"],
                 "finished_at": record.get("finished_at"),
-                "status": record.get("terminal", {}).get("status", "running"),
+                "status": (record.get("terminal") or {}).get("status", "running"),
                 "project_id": record["project_id"],
             }
             for _, _, record in reversed(_entries(directory, view.project.id))

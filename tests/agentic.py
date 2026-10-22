@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from sigma import agentic, chatgpt_auth
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.agentic_evidence import save as save_evidence
-from sigma.api import agentic_runs_view, export_project_view, app
+from sigma.api import agentic_runs_view, app, export_project_view
 from sigma.projects import ProjectError, create_strategy, inspect_project
 from sigma.proposals import accepted_provenance
 from sigma.samples import open_sample_project, sample_projects
@@ -119,7 +119,7 @@ async def main_async(root: Path):
     before = (Path(path) / "project.json").read_bytes()
     assert before != source_before
     assert view.project.id != "counting-constrained-binary-strings"
-    assert view.project.title.endswith(" (copy)")
+    assert view.project.title.endswith(" - Working #1")
 
     events, calls = await exercise(path, [CANDIDATE, DISTINCT], before)
     assert [call["role"] for call in calls] == ["strategy_explore", "strategy_challenge"]
@@ -143,7 +143,9 @@ async def main_async(root: Path):
     export = export_project_view(path)
     assert export["export_version"] == 1
     assert export["project"]["id"] == view.project.id
-    assert not export["project"]["strategies"]  # asdict preserves the dataclass tuple; HTTP JSON uses [].
+    assert not export["project"][
+        "strategies"
+    ]  # asdict preserves the dataclass tuple; HTTP JSON uses [].
     assert any(run["run_id"] == events[-1]["run_id"] for run in export["agentic_runs"])
     assert any(run["steps"][0]["output"] == CANDIDATE for run in export["agentic_runs"])
     assert any(event["type"] == "activity.started" for event in events)

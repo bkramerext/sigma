@@ -785,13 +785,49 @@ function StrategyCreationActions({ buttonRef, disabled, onManual, onAI }: {
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
+type AgenticEvent = { type: string; sequence: number; run_id: string; kind?: 'explore' | 'challenge' | 'revise' | null; attempt?: number | null; summary?: string | null; outcome?: 'revise' | 'retry' | 'present' | 'stop' | null; max_calls?: number | null; draft?: ProposalResult['draft'] | null; provenance?: ProposalResult['provenance'] | null; receipt?: string | null; assessment?: 'distinct' | 'overlapping' | 'unconvincing' | null; objections?: string[] | null; missing_obligations?: string | null; mechanism_comparison?: string | null };
+const activityLabels = { explore: 'Exploring a candidate', challenge: 'Independent challenge', revise: 'Targeted revision' } as const;
+async function readAgenticStream(response: Response, onEvent: (event: AgenticEvent) => void): Promise<AgenticEvent> {
+  if (!response.ok) { let detail = `HTTP ${response.status}`; try { const body = await response.json(); detail = body.error ?? body.detail ?? detail; } catch {} throw new Error(String(detail)); }
+  if (!response.body) throw new Error('The server returned no progress stream. Nothing was saved.');
+  const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let sequence = 0; let runId = ''; let terminal: AgenticEvent | null = null;
+  const consume = (chunk: string) => {
+    buffer += chunk; const records = buffer.split(/\r?\n\r?\n/); buffer = records.pop() ?? '';
+    for (const record of records) {
+      const data = record.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+      if (!data) continue;
+      let event: AgenticEvent; try { event = JSON.parse(data) as AgenticEvent; } catch { throw new Error('The server sent malformed progress data. You can retry; nothing was saved.'); }
+      if (!['run.started', 'activity.started', 'activity.completed', 'decision', 'run.completed', 'run.stopped', 'run.failed'].includes(event?.type)) throw new Error('The server sent an unknown progress event. You can retry; nothing was saved.');
+      if (!event || typeof event.type !== 'string' || !Number.isInteger(event.sequence) || event.sequence !== sequence + 1 || typeof event.run_id !== 'string' || !/^[0-9a-f]{32}$/.test(event.run_id)) throw new Error('The progress stream was incomplete or out of order. You can retry; nothing was saved.');
+      if (runId && event.run_id !== runId) throw new Error('The progress stream changed run identity. You can retry; nothing was saved.');
+      if (terminal) throw new Error('The server sent progress after its terminal event. You can retry; nothing was saved.');
+      sequence = event.sequence; runId = event.run_id;
+      const activityKind = event.kind === 'explore' || event.kind === 'challenge' || event.kind === 'revise';
+      if (event.type === 'run.started' && event.max_calls !== 6) throw new Error('The server sent an invalid run limit. You can retry; nothing was saved.');
+      if (event.type.startsWith('activity.') && (!activityKind || !Number.isInteger(event.attempt) || (event.attempt ?? 0) < 1 || (event.attempt ?? 0) > 2)) throw new Error('The server sent an invalid activity event. You can retry; nothing was saved.');
+      if (event.type === 'activity.completed' && typeof event.summary !== 'string') throw new Error('The server sent an incomplete activity result. You can retry; nothing was saved.');
+      if (event.type === 'activity.completed' && event.kind === 'challenge' && (!event.assessment || !Array.isArray(event.objections) || typeof event.missing_obligations !== 'string' || typeof event.mechanism_comparison !== 'string')) throw new Error('The server sent an incomplete reviewer summary. You can retry; nothing was saved.');
+      if (event.type === 'decision' && (!['revise', 'retry', 'present', 'stop'].includes(event.outcome ?? '') || typeof event.summary !== 'string')) throw new Error('The server sent an invalid coordinator decision. You can retry; nothing was saved.');
+      if (['run.stopped', 'run.failed'].includes(event.type) && typeof event.summary !== 'string') throw new Error('The server sent an incomplete terminal result. You can retry; nothing was saved.');
+      if (event.type === 'run.completed') {
+        const fields = ['title', 'summary', 'approach', 'first_tests', 'assumptions', 'failure_modes'];
+        if (!event.draft || typeof event.receipt !== 'string' || !event.receipt || !event.provenance || typeof event.provenance.provider !== 'string' || typeof event.provenance.model !== 'string' || fields.some(key => typeof event.draft?.[key as keyof ProposalResult['draft']] !== 'string')) throw new Error('The completed stream did not include a complete draft and receipt. You can retry; nothing was saved.');
+      }
+      if (['run.completed', 'run.stopped', 'run.failed'].includes(event.type)) terminal = event;
+      onEvent(event);
+    }
+  };
+  try { while (true) { const { done, value } = await reader.read(); if (done) break; consume(decoder.decode(value, { stream: true })); } consume(decoder.decode()); }
+  catch (error) { await reader.cancel().catch(() => {}); throw error; }
+  if (buffer.trim()) consume('\n\n');
+  if (!terminal) throw new Error('The progress stream ended without a final result. You can retry; nothing was saved.');
+  return terminal;
+}
 function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
   path: string; projectId: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
 }) {
   const composer = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
-  const activeRequestId = useRef<string | null>(null);
-  const cancellationPending = useRef(false);
   const submitting = useRef(false);
   const [config, setConfig] = useState<{ available: boolean; provider: string; mode: string; binding: string; project_id: string; model: string; reasoning_effort: string; message: string } | null>(null);
   const [seed, setSeed] = useState('');
@@ -805,6 +841,9 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
   const [cancelling, setCancelling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [activities, setActivities] = useState<string[]>([]);
+  const [currentActivity, setCurrentActivity] = useState('');
+  const [review, setReview] = useState<AgenticEvent | null>(null);
   useEffect(() => {
     composer.current?.querySelector('textarea')?.focus();
     const controller = new AbortController();
@@ -820,31 +859,16 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
   async function cancel() {
     if (saving || cancelling) return;
     if (busy) {
-      const requestId = activeRequestId.current;
+      setCancelling(true);
+      if (ai.connecting) ai.cancelSignIn();
       request.current?.abort();
-      if (!requestId) {
-        if (ai.connecting) ai.cancelSignIn();
-        setError('Request cancelled. Nothing was saved.');
-        return;
-      }
-      cancellationPending.current = true; setCancelling(true); setError('');
-      try {
-        await post<{ cancelled: boolean }>('proposals/cancel', { request_id: requestId });
-        setError('Request cancelled. The provider may already have processed it; nothing was saved. You can retry.');
-        activeRequestId.current = null;
-      } catch (error) {
-        setError(`Could not confirm cancellation. Retry cancellation before generating again. ${errorMessage(error)}`);
-      } finally {
-        cancellationPending.current = false; setCancelling(false);
-        if (!activeRequestId.current) { submitting.current = false; setBusy(false); }
-      }
       return;
     }
     lifetime.current.abort(); onCancel();
   }
   async function generate() {
     if (submitting.current) return; submitting.current = true;
-    const controller = new AbortController(); request.current = controller; setBusy(true); setError('');
+    const controller = new AbortController(); request.current = controller; setBusy(true); setError(''); setActivities([]); setCurrentActivity('Preparing run'); setReview(null);
     try {
       if (needsConnection) {
         const connected = await ai.signIn({ accountId: ai.info?.active_account, enablePlan: ai.info?.status === 'plan_not_permitted', signal: lifetime.current.signal });
@@ -856,19 +880,30 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
       if (latest.project_id !== projectId) throw new Error('Project identity changed during sign-in. Reopen it before generating; your text is retained.');
       if (!latest.available) throw new Error(latest.message);
       if (lifetime.current.signal.aborted) return;
-      const requestId = crypto.randomUUID(); activeRequestId.current = requestId;
-      const next = await post<ProposalResult>('proposals', { path, seed, expected_binding: latest.binding, expected_project_id: projectId, request_id: requestId }, controller.signal);
-      if (controller.signal.aborted) return;
-      if (!next?.draft || !next.receipt || !next.provenance || !['title', 'summary', 'approach', 'first_tests', 'assumptions', 'failure_modes'].every(key => typeof next.draft[key as keyof ProposalResult['draft']] === 'string')) throw new Error('The local server returned an incomplete strategy draft. Nothing was saved.');
-      setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary);
-      setApproach(next.draft.approach);
-      requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
-    } catch (error) { if (!controller.signal.aborted) setError(errorMessage(error)); }
+      const stream = await fetch('/api/projects/proposals/agentic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, seed, expected_binding: latest.binding, expected_project_id: projectId }), signal: controller.signal });
+      const terminal = await readAgenticStream(stream, event => {
+        if (event.type === 'activity.started' && event.kind) setCurrentActivity(`${activityLabels[event.kind]}${event.attempt ? ` · attempt ${event.attempt}` : ''}`);
+        if (event.type === 'activity.completed' && event.kind) {
+          setActivities(previous => [...previous, `${activityLabels[event.kind!]}${event.attempt ? ` · attempt ${event.attempt}` : ''}: ${event.summary ?? 'completed'}`]);
+          if (event.kind === 'challenge') setReview(event);
+          setCurrentActivity('');
+        }
+        if (event.type === 'decision') { setActivities(previous => [...previous, `Decision · ${event.outcome}: ${event.summary}`]); setCurrentActivity(''); }
+        if (event.type === 'run.started') setCurrentActivity('Starting bounded run · up to 6 model calls');
+      });
+      if (terminal.type === 'run.completed' && terminal.draft && terminal.receipt && terminal.provenance) {
+        const next: ProposalResult = { draft: terminal.draft, receipt: terminal.receipt, provenance: terminal.provenance };
+        setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary); setApproach(next.draft.approach); setCurrentActivity('Ready for your review');
+        requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
+      } else if (terminal.type === 'run.stopped') { setCurrentActivity('Run stopped'); setError(`${terminal.summary ?? 'No viable candidate was found.'} Nothing was saved. You can retry with different guidance.`); }
+      else { setCurrentActivity('Run failed'); throw new Error(`${terminal.summary ?? 'The run failed.'} Nothing was saved.`); }
+    } catch (error) {
+      if (controller.signal.aborted) { setCurrentActivity('Run cancelled'); setError('Run cancelled. Nothing was saved. If generation had started, its evidence will be retained in project export. You can retry.'); }
+      else { const message = errorMessage(error); setCurrentActivity('Run could not be completed'); setError(message); reportRequestFailure(message); }
+    }
     finally { if (request.current === controller) {
       request.current = null;
-      if (!cancellationPending.current) {
-        submitting.current = false; setBusy(false); activeRequestId.current = null;
-      }
+      submitting.current = false; setBusy(false); setCancelling(false);
     } }
   }
   async function save(event: FormEvent) {
@@ -879,16 +914,22 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
     <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Saving…' : 'Save strategy'}</button>}<button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
-    {!busy && <p id="proposal-help" className="hint">Generate one candidate solution and review the editable, unsaved draft before saving. Its viability has not been evaluated.</p>}
-    <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
+    {!busy && <p id="proposal-help" className="hint">Explore and independently challenge a candidate, then review the editable, unsaved draft before saving.</p>}
+    <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'} · maximum 6 calls / 2 candidates{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point (optional)</summary>
     <label htmlFor="proposal-seed" className="sr-only">Starting point (optional)</label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
     <p id="seed-help" className="hint">An optional idea or proposed mechanism, not an assumption to accept uncritically. Leave empty for an independent solution.</p>
-    <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI in one request. Cancelling stops local work; provider usage may already count toward the selected plan or billing mode.</p>
+    <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Cancelling disconnects the active run; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
-    <p className="sr-only" role="status" aria-live="polite">{busy ? 'Generating one strategy…' : ''}</p>
+    {(busy || activities.length > 0 || currentActivity) && <section className="agentic-activity" aria-label="Generation progress" aria-live="polite">
+      {busy && <span className="agentic-filament" aria-hidden="true"/>}
+      {currentActivity && <p className="agentic-current">{currentActivity}</p>}
+      {activities.length > 0 && <ol>{activities.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ol>}
+    </section>}
+    {review && <section className="agentic-review" aria-label="Independent review"><strong>Independent review · {review.assessment}</strong><p>{review.summary}</p><p>{review.mechanism_comparison}</p><ul>{review.objections?.map((objection, index) => <li key={index}>{objection}</li>)}</ul><p><strong>Still to establish:</strong> {review.missing_obligations}</p></section>}
+    <p className="sr-only" role="status" aria-live="polite">{busy ? currentActivity || 'Generating strategy…' : ''}</p>
     <PlanWelcome/>
     {ai.connecting && <button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button>}
     {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
@@ -900,7 +941,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
         <label htmlFor="proposal-summary">Description</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
         <label htmlFor="proposal-approach">Plan</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
-        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; it does not establish viability.</p>
+        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; reviewer obligations remain open as shown above.</p>
       </fieldset>}
     </form>
   </div>;
