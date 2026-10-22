@@ -127,3 +127,22 @@
 .workspace-page .agentic-review ul { padding-left: 20px; }
 @keyframes agentic-sweep { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .workspace-page .agentic-filament { animation: none; transform: none; background: #b68457; } }
+
+/* Match the home New Project button, including the attached dropdown. */
+.workspace-page .new-strategy-split > .copper-button,
+.workspace-page .new-strategy-split > details > summary { min-height: 50px; font-size: 15px; }
+.workspace-page .new-strategy-split > .copper-button {
+  padding: 14px 20px; border-radius: 7px 0 0 7px; border-right: 0;
+}
+.workspace-page .new-strategy-split > details > summary {
+  width: 44px; padding: 0; color: #e6af92; background: #07111ee8;
+  border: 1px solid #a96548; border-radius: 0 7px 7px 0;
+  box-shadow: inset 0 1px 0 #cd92702b;
+}
+.workspace-page .new-strategy-split > details > summary:hover,
+.workspace-page .new-strategy-split > details[open] > summary {
+  color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054;
+}
+.workspace-page .new-strategy-split > details > summary:focus-visible {
+  outline: 2px solid #e5a785; outline-offset: 3px;
+}
