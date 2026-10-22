@@ -29,7 +29,7 @@
 .workspace-page .pool-heading { flex-direction: row; align-items: center; flex-wrap: wrap; }
 .workspace-page .pool-heading h2 { font-size: 30px; }
 .workspace-page .strategies-intro { font-size: 15px; margin: 6px 0 18px; }
-.workspace-page .strategies-table { border: 1px solid var(--workspace-line); border-radius: 12px; }
+.workspace-page .strategies-table { border: 2px solid var(--workspace-line); border-radius: 12px; }
 .workspace-page .strategy-columns { display: grid; grid-template-columns: minmax(0, 1fr) 266px; padding: 14px 24px; text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .strategy-list { background: transparent; padding: 0; margin: 0; border: 0; border-radius: 12px; }
 .workspace-page .strategy-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 190px 44px; column-gap: 16px; align-items: start; padding: 15px 36px 15px 24px; min-height: 78px; border-top: 1px solid var(--workspace-line); transition: background-color .15s; }
