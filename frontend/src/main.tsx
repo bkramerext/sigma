@@ -910,7 +910,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
         setResult(next); setTitle(next.draft.title); setSummary(next.draft.summary); setApproach(next.draft.approach); setCurrentActivity('Ready for your review');
         requestAnimationFrame(() => document.getElementById('proposal-title')?.focus());
       } else if (terminal.type === 'run.stopped') { setCurrentActivity('Run stopped'); setError(`${terminal.summary ?? 'No viable candidate was found.'} Nothing was saved. You can retry with different guidance.`); }
-      else { setCurrentActivity('Run failed'); throw new Error(`${terminal.summary ?? 'The run failed.'} Nothing was saved.`); }
+      else { setCurrentActivity('Run failed'); throw new Error(terminal.summary ?? 'The run failed. No strategy was saved.'); }
     } catch (error) {
       if (controller.signal.aborted) { setCurrentActivity('Run cancelled'); setError('Run cancelled. Nothing was saved. If generation had started, its evidence will be retained in project export. You can retry.'); }
       else { const message = errorMessage(error); setCurrentActivity('Run could not be completed'); setError(message); reportRequestFailure(message); }
