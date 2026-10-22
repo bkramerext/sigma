@@ -170,6 +170,7 @@
   opacity: 0; visibility: hidden; transform: translateY(-2px);
   transition: opacity 100ms ease, transform 100ms ease, visibility 100ms;
 }
+.workspace-page .project-text-actions .sigma-render-tooltip-wrap:last-child .sigma-render-tooltip { left: auto; right: 0; }
 .workspace-page .sigma-render-tooltip-wrap:hover .sigma-render-tooltip,
 .workspace-page .sigma-render-tooltip-wrap:focus-within .sigma-render-tooltip {
   opacity: 1; visibility: visible; transform: translateY(0);
