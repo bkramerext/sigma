@@ -663,24 +663,12 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
   </form>;
 }
 
-function SplitStrategyAction({ buttonRef, disabled, onManual, onAI }: {
+function StrategyCreationActions({ buttonRef, disabled, onManual, onAI }: {
   buttonRef: React.RefObject<HTMLButtonElement | null>; disabled: boolean; onManual: () => void; onAI: () => void;
 }) {
-  const menu = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !menu.current?.contains(event.target) && menu.current) menu.current.open = false; };
-    document.addEventListener('pointerdown', outside); return () => document.removeEventListener('pointerdown', outside);
-  }, []);
-  function choose(action: () => void) { if (disabled) return; if (menu.current) menu.current.open = false; action(); }
-  return <div className="new-strategy-split">
-    <button className="copper-button" ref={buttonRef} disabled={disabled} onClick={() => choose(onManual)} title="Write manually">New Strategy</button>
-    <details ref={menu} onKeyDown={event => { if (event.key === 'Escape' && menu.current) { event.preventDefault(); menu.current.open = false; menu.current.querySelector('summary')?.focus(); } }}>
-      <summary aria-label="New Strategy options" aria-disabled={disabled} onClick={event => { if (disabled) event.preventDefault(); }}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-      <div className="strategy-choice-menu" aria-label="Choose how to create a strategy">
-        <button aria-label="Write manually" disabled={disabled} onClick={() => choose(onManual)}><span aria-hidden="true">✎</span><span>Write manually<small>Capture your own approach</small></span></button>
-        <button aria-label="Generate with AI" disabled={disabled} onClick={() => choose(onAI)}><span aria-hidden="true">✧</span><span>Generate with AI<small>Start from the research problem or an idea</small></span></button>
-      </div>
-    </details>
+  return <div className="strategy-heading-actions">
+    <button type="button" className="text-view-link" ref={buttonRef} disabled={disabled} onClick={onManual}>New</button>
+    <button type="button" className="text-view-link" disabled={disabled} onClick={onAI}>Generate</button>
   </div>;
 }
 
@@ -981,7 +969,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <section className="pool" aria-labelledby="pool-heading">
       <div className="pool-heading">
         <h2 id="pool-heading" tabIndex={-1}>Strategies</h2>
-        <SplitStrategyAction buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
+        <StrategyCreationActions buttonRef={newButton} disabled={editing || generating || projectEditing || closing || ordering || !!dragId} onManual={() => { setManualDraft(undefined); setEditing(true); }} onAI={() => setGenerating(true)}/>
       </div>
       <p className="hint strategies-intro">Independent avenues of investigation. Stages are manually tracked.</p>
       <p className="sr-only" role="status">{announcement}</p>
