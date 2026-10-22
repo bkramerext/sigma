@@ -18,6 +18,8 @@ Read `docs/HUMAN-AI-INTERACTION.md` and current `docs/STATUS.md` before implemen
 
 ## Strategy assessments and strategy enable/disable
 
+- Add a separate hard-coded runtime constant to disable the **Project details & history** section, analogous to the existing workspace-sidebar feature flag. When disabled, the entire section (including event history) is omitted from the UI; when re-enabled in code, its existing behavior returns. Keep this as a simple code-level flag, not a user-facing setting, and add coverage for both flag states where practical.
+
 - Strategy names must be unique within a project, including when forking. If a fork would duplicate an existing name, assign a clear unique default (for example, “Forked strategy 2”) or prompt for a unique name. Validate uniqueness case-insensitively after trimming whitespace in both UI and backend, including rename/edit and concurrent requests. Show a clear inline error when a manually entered name conflicts; do not silently overwrite or create duplicates. Add regression tests for fork, rename, case/whitespace collisions, and backend enforcement.
 
 - Hide the strategy drag/reorder thumb when the project has only one strategy, since reordering is not meaningful. Show it when there are at least two strategies and retain existing drag behavior and accessible labeling.
