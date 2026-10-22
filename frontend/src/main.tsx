@@ -487,7 +487,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
   const [storedSelected, setSelected] = useState<TextDisplay>(() => window.localStorage.getItem(preferenceKey) === 'rendered' ? 'rendered' : 'plain');
-  const selected: TextDisplay = mathematical ? storedSelected : 'plain';
+  const selected: TextDisplay = storedSelected;
   const [rendering, setRendering] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editingFromRendered, setEditingFromRendered] = useState(false);
@@ -572,7 +572,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     requestAnimationFrame(() => exportTrigger.current?.focus());
   }
   const viewActions = <>
-    {mathematical && <TooltipWrap>
+    {<TooltipWrap>
       <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
       aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} aria-describedby={renderTooltipId}
