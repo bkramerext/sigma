@@ -135,7 +135,7 @@ function TextViews({ path, scope, strategyId, source, contentClass, onSaved, mat
   const name = scope === 'project' ? 'research problem' : 'strategy approach';
   return <div className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     <div className="text-view-controls">
-      {mathematical && <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}`}
+      {mathematical && <button type="button" className={`sigma-render-toggle${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
         aria-label={selected === 'rendered' ? `Show plain ${name}` : `Render ${name} as Markdown`}
         aria-pressed={selected === 'rendered' || rendering} title={selected === 'rendered' ? 'Show plain text' : 'Render Markdown'}
         disabled={editing || busy} onClick={() => {
