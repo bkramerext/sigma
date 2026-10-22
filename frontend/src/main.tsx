@@ -1039,7 +1039,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
 }
 
 function StrategyCommands({ strategy, onCommand, disabled = false }: {
-  strategy: Strategy; onCommand: (mode: 'remove' | 'stage' | 'fork', strategy: Strategy) => void; disabled?: boolean;
+  strategy: Strategy; onCommand: (mode: 'remove' | 'fork', strategy: Strategy) => void; disabled?: boolean;
 }) {
   const disclosure = useRef<HTMLDetailsElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1092,7 +1092,6 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
       <button role="menuitem" className="secondary" disabled title="Scheduling is not available yet" aria-describedby={`schedule-explanation-${strategy.id}`}>Schedule</button>
       <button role="menuitem" className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
       <button role="menuitem" className="secondary" disabled title="Artifact reporting is not available yet" aria-describedby={`report-explanation-${strategy.id}`}>Report artifact</button>
-      <button role="menuitem" className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('stage', strategy); }}>Change stage</button>
       <hr role="separator"/>
       <button role="menuitem" className="secondary destructive-action" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
       <span className="sr-only" id={`schedule-explanation-${strategy.id}`}>Scheduling is not available yet.</span>
@@ -1102,14 +1101,13 @@ function StrategyCommands({ strategy, onCommand, disabled = false }: {
 }
 
 function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
-  mode: 'edit' | 'remove' | 'stage'; strategy: Strategy; path: string;
-  onSaved: (view: ProjectView, mode: 'edit' | 'remove' | 'stage', strategy: Strategy) => void;
+  mode: 'edit' | 'remove'; strategy: Strategy; path: string;
+  onSaved: (view: ProjectView, mode: 'edit' | 'remove', strategy: Strategy) => void;
   onCancel: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
-  const [stage, setStage] = useState<Stage>(strategy.stage);
   const submitting = useRef(false);
   const [title, setTitle] = useState(strategy.title);
   const [approach, setApproach] = useState(strategy.approach);
@@ -1118,14 +1116,13 @@ function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
   useEffect(() => {
     dialog.current?.showModal();
     if (mode === 'edit') nameInput.current?.focus();
-    else if (mode === 'stage') dialog.current?.querySelector('select')?.focus();
     else cancelButton.current?.focus();
   }, [mode]);
   async function save(event: FormEvent) {
     event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
     try {
       const next = await post<ProjectView>(`strategies/${mode}`, {
-        path, strategy_id: strategy.id, ...(mode === 'edit' ? { title, approach } : mode === 'stage' ? { stage } : {}),
+        path, strategy_id: strategy.id, ...(mode === 'edit' ? { title, approach } : {}),
       });
       onSaved(next, mode, strategy);
     } catch (error) { setError(errorMessage(error)); }
@@ -1135,13 +1132,12 @@ function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
     aria-describedby="strategy-dialog-description" onCancel={event => {
       event.preventDefault(); if (!busy) onCancel();
     }}>
-    <h2 id="strategy-dialog-title">{mode === 'edit' ? 'Edit strategy' : mode === 'stage' ? 'Change stage' : `Remove “${strategy.title}”?`}</h2>
+    <h2 id="strategy-dialog-title">{mode === 'edit' ? 'Edit strategy' : `Remove “${strategy.title}”?`}</h2>
     <p id="strategy-dialog-description" className="hint">{mode === 'edit'
       ? 'Update the name and description. Earlier text remains in project history.'
-      : mode === 'stage' ? 'Stages are manually tracked. Exploring means you are investigating; no AI agent is running.' : 'This strategy will leave Strategies. Its idea and history will be kept in the project.'}</p>
+      : 'This strategy will leave Strategies. Its idea and history will be kept in the project.'}</p>
     <form onSubmit={save}>
       <fieldset disabled={busy}>
-        {mode === 'stage' && <><label htmlFor="manual-stage">Manually tracked stage</label><select autoFocus id="manual-stage" value={stage} onChange={event => setStage(event.target.value as Stage)}>{Object.entries(stageLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></>}
         {mode === 'edit' && <>
           <label htmlFor="edit-strategy-name">Name</label>
           <input ref={nameInput} id="edit-strategy-name" value={title} required maxLength={200}
@@ -1575,14 +1571,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
-        <div className="strategy-columns" aria-hidden="true"><span>Strategy</span><span>Stage</span></div>
+        <div className="strategy-columns" aria-hidden="true"><span>Strategy</span></div>
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
             <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => { if (ordering || dragId || activeMode !== null) return; if (mode === 'fork') { if (!enterMode('new-strategy')) return; expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>} />
             <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
           </div>
-          <span className={`stage-label stage-${strategy.stage}`} title="Manually tracked; no strategy runner"><i aria-hidden="true"/>{stageLabels[strategy.stage]}</span>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
