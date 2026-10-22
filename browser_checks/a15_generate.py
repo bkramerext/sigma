@@ -71,7 +71,7 @@ with sync_playwright() as playwright:
     assert "First tests" not in solution
     assert "Ways this could fail" not in solution
     assert "Assumptions" not in solution
-    expect(dialog).to_contain_text("not independently reviewed or verified")
+    expect(dialog).to_contain_text("Its viability has not been evaluated")
     assert dialog.locator(".agentic-activity").count() == 0
     assert len(generation_requests) == 1
     assert state.read_bytes() == before
@@ -105,11 +105,13 @@ with sync_playwright() as playwright:
     dialog.get_by_label("Starting point (optional)").fill("retry-after-cancel")
     dialog.get_by_role("button", name="Generate", exact=True).click()
     expect(dialog.get_by_label("Title", exact=True)).to_have_value("Terminal-symbol recurrence")
+    accepted_solution = dialog.get_by_label("Proposed solution", exact=True).input_value()
     dialog.get_by_label("Title", exact=True).fill("Human accepted recurrence")
     dialog.get_by_role("button", name="Save strategy", exact=True).click()
     expect(page.locator(".strategy-row")).to_have_count(1)
     saved = json.loads(state.read_bytes())
     assert saved["strategies"][0]["title"] == "Human accepted recurrence"
+    assert saved["strategies"][0]["approach"] == accepted_solution
     assert saved["strategies"][0]["provenance"]["provider"] == "openai"
     assert len(generation_requests) == 4
     page.reload()
