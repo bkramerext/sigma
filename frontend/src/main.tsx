@@ -837,8 +837,8 @@ async function readAgenticStream(response: Response, onEvent: (event: AgenticEve
   if (!terminal) throw new Error('The progress stream ended without a final result. You can retry; nothing was saved.');
   return terminal;
 }
-function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
-  path: string; projectId: string; onSaved: (view: ProjectView) => void; onCancel: () => void;
+function GenerateStrategy({ path, projectId, onSaved, onCancel, onNew }: {
+  path: string; projectId: string; onSaved: (view: ProjectView) => void; onCancel: () => void; onNew: () => void;
 }) {
   const composer = useRef<HTMLDivElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -927,8 +927,8 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
     finally { submitting.current = false; setSaving(false); }
   }
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Saving…' : 'Save'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
-    {!busy && <p id="proposal-help" className="hint">Explore and independently challenge a candidate, then review the editable, unsaved draft before saving.</p>}
+    <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-new" disabled={busy || saving || cancelling} onClick={onNew}>New</button><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Accepting…' : 'Accept'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
+    {!busy && <p id="proposal-help" className="hint">Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.</p>}
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'} · maximum 6 calls / 2 candidates{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point (optional)</summary>
@@ -955,7 +955,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel }: {
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
         <label htmlFor="proposal-summary">Description</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
         <label htmlFor="proposal-approach">Plan</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
-        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Saving records your acceptance and edits; reviewer obligations remain open as shown above.</p>
+        <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Accepting saves your edits and records your acceptance; reviewer obligations remain open as shown above.</p>
       </fieldset>}
     </form>
   </div>;
@@ -1095,7 +1095,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         setView(next); setEditing(false); setAnnouncement(`Strategy saved: ${strategy.title}`);
         setFocusStrategy(strategy.id);
       }}/>}
-      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
+      {generating && <GenerateStrategy path={view.path} projectId={view.project.id} onNew={() => { setGenerating(false); setManualDraft(undefined); setEditing(true); }} onCancel={() => { setGenerating(false); requestAnimationFrame(() => newButton.current?.focus()); }} onSaved={next => {
         const strategy = next.project.strategies.at(-1)!; setView(next); setGenerating(false); setFocusStrategy(strategy.id); setAnnouncement('AI-assisted strategy accepted and saved.');
       }}/>}</div>
       {strategies.length ? <div className="strategies-table">
