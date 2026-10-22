@@ -1041,63 +1041,12 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
 function StrategyCommands({ strategy, onCommand, disabled = false }: {
   strategy: Strategy; onCommand: (mode: 'remove' | 'fork', strategy: Strategy) => void; disabled?: boolean;
 }) {
-  const disclosure = useRef<HTMLDetailsElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  function positionMenu() {
-    const element = disclosure.current;
-    const panel = element?.querySelector<HTMLElement>('.command-panel');
-    const trigger = element?.querySelector('summary');
-    if (!element?.open || !panel || !trigger) return;
-    if (window.innerWidth <= 700) { panel.removeAttribute('style'); return; }
-    const rect = trigger.getBoundingClientRect();
-    const height = panel.getBoundingClientRect().height;
-    panel.style.position = 'fixed'; panel.style.right = 'auto'; panel.style.bottom = 'auto';
-    panel.style.top = `${Math.max(16, Math.min(rect.bottom + 4, window.innerHeight - height - 16))}px`;
-    panel.style.left = `${Math.max(16, Math.min(rect.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 16))}px`;
-  }
-  useEffect(() => {
-    function outside(event: PointerEvent) {
-      if (event.target instanceof Node && !disclosure.current?.contains(event.target) && disclosure.current) {
-        disclosure.current.open = false;
-      }
-    }
-    document.addEventListener('pointerdown', outside);
-    return () => document.removeEventListener('pointerdown', outside);
-  }, []);
-  return <details className="strategy-commands" name="strategy-commands" ref={disclosure} onToggle={() => {
-    setMenuOpen(disclosure.current?.open ?? false);
-    positionMenu();
-    if (disclosure.current?.open) requestAnimationFrame(() => disclosure.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus());
-  }} onClick={() => requestAnimationFrame(positionMenu)} onKeyDown={event => {
-    if (event.key === 'Escape' && disclosure.current) {
-      event.preventDefault(); event.stopPropagation(); disclosure.current.open = false;
-      disclosure.current.querySelector('summary')?.focus();
-    }
-  }}>
-    <summary id={`commands-${strategy.id}`} role="button" className="secondary strategy-toggle" aria-label={`More actions for ${strategy.title}`} aria-haspopup="menu" aria-expanded={menuOpen} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}>
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
-        <circle cx="8" cy="3" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="13" r="1.3" fill="currentColor"/>
-      </svg>
-    </summary>
-    <div className="command-panel" role="menu" aria-labelledby={`commands-${strategy.id}`} onKeyDown={event => {
-      const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
-      const index = items.indexOf(document.activeElement as HTMLButtonElement);
-      let next = -1;
-      if (event.key === 'ArrowDown') next = (index + 1) % items.length;
-      else if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length;
-      else if (event.key === 'Home') next = 0;
-      else if (event.key === 'End') next = items.length - 1;
-      if (next >= 0 && items.length) { event.preventDefault(); items[next].focus(); }
-    }}>
-      <button role="menuitem" className="secondary" disabled title="Scheduling is not available yet" aria-describedby={`schedule-explanation-${strategy.id}`}>Schedule</button>
-      <button role="menuitem" className="secondary" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('fork', strategy); }}>Fork</button>
-      <button role="menuitem" className="secondary" disabled title="Artifact reporting is not available yet" aria-describedby={`report-explanation-${strategy.id}`}>Report artifact</button>
-      <hr role="separator"/>
-      <button role="menuitem" className="secondary destructive-action" disabled={disabled} onClick={() => { if (disclosure.current) disclosure.current.open = false; onCommand('remove', strategy); }}>Remove</button>
-      <span className="sr-only" id={`schedule-explanation-${strategy.id}`}>Scheduling is not available yet.</span>
-      <span className="sr-only" id={`report-explanation-${strategy.id}`}>Artifact reporting is not available yet.</span>
-    </div>
-  </details>;
+  return <span className="strategy-inline-commands">
+    <button type="button" className="text-view-link" disabled={disabled}
+      onClick={() => onCommand('fork', strategy)}>Fork</button>
+    <button type="button" id={`commands-${strategy.id}`} className="text-view-link destructive-action" disabled={disabled}
+      onClick={() => onCommand('remove', strategy)}>Remove</button>
+  </span>;
 }
 
 function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
