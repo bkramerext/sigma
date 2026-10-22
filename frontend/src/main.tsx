@@ -467,12 +467,35 @@ function Home({ initialPath, onOpen }: {
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
+  const shell = useRef<HTMLDivElement>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
+  useEffect(() => {
+    // CSS background-size: cover scales the source image by the larger of
+    // viewport-width/image-width and viewport-height/image-height. Apply
+    // that exact same factor to the beam overlay, anchored at image top/center.
+    const background = new Image();
+    const updateScale = () => {
+      if (!background.naturalWidth || !background.naturalHeight) return;
+      const scale = Math.max(
+        window.innerWidth / background.naturalWidth,
+        window.innerHeight / background.naturalHeight,
+      );
+      shell.current?.style.setProperty('--home-art-scale', String(scale));
+    };
+    background.addEventListener('load', updateScale);
+    window.addEventListener('resize', updateScale);
+    background.src = '/sigma-home-background-copper.png';
+    if (background.complete) updateScale();
+    return () => {
+      background.removeEventListener('load', updateScale);
+      window.removeEventListener('resize', updateScale);
+    };
+  }, []);
   function cancel() {
     const trigger = entry === 'open' ? openButton : newButton;
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
   }
-  return <div className="home-shell">
+  return <div ref={shell} className="home-shell">
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
       <div className="home-topline"><ConnectionStatus/></div>
