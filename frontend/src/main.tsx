@@ -400,8 +400,14 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new investigation.</p>}
     <ul>{projects.map(entry => <li key={entry.id}>
-      <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong><small>{entry.investigation_type === 'mathematical' ? 'Mathematical' : entry.investigation_type === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small><span title={entry.path}>{entry.path}</span></button>
-      <button className="recent-forget" disabled={!!opening} aria-label={`Forget ${entry.title} from Recent Projects`} title="Forget from Recent Projects; keep all research" onClick={() => void forget(entry)}>×</button>
+      <div className="recent-entry">
+        <div className="recent-title-row">
+          <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}><strong>{entry.title}</strong></button>
+          <button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} title="Remove from Recent Projects; keep all research" onClick={() => void forget(entry)}>Remove</button>
+        </div>
+        <small>{entry.investigation_type === 'mathematical' ? 'Mathematical' : entry.investigation_type === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small>
+        <span title={entry.path}>{entry.path}</span>
+      </div>
       {entry.error && <p className="recent-unavailable">{entry.error}</p>}
     </li>)}</ul>
     {error && <p role="alert" className="error">{error}</p>}
