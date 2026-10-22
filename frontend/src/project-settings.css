@@ -121,3 +121,21 @@
 .project-settings-dialog.export-project-dialog .settings-actions .export-download-icon svg { width: 18px; height: 18px; }
 .project-settings-dialog.export-project-dialog .settings-actions .export-download-icon:hover:not(:disabled) { color: #f3cd9e; background: #203747; }
 .project-settings-dialog.export-project-dialog .settings-actions .export-download-icon:disabled { opacity: .5; cursor: default; }
+
+/* Align the Settings tab labels with the header title and form fields.
+   Keep the separator full width while insetting the interactive tabs. */
+.project-settings-dialog .settings-tabs {
+  box-sizing: border-box;
+  padding-inline: 24px;
+  margin: 0;
+  gap: 28px;
+  flex: 0 0 auto;
+}
+.project-settings-dialog .settings-tabs [role="tab"] {
+  margin: 0;
+  min-width: 0;
+  padding: 10px 0 12px;
+}
+@media (max-width: 560px) {
+  .project-settings-dialog .settings-tabs { padding-inline: 18px; }
+}
