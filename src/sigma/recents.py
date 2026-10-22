@@ -1,4 +1,4 @@
-"""Four-entry application access index for projects the user opened or created."""
+"""Six-entry application access index for projects the user opened or created."""
 
 import fcntl
 import json
@@ -68,7 +68,7 @@ def _validate(value: Any) -> dict:
         raise ValueError()
     if (
         not isinstance(value["entries"], list)
-        or len(value["entries"]) > 4
+        or len(value["entries"]) > 6
         or not isinstance(value["bootstrapped_roots"], dict)
     ):
         raise ValueError()
@@ -198,7 +198,7 @@ def record_access(view: ProjectView) -> None:
                     "included_example": False,
                 },
                 *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
-            ][:4]
+            ][:6]
     except ProjectError:
         print(
             "Recent Projects could not be updated. The project operation succeeded; check application state permissions.",
