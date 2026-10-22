@@ -1104,7 +1104,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
           <details className="strategy-detail">
             <summary title="Expand or collapse the full approach"><div className="strategy-title-line"><StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView}/><svg className="strategy-expand-arrow" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M7 4 L19 12 L7 20 Z"/></svg></div>
               <span className="strategy-preview">{strategy.summary || strategy.approach.replace(/\s+/g, ' ')}</span>
-              {strategy.provenance && <span className="ai-byline">AI-assisted · Human accepted</span>}
+              
             </summary>
             <div className="strategy-expanded"><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView}/>
               
