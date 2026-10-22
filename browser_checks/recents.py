@@ -1,5 +1,6 @@
 """Real Chrome: Samples/Recent Home tabs, direct sample opens, and responsive layout."""
 
+import json
 import os
 import re
 from pathlib import Path
@@ -64,16 +65,41 @@ with sync_playwright() as playwright:
     expect(page.locator(".strategy-row")).to_have_count(3)
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
     assert Path(path, "project.json").read_bytes() != original
+
+    # Expansion shows the complete approach, not a clipped duplicate preview.
+    first_row = page.locator(".strategy-row").first
+    preview = first_row.locator(".strategy-preview")
+    disclosure = first_row.locator(".strategy-detail > summary")
+    expect(preview).to_be_visible()
+    disclosure.click()
+    expect(preview).to_be_hidden()
+    source = json.loads(Path(path, "project.json").read_text())
+    expect(first_row.locator(".strategy-expanded .strategy-approach")).to_have_text(
+        source["strategies"][0]["approach"]
+    )
+    disclosure.click()
+    expect(preview).to_be_visible()
     saved = page.request.post(
         "http://127.0.0.1:8001/api/projects/strategies",
         data={"path": path, "title": "Browser sample addition", "approach": "Keep this strategy"},
     )
     assert saved.status == 201
     page.get_by_role("button", name="Close project").click()
+    expect(samples_tab).to_have_attribute("aria-selected", "true")
     recent_tab.click()
     expect(
         recent_panel.get_by_text(re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy\)"))
     ).to_be_visible()
+
+    # Project navigation unmounts Home; tab state should survive that and reload.
+    recent_panel.locator(".recent-open").first.click()
+    expect(page.get_by_role("heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3 \\(copy"))).to_be_visible()
+    page.get_by_role("button", name="Close project").click()
+    expect(recent_tab).to_have_attribute("aria-selected", "true")
+    page.reload()
+    expect(recent_tab).to_have_attribute("aria-selected", "true")
+    samples_tab.click()
+    expect(samples_tab).to_have_attribute("aria-selected", "true")
 
     for width, height in ((1280, 720), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
@@ -86,5 +112,5 @@ with sync_playwright() as playwright:
     assert not errors, errors
     browser.close()
     print(
-        "PASS Chrome Samples/Recent tabs, Samples default, keyboard access, direct open, recent copy, immutable source, and responsive layout"
+        "PASS Chrome sticky Samples/Recent tabs, full expanded strategy text, keyboard access, sample copy, immutable source, and responsive layout"
     )
