@@ -1,6 +1,6 @@
 # A14: Agentic Generate Strategy prototype
 
-**Status:** Ready for Codex implementation. This is the first bounded agentic research-generation slice.
+**Status:** Historical agentic design reference. The basic functional Generate Strategy work is now **A15**; the heavier independent Explore → Challenge → Decide agentic scope is **A16**. Preserve any existing implementation; this document is not an additional active assignment.
 
 ## Goal
 
