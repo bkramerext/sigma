@@ -98,7 +98,7 @@
 .workspace-page .text-view-editor textarea { display: block; width: 100%; max-width: none; box-sizing: border-box; }
 .workspace-page .text-view-controls .sigma-render-toggle,
 .workspace-page .text-view-controls .sigma-render-toggle.sigma-render-active {
-  border: 0; border-radius: 0; background: transparent;
+  border: 1px solid transparent; border-radius: 6px; background: transparent;
   box-shadow: none; filter: none;
 }
 .workspace-page .text-view-controls .sigma-render-toggle {
@@ -119,11 +119,20 @@
 }
 .workspace-page .text-view-controls .text-view-link.text-view-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
-  padding: 4px; text-decoration: none; border-radius: 5px;
+  width: 32px; height: 32px; min-width: 32px; min-height: 32px;
+  padding: 4px; text-decoration: none; border: 1px solid transparent; border-radius: 6px;
 }
 .workspace-page .text-view-controls .text-view-icon svg { width: 18px; height: 18px; flex: 0 0 18px; }
-.workspace-page .text-view-controls .text-view-icon:hover:not(:disabled) { color: #f1c58d; background: #172735; }
+/* The pencil, gear and Sigma use the same copper hover as Download. */
+.workspace-page .text-view-controls :is(.text-view-icon, .sigma-render-toggle):hover:not(:disabled) {
+  color: #fff2e9; background: var(--copper-gradient); border-color: #ac7054;
+  text-shadow: 0 1px 1px #24120d;
+  box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004;
+  filter: none;
+}
+.workspace-page .text-view-controls .sigma-render-toggle.sigma-render-active:hover:not(:disabled) span {
+  background: none; color: #fff2e9; -webkit-text-fill-color: #fff2e9;
+}
 .workspace-page .text-view-controls .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .text-view-controls .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
@@ -136,29 +145,15 @@
   color: transparent;
 }
 
-/* Align the glyph itself with the description's left edge, not its button box. */
+/* Center Sigma within the same 32px footprint as the other action icons. */
 .workspace-page .text-views > .text-view-controls,
-.workspace-page .project-text-views > .text-view-controls {
-  column-gap: 12px;
-}
+.workspace-page .project-text-views > .text-view-controls { column-gap: 12px; }
 .workspace-page .text-view-controls .sigma-render-toggle {
-  width: 24px; min-width: 24px;
-  justify-items: start;
-  text-align: left;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; text-align: center;
 }
 .workspace-page .text-view-controls .sigma-render-toggle span {
-  display: block;
-  width: 24px;
-  text-align: left;
-}
-
-/* Align the sigma glyph itself with the left edge of the description text. */
-.workspace-page .text-view-controls .sigma-render-toggle {
-  display: flex; align-items: center; justify-content: flex-start;
-  width: 24px; min-width: 24px; padding: 0;
-}
-.workspace-page .text-view-controls .sigma-render-toggle span {
-  width: auto; margin-left: -2px; text-align: left;
+  display: block; width: auto; margin: 0; text-align: center; line-height: 1;
 }
 
 /* Keep the render hint visible for the unconverted gray sigma as well. */
