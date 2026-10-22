@@ -1107,6 +1107,8 @@ async def _worker(session_id: str, path: str) -> None:
                     "status": "running",
                     "started_at": _now(),
                     "call_number": record["calls_used"],
+                    "context_artifact_ids": context["context_artifact_ids"],
+                    "context_obligation_count": len(context["outstanding_obligations"]),
                 }
                 record["steps"].append(step)
                 _save(path, record)
