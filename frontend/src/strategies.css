@@ -609,7 +609,7 @@
 @media (min-width: 701px) {
   .workspace-page .session-columns,
   .workspace-page .session-row {
-    grid-template-columns: minmax(0, 28fr) minmax(0, 72fr);
+    grid-template-columns: minmax(0, 20fr) minmax(0, 80fr);
     column-gap: 12px;
   }
   .workspace-page .session-columns > span:nth-child(2) {
