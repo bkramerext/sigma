@@ -819,7 +819,7 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
   }
   return <dialog ref={dialog} className="strategy-dialog proposal-dialog" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onCancel={event => { event.preventDefault(); cancel(); }}>
     <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-cancel" disabled={saving} onClick={cancel}>{busy ? "Cancel request" : "Cancel"}</button></div>
-    <p id="proposal-help" className="hint">Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof.</p>
+    <p id="proposal-help" className="hint">{busy && !ai.connecting ? <span className="generating-status" role="status"><span aria-hidden="true">⌛</span> Generating strategy…</span> : "Explore a direction, challenge it independently, and review the unsaved draft before saving. The reviewer does not verify a proof."}</p>
     <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'}{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point</summary>
@@ -834,11 +834,11 @@ function GenerateStrategy({ path, projectId, onSaved, onCancel, onManual }: {
       <ol>{progress.filter(event => event.type === 'activity.completed' || event.type === 'decision').map(event => <li key={event.sequence}>{event.summary}{event.kind === 'challenge' && event.assessment && <div className="agentic-review"><strong>Reviewer: {event.assessment}</strong><p>{event.mechanism_comparison}</p><ul>{event.objections?.map((objection, index) => <li key={index}>{objection}</li>)}</ul><p>Still to establish: {event.missing_obligations}</p></div>}</li>)}</ol>
     </section>}
     <PlanWelcome/>
-    <button type="button" className={`${needsConnection ? 'chatgpt-sign-in' : 'secondary'}${busy && !ai.connecting ? ' generating-action' : ''}`} disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : <><span className="generating-hourglass" aria-hidden="true">⌛</span> Generating…</> : needsConnection ? <><img src="/chatgpt-logo-black.svg" alt="" width="20" height="20"/>Continue with ChatGPT</> : result ? 'Regenerate · new request' : 'Generate draft'}</button>
+    {!busy && <button type="button" className={`${needsConnection ? 'chatgpt-sign-in' : 'secondary'}${busy && !ai.connecting ? ' generating-action' : ''}`} disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? ai.connecting ? 'Connecting…' : <><span className="generating-hourglass" aria-hidden="true">⌛</span> Generating…</> : needsConnection ? <><img src="/chatgpt-logo-black.svg" alt="" width="20" height="20"/>Continue with ChatGPT</> : result ? 'Regenerate · new request' : 'Generate draft'}</button>}
     {ai.connecting && <button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button>}
     {ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}
     {ai.error && <p role="alert" className="error">{ai.error}</p>}
-    <button type="button" className="text-button" disabled={busy || saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>
+    {!busy && <button type="button" className="text-button" disabled={saving} onClick={() => { lifetime.current.abort(); onManual({ title, approach: approach || seed }); }}>Continue manually</button>}
     {stopped && <p role="status" className="hint">{stopped}</p>}
     {error && <p role="alert" className="error">{error}</p>}
     <form onSubmit={save}>
