@@ -110,3 +110,12 @@
 }
 .workspace-page .text-view-controls .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .text-view-controls .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+
+/* A conversion replaces sigma with a metallic hourglass without a busy cursor. */
+.workspace-page .text-view-controls .sigma-render-toggle:disabled { cursor: default; }
+.workspace-page .text-view-controls .sigma-render-toggle.sigma-render-pending span {
+  font-size: 22px;
+  background: linear-gradient(130deg, #ffe0ab 2%, #ae6e46 38%, #f3c28b 65%, #8c4c30 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
