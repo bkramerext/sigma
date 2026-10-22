@@ -7,7 +7,7 @@ from dataclasses import asdict
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sigma import chatgpt_auth
@@ -80,7 +80,7 @@ class OpenRequest(BaseModel):
 class InitRequest(OpenRequest):
     title: str
     problem: str
-    research_mode: str = "default"
+    investigation_type: str = Field(default="default", validation_alias=AliasChoices("investigation_type", "research_mode"))
     ai_model: str | None = None
     reasoning_effort: str = "high"
 
@@ -96,7 +96,7 @@ def init_view(body: InitRequest):
         body.path,
         body.title,
         body.problem,
-        body.research_mode,
+        body.investigation_type,
         body.ai_model,
         body.reasoning_effort,
     )
@@ -165,7 +165,7 @@ class CreateProjectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
-    research_mode: str = "default"
+    investigation_type: str = Field(default="default", validation_alias=AliasChoices("investigation_type", "research_mode"))
     ai_model: str | None = None
     reasoning_effort: str = "high"
 
@@ -179,7 +179,7 @@ def destination_view(title: str = ""):
 def create_project_view(body: CreateProjectRequest):
     return asdict(
         create_project(
-            body.title, body.problem, body.research_mode, body.ai_model, body.reasoning_effort
+            body.title, body.problem, body.investigation_type, body.ai_model, body.reasoning_effort
         )
     )
 
@@ -325,7 +325,7 @@ class ProjectSettingsRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str
     problem: str
-    research_mode: str
+    investigation_type: str = Field(validation_alias=AliasChoices("investigation_type", "research_mode"))
     ai_model: str
     reasoning_effort: str
 
@@ -342,7 +342,7 @@ def update_project_view(body: UpdateProjectRequest):
             body.path,
             body.title,
             body.problem,
-            body.research_mode,
+            body.investigation_type,
             body.ai_model,
             body.reasoning_effort,
             body.expected.model_dump(),
