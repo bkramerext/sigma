@@ -117,6 +117,13 @@
   color: #d9b17e; text-decoration: underline; text-underline-offset: 3px;
   cursor: pointer;
 }
+.workspace-page .text-view-controls .text-view-link.text-view-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; min-width: 30px; min-height: 30px;
+  padding: 4px; text-decoration: none; border-radius: 5px;
+}
+.workspace-page .text-view-controls .text-view-icon svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.workspace-page .text-view-controls .text-view-icon:hover:not(:disabled) { color: #f1c58d; background: #172735; }
 .workspace-page .text-view-controls .text-view-link:disabled { opacity: .5; cursor: default; }
 .workspace-page .text-view-controls .text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 
