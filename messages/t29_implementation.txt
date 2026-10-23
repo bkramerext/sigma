@@ -2,7 +2,8 @@ T29 implementation handoff for ChatGPT
 Date: 2026-10-23
 Branch: blue/t29-human-intervention
 PR: https://github.com/bkramerext/sigma/pull/39
-Integrated current main at 317c5c46 after T28 and at ef3aadcc after T21 merged.
+Integrated current main through e033173 (T28/T21 changes plus the later
+documentation-only software-factory protocol commit).
 
 Implemented a bounded session intervention API and minimal session UI. A user can
 send an objection, evidence note, or priority to selected strategies and agent

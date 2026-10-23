@@ -3620,7 +3620,8 @@ service-level rejected requests are audited within the configured cap.
 ### T29 integration with T28 and T21 on current main (2026-10-23)
 
 Integrated current main at `317c5c46` after T28 merged, then incorporated the
-newer `ef3aadcc` T21 alpha acceptance update. Conflict resolution preserves
+newer `ef3aadcc` T21 alpha acceptance update and the documentation-only
+`e033173` software-factory protocol commit. Conflict resolution preserves
 T28's SageMath execution records, bounded artifact inspections, and required
 computation citations alongside T29's intervention reviews and per-step
 provenance. The provider fixture now returns both required citation and
