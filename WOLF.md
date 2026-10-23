@@ -65,3 +65,22 @@ The central challenge is **continuity across separate agents and repeated iterat
 ## 2. Agents within SIGMA
 
 The architecture and information flow of SIGMA's future multi-agent research engine remain to be determined. That is a separate design problem from the development workflow described above.
+
+
+## 3. The five-worker software factory
+
+By October 23, SIGMA's development process had converged on a small **software factory** with **five AI workers**: four separately operated Codex sessions, **Blue, Green, Red and Gray**, plus **ChatGPT** as an engineering contributor. Blue has implemented orchestration and model controls; Green has implemented the isolated Python executor and outcome measurements/provenance. Red is being oriented toward cloud work and Gray toward interface refinement. Assigned future work is not the same as completed code.
+
+The human is the product owner, and has deliberately taken responsibility for **ideation, messaging between the disconnected workers, and manual review of the running UI**. ChatGPT handles architecture, ticket design, engineering coordination, repository inspection and edits, PR review, merge decisions and integration. The colored Codex workers handle bounded implementations and automated verification. It is a coordinated, human-operated process, not an invisible autonomous swarm: ChatGPT does not control or monitor the local Codex terminals.
+
+### How work is created and distributed
+
+The workflow starts with a discussion of intent, observed behavior, scope and tradeoffs. The human's feedback does not automatically become an unreviewed change. When the design is settled, ChatGPT writes a narrow **T-numbered ticket** in `tickets/`, with testable acceptance conditions, constraints, error behavior, and a frugal model/thinking recommendation. `TICKET_TRACKING.md` records ownership, status and links to reviewable work. GitHub supplies durable context across workers that cannot share continuous memory.
+
+The ticket is passed to the appropriate color specialist. That worker develops in a separate checkout and branch, executes `./sigma setup` and `./sigma test` as appropriate, adds focused browser or integration checks, and submits a PR without self-merging. ChatGPT checks the implementation against its contract, reviews the actual diff and test evidence, and requests corrections where needed. The worker owns its fixes and integration with an updated `main`. ChatGPT sequences and merges reviewed PRs; combined-code verification and human UI evaluation remain separate checkpoints. The human carries messages between terminal sessions and exercises the application, supplying the observations that drive the next round.
+
+### A real Day 3 integration
+
+The sequence was exercised with [PR #11](https://github.com/bkramerext/sigma/pull/11) (migration from assignments to durable T-tickets), [PR #13](https://github.com/bkramerext/sigma/pull/13) (Green's metrics and provenance data), and [PR #12](https://github.com/bkramerext/sigma/pull/12) (Blue's model/thinking header controls). Review exposed concrete discrepancies. A report export was truncating unequal-length metric groups; a table had crept into T24 even though Gray's T25 owned Outcome presentation; Blue's original controls were in the wrong place and did not preserve the desired four-pill hierarchy. Both workers corrected their PRs. After #11 merged, their branches incorporated the new `main`, reported renewed test runs, and were merged in dependency order by ChatGPT.
+
+That is a bona fide engineering loop: **specification, parallel implementation, independent review, revision, integration, and observable evidence**. It is not evidence that all integration risks or research-quality challenges are closed. In particular, a successful PR merge and deterministic tests do not replace a combined-runtime smoke test or a human judging whether the UI feels correct. A five-worker operation has created a new responsibility too: keeping handoffs and shared architecture aligned without overwhelming the human who carries the messages.
