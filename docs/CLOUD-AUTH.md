@@ -103,6 +103,51 @@ Gate A does not implement durable job scheduling, anonymous Demo APIs, or cloud
 deployment. Cloudflare feasibility and deployment remain separate from this
 authentication and filesystem-backed workspace implementation.
 
+## Gate B research execution configuration
+
+Cloud research inference is enabled only when an operator explicitly supplies
+`SIGMA_CLOUD_OPENAI_API_KEY` and `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Cloud
+mode never falls back to a checkout's `OPENAI_API_KEY` or a locally connected
+ChatGPT plan. The service credential stays in the backend environment; the
+cloud UI cannot read, replace, or select it. Keep the deployment's secret
+store and backups access-controlled, and rotate the key through the operator's
+secret-management process.
+
+The global ceiling is in estimated USD and applies atomically across all
+workspaces. A call must reserve a conservative maximum cost before dispatch.
+Confirmed provider token counts are priced using SIGMA's reviewed model price
+table; the reported cost remains an estimate. If a call times out, is canceled,
+or its response is lost before its usage is saved, the full reservation remains
+held and the attempt is recorded as unknown. Such a call is never automatically
+retried. Cloud research also requires a per-session cost limit in Research
+Limits, a priced model, and explicit token usage bounds.
+
+The service ledger also enforces these environment-configurable limits:
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `SIGMA_CLOUD_USER_MAX_CONCURRENT` | `1` | Running sessions per workspace |
+| `SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT` | `4` | Running sessions across the service |
+| `SIGMA_CLOUD_USER_MAX_QUEUED` | `2` | Queued sessions per workspace |
+| `SIGMA_CLOUD_GLOBAL_MAX_QUEUED` | `16` | Queued sessions across the service |
+| `SIGMA_CLOUD_USER_TOKEN_BUDGET` | `2000000` | Reserved or observed model tokens per workspace |
+
+Malformed or missing global spend configuration disables cloud research. Queue
+slots, active slots, provider attempts, token reservations and spend reservations
+are stored in `cloud-research.sqlite3` beside the workspace mapping database,
+under the configured private workspaces root. Back up that file together with
+the auth database and workspace tree. The existing project session records
+remain the source of truth for events, checkpoints, call outputs, computation
+runs, and outcomes. Steps retain their role, strategy, cycle, and source-artifact
+references; raw full prompts are not persisted. Queued sessions with no provider
+attempt can be picked up when the owner reconnects after restart. Claimed work
+is reconciled to paused/interrupted with an unknown attempt; it is not replayed.
+
+The shared cloud key is deliberately restricted to bounded research sessions.
+Standalone proposal, agentic-proposal, paper-generation, and text-conversion
+inference routes return 403 in cloud mode until they receive their own durable
+budget accounting. Local mode keeps the existing provider selection and routes.
+
 Automated tests use local RSA signing keys and mocked Google endpoints. They do
 not make network requests or paid model calls. No Google OAuth client, client
 secret, allowed organization domain, or admin email is hardcoded in source.

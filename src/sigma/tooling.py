@@ -64,6 +64,8 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/cloud_demo.py"],
             [*python, "python", "tests/cloud_auth.py"],
             [*python, "python", "tests/cloud_workspaces.py"],
+            [*python, "python", "tests/cloud_research.py"],
+            [*python, "python", "tests/cloud_research_api.py"],
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_orphans.py"],
             [*python, "ruff", "check", "src", "tests", "sigma"],
