@@ -39,15 +39,16 @@
 | T17.6 | Research outcomes and strategy attribution | Done | — |
 | T17.7 | UI corrections and regression hardening | Done | — |
 | T17.7.1 | Dialog, report, and UI refinements | Done | — |
-| T17.8 | Live research-quality acceptance | Open; not accepted | — |
-| T18 | Concurrent multi-strategy research and peer handoffs | Merged, engineering done | Blue |
-| T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green |
-| T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | — |
+| T17.8 | Live research-quality acceptance | Open; not accepted | ChatGPT review · [PR #4](https://github.com/bkramerext/sigma/pull/4) merged (engineering) |
+| T18 | Concurrent multi-strategy research and peer handoffs | Merged, engineering done | Blue · [PR #8](https://github.com/bkramerext/sigma/pull/8) |
+| T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green · [PR #9](https://github.com/bkramerext/sigma/pull/9) |
+| T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
 | T21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
 | T22 | Cloud deployment | Planned / unverified | Unassigned |
-| T23 | Project difficulty setting | Done | — |
+| T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Clickable model and thinking-level pills under Difficulty; cost dollar signs; sign-in placeholder | Proposed | Unassigned |
-| T24 | Consolidated outcome metrics, operational and research quality | Ready to assign; not verified started | Green proposed |
+| T24 | Outcome metrics and provenance *data* (no presentation table) | Ready to assign; not verified started | Green proposed · ChatGPT authored ticket | 
+| T25 | Outcome hierarchy and collapsible subsections | Proposed; not started | Gray proposed · ChatGPT authored ticket |
 
 ### T23.1 scope
 
@@ -55,7 +56,7 @@ Clicking model and thinking pills cycles through the **actually supported** sele
 
 ### T24 scope
 
-Display one compact outcome table combining existing metrics with distinct operational and research-quality measurements: participating agents, dispatched/completed/rejected/timed-out/cancelled model calls, input/output/cached/total tokens where supplied, wall-clock time and per-agent duration, research cycles, participating strategies, Python execution outcomes, artifact counts/sizes, operational errors, estimated dollar cost when grounded, verification status and open proof obligations. Do not double-count concurrent work or recovered/reused executions. Use `—` when data are unavailable rather than inventing zeros or usage estimates. Explicitly account for Green's HTTP 400 rejection, plan allowance uncertainty, and incomplete live guidance validation.
+Provide persisted, structured outcome measurements for T25's collapsible **Metrics** subsection (do **not** build a table): participating agents, dispatched/completed/rejected/timed-out/cancelled model calls, input/output/cached/total tokens where supplied, wall-clock time and per-agent duration, research cycles, participating strategies, Python execution outcomes, artifact counts/sizes, operational errors, estimated dollar cost when grounded, verification status and open proof obligations. Do not double-count concurrent work or recovered/reused executions. Use `—` when data are unavailable rather than inventing zeros or usage estimates. Explicitly account for Green's HTTP 400 rejection, plan allowance uncertainty, and incomplete live guidance validation.
 
 ## Minor and unnumbered work
 
@@ -74,10 +75,11 @@ Display one compact outcome table combining existing metrics with distinct opera
 | Candidate-solution generation | Done |
 | Session controls, elapsed time and reports | Done |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
-| Network-bound failure toast and safe recovery | Implemented in tested paths; broader error coverage remains to validate |
+| Network-bound failure toast and safe recovery | Implemented in tested paths ([PR #1](https://github.com/bkramerext/sigma/pull/1)); broader error coverage remains to validate |
 | Live cross-strategy research validation | Open (T17.8) |
 | Formal Lean proof verification | Future, not implemented |
-| LaTeX button / Academic paper using LaTeX | **Done (T20; supporting T17.7.1)** |
+| LaTeX paper export workflow | **Done** (T20; [PR #5](https://github.com/bkramerext/sigma/pull/5)) |
+| Separate project-header LaTeX shortcut | **Open PR** ([PR #10](https://github.com/bkramerext/sigma/pull/10)); not yet merged |
 
 ## Reported gaps and follow-up ownership
 
@@ -102,22 +104,26 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 
 | Codex | Last ticket | Current work |
 |---|---|---|
-| Blue | T18 merged | No active task verified |
-| Green | T19 merged | T24 proposed next; not confirmed started |
+| Blue | T18 merged ([PR #8](https://github.com/bkramerext/sigma/pull/8)) | T23.1 proposed; no active work verified |
+| Green | T19 merged ([PR #9](https://github.com/bkramerext/sigma/pull/9)) | T24 proposed next; not confirmed started |
 
-**Terminology:** Ticket and ticket are interchangeable. **Color:** Blue and Green identify Codex workers, not status. There is no confirmed currently-running worker from the repository evidence in this snapshot.
+**Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. There is no confirmed currently-running worker from the repository evidence in this snapshot.
 
 **Delivery target:** October 26, 2026. Outstanding integration, cloud work, T23.1 pills, T24 metrics and T17.8 acceptance should be tracked separately; completion of software work does not close the research-quality gate.
 
-## Outcome layout: Provenance
+## Outcome hierarchy (T25)
 
-Outcome displays **Metrics**, **Strategy Assessments**, and **Provenance** as peer subsections. Provenance links each conclusion and recorded metric to its originating research session, strategy, agent role/model and thinking level, cycle, role step, source evidence artifact, Python execution and captured file when applicable. Preserve stable IDs, timestamps, reused/interrupted provenance and audit drill-down; never imply that model-generated evidence is independently verified. Track implementation in **T24** alongside the outcome table.
+**SESSIONS → OUTCOME → direct general details + collapsible Status, Strategy Assessments, Metrics, Provenance** (additional Evidence & Obligations section if warranted). T24 supplies metrics/provenance evidence; T25 implements the presentation, without tables or a two-column layout. Markdown icons/actions are attached to meaningful markdown-bearing sections, not decorative status fields. [Ticket T25](tickets/t25.md) is proposed and authored by **ChatGPT**.
 
 ## Planned Codex workers
 
 | Codex | Planned responsibility | Status |
 |---|---|---|
 | Red | Cloud support (T22) | Later; not started |
-| Gray | UI improvements, live prompts, and tickets | Later; not started |
+| Gray | UI improvements, live prompts, and tickets; T25 proposed | Later; not started |
 
 Ticket naming convention: `T1`, `T8.2`, `T17.7.1`; canonical ticket documents live at `tickets/t1.md`, `tickets/t8.2.md`, etc. Historical ticket documents are migrated into `tickets/` in this PR; supplementary historical design/security documents use `tN-design.md` or `tN-security.md`. T14.1 is retained as historical record but removed from the active tracker.
+
+## PR and authorship conventions
+
+Include a clickable GitHub [PR #N](https://github.com/bkramerext/sigma/pulls) link **only when a specific PR exists**; each ticket's own PR belongs in its tracker row once opened. The current ticket-file migration is [PR #11](https://github.com/bkramerext/sigma/pull/11), authored by **ChatGPT**. Credit ChatGPT for ticket drafting, integration planning, and review where performed, without implying that ChatGPT or a Codex worker implemented changes it did not.
