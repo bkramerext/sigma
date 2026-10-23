@@ -37,6 +37,127 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
+    if body["text"]["format"]["name"] == "sigma_research_paper":
+        sources = context["sources"]
+        project_source = next(item for item in sources if item["kind"] == "project")
+        project_data = project_source["data"]
+        title = project_data["title"]
+        problem = project_data["problem"]
+        max_regions = (
+            "maximum regions" in title.casefold()
+            or "maximum number of regions" in problem.casefold()
+        )
+        artifact_refs = [item["id"] for item in sources if item["kind"] == "artifact"]
+        if max_regions:
+            evidence = artifact_refs[:4] or [project_source["id"]]
+            paper = {
+                "title": "Line Arrangements: A Saved Unverified Argument",
+                "abstract": r"This paper synthesizes the saved investigation of the maximum number of regions formed by lines. The record proposes the formula $R(n)=1+n(n+1)/2$ and discusses an insertion upper bound and a general-position construction. Its argument remains an unverified model result.",
+                "abstract_claim_ids": ["C1"],
+                "problem_framing": [
+                    "The objective is to determine the maximum number of regions cut out by n straight lines in the plane."
+                ],
+                "problem_framing_claim_ids": ["C1"],
+                "methods": [
+                    "We inspected the saved research-session artifacts and review record. No external source or proof checker was used."
+                ],
+                "methods_claim_ids": ["C1"],
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "The saved work proposes R(n)=1+n(n+1)/2.",
+                        "status": "conjecture",
+                        "evidence_refs": evidence,
+                        "reasoning": "The formula and both proof obligations appear in the cited saved work, but the record labels the argument unverified.",
+                    }
+                ],
+                "sections": [
+                    {
+                        "heading": "The proposed upper bound",
+                        "paragraphs": [
+                            r"The saved argument inserts lines one at a time. The kth line has at most k−1 distinct earlier intersections and therefore at most k pieces; it can increase the region count by at most k. Summing gives $R(n)=1+\sum_{k=1}^{n}k$ and $R(n)=1+n(n+1)/2$."
+                        ],
+                        "claim_ids": ["C1"],
+                    },
+                    {
+                        "heading": "Attainability and evidence boundary",
+                        "paragraphs": [
+                            "The record proposes a general-position arrangement in which each new line meets earlier lines at distinct points. The saved narrative treats this as the attaining construction, while the review still labels the full argument unverified."
+                        ],
+                        "claim_ids": ["C1"],
+                    },
+                ],
+                "limitations": [
+                    "This fixture record is model-generated and has not been formally checked."
+                ],
+                "open_obligations": [
+                    "A human should inspect the distinct-intersection construction and induction details."
+                ],
+                "conclusions": [
+                    "The saved evidence supports reporting an unverified solution candidate, not an independently verified theorem."
+                ],
+                "conclusion_claim_ids": ["C1"],
+                "validation_warnings": ["The proof has not been independently verified."],
+            }
+        else:
+            paper = {
+                "title": "An Exploratory Record with Open Questions",
+                "abstract": "This paper reports an exploratory research state. The saved project provides an objective but no completed research session, so the available evidence does not support a theorem-proof conclusion. The discussion is limited to the recorded scope and makes its missing evidence explicit.",
+                "abstract_claim_ids": ["C1"],
+                "problem_framing": [f"The saved objective is: {problem}"],
+                "problem_framing_claim_ids": ["C1"],
+                "methods": [
+                    "We inspected the current saved project snapshot; no research session or experiment was recorded."
+                ],
+                "methods_claim_ids": ["C1"],
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "The project snapshot records the stated research objective.",
+                        "status": "established",
+                        "evidence_refs": [project_source["id"]],
+                        "reasoning": "This is directly present in the saved project record.",
+                    }
+                ],
+                "sections": [
+                    {
+                        "heading": "Available evidence",
+                        "paragraphs": [
+                            "The snapshot contains the project objective but no durable research findings."
+                        ],
+                        "claim_ids": ["C1"],
+                    },
+                    {
+                        "heading": "Exploratory status",
+                        "paragraphs": [
+                            "No substantive conclusion is justified by this record; the project remains open for investigation."
+                        ],
+                        "claim_ids": [],
+                    },
+                ],
+                "limitations": [
+                    "There are no saved research sessions or findings in this snapshot."
+                ],
+                "open_obligations": [
+                    "Conduct and preserve research before drawing a substantive conclusion."
+                ],
+                "conclusions": ["This is an exploratory account, not a theorem-proof paper."],
+                "conclusion_claim_ids": ["C1"],
+                "validation_warnings": [],
+            }
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(paper)}],
+                    }
+                ],
+            },
+        )
     if body["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}:
         strategy_title = context.get("strategy", {}).get("title")
         if strategy_title == "Failure fixture strategy":

@@ -1862,3 +1862,78 @@ The Project details & history section is controlled by
 `SHOW_PROJECT_DETAILS_AND_HISTORY` in the frontend runtime and is currently
 hidden (`false`). Frontend typecheck and production build passed after this
 flag was added.
+
+## A20 — AI-authored research paper (2026-10-22)
+
+Implemented on `feature/a20-ai-authored-paper` for review; no merge performed.
+The separate Project-pane **Author AI paper** action opens a versioned paper
+workflow. Project Audit and deterministic Research Report renderers and routes
+retain their existing output semantics. The new pipeline is in
+`src/sigma/papers.py`; API routes list, generate, read, and download paper
+versions. The visible workflow states the selected project model and provider
+mode, one-call limit, API-key billing disclosure, progress, cancellation, saved
+version history, complete structured preview, evidence references, and PDF
+download.
+
+Each request takes the full current project/strategy/session/artifact/agentic-run
+snapshot and stable source IDs, computes a SHA-256 fingerprint, and sends the
+complete package or refuses it above 65,000 bytes; evidence is never silently
+truncated. The provider returns a strict structured draft with claims, evidence
+references, claim status, claim-to-narrative links for the abstract/framing/
+methods/sections/conclusions, unresolved obligations, and author self-review
+warnings. The validator rejects unknown source/claim IDs and flags missing
+references, missing narrative links, explicit counterexample/contradiction
+language, cited unverified/incomplete evidence labeled established, omitted
+saved obligations, and citation-like external references. Nuanced contradiction
+review remains model self-review, is labeled as such, and is not independent
+mathematical verification. No external bibliography is generated.
+
+API-key mode uses one Responses call with `store:false`, a 12,000-token output
+ceiling, a 120-second request timeout, and a 1 MB response cap. ChatGPT-plan
+mode uses the existing completed-stream validator and its 1 MB cap; no output
+token ceiling is claimed for that transport. Disconnect cancels the request;
+PDF compilation runs off the event loop through the existing bounded Tectonic
+path, and a cancelled or failed compile publishes no version. The controlled
+renderer escapes prose and permits only a small math-command allowlist; it never
+executes model-supplied document LaTeX. Per-project sidecars under private
+`papers/` storage retain up to 50 immutable versions with the exact source
+snapshot, structured draft, provider/model/effort, timestamp, validation notes,
+PDF hash/size, and compiled PDF. Regeneration adds a new record; project edits
+do not rewrite old snapshots. The project audit/history and research-session
+records are not mutated. Removing a project directory also removes its nested
+paper versions.
+
+Verification performed:
+
+- `./sigma test` passed the full suite, including the new `tests/papers.py`,
+  Ruff check/format, Pyright, frontend typecheck, and production build. The
+  existing non-failing Starlette/httpx deprecation warning remains.
+- `uv run --with playwright python browser_checks/a20_paper.py` passed in real
+  Chrome against the isolated provider fixture. It opened the Maximum Regions
+  Sample copy, generated and inspected a saved research session, authored from
+  that snapshot, checked claim/source linkage and immutability metadata, and
+  retrieved the compiled PDF through the browser. No live provider call was
+  made.
+- The actual fixture PDF was rendered with macOS Quick Look and visually
+  inspected. Its title, abstract, section hierarchy, formula and evidence-link
+  markers were legible; the result was labeled unverified. Captures:
+  `/tmp/sigma-a20-paper-preview.png`, `/tmp/sigma-a20-paper-mobile.png`, and
+  `/tmp/sigma-a20-paper.pdf.png`.
+- The isolated unresolved-project fixture produced an exploratory note with no
+  theorem-proof claim. Adversarial unit fixtures cover invented source IDs,
+  unverified/incomplete cited evidence labeled established, contradiction
+  language, citation-like external text, and missing saved obligations.
+- The normal SIGMA ports were occupied by an unrelated/unverifiable service;
+  `./sigma start` correctly refused to replace it. Browser checks used the
+  current Vite app on port 5174 and fixture API on 8012, leaving the existing
+  service untouched. The known stale A17 browser assertions were not rerun; the
+  source-controlled A17/API/export regressions passed in `./sigma test`.
+
+No bounded real-provider trial was run because no live provider use was
+authorized. Author prose quality, provider-specific output compatibility, and
+real-provider timeout/rate-limit behavior therefore remain unverified. The A17.8
+core-system acceptance gate remains open. Recommendation: review A20 as a
+separate capability, then verify compatibility against the accepted integrated
+A17 work on the latest `main` before any merge. Do not mark A20 complete until
+human review and an authorized quality trial or an explicit decision to leave
+that criterion open.

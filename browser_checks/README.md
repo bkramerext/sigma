@@ -151,3 +151,30 @@ work, failure recovery, concurrent provider pulse and reduced motion,
 desktop/mobile layout, and unchanged strategy data. It makes no live provider
 call. Screenshots are written to `/tmp/sigma-a171-desktop.png` and
 `/tmp/sigma-a171-mobile.png`.
+
+## A20 AI-authored research paper
+
+Start the current Vite frontend on port 5174 and the isolated mock provider/API
+on port 8012 in separate terminals:
+
+```sh
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 5174
+```
+
+```sh
+uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8012
+```
+
+Then run:
+
+```sh
+uv run --with playwright python browser_checks/a20_paper.py
+```
+
+This real-Chrome scenario copies the Maximum Regions Sample, runs its mock
+research session, generates the distinct AI-authored paper, checks saved
+snapshot and claim references, and retrieves the compiled PDF through the
+browser. It also checks the narrow-screen dialog. It makes no live provider
+calls. Review captures are `/tmp/sigma-a20-paper-preview.png` and
+`/tmp/sigma-a20-paper-mobile.png`; the downloaded PDF is
+`/tmp/sigma-a20-paper.pdf`.

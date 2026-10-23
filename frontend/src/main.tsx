@@ -615,6 +615,109 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
   </dialog>;
 }
 
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
+type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; snapshot: { sources: { id: string; kind: string }[] } };
+
+function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId: string; onCancel: () => void }) {
+  const ai = useAI();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const [papers, setPapers] = useState<PaperSummary[]>([]);
+  const [selected, setSelected] = useState<PaperRecord | null>(null);
+  const [binding, setBinding] = useState('');
+  const [model, setModel] = useState('');
+  const [mode, setMode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { dialog.current?.showModal(); void refresh(); return () => request.current?.abort(); }, []);
+  async function refresh(keepId?: string) {
+    setLoading(true);
+    try {
+      const query = new URLSearchParams({ path });
+      const [listResponse, configResponse] = await Promise.all([
+        fetch(`/api/projects/papers?${query}`, { cache: 'no-store' }),
+        fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store' }),
+      ]);
+      const list = await listResponse.json(); const config = await configResponse.json();
+      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
+      setPapers(list.papers as PaperSummary[]);
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); }
+      else { setBinding(config.binding); setModel(config.model); setMode(config.mode); }
+      const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
+      if (nextId) {
+        const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store' });
+        const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
+        setSelected(record as PaperRecord);
+      } else setSelected(null);
+      setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setLoading(false); }
+  }
+  async function openPaper(id: string) {
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
+      setSelected(record as PaperRecord); setError('');
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function generatePaper() {
+    if (busy || !binding) return;
+    const controller = new AbortController(); request.current = controller;
+    setBusy(true); setPhase('Freezing the complete evidence snapshot…'); setError('');
+    const finishProvider = beginProviderRequest('ai-paper');
+    const timer = window.setTimeout(() => setPhase('Authoring, validating evidence references, and compiling PDF…'), 350);
+    try {
+      const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }) });
+      const result = await response.json().catch(() => null);
+      if (!result) throw new Error(`Paper generation failed with an invalid server response (${response.status}). No version was published.`);
+      if (!response.ok) throw new Error(result.error ?? 'Paper generation failed; no version was published.');
+      setPhase('Saved a new immutable paper version.');
+      await refresh(result.paper_id);
+    } catch (cause) {
+      if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+      else setPhase('Generation cancelled. No new version was published.');
+    } finally { window.clearTimeout(timer); finishProvider(); if (request.current === controller) request.current = null; setBusy(false); }
+  }
+  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <header className="settings-header"><h2 id="ai-paper-heading">AI-authored research paper</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <div className="settings-body ai-paper-body">
+      <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
+      <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong> · one provider call · up to 12,000 output tokens for API-key mode. No research session will be started.</p>
+      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
+      {busy && <p role="status" aria-live="polite">{phase}</p>}
+      {error && <p role="alert" className="error">{error}</p>}
+      {loading && <p>Loading saved versions…</p>}
+      {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}
+      {!loading && papers.length > 0 && <select id="ai-paper-version" value={selected?.paper_id ?? ''} disabled={busy} onChange={event => void openPaper(event.target.value)}>{papers.map(item => <option key={item.paper_id} value={item.paper_id}>{item.title} · {dateLabel(item.created_at)}</option>)}</select>}
+      {selected && <article className="ai-paper-preview">
+        <h3>{selected.draft.title}</h3>
+        <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
+        <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
+        <h4>Problem framing</h4>{selected.draft.problem_framing.map((text, index) => <p key={`framing-${index}`}>{text}</p>)}
+        <p className="settings-hint">Claim links: {selected.draft.problem_framing_claim_ids.join(', ') || 'None'}</p>
+        <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
+        <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
+        <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
+        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}</p>
+        {selected.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
+        {(selected.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
+        {selected.draft.sections.map(section => <section key={section.heading}><h4>{section.heading}</h4>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}
+        <h4>Claim register</h4>{selected.draft.claims.map(claim => <section key={claim.id}><p><strong>{claim.id} · {claim.status}:</strong> {claim.statement}</p><p>{claim.reasoning}</p><p className="settings-hint">Evidence: {claim.evidence_refs.join(', ') || 'No source reference'}</p></section>)}
+        <h4>Limitations</h4><ul>{selected.draft.limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        {selected.draft.open_obligations.length > 0 && <><h4>Open obligations</h4><ul>{selected.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
+        <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
+        <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
+        {selected.pdf_available && <a className="text-view-link" href={pdfUrl} download={`sigma-ai-paper-${selected.paper_id}.pdf`}>Download compiled PDF</a>}
+        {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+      </article>}
+    </div>
+  </dialog>;
+}
+
 function FloatingTooltip() {
   const [active, setActive] = useState<{ element: HTMLElement; text: string } | null>(null);
   const tooltip = useRef<HTMLDivElement>(null);
@@ -1662,6 +1765,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [paperOpen, setPaperOpen] = useState(false);
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -1819,7 +1923,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Author AI paper" title="Author AI paper from saved research evidence" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}><span aria-hidden="true" className="ai-paper-icon">✎</span></button><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
@@ -1906,6 +2010,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>}
+    {paperOpen && (
+      <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
+        setPaperOpen(false);
+        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Author AI paper"]')?.focus());
+      }} />
+    )}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
