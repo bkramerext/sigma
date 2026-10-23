@@ -2,7 +2,8 @@ T22.5 — Per-User Cloud Research Spending Limits
 
 Branch: feature/t22-5-per-user-spending
 Base: 703442cfef6be004e8ed28e46f211ecf151e3f6e (current main at branch creation)
-PR: pending creation
+PR: #55 — https://github.com/bkramerext/sigma/pull/55
+Implementation commit: 759dc2efe21a5f341a717ef1603ec43d1223e904
 
 MET
 - Durable cloud accounting now requires SIGMA_CLOUD_USER_SPEND_CEILING_USD and SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD. Missing, malformed, non-finite, under-cent, and above-policy values fail closed. User ceilings cannot exceed $2.00; global ceilings cannot exceed $15.00.
@@ -28,4 +29,4 @@ VERIFICATION
 - Real Chrome: browser_checks/t23_1_google_signin.py PASS against isolated local backend/Vite on separate ports; budget and cloud identity responses were deterministic browser fixtures. Confirmed exhausted status, New/Open availability, and opening a saved project. No external Google OAuth or paid API call.
 - git diff --check: PASS.
 
-Do not self-merge. R4R requested after PR creation.
+R4R: requested on PR #55. Do not self-merge.
