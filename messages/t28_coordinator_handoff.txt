@@ -1,0 +1,24 @@
+T28 — Computational evidence and artifact comprehension
+
+Status: implemented on feature/t28-computational-evidence; PR is ready for review (R4R).
+
+What changed
+- Existing sandbox artifacts can now be inspected safely without introducing another execution path. PNG/JPEG get a bounded 64×20 grayscale rendering; common UTF-8 text/CSV/JSON formats get an escaped preview capped at 1,400 characters. Inspection reads files through the existing sidecar hash check.
+- Unsupported, corrupt, oversized, missing, and integrity-mismatched files receive explicit notices. A maximum of two artifacts are inspected per execution; image decode is capped at 2 million pixels and one file at 4 MB.
+- Python and SageMath prior-session computations now reach Investigator and Skeptic with the original source, output/error, execution status, runtime, origin, limitations, and artifact previews. Structured citations are checked against the supplied evidence. Failed runs cannot be claimed as results, and reused runs retain their original IDs/provenance.
+- Per-runtime execution status summaries now report Python and SageMath separately, including each recorded status. Shared/recovered evidence is deduplicated by runtime and execution ID; artifact byte accounting remains deduplicated.
+- Preview snapshots are included in role-step evidence for audit; original execution records are unchanged.
+
+Verification
+- Focused test: `uv run --locked --no-sync python tests/computational_evidence.py` passed. It covers PNG/CSV inspection, corrupt and oversized artifacts, unsupported PDF, integrity tampering, separate Python/Sage status metrics and storage, and successful plus failed two-session citations for both runtimes.
+- `./sigma test` passed on 2026-10-23: all backend regressions, the 10-strategy concurrency case, Python and Sage service tests, Ruff, Pyright, frontend typecheck, and production build.
+- Real locally installed Docker images were exercised. Python 3.12.8 wrote a Matplotlib PNG under `/artifacts`; SageMath 10.8 wrote a plot PNG there. Both completed and the stored, hash-checked PNG was inspectable.
+- Cross-checked merged Blue PR #18: commit 102ca15 is an ancestor of current main. T28 was tested with its prior-session assumptions, limitations, computation observations, and failure evidence contract present.
+- No UI changes, browser run or live model call; online Investigator/Skeptic interpretation remains unverified. No paid calls.
+
+Limitations
+- Grayscale rendering does not OCR axis labels, distinguish colors, recover exact pixel values, or establish a plot's scientific interpretation. Compare the picture with its code and printed values.
+- Formats other than bounded raster images and recognized UTF-8 text are explicitly unsupported; original artifacts remain available through the existing stored references.
+- Pillow 13.0.0 is a pinned dependency for safe common-raster decoding.
+
+Coordinator action: review and merge this single PR when ready. Do not self-merge.

@@ -409,3 +409,24 @@ Stopping dispatched work preserves Python's bounded-completion and evidence
 capture semantics; queued work never starts after stop. Exact computations
 and agent agreement do not establish formal verification. See
 [Sage execution](SAGE-EXECUTION.md) for setup, contracts and measured limits.
+
+## T28: Inspect and cite existing computational evidence
+
+Keep artifact comprehension inside the existing Python/SageMath execution and
+artifact store. Generate small safe textual representations at evidence
+assembly time; do not run artifact content, expand the execution subsystem, or
+ask an unbounded model/image service to interpret files. Include source,
+result/error, status, provenance, limitations and inspection alongside prior
+session evidence. Require structured citations to match context-provided
+execution IDs, and disallow failed runs as positive results. Keep the original
+execution sidecar canonical and store inspection snapshots with role steps.
+Python and SageMath metrics are separate and deduplicated by runtime plus
+execution ID; original artifact byte accounting stays unchanged.
+
+Tradeoffs: Pillow adds a pinned dependency to safely decode common raster
+formats. Grayscale ASCII views make plot shape inspectable but do not recover
+labels, colors, values or semantics. Limit previews to two files, 4 MB per
+file, 2 million image pixels, 1,400 text characters and 64×20 image cells.
+Unsupported/corrupt/unavailable files retain an explicit notice and original
+artifact reference. Numerical computation and agreement remain evidence, not
+proof.
