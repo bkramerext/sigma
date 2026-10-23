@@ -5,9 +5,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 from unittest.mock import patch
 
+import httpx
+
 from sigma import papers
+from sigma.plan_stream import completed
 from sigma.projects import ProjectError, initialize_project, inspect_project
 
 
@@ -52,6 +56,41 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
 
 
 def main() -> None:
+    class StreamResponse:
+        def __init__(self, content: bytes):
+            self.headers = {"content-type": "text/event-stream"}
+            self.content = content
+
+        async def aiter_bytes(self):
+            yield self.content
+
+    large_event = (
+        b'data: {"type":"response.created","sequence_number":0,"response":{"id":"r"},"padding":"'
+        + b"x" * 1_100_000
+        + b'"}\n\n'
+        + b'data: {"type":"response.completed","sequence_number":1,"response":{"id":"r","status":"completed","output":[]}}\n\n'
+    )
+    parsed_stream = asyncio.run(
+        completed(
+            cast(httpx.Response, StreamResponse(large_event)),
+            max_stream_bytes=papers.MAX_CHATGPT_STREAM_BYTES,
+        )
+    )
+    assert parsed_stream["status"] == "completed"
+    try:
+        asyncio.run(
+            completed(
+                cast(httpx.Response, StreamResponse(large_event)),
+                max_stream_bytes=papers.MAX_RESPONSE_BYTES,
+                overflow_message="ChatGPT paper response exceeded the 1 MB stream limit. No paper was saved.",
+            )
+        )
+    except ProjectError as exc:
+        assert "ChatGPT paper response" in str(exc) and "No paper was saved" in str(exc)
+        assert "strategy" not in str(exc)
+    else:
+        raise AssertionError("Paper stream byte limit must be enforced with paper-specific error")
+
     evidence_export = {
         "project": {
             "id": "pid",

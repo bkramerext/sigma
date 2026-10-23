@@ -1895,7 +1895,7 @@ mathematical verification. No external bibliography is generated.
 
 API-key mode uses one Responses call with `store:false`, a 12,000-token output
 ceiling, a 120-second request timeout, and a 1 MB response cap. ChatGPT-plan
-mode uses the existing completed-stream validator and its 1 MB cap; no output
+mode uses the completed-stream validator with a separate 4 MB cap; no output
 token ceiling is claimed for that transport. Disconnect cancels the request;
 PDF compilation runs off the event loop through the existing bounded Tectonic
 path, and a cancelled or failed compile publishes no version. The controlled
@@ -1934,10 +1934,33 @@ Verification performed:
   service untouched. The known stale A17 browser assertions were not rerun; the
   source-controlled A17/API/export regressions passed in `./sigma test`.
 
-No bounded real-provider trial was run because no live provider use was
-authorized. Author prose quality, provider-specific output compatibility, and
-real-provider timeout/rate-limit behavior therefore remain unverified. The A17.8
-core-system acceptance gate remains open. Recommendation: review A20 as a
+### ChatGPT-plan stream-limit follow-up
+
+After the user reported a Maximum Regions generation failure, traced the exact
+message to the shared ChatGPT SSE parser, which had applied its 1 MB research
+proposal cap and emitted “no strategy was saved” for paper generation. The
+paper route now supplies its own bounded 4 MB streamed-response allowance and
+a paper-specific overflow message; API-key JSON remains capped at 1 MB. The
+paper dialog shows both mode-specific response limits. A synthetic 1.1 MB SSE
+regression confirms the paper stream completes under its configured cap and
+that overflow at the smaller cap reports a paper error without strategy
+wording.
+
+After this follow-up, `./sigma test` passed the full suite, Ruff, Pyright,
+frontend typecheck, and production build. Real Chrome A20 browser check passed
+on Vite 5174 with isolated provider fixture 8012, including the visible limits,
+Maximum Regions Sample workflow, remembered export options, and PDF download.
+The configured local `projects/` contains no Maximum Regions user project, so
+the user's exact saved project and a live ChatGPT-plan provider run were not
+available to verify. The fixture proves the UI and bounded parser behavior,
+not real-provider compatibility; that remains unverified.
+
+No bounded real-provider trial was run. The user's saved Maximum Regions
+project is absent from the configured local project root, and no paid API call
+was made without explicit billing approval. Author prose quality,
+provider-specific output compatibility, and real-provider timeout/rate-limit
+behavior therefore remain unverified. The A17.8 core-system acceptance gate
+remains open. Recommendation: review A20 as a
 separate capability, then verify compatibility against the accepted integrated
 A17 work on the latest `main` before any merge. Do not mark A20 complete until
 human review and an authorized quality trial or an explicit decision to leave

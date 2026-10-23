@@ -24,6 +24,7 @@ from sigma.proposals import configuration
 
 MAX_CONTEXT_BYTES = 100_000
 MAX_RESPONSE_BYTES = 1_000_000
+MAX_CHATGPT_STREAM_BYTES = 4_000_000
 MAX_PAPER_BYTES = 12_000_000
 CALL_SECONDS = 120
 MAX_PAPERS = 50
@@ -533,7 +534,12 @@ async def _provider(
             ) as response,
         ):
             if response.status_code == 200 and binding["mode"] == "chatgpt":
-                raw = await completed(response, guard)
+                raw = await completed(
+                    response,
+                    guard,
+                    max_stream_bytes=MAX_CHATGPT_STREAM_BYTES,
+                    overflow_message="ChatGPT paper response exceeded the 4 MB stream limit. No paper was saved.",
+                )
             else:
                 body = bytearray()
                 async for chunk in response.aiter_bytes():

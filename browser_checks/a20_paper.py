@@ -65,6 +65,8 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("gpt-6.1-sol")
     expect(dialog).to_contain_text("complete evidence snapshot up to 100,000 bytes")
     expect(dialog).to_contain_text("One provider call")
+    expect(dialog).to_contain_text("4 MB streamed-response cap in ChatGPT-plan mode")
+    expect(dialog).to_contain_text("1 MB response cap in API-key mode")
     expect(dialog).to_contain_text("120-second timeout")
     dialog.get_by_role("button", name="Generate paper", exact=True).click()
     expect(dialog).to_contain_text("Line Arrangements: A Saved Unverified Argument", timeout=30000)
