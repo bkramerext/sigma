@@ -49,6 +49,9 @@
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
 | T25 | Outcome hierarchy and collapsible subsections | Assigned to Gray; not started | Gray · ChatGPT authored ticket · PR pending |
+| T27 | Research intelligence, cross-strategy learning and agent guidance | Assigned; immediate | Blue · ChatGPT authored ticket |
+| T28 | Rich computational artifact inspection and cross-session evidence | Pending; Green unavailable | Green · ChatGPT authored ticket |
+| T29 | Human intervention during active concurrent research | Pending after T27 | Blue · ChatGPT authored ticket |
 
 ### T23.1 scope
 
@@ -87,13 +90,13 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 |---|---|---|
 | Provider timeouts, HTTP 400 rejections, plan-usage uncertainty | Blue and Green | T24 for metrics; T21 for integration/reliability |
 | Token usage metadata absent | Blue and Green | T24; display unavailable rather than inferred |
-| Real cross-strategy reasoning and handoff uptake not demonstrated | Blue | T17.8 |
-| Multi-session improvement of research strategies not demonstrated | Blue | T17.8 |
-| False transfer due to domain/assumption mismatch | Blue | T17.8 adversarial evaluation |
-| User intervention during active multi-strategy session not implemented | Blue | New deferred ticket needed; assign target branch and record exact intervention provenance |
-| Revised Python-guidance quality not live validated | Green | T17.8 |
-| Cross-session computation synthesis not live validated | Green | T17.8 |
-| Model cannot inspect complete captured binary/plot artifacts | Green | New follow-up needed for richer artifact inspection |
+| Real cross-strategy reasoning and handoff uptake not demonstrated | Blue | T27 implementation; T17.8 acceptance |
+| Multi-session improvement of research strategies not demonstrated | Blue | T27 implementation; T17.8 acceptance |
+| False transfer due to domain/assumption mismatch | Blue | T27 adversarial tests; T17.8 acceptance |
+| User intervention during active multi-strategy session not implemented | Blue | T29 (Blue; pending) |
+| Revised Python-guidance quality not live validated | Green | T27 guidance; T28 follow-up; T17.8 acceptance |
+| Cross-session computation synthesis not live validated | Green | T28; T17.8 acceptance |
+| Model cannot inspect complete captured binary/plot artifacts | Green | T28 (Green; pending) |
 | Python Docker sandbox assumes trusted host kernel/daemon/image | Green | Documented prototype security boundary |
 | No independent mathematical proof checker | Both | Future Lean/formal verification |
 | Real-provider paper quality and provider compatibility not established | T20 | T21 integration / acceptance |
