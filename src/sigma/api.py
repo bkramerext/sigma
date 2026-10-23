@@ -235,6 +235,16 @@ def research_execution_view(execution_id: str, path: str):
     return python_sandbox.get_execution(path, execution_id)
 
 
+@app.get("/api/projects/research-executions/{execution_id}/artifacts/{filename}")
+def research_execution_artifact_view(execution_id: str, filename: str, path: str):
+    content, media_type = python_sandbox.get_execution_artifact(path, execution_id, filename)
+    return Response(
+        content,
+        media_type=media_type,
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @app.post("/api/projects/research-executions", status_code=201)
 async def research_execution_start_view(body: ResearchPythonRequest):
     return await python_sandbox.execute_research_code(

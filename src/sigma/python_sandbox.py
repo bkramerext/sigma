@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import hashlib
 import json
+import mimetypes
 import os
 import selectors
+import secrets
 import signal
 import subprocess
+import tarfile
 import tempfile
 import threading
 import time
+from io import BytesIO
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +32,8 @@ MAX_OUTPUT_BYTES = 32_000
 EXECUTION_TIMEOUT_SECONDS = 15
 MAX_STORAGE_BYTES = 16_000_000
 MAX_ARTIFACT_BYTES = 64_000
+MAX_CAPTURED_ARTIFACT_BYTES = 4_000_000
+MAX_CAPTURED_ARTIFACTS = 8
 _EXECUTION_GATE = threading.BoundedSemaphore(1)
 
 
@@ -38,14 +45,16 @@ class ExecutionResult:
     stderr: str
     duration_ms: int
     image_id: str | None = None
+    artifacts: tuple[tuple[str, str, bytes], ...] = ()
 
 
-def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
+def docker_command(
+    cidfile: str | None = None, image: str = IMAGE, runner_token: str | None = None
+) -> list[str]:
     """Return fixed container arguments; user values never enter command tokens."""
     command = [
         CONTAINER_RUNTIME,
         "run",
-        "--rm",
         "--interactive",
         "--pull=never",
         "--network=none",
@@ -55,6 +64,7 @@ def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
         "--pids-limit=64",
         "--read-only",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+        "--tmpfs=/artifacts:rw,noexec,nosuid,size=16m",
         "--user=65532:65532",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -62,8 +72,62 @@ def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
     ]
     if cidfile:
         command.append(f"--cidfile={cidfile}")
+    if runner_token:
+        command.append(f"--env=SIGMA_RUNNER_TOKEN={runner_token}")
     command.append(image)
     return command
+
+
+def _capture_artifacts(container_id: str) -> tuple[tuple[str, str, bytes], ...]:
+    try:
+        result = subprocess.run(
+            [CONTAINER_RUNTIME, "exec", container_id, "tar", "-C", "/artifacts", "-cf", "-", "."],
+            capture_output=True,
+            timeout=5,
+            check=False,
+            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ProjectError("Could not capture research output files") from exc
+    if result.returncode != 0:
+        raise ProjectError("Could not capture research output files")
+    if not result.stdout:
+        return ()
+    if len(result.stdout) > 16 * 1024 * 1024:
+        raise ProjectError("Research output files exceeded their combined size limit")
+    captured: list[tuple[str, str, bytes]] = []
+    total = 0
+    try:
+        archive = tarfile.open(fileobj=BytesIO(result.stdout), mode="r:")
+        for member in archive:
+            filename = member.name.removeprefix("./")
+            if member.isdir() and filename in {"", "."}:
+                continue
+            if (
+                len(captured) >= MAX_CAPTURED_ARTIFACTS
+                or not filename
+                or filename in {".", ".."}
+                or "/" in filename
+                or "\\" in filename
+                or not member.isfile()
+                or member.size > MAX_CAPTURED_ARTIFACT_BYTES
+            ):
+                raise ProjectError("Research output files must be small regular files with simple names")
+            stream = archive.extractfile(member)
+            if stream is None:
+                raise ProjectError("Could not read a research output file")
+            content = stream.read(MAX_CAPTURED_ARTIFACT_BYTES + 1)
+            if len(content) != member.size:
+                raise ProjectError("Research output file size did not match its archive metadata")
+            total += len(content)
+            if total > MAX_CAPTURED_ARTIFACT_BYTES:
+                raise ProjectError("Research output files exceeded their combined size limit")
+            captured.append(
+                (filename, mimetypes.guess_type(filename)[0] or "application/octet-stream", content)
+            )
+    except (tarfile.TarError, OSError) as exc:
+        raise ProjectError("Research output files were not a valid artifact archive") from exc
+    return tuple(captured)
 
 
 def _validate_source(source: str) -> bytes:
@@ -98,13 +162,16 @@ def _image_identity() -> str | None:
     return image_id
 
 
-def _run(source: str, image_id: str) -> tuple[int | None, bytes, bytes, str]:
+def _run(
+    source: str, image_id: str
+) -> tuple[int | None, bytes, bytes, str, tuple[tuple[str, str, bytes], ...]]:
     encoded = _validate_source(source)
     cid_fd, cid_name = tempfile.mkstemp(prefix="sigma-python-", suffix=".cid")
     os.close(cid_fd)
     cidfile = Path(cid_name)
     cidfile.unlink()
     runtime = CONTAINER_RUNTIME
+    runner_token = secrets.token_hex(16)
 
     def kill_container() -> None:
         try:
@@ -126,7 +193,7 @@ def _run(source: str, image_id: str) -> tuple[int | None, bytes, bytes, str]:
 
     try:
         process = subprocess.Popen(
-            docker_command(str(cidfile), image_id),
+            docker_command(str(cidfile), image_id, runner_token),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -136,15 +203,11 @@ def _run(source: str, image_id: str) -> tuple[int | None, bytes, bytes, str]:
         )
     except OSError:
         cidfile.unlink(missing_ok=True)
-        return None, b"", b"Container runtime could not start.", "unavailable"
+        return None, b"", b"Container runtime could not start.", "unavailable", ()
     assert process.stdin and process.stdout and process.stderr
     started = time.monotonic()
     try:
-        process.stdin.write(encoded)
-    except BrokenPipeError:
-        pass
-    try:
-        process.stdin.close()
+        process.stdin.write(str(len(encoded)).encode("ascii") + b"\n" + encoded)
     except BrokenPipeError:
         pass
     selector = selectors.DefaultSelector()
@@ -152,6 +215,10 @@ def _run(source: str, image_id: str) -> tuple[int | None, bytes, bytes, str]:
     selector.register(process.stderr, selectors.EVENT_READ, "stderr")
     chunks = {"stdout": bytearray(), "stderr": bytearray()}
     status = "completed"
+    marker = b"\x1eSIGMA_DONE:" + runner_token.encode("ascii") + b"\x1f\n"
+    pending_stdout = bytearray()
+    marker_seen = False
+    artifacts: tuple[tuple[str, str, bytes], ...] = ()
 
     def close_pipes() -> None:
         for key in list(selector.get_map().values()):
@@ -164,31 +231,89 @@ def _run(source: str, image_id: str) -> tuple[int | None, bytes, bytes, str]:
         kill_container()
         try:
             os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        except (PermissionError, ProcessLookupError):
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
         close_pipes()
         return reason
 
     while selector.get_map():
         elapsed = time.monotonic() - started
-        if elapsed >= EXECUTION_TIMEOUT_SECONDS and status == "completed":
+        if elapsed >= EXECUTION_TIMEOUT_SECONDS and status == "completed" and not marker_seen:
             status = stop_container("timeout")
             break
         for key, _ in selector.select(min(0.1, max(0.001, EXECUTION_TIMEOUT_SECONDS - elapsed))):
             chunk = os.read(key.fd, MAX_OUTPUT_BYTES + 1)
             if not chunk:
-                selector.unregister(key.fileobj)
-                continue
-            buffer = chunks[key.data]
+                if key.data == "stdout" and pending_stdout and not marker_seen:
+                    chunk = bytes(pending_stdout)
+                    pending_stdout.clear()
+                else:
+                    selector.unregister(key.fileobj)
+                    continue
+            if key.data == "stdout":
+                pending_stdout.extend(chunk)
+                marker_at = pending_stdout.find(marker)
+                if marker_at >= 0:
+                    output_chunk = bytes(pending_stdout[:marker_at])
+                    pending_stdout.clear()
+                    marker_seen = True
+                else:
+                    keep = min(len(marker) - 1, len(pending_stdout))
+                    output_chunk = bytes(pending_stdout[:-keep] if keep else pending_stdout)
+                    if keep:
+                        del pending_stdout[:-keep]
+                    else:
+                        pending_stdout.clear()
+                buffer = chunks["stdout"]
+            else:
+                output_chunk = chunk
+                buffer = chunks["stderr"]
             room = MAX_OUTPUT_BYTES - sum(len(value) for value in chunks.values())
-            buffer.extend(chunk[: max(0, room)])
-            if len(chunk) > room and status == "completed":
+            buffer.extend(output_chunk[: max(0, room)])
+            if len(output_chunk) > room and status == "completed":
                 status = stop_container("output_limit")
                 break
+            if marker_seen:
+                try:
+                    cid = cidfile.read_text(encoding="ascii").strip()
+                    artifacts = _capture_artifacts(cid)
+                except (OSError, UnicodeError, ProjectError) as exc:
+                    status = "failed"
+                    message = (
+                        str(exc)
+                        if isinstance(exc, ProjectError)
+                        else "Could not capture research output files."
+                    )
+                    chunks["stderr"] = bytearray(message.encode("utf-8")[:MAX_OUTPUT_BYTES])
+                try:
+                    process.stdin.close()
+                except BrokenPipeError:
+                    pass
+                break
+        if marker_seen:
+            continue
         if process.poll() is not None and not selector.get_map():
             break
     selector.close()
     return_code = process.wait()
+    try:
+        cid = cidfile.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError):
+        cid = ""
+    if len(cid) == 64 and all(character in "0123456789abcdef" for character in cid):
+        try:
+            subprocess.run(
+                [runtime, "rm", "--force", cid],
+                capture_output=True,
+                timeout=3,
+                check=False,
+                env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
     cidfile.unlink(missing_ok=True)
     diagnostic = b""
     if status == "timeout":
@@ -204,7 +329,7 @@ def _run(source: str, image_id: str) -> tuple[int | None, bytes, bytes, str]:
         stderr.extend(diagnostic)
     else:
         stdout, stderr = chunks["stdout"], chunks["stderr"]
-    return return_code, bytes(stdout), bytes(stderr), status
+    return return_code, bytes(stdout), bytes(stderr), status, artifacts
 
 
 def _execute(source: str) -> ExecutionResult:
@@ -219,7 +344,7 @@ def _execute(source: str) -> ExecutionResult:
             0,
         )
     started = time.monotonic()
-    return_code, stdout, stderr, status = _run(source, image_id)
+    return_code, stdout, stderr, status, artifacts = _run(source, image_id)
     duration = round((time.monotonic() - started) * 1000)
     if status == "unavailable":
         return ExecutionResult(status, None, "", stderr.decode("utf-8"), duration, image_id)
@@ -232,6 +357,7 @@ def _execute(source: str) -> ExecutionResult:
         stderr.decode("utf-8", errors="replace"),
         duration,
         image_id,
+        artifacts,
     )
 
 
@@ -266,7 +392,11 @@ def _metadata_id(value: str | None, label: str) -> str | None:
         raise ProjectError(f"Invalid {label} identifier") from exc
 
 
-def _save_record(directory: Path, record: dict[str, Any]) -> None:
+def _save_record(
+    directory: Path,
+    record: dict[str, Any],
+    artifacts: tuple[tuple[str, str, bytes], ...] = (),
+) -> None:
     encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_ARTIFACT_BYTES:
         raise ProjectError("Research execution artifact exceeded its storage limit")
@@ -281,14 +411,61 @@ def _save_record(directory: Path, record: dict[str, Any]) -> None:
                 for item in directory.glob("*.json")
                 if item.is_file() and not item.is_symlink()
             ]
-            if sum(item.stat().st_size for item in existing) + len(encoded) > MAX_STORAGE_BYTES:
-                raise ProjectError("Research execution storage limit reached")
-            staged = _stage(directory, encoded)
+            artifact_dir = directory / f"{record['id']}.artifacts"
+            artifact_dir.mkdir(mode=0o700, exist_ok=False)
+            artifact_records = []
             try:
-                os.chmod(staged, 0o600)
-                os.replace(staged, directory / f"{record['id']}.json")
-            finally:
-                staged.unlink(missing_ok=True)
+                for filename, media_type, content in artifacts:
+                    if (
+                        len(content) > MAX_CAPTURED_ARTIFACT_BYTES
+                        or Path(filename).name != filename
+                        or filename in {".", ".."}
+                    ):
+                        raise ProjectError("Research output artifact is invalid")
+                    target = artifact_dir / filename
+                    fd = os.open(
+                        target,
+                        os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+                        0o600,
+                    )
+                    with os.fdopen(fd, "wb") as output:
+                        output.write(content)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    artifact_records.append(
+                        {
+                            "filename": filename,
+                            "media_type": media_type,
+                            "size_bytes": len(content),
+                            "sha256": hashlib.sha256(content).hexdigest(),
+                        }
+                    )
+                record["artifacts"] = artifact_records
+                encoded = (
+                    json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+                ).encode()
+                if len(encoded) > MAX_ARTIFACT_BYTES:
+                    raise ProjectError("Research execution artifact exceeded its storage limit")
+                existing_bytes = sum(
+                    item.stat().st_size
+                    for item in directory.rglob("*")
+                    if item.is_file() and not item.is_symlink()
+                )
+                if existing_bytes + len(encoded) + sum(
+                    item["size_bytes"] for item in artifact_records
+                ) > MAX_STORAGE_BYTES:
+                    raise ProjectError("Research execution storage limit reached")
+                staged = _stage(directory, encoded)
+                try:
+                    os.chmod(staged, 0o600)
+                    os.replace(staged, directory / f"{record['id']}.json")
+                finally:
+                    staged.unlink(missing_ok=True)
+            except BaseException:
+                for item in artifact_dir.iterdir():
+                    item.unlink(missing_ok=True)
+                artifact_dir.rmdir()
+                raise
             fcntl.flock(lock, fcntl.LOCK_UN)
     except OSError as exc:
         raise ProjectError("Could not store research execution artifact") from exc
@@ -336,7 +513,13 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
 
 async def execute(source: str) -> ExecutionResult:
     """Execute one bounded code proposal without blocking the event loop."""
-    return await asyncio.to_thread(_execute_admitted, source)
+    task = asyncio.create_task(asyncio.to_thread(_execute_admitted, source))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # The container has a hard wall limit; wait for its bounded cleanup so
+        # callers that persist the result can retain an honest execution record.
+        return await asyncio.shield(task)
 
 
 async def execute_research_code(
@@ -352,7 +535,13 @@ async def execute_research_code(
     view = inspect_project(path)
     if cycle is not None and (type(cycle) is not int or cycle < 1):
         raise ProjectError("Research cycle must be a positive integer")
-    result = await execute(source)
+    execution_task = asyncio.create_task(execute(source))
+    cancelled = False
+    try:
+        result = await asyncio.shield(execution_task)
+    except asyncio.CancelledError:
+        cancelled = True
+        result = await asyncio.shield(execution_task)
     record = {
         "schema_version": 1,
         "id": str(uuid4()),
@@ -377,9 +566,29 @@ async def execute_research_code(
             "wall_limit_seconds": EXECUTION_TIMEOUT_SECONDS,
         },
     }
-    _save_record(_execution_directory(path), record)
+    _save_record(_execution_directory(path), record, result.artifacts)
+    if cancelled:
+        raise asyncio.CancelledError
     return record
 
 
 def get_execution(path: str | Path, execution_id: str) -> dict[str, Any]:
     return _read_record(path, execution_id)
+
+
+def get_execution_artifact(
+    path: str | Path, execution_id: str, filename: str
+) -> tuple[bytes, str]:
+    record = _read_record(path, execution_id)
+    metadata = next(
+        (item for item in record.get("artifacts", []) if item.get("filename") == filename), None
+    )
+    if metadata is None or Path(filename).name != filename:
+        raise ProjectError("Research output artifact not found")
+    target = _execution_directory(path) / f"{record['id']}.artifacts" / filename
+    if target.is_symlink() or not target.is_file() or target.stat().st_size != metadata["size_bytes"]:
+        raise ProjectError("Research output artifact not found")
+    content = target.read_bytes()
+    if hashlib.sha256(content).hexdigest() != metadata["sha256"]:
+        raise ProjectError("Research output artifact failed its integrity check")
+    return content, str(metadata["media_type"])

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import selectors
+import secrets
 import signal
 import subprocess
 import sys
@@ -17,7 +18,9 @@ MAX_SOURCE_BYTES = 16_000
 MAX_OUTPUT_BYTES = 32_000
 
 
-def command(runtime: str = "docker", cidfile: str | None = None) -> list[str]:
+def command(
+    runtime: str = "docker", cidfile: str | None = None, runner_token: str | None = None
+) -> list[str]:
     result = [
         runtime,
         "run",
@@ -31,6 +34,7 @@ def command(runtime: str = "docker", cidfile: str | None = None) -> list[str]:
         "--pids-limit=64",
         "--read-only",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+        "--tmpfs=/artifacts:rw,noexec,nosuid,size=16m",
         "--user=65532:65532",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -38,6 +42,8 @@ def command(runtime: str = "docker", cidfile: str | None = None) -> list[str]:
     ]
     if cidfile:
         result.append(f"--cidfile={cidfile}")
+    if runner_token:
+        result.append(f"--env=SIGMA_RUNNER_TOKEN={runner_token}")
     result.append(IMAGE)
     return result
 
@@ -52,9 +58,10 @@ def execute(source: str, timeout: int = 15, runtime: str = "docker") -> tuple[in
     os.close(fd)
     cidfile = cid_name
     os.unlink(cidfile)
+    token = secrets.token_hex(16)
     try:
         process = subprocess.Popen(
-            command(runtime, cidfile),
+            command(runtime, cidfile, token),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -65,17 +72,16 @@ def execute(source: str, timeout: int = 15, runtime: str = "docker") -> tuple[in
         return 127, "Container runtime is unavailable."
     assert process.stdin and process.stdout and process.stderr
     try:
-        process.stdin.write(encoded)
-    except BrokenPipeError:
-        pass
-    try:
-        process.stdin.close()
+        process.stdin.write(str(len(encoded)).encode("ascii") + b"\n" + encoded)
     except BrokenPipeError:
         pass
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ, "stdout")
     selector.register(process.stderr, selectors.EVENT_READ, "stderr")
     captured = {"stdout": bytearray(), "stderr": bytearray()}
+    marker = b"\x1eSIGMA_DONE:" + token.encode("ascii") + b"\x1f\n"
+    stdout_pending = bytearray()
+    finished = False
     started = time.monotonic()
     status = 0
 
@@ -108,6 +114,24 @@ def execute(source: str, timeout: int = 15, runtime: str = "docker") -> tuple[in
             if not chunk:
                 selector.unregister(key.fileobj)
                 continue
+            if key.data == "stdout":
+                stdout_pending.extend(chunk)
+                marker_at = stdout_pending.find(marker)
+                if marker_at >= 0:
+                    chunk = bytes(stdout_pending[:marker_at])
+                    stdout_pending.clear()
+                    finished = True
+                    try:
+                        process.stdin.close()
+                    except BrokenPipeError:
+                        pass
+                else:
+                    keep = min(len(marker) - 1, len(stdout_pending))
+                    chunk = bytes(stdout_pending[:-keep] if keep else stdout_pending)
+                    if keep:
+                        del stdout_pending[:-keep]
+                    else:
+                        stdout_pending.clear()
             current = captured[key.data]
             remaining = MAX_OUTPUT_BYTES - 1 - sum(map(len, captured.values()))
             current.extend(chunk[: max(0, remaining)])
@@ -115,6 +139,8 @@ def execute(source: str, timeout: int = 15, runtime: str = "docker") -> tuple[in
                 status = 125
                 terminate()
                 break
+        if finished:
+            continue
     selector.close()
     process.wait()
     if os.path.exists(cidfile):

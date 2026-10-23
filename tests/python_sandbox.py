@@ -33,6 +33,7 @@ def main() -> None:
         "--pids-limit=64",
         "--read-only",
         "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+        "--tmpfs=/artifacts:rw,noexec,nosuid,size=16m",
         "--user=65532:65532",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
@@ -54,7 +55,15 @@ def main() -> None:
         path = Path(temporary) / "p.sigma"
         initialize_project(path, "Sandbox project", "Run a finite computation")
         session_id, strategy_id = str(uuid4()), str(uuid4())
-        fake = python_sandbox.ExecutionResult("completed", 0, "2\n", "", 17, "sha256:" + "a" * 64)
+        fake = python_sandbox.ExecutionResult(
+            "completed",
+            0,
+            "2\n",
+            "",
+            17,
+            "sha256:" + "a" * 64,
+            (("plot.png", "image/png", b"PNG fixture"),),
+        )
         with patch.object(python_sandbox, "execute", return_value=fake):
             record = asyncio.run(
                 python_sandbox.execute_research_code(
@@ -70,7 +79,19 @@ def main() -> None:
         assert record["cycle"] == 2 and record["source"] == "print(1 + 1)"
         assert record["environment"]["network"] == "none"
         assert record["environment"]["image_id"] == "sha256:" + "a" * 64
+        assert record["artifacts"] == [
+            {
+                "filename": "plot.png",
+                "media_type": "image/png",
+                "size_bytes": len(b"PNG fixture"),
+                "sha256": __import__("hashlib").sha256(b"PNG fixture").hexdigest(),
+            }
+        ]
         assert python_sandbox.get_execution(str(path), record["id"]) == record
+        assert python_sandbox.get_execution_artifact(str(path), record["id"], "plot.png") == (
+            b"PNG fixture",
+            "image/png",
+        )
         assert python_sandbox.list_executions(str(path)) == [record]
         rejects(lambda: python_sandbox.get_execution(str(path), str(uuid4())))
         rejects(lambda: asyncio.run(python_sandbox.execute_research_code(str(path), "x" * 16_001)))
@@ -90,16 +111,49 @@ def main() -> None:
         assert directory.stat().st_mode & 0o777 == 0o700
         assert (path / "project.json").exists()
 
+        async def cancellation_is_durable():
+            started = asyncio.Event()
+            finish = asyncio.Event()
+
+            async def delayed(_source):
+                started.set()
+                await finish.wait()
+                return fake
+
+            with patch.object(python_sandbox, "execute", side_effect=delayed):
+                task = asyncio.create_task(
+                    python_sandbox.execute_research_code(str(path), "print('durable')")
+                )
+                await started.wait()
+                task.cancel()
+                finish.set()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                else:
+                    raise AssertionError("Cancellation should propagate after saving the result")
+
+            records = python_sandbox.list_executions(str(path))
+            assert any(item["source"] == "print('durable')" for item in records)
+
+        asyncio.run(cancellation_is_durable())
+
         client = TestClient(app)
         response = client.get("/api/projects/research-executions", params={"path": str(path)})
-        assert (
-            response.status_code == 200 and response.json()["executions"][0]["id"] == record["id"]
+        assert response.status_code == 200 and any(
+            item["id"] == record["id"] for item in response.json()["executions"]
         )
         response = client.get(
             f"/api/projects/research-executions/{record['id']}",
             params={"path": str(path)},
         )
         assert response.status_code == 200 and response.json()["source"] == "print(1 + 1)"
+        response = client.get(
+            f"/api/projects/research-executions/{record['id']}/artifacts/plot.png",
+            params={"path": str(path)},
+        )
+        assert response.status_code == 200 and response.content == b"PNG fixture"
         with patch.object(python_sandbox, "execute", return_value=fake):
             response = client.post(
                 "/api/projects/research-executions",
