@@ -3,22 +3,24 @@
 import asyncio
 import json
 import os
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any, Literal
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chatgpt_auth, papers, python_sandbox, research_sessions
+from sigma import chatgpt_auth, cloud_workspaces, papers, python_sandbox, research_sessions
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
+    WorkspaceAccessError,
     change_stage,
     close_project,
     create_project,
@@ -47,7 +49,33 @@ from sigma.research_tools import execution_capabilities
 from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
+async def cloud_workspace_scope(request: Request) -> AsyncIterator[None]:
+    """Bind each protected cloud request to its verified subject's durable root."""
+    if (
+        not cloud_workspaces.enabled()
+        or request.url.path == "/api/ui-instance"
+        or request.url.path.startswith("/api/cloud-auth/")
+    ):
+        yield
+        return
+    principal = getattr(request.state, "cloud_principal", None)
+    if principal is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    try:
+        token = cloud_workspaces.bind(principal)
+    except cloud_workspaces.WorkspaceUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Private workspace is unavailable.") from exc
+    try:
+        yield
+    finally:
+        cloud_workspaces.reset(token)
+
+
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
+# Installed before routes, so FastAPI applies this dependency after the auth
+# middleware has attached its verified principal. Cloud-auth's own public and
+# admin endpoints do not access workspace data.
+app.router.dependencies.append(Depends(cloud_workspace_scope))
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 
 
@@ -84,6 +112,11 @@ async def local_browser_only(request: Request, call_next):
 @app.exception_handler(ProjectError)
 async def project_error(request: Request, exc: ProjectError):
     return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.exception_handler(WorkspaceAccessError)
+async def workspace_access_error(request: Request, exc: WorkspaceAccessError):
+    return JSONResponse({"error": "Project not found or access denied."}, status_code=404)
 
 
 class OpenRequest(BaseModel):

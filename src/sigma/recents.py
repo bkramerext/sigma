@@ -27,6 +27,11 @@ MAX_ENTRIES = MAX_PER_CATEGORY * (len(ResearchMode) + 1)
 
 
 def state_directory() -> Path:
+    from sigma import cloud_workspaces
+
+    workspace_path = cloud_workspaces.private_state_directory()
+    if workspace_path is not None:
+        return workspace_path
     configured = os.environ.get("SIGMA_STATE_DIR")
     if configured:
         path = Path(configured).expanduser()

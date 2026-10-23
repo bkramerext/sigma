@@ -25,38 +25,48 @@ MAX_CONTEXT = 48000
 MAX_RESPONSE = 128000
 _gate = threading.Lock()
 _receipt_key = secrets.token_bytes(32)
-_active_requests: dict[str, asyncio.Task] = {}
-_cancelled_requests: dict[str, float] = {}
+_active_requests: dict[tuple[str, str], asyncio.Task] = {}
+_cancelled_requests: dict[tuple[str, str], float] = {}
+
+
+def _request_key(request_id: str) -> tuple[str, str]:
+    from sigma import cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    return (workspace.workspace_id if workspace is not None else "local", request_id)
 
 
 def register_request(request_id: str, task: asyncio.Task) -> None:
+    scoped_id = _request_key(request_id)
     now = time.monotonic()
     for key, expires in list(_cancelled_requests.items()):
         if expires <= now:
             _cancelled_requests.pop(key, None)
-    if request_id in _cancelled_requests:
-        _cancelled_requests.pop(request_id, None)
+    if scoped_id in _cancelled_requests:
+        _cancelled_requests.pop(scoped_id, None)
         task.cancel()
         return
-    if request_id in _active_requests:
+    if scoped_id in _active_requests:
         raise ProjectError("Duplicate proposal request identifier")
-    _active_requests[request_id] = task
+    _active_requests[scoped_id] = task
 
 
 def unregister_request(request_id: str, task: asyncio.Task) -> None:
-    if _active_requests.get(request_id) is task:
-        _active_requests.pop(request_id, None)
+    scoped_id = _request_key(request_id)
+    if _active_requests.get(scoped_id) is task:
+        _active_requests.pop(scoped_id, None)
 
 
 async def cancel_request(request_id: str) -> bool:
+    scoped_id = _request_key(request_id)
     now = time.monotonic()
     for key, expires in list(_cancelled_requests.items()):
         if expires <= now:
             _cancelled_requests.pop(key, None)
-    task = _active_requests.get(request_id)
+    task = _active_requests.get(scoped_id)
     if task is None:
         # Cancellation may arrive through Vite before the proxied proposal POST.
-        _cancelled_requests[request_id] = now + 120
+        _cancelled_requests[scoped_id] = now + 120
         return False
     if not task.done():
         task.cancel()
