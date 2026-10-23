@@ -48,3 +48,10 @@ Coordinator security correction (PR #44 review)
 - Implemented the server-side check in `src/sigma/cloud_demo.py`; no workspace files or Green-owned workspace implementation were changed.
 - Added deterministic API regressions for explicit and default workspace roots, parent-symlink aliases, unsafe write permissions, and valid curated snapshot exports.
 - Final verification: `uv run python tests/cloud_demo.py` — 6 passed; `./sigma test` — all steps passed, including cloud Demo/auth/workspace checks, Ruff, formatting, Pyright, frontend typecheck and production build. Both real-Chrome checks passed against mocked API responses, not a live browser-to-backend integration.
+
+Correction delivery
+
+- Base: `main` at `113436118514ff7cca2c806c8924f958ff16392f`.
+- Corrected PR head: `af05be8d9b853e5cdb49a9e062c6fa211fd004dd`.
+- GitHub reports PR #44 open and mergeable. It remains unmerged for coordinator review.
+- Final checks on this corrected tree: `uv run python tests/cloud_demo.py` — 6 passed; `./sigma test` — all steps passed; real Chrome Demo and denied-account UI checks passed with mocked API responses. Live browser-to-backend integration remains unverified.
