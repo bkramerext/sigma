@@ -24,6 +24,10 @@ class ProjectError(ValueError):
     """An invalid request or a project that cannot safely be used."""
 
 
+class WorkspaceAccessError(ProjectError):
+    """A cloud request addressed a project outside its private workspace."""
+
+
 class ResearchMode(str, Enum):
     DEFAULT = "default"
     BIOLOGY = "biology"
@@ -211,11 +215,23 @@ def project_path(value: str | Path) -> Path:
     try:
         path = Path(value).expanduser().absolute()
         if path.is_symlink():
+            from sigma import cloud_workspaces
+
+            if cloud_workspaces.current() is not None:
+                raise WorkspaceAccessError("Project not found or access denied.")
             raise ProjectError("Project directory must not be a symbolic link")
         path = path.resolve()
+        from sigma import cloud_workspaces
+
+        try:
+            cloud_workspaces.assert_project_path(value, path)
+        except ValueError as exc:
+            raise WorkspaceAccessError("Project not found or access denied.") from exc
         if path.suffix != ".sigma":
             raise ProjectError("Project path must end in .sigma")
         return path
+    except WorkspaceAccessError:
+        raise
     except (OSError, ValueError, RuntimeError) as exc:
         raise ProjectError(f"Invalid project path: {exc}") from exc
 
@@ -942,6 +958,11 @@ class ProjectDestination:
 
 def projects_root() -> Path:
     """Explicit server-side location, independent of the browser or current directory."""
+    from sigma import cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    if workspace is not None:
+        return workspace.path
     try:
         configured = Path(
             os.environ.get("SIGMA_PROJECTS_ROOT", str(ROOT / "projects"))

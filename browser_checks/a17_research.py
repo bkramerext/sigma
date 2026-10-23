@@ -1075,7 +1075,24 @@ with sync_playwright() as playwright:
     expect(provenance_detail).to_contain_text(metrics_session["id"])
     for width, height in ((1440, 900), (1280, 800), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
-        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), width
+        overflow = page.evaluate(
+            """() => [...document.querySelectorAll('*')].filter(element => {
+              const rect = element.getBoundingClientRect();
+              return rect.left < -1 || rect.right > window.innerWidth + 1;
+            }).slice(0, 12).map(element => ({
+              tag: element.tagName,
+              className: typeof element.className === 'string' ? element.className : '',
+              left: Math.round(element.getBoundingClientRect().left),
+              right: Math.round(element.getBoundingClientRect().right),
+              scrollWidth: element.scrollWidth,
+              clientWidth: element.clientWidth,
+              text: (element.textContent || '').trim().slice(0, 90),
+            }))"""
+        )
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), (
+            width,
+            overflow,
+        )
         assert_outcome_markdown_control_flow()
         outcome_box = first_session.locator(".session-outcome").bounding_box()
         assert (
