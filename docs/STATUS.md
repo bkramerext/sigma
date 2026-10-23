@@ -412,21 +412,25 @@ difficulty badge remains visible and the page has no horizontal overflow.
 
 ## A23.1 Evaluation (2026-10-23)
 
-Added compact model, thinking-level, and authentication-status pills beneath
-the project title/difficulty row. The model catalog now supplies relative cost
-tiers derived from the published API token prices; the model pill exposes the
-explanation that these tiers are not session charges. The header reads the
-existing account-verified model catalog and persists choices through the
-existing project settings update service, so later provider requests use the
-saved model and thinking level. It never changes the selected billing mode.
+The first implementation put controls beside Difficulty and replaced the
+functional ChatGPT connection control with a passive sign-in status. PR review
+rejected both choices and pointed to the updated `tickets/t23.1.md`. The revised
+header preserves Difficulty and places four distinct pills in the requested
+upper-right 2×2 arrangement: Model over Thinking on the left, Google sign-in
+over ChatGPT sign-in on the right. Google is a clearly unavailable, noninteractive
+placeholder. The ChatGPT pill is the existing `ConnectionStatus` disclosure,
+with its live state, connection/reconnection, account switching, billing mode,
+and disconnect actions preserved.
 
-The model pill cycles only among account-verified available models that support
-the current thinking level. If no compatible alternate exists, the control is
-disabled with an explanation. The thinking pill cycles only through the
-selected model's supported efforts. A static Sign in/Signed in placeholder
-reflects ChatGPT connection state; API-key mode displays Sign in with an
-accessible explanation that ChatGPT plan sign-in is inactive. No authentication
-flow was added.
+The account-verified model catalog supplies relative cost tiers derived from
+published API token prices. Dollar signs have an accessible explanation that
+they are not session charges. Model and Thinking selections persist through
+the existing project settings update service and affect subsequent provider
+requests without changing billing mode. Model rotation includes every
+available catalog model; if the next model disallows the current effort, the
+header visibly announces the resulting effort before activation and persists
+both values together. Thinking cycles only through the current model's
+supported efforts.
 
 Verification passed:
 
@@ -435,15 +439,18 @@ Verification passed:
   verify all three documented relative price tiers and reject a model/thinking
   pair after the fixture narrows the model's supported efforts.
 - `uv run --with playwright python browser_checks/header.py`: real Chrome with
-  an isolated local fixture passed model and thinking selection by keyboard,
-  persisted project settings, unsupported-model skipping, cost disclosure,
-  placeholder status, and no billing-mode change at 1280, 1100, 700, 390, and
-  320px. No provider inference or paid API call was made. Inspected captures:
+  an isolated local fixture passed precise two-by-two placement, keyboard
+  cycling, incompatible-effort reconciliation, persisted project settings,
+  accessible cost disclosure, unavailable Google sign-in, and the existing
+  functional ChatGPT connection dialog at 1280, 1100, 700, 390, and 320px.
+  No provider inference or paid API call was made. Inspected captures:
   `/tmp/sigma-a23-model-controls-1280.png` and
   `/tmp/sigma-a23-model-controls-390.png`.
 
 The model catalog and settings contract are tested with deterministic fixtures;
-live provider inference was not used for this UI/configuration assignment.
+live provider inference was not used for this UI/configuration assignment. The
+ChatGPT control was exercised against the local fixture and its existing
+connection dialog/actions, not a live sign-in or account.
 
 ## A17.8 Evaluation (2026-10-22)
 

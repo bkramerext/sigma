@@ -46,12 +46,12 @@
 | A21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
 | A22 | Cloud deployment | Planned / unverified | Unassigned |
 | A23 | Project difficulty setting | Done | — |
-| A23.1 | Interactive model and thinking controls | Implementation complete; PR open | Blue |
+| A23.1 | Interactive model and thinking controls | Review revisions implemented; PR open | Blue |
 | A24 | Consolidated outcome metrics, operational and research quality | Ready to assign; not verified started | Green proposed |
 
 ### A23.1 scope
 
-Clicking model and thinking pills cycles through the **actually supported** selections. Show relative pricing as `$`, `$$`, etc. Reconcile incompatible reasoning levels, persist selection, and apply changes only to future requests. Preserve the selected billing mode; do not initiate paid-API fallback. The authentication pill remains a placeholder. Preserve SIGMA's existing UI styling.
+Place four distinct controls in an upper-right 2×2 header group: Model over Thinking at left; Google sign-in over the existing functional ChatGPT sign-in control at right. Preserve Difficulty in place. Cycle through supported model/effort options, visibly disclose a required effort adjustment before changing models, persist only project model settings for future requests, and never change billing mode. Google is a noninteractive not-implemented placeholder for T22. Reuse the existing ChatGPT connection UI and state/actions.
 
 ### A24 scope
 

@@ -41,8 +41,8 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; flex: 0 0 auto; gap: 12px; margin-left: 0; padding-top: 12px; }
-.workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content; grid-template-areas: "model google" "thinking chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
+.workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 12px; }
 .workspace-page .current-project { min-width: 0; margin: 0; color: var(--workspace-copper); font: 400 clamp(17px, 1.5vw, 22px)/1.35 Georgia, serif; overflow-wrap: anywhere; }
 .workspace-page .project-title-edit { display: inline; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
@@ -241,21 +241,30 @@
 .workspace-page .project-header-title-row .research-type-icon { display: block; flex: 0 0 26px; width: 26px; height: 26px; color: var(--workspace-copper); }
 .workspace-page .project-header-title-row .project-header-title { width: auto; flex: 1 1 auto; }
 .workspace-page .project-difficulty-badge { display: inline-flex; flex: 0 0 auto; align-items: center; max-width: 100%; padding: 3px 8px; border: 1px solid #8b6745; border-radius: 999px; background: #091824e8; color: #e0c4a0; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .025em; white-space: nowrap; }
-.workspace-page .project-header-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; max-width: 100%; }
+.workspace-page .project-header-controls { display: contents; }
 .workspace-page .project-control-pill { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-height: 27px; padding: 4px 9px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e1c39e; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
+.workspace-page .project-model-pill { grid-area: model; }
+.workspace-page .project-thinking-pill { grid-area: thinking; }
+.workspace-page .project-google-signin { grid-area: google; }
+.workspace-page .project-chatgpt-signin { min-width: 0; max-width: none; }
+.workspace-page .project-chatgpt-signin > summary { margin-left: 0; padding-inline: 9px; font-size: 10px; }
+.workspace-page .project-google-placeholder { display: inline-flex; align-items: center; justify-content: center; min-height: 27px; padding: 4px 9px; border: 1px solid #4f5a62; border-radius: 999px; background: #111a22ed; color: #9baab5; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
 button.project-control-pill { cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
 button.project-control-pill:hover:not(:disabled), button.project-control-pill:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
 button.project-control-pill:focus-visible { outline: 2px solid #e9bc82; outline-offset: 2px; }
 button.project-control-pill:disabled { cursor: default; opacity: .62; }
-.workspace-page .project-auth-placeholder { color: #aab8c4; }
-.workspace-page .project-auth-placeholder.is-connected { border-color: #557a63; color: #c0dfc5; }
-.workspace-page .project-controls-message { flex: 1 0 100%; color: #9fb0bd; font-size: 10px; line-height: 1.35; }
+.workspace-page .project-controls-message { grid-column: 1 / -1; color: #9fb0bd; font-size: 10px; line-height: 1.35; }
 .workspace-page .project-header-controls .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 700px) {
   .workspace-page .project-art-header .project-title-line { max-width: 100%; gap: 8px; }
   .workspace-page .project-header-title { font-size: 18px; }
   .workspace-page .project-header-title-row { gap: 5px; }
   .workspace-page .project-header-title-row .research-type-icon { flex-basis: 22px; width: 22px; height: 22px; }
-  .workspace-page .project-header-controls { gap: 5px; }
   .workspace-page .project-control-pill { min-height: 26px; padding-inline: 8px; font-size: 9px; }
+  .workspace-page .project-art-header .header-controls { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); justify-content: stretch; gap: 6px; }
+  .workspace-page .project-art-header .header-controls > :is(.project-model-pill, .project-thinking-pill, .project-google-placeholder, .project-chatgpt-signin) { justify-self: stretch; }
+  .workspace-page .project-art-header .api-connection.project-chatgpt-signin { width: 100%; max-width: none; }
+  .workspace-page .project-chatgpt-signin > summary { width: 100%; min-width: 0; justify-content: center; padding-inline: 4px; font-size: 9px; white-space: normal; }
+  .workspace-page .project-chatgpt-signin > summary [role="status"] { min-width: 0; white-space: normal; text-align: center; }
+  .workspace-page .project-google-placeholder { min-width: 0; padding-inline: 4px; font-size: 9px; }
 }

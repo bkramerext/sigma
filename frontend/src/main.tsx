@@ -1072,12 +1072,16 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}</span>{projectDifficulty && <span className={`project-difficulty-badge difficulty-${projectDifficulty}`} aria-label={`Project difficulty: ${difficultyLabels[projectDifficulty]}`}>Difficulty · {difficultyLabels[projectDifficulty]}</span>}</div>}{projectView && onProjectUpdated && <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption">Back to home</button></div></div>
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}</span>{projectDifficulty && <span className={`project-difficulty-badge difficulty-${projectDifficulty}`} aria-label={`Project difficulty: ${difficultyLabels[projectDifficulty]}`}>Difficulty · {difficultyLabels[projectDifficulty]}</span>}</div>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption">Back to home</button></div></div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    <ConnectionStatus disabled={connectionDisabled}/>
+    {close && projectView && onProjectUpdated ? <>
+      <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
+      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in is not implemented; planned for cloud support" aria-label="Google sign-in is not implemented; planned for cloud support">Google · Not implemented</span>
+      <ConnectionStatus disabled={connectionDisabled} projectHeader/>
+    </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
   </header>;
 }
@@ -1189,28 +1193,28 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
 
   const current = models.find(model => model.id === view.project.ai_model);
   const available = models.filter(model => model.availability === 'available');
-  const compatible = available.filter(model => model.efforts.includes(view.project.reasoning_effort));
-  const currentCompatibleIndex = compatible.findIndex(model => model.id === view.project.ai_model);
-  const nextModel = compatible.length === 1 && currentCompatibleIndex < 0
-    ? compatible[0]
-    : compatible.length > 1
-      ? compatible[(currentCompatibleIndex + 1) % compatible.length]
-      : undefined;
+  const currentAvailableIndex = available.findIndex(model => model.id === view.project.ai_model);
+  const nextModel = available.length > 1
+    ? available[(currentAvailableIndex + 1 + available.length) % available.length]
+    : available.length === 1 && currentAvailableIndex < 0 ? available[0] : undefined;
   const efforts = current?.availability === 'available' ? current.efforts : [];
   const currentEffortIndex = efforts.indexOf(view.project.reasoning_effort);
   const nextEffort = efforts.length > 1
     ? efforts[(currentEffortIndex + 1 + efforts.length) % efforts.length]
     : undefined;
-  const noCompatibleAlternative = available.length > 0 && !nextModel;
+  const effortOrder = ['low', 'medium', 'high', 'xhigh'];
+  const reconciledEffort = (model: CatalogChoice | undefined) => {
+    if (!model?.efforts.length) return undefined;
+    if (model.efforts.includes(view.project.reasoning_effort)) return view.project.reasoning_effort;
+    const oldIndex = effortOrder.indexOf(view.project.reasoning_effort);
+    return [...model.efforts].sort((a, b) => {
+      const distance = Math.abs(effortOrder.indexOf(a) - oldIndex) - Math.abs(effortOrder.indexOf(b) - oldIndex);
+      return distance || effortOrder.indexOf(a) - effortOrder.indexOf(b);
+    })[0];
+  };
+  const nextModelEffort = reconciledEffort(nextModel);
+  const effortWillChange = Boolean(nextModel && nextModelEffort !== view.project.reasoning_effort);
   const costHelpId = `project-model-cost-help-${view.project.id}`;
-  const connectedPlan = ai.info?.mode === 'chatgpt' && ai.info.status === 'connected';
-  const authLabel = ai.initialLoading ? 'Checking…' : connectedPlan ? 'Signed in' : 'Sign in';
-  const authDescription = connectedPlan
-    ? 'ChatGPT account is connected. This does not guarantee model inference or remaining usage.'
-    : ai.info?.mode === 'api_key'
-      ? 'OpenAI API-key mode is selected; ChatGPT sign-in is not active. This pill is a placeholder.'
-      : 'ChatGPT sign-in is not active. This pill is a placeholder; authentication is handled in AI settings.';
-  const authStatusDescription = ai.initialLoading ? 'Checking AI sign-in status.' : authDescription;
 
   async function update(nextModel: string, nextEffort: string) {
     if (saving.current || disabled || busy) return;
@@ -1229,20 +1233,22 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   }
 
   const modelLabel = current ? `${current.label.split(' · ')[0]} ${current.relative_cost}` : view.project.ai_model;
-  const modelDisabled = !catalogReady || busy || disabled || !nextModel;
+  const modelDisabled = !catalogReady || busy || disabled || !nextModel || !nextModelEffort;
   const thinkingDisabled = !catalogReady || busy || disabled || !nextEffort;
   const statusMessage = message || !catalogReady
     ? message || 'Checking model availability…'
     : current?.availability !== 'available'
       ? 'Saved model access is not verified; settings were preserved.'
-      : noCompatibleAlternative
-        ? 'No other available model supports this Thinking level.'
-        : '';
-  return <div className="project-header-controls" aria-label="Project model controls">
-    <button type="button" className="project-control-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.`} aria-describedby={costHelpId} title={noCompatibleAlternative ? 'No other available model supports this Thinking level.' : 'Cycle through available models'} disabled={modelDisabled} onClick={() => nextModel && void update(nextModel.id, view.project.reasoning_effort)}>{modelLabel}</button>
-    <button type="button" className="project-control-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title="Cycle through thinking levels supported by this model" disabled={thinkingDisabled} onClick={() => nextEffort && void update(view.project.ai_model, nextEffort)}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
-    <span className={`project-control-pill project-auth-placeholder${connectedPlan ? ' is-connected' : ''}`} role="status" aria-label={authStatusDescription} title={authStatusDescription}>{authLabel}</span>
+      : '';
+  const nextEffortNotice = effortWillChange
+    ? ` Switching to ${nextModel?.label.split(' · ')[0]} will also change Thinking from ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort} to ${thinkingLabels[nextModelEffort!]}.`
+    : '';
+  const visibleEffortNotice = effortWillChange ? `Next model uses ${thinkingLabels[nextModelEffort!]}.` : '';
+  return <div className="project-header-controls" aria-label="Project model and thinking controls">
+    <button type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`Cycle through available models.${nextEffortNotice}`} disabled={modelDisabled} onClick={() => nextModel && nextModelEffort && void update(nextModel.id, nextModelEffort)}><span>Model · </span>{modelLabel}</button>
+    <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title="Cycle through thinking levels supported by this model" disabled={thinkingDisabled} onClick={() => nextEffort && void update(view.project.ai_model, nextEffort)}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
     <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
+    {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
     {statusMessage && <span className="project-controls-message" role="status">{statusMessage}</span>}
   </div>;
 }

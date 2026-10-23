@@ -91,12 +91,14 @@ that copy in Recents, source-file immutability, and 1280x720, 390x844 and
 With a fresh `provider_fixture:app` on port 8001 and the normal UI on 5173, run
 `uv run --with playwright python browser_checks/header.py`. It checks the full
 project name and header reflow at 1280, 1100, 700, 390 and 320px, the absence of
-the workspace tagline, shared Home/Close button states, identical Home/workspace
-connection pill styling and live label, disclosure/focus behavior, and keyboard
-Back to home. It also cycles and persists the model/thinking pills, skips a
-verified model that does not support the selected effort, checks the relative
-cost explanation and placeholder auth state, and verifies no horizontal
-overflow. Screenshots are `/tmp/sigma-a23-model-controls-*.png` and
+the workspace tagline, shared Home/Close button states, the existing functional
+connection disclosure in its compact project-header presentation, disclosure/
+focus behavior, and keyboard Back to home. It verifies the upper-right 2×2 Model/Google and Thinking/ChatGPT
+arrangement, cycles and persists model/thinking settings (including explicit
+effort reconciliation when a new model does not support the current effort),
+relative cost disclosure, noninteractive Google placeholder, functional
+ChatGPT connection disclosure/actions, and no horizontal overflow. Screenshots
+are `/tmp/sigma-a23-model-controls-*.png` and
 `/tmp/sigma-a13-header-*.png`.
 
 ## A15 single-request Generate Strategy
