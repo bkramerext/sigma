@@ -13,7 +13,8 @@ SCORE_AXES = ("mathematical_judgment", "discriminating_next_step", "evidence_lab
 SCORE_VALUES = (0, 1, 2)
 CASES: dict[str, tuple[str, str, str]] = {
     "RH-SYM": (
-        "The functional equation pairs each nontrivial zero with its reflection; therefore each zero is fixed by reflection and lies on Re(s)=1/2.",
+        ("The functional equation pairs each nontrivial zero with its reflection; "
+         "therefore each zero is fixed by reflection and lies on Re(s)=1/2."),
         "Reject set symmetry implying pointwise fixedness; a symmetric pair may be distinct.",
         "invalid_inference",
     ),
@@ -23,13 +24,17 @@ CASES: dict[str, tuple[str, str, str]] = {
         "invalid_inference",
     ),
     "RH-REGION": (
-        "There are no zeros with Re(s)>7/8, and symmetry excludes Re(s)<1/8, so all zeros lie on Re(s)=1/2.",
+        ("There are no zeros with Re(s)>7/8, and symmetry excludes Re(s)<1/8, "
+         "so all zeros lie on Re(s)=1/2."),
         "Reject interior-to-line collapse: 1/8 <= Re(s) <= 7/8 is not just the line.",
         "invalid_inference",
     ),
     "RH-ETA-PARTIAL": (
-        "For every complex s and positive integer m, splitting even and odd indices gives sum_{n=1}^{2m}(-1)^(n-1)n^(-s) = sum_{n=1}^{2m}n^(-s) - 2^(1-s)sum_{n=1}^m n^(-s).",
-        "Credit the exact finite identity; require separate convergence and continuation arguments for infinite-series claims.",
+        ("For every complex s and positive integer m, splitting even and odd indices "
+         "gives sum_{n=1}^{2m}(-1)^(n-1)n^(-s) = sum_{n=1}^{2m}n^(-s) "
+         "- 2^(1-s)sum_{n=1}^m n^(-s)."),
+        ("Credit the exact finite identity; require separate convergence and "
+         "continuation arguments for infinite-series claims."),
         "valid_partial_result",
     ),
 }
@@ -39,9 +44,16 @@ def challenge_manifest() -> dict[str, Any]:
     """Public challenge inputs. Expected judgments are deliberately omitted."""
     return {
         "schema_version": 1,
-        "purpose": "Evaluator-authored RH challenges, not independently generated agent discoveries",
+        "purpose": (
+            "Evaluator-authored RH challenges, not independently generated agent discoveries"
+        ),
         "cases": [
-            {"case_id": key, "kind": kind, "claim": claim, "provenance": "injected_evaluator_challenge"}
+            {
+                "case_id": key,
+                "kind": kind,
+                "claim": claim,
+                "provenance": "injected_evaluator_challenge",
+            }
             for key, (claim, _, kind) in CASES.items()
         ],
     }
@@ -95,7 +107,10 @@ def validate_review(review: dict[str, Any]) -> dict[str, Any]:
     else:
         if any(type(value) is not int or value not in SCORE_VALUES for value in scores.values()):
             raise ValueError("Scored review requires four integer scores from 0 to 2")
-        if not all(isinstance(review.get(key), str) and review[key].strip() for key in ("reviewer", "observed_objection", "observed_next_step", "notes")):
+        if not all(
+            isinstance(review.get(key), str) and review[key].strip()
+            for key in ("reviewer", "observed_objection", "observed_next_step", "notes")
+        ):
             raise ValueError("Scored review requires human reviewer and specific evidence")
         if not review.get("artifact_ids") or not review.get("session_id"):
             raise ValueError("Scored review requires session and artifact provenance")
@@ -206,7 +221,10 @@ def captured_review(case_id: str, transcript_path: str) -> dict[str, Any]:
     capture = json.loads(path.read_text(encoding="utf-8"))
     if capture.get("case_id") != case_id or capture.get("schema_version") != 1:
         raise ValueError("Captured transcript case or schema mismatch")
-    if capture.get("provenance") != "evaluator-authored human intervention, acknowledged by Skeptic":
+    if (
+        capture.get("provenance")
+        != "evaluator-authored human intervention, acknowledged by Skeptic"
+    ):
         raise ValueError("Unverified challenge delivery")
     result = blank_review(case_id, transcript_path)
     result.update({
@@ -222,15 +240,27 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", action="store_true", help="Print challenge inputs without answers")
+    parser.add_argument(
+        "--manifest", action="store_true", help="Print challenge inputs without answers"
+    )
     parser.add_argument("--review-template", choices=CASES, help="Print a blank review for a case")
     parser.add_argument("--transcript", help="Transcript path for a blank review template")
-    parser.add_argument("--score", type=Path, help="Validate a completed review JSON and print result")
-    parser.add_argument("--capture", choices=CASES, help="Capture an acknowledged Skeptic challenge from saved session")
+    parser.add_argument(
+        "--score", type=Path, help="Validate a completed review JSON and print result"
+    )
+    parser.add_argument(
+        "--capture", choices=CASES,
+        help="Capture an acknowledged Skeptic challenge from saved session",
+    )
     parser.add_argument("--project-path", help="Working SIGMA project path, not sample template")
     parser.add_argument("--session-id", help="Saved research session UUID")
-    parser.add_argument("--output", type=Path, help="Write captured transcript JSON to this new file")
-    parser.add_argument("--captured-review", type=Path, help="Create blank review from a captured transcript")
+    parser.add_argument(
+        "--output", type=Path, help="Write captured transcript JSON to this new file"
+    )
+    parser.add_argument(
+        "--captured-review", type=Path,
+        help="Create blank review from a captured transcript",
+    )
     args = parser.parse_args()
     if args.manifest:
         result = challenge_manifest()
@@ -253,7 +283,10 @@ def main() -> None:
         record = json.loads(args.captured_review.read_text(encoding="utf-8"))
         result = captured_review(record["case_id"], str(args.captured_review))
     else:
-        parser.error("Choose --manifest, --review-template, --capture, --captured-review or --score")
+        parser.error(
+            "Choose --manifest, --review-template, --capture, "
+            "--captured-review or --score"
+        )
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
