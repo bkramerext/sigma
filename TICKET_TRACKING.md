@@ -39,7 +39,7 @@
 | T17.6 | Research outcomes and strategy attribution | Done | — |
 | T17.7 | UI corrections and regression hardening | Done | — |
 | T17.7.1 | Dialog, report, and UI refinements | Done | — |
-| T17.8 | Live research-quality acceptance | Open; not accepted | ChatGPT review · [PR #4](https://github.com/bkramerext/sigma/pull/4) merged (engineering) |
+| T17.8 | Agentic solution quality and final A17 verification | Open; deterministic acceptance evidence ready for human review; genuine real-provider solution quality remains unverified | ChatGPT review · [PR #4](https://github.com/bkramerext/sigma/pull/4) merged (engineering); [PR #41](https://github.com/bkramerext/sigma/pull/41) acceptance |
 | T18 | Concurrent multi-strategy research and peer handoffs | Merged, engineering done | Blue · [PR #8](https://github.com/bkramerext/sigma/pull/8) |
 | T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green · [PR #9](https://github.com/bkramerext/sigma/pull/9) |
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
