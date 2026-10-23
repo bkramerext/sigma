@@ -44,7 +44,8 @@
 | T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green · [PR #9](https://github.com/bkramerext/sigma/pull/9) |
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
 | T21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
-| T22 | Cloud deployment | Planned / unverified | Unassigned |
+| T22 | Cloud deployment | T22.1 local feasibility checked; remote/security gates open | Red · ChatGPT authored ticket |
+| T22.1 | Cloudflare runtime, scientific isolation and durable storage spike | Local checks pass; remote deployment and model access unverified | Red · [spike PR #22](https://github.com/bkramerext/sigma/pull/22), stacked on [requirements PR #21](https://github.com/bkramerext/sigma/pull/21) |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
@@ -123,7 +124,7 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 
 | Codex | Planned responsibility | Status |
 |---|---|---|
-| Red | Cloud support (T22) | Later; not started |
+| Red | Cloud support (T22) | T22.1 spike in progress; local evidence recorded, remote gates open |
 | Gray | UI improvements, live prompts, and tickets; T25 proposed | Later; not started |
 
 Ticket naming convention: `T1`, `T8.2`, `T17.7.1`; canonical ticket documents live at `tickets/t1.md`, `tickets/t8.2.md`, etc. Historical ticket documents are migrated into `tickets/` in this PR; supplementary historical design/security documents use `tN-design.md` or `tN-security.md`. T14.1 is retained as historical record but removed from the active tracker.

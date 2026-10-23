@@ -1,0 +1,44 @@
+{
+  "image": "sagemath/sagemath@sha256:fb96c7fb10d672f3be0d088399db3aeac52650416d1bb71f74f26429ea35778f",
+  "image_id": "sha256:fb96c7fb10d672f3be0d088399db3aeac52650416d1bb71f74f26429ea35778f",
+  "architecture": "amd64",
+  "docker_inspect_size_bytes": 1469325553,
+  "samples": [
+    {
+      "elapsed_seconds": 23.464,
+      "result": {
+        "sage": "SageMath version 10.8, Release Date: 2025-12-18",
+        "max_rss_kib": 422512,
+        "algebra": "passed",
+        "number_theory": "passed",
+        "isolation": "local Docker only"
+      }
+    },
+    {
+      "elapsed_seconds": 23.371,
+      "result": {
+        "sage": "SageMath version 10.8, Release Date: 2025-12-18",
+        "max_rss_kib": 422976,
+        "algebra": "passed",
+        "number_theory": "passed",
+        "isolation": "local Docker only"
+      }
+    },
+    {
+      "elapsed_seconds": 33.652,
+      "result": {
+        "sage": "SageMath version 10.8, Release Date: 2025-12-18",
+        "max_rss_kib": 422812,
+        "algebra": "passed",
+        "number_theory": "passed",
+        "isolation": "local Docker only"
+      }
+    }
+  ],
+  "limits": {
+    "memory_mib": 1024,
+    "cpus": 1,
+    "pids": 128
+  },
+  "scope": "Local amd64 emulation; no Cloudflare cold-start measurement"
+}

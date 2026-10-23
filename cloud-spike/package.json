@@ -1,0 +1,20 @@
+{
+  "name": "sigma-t22-1-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tsx --test contracts.test.ts",
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev --ip 127.0.0.1 --port 8787",
+    "bundle": "wrangler deploy --dry-run --outdir dist"
+  },
+  "dependencies": {"@cloudflare/containers": "0.3.7"},
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261023.1",
+    "@types/node": "24.10.0",
+    "miniflare": "4.20260730.0",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "wrangler": "4.152.0"
+  }
+}
