@@ -1,6 +1,7 @@
 T20.1 follow-up — Gray
 
-The UI follow-up is implemented on a branch from the merged T20.1 main commit.
+The UI follow-up is implemented on a branch from current main, including the
+recent Arrival, Xenopus, and quantum chemistry sample-project merges.
 It carries the requested research-session limit changes through the frontend,
 shared backend validation, persistence, and enforcement. Existing saved values
 remain intact. Session duration accepts minutes, hours, and days and is stored
@@ -31,5 +32,6 @@ Validation:
   at 0/30 provider calls, so its research-result assertions could not run.
 - No paid provider calls were made.
 
-PR: will be linked here after it is opened. The PR is for coordinator review;
-it has not been merged.
+PR: https://github.com/bkramerext/sigma/pull/35
+
+The PR is open for coordinator review and has not been merged.

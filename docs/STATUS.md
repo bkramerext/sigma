@@ -48,6 +48,9 @@ labels and align strategy count and difficulty under the title. Open Project
 Cancel now follows its heading. Tooltip timing and click-to-hide behavior are
 shared across the app.
 
+The T20.1 follow-up branch includes the current main additions for Arrival,
+Xenopus tail regeneration, and quantum chemistry samples.
+
 Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
 320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
 `browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The A17
