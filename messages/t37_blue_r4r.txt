@@ -2,10 +2,12 @@ T37 PR #45 — coordinator review revision
 Status: R4R; pushed for coordinator review (GitHub reports mergeable=false; see metadata below)
 
 Branch: blue/t37-trustworthy-research-memory
-Integrated base: origin/main b9844ed3301793601a3ba5adee1eabcda0c50dab
+Integrated base: origin/main cd85552a3a0ec9f947f95254c70c7267044d4d2f
   (includes PR #42 and requested PR #46 at c4ef4f0af5c795657f0c55579bfef051c9e78f45)
-Tested integrated code head: f8ee8571ad87a22c2d0acdbc2fcb6a53abfaebd2
-Pushed branch head before this handoff-only commit: cf4a67310314735de2249fda3d2768b9b801dc73
+Integrated merge commit: 7be80e5 (clean merge of seven newer main commits)
+Tested code head: 0fccdad57ef2167b3637268360300ec91a644a5b
+Three lint/format-only corrections to newly merged T39 files are included; no T39 behavior changed.
+Pushed branch head: pending final push below
 PR: https://github.com/bkramerext/sigma/pull/45
 
 Review findings reproduced and corrected
@@ -54,10 +56,11 @@ Review findings reproduced and corrected
    update after Chrome verification changed only ticket/status documentation.
 
 6. Verification — MET.
-   - `./sigma test` — passed on the final integrated head: research
-     session/concurrency, T22 Gate C, computation, reports, Ruff, format check
-     (69 files), Pyright (0 diagnostics), frontend typecheck and production
-     build.
+   - `./sigma test` — initially stopped at Ruff on newly merged T39 files;
+     after one exception-type correction, one import sort, and formatting
+     three T39 files, passed all research session/concurrency, T39/T22,
+     computation, report, Ruff, format (72 files), Pyright (0 diagnostics),
+     frontend typecheck and production-build steps.
    - `uv run --locked --no-sync python tests/research_sessions.py` — passed,
      including 10-strategy concurrency and continuation coverage.
    - `uv run --locked --no-sync python tests/project_reports.py` — passed.
@@ -73,4 +76,5 @@ Review findings reproduced and corrected
 No live provider calls or paid API calls were made. Deterministic evidence
 handling and fixture plumbing are verified; empirical live-model research
 quality is UNVERIFIED. Model-reported dispositions remain unverified. T17.8
-remains separate. PR #45 is open and pushed; do not self-merge. GitHub `get_pr_info` reports base b9844ed, head cf4a673, and `mergeable=false`. The compare endpoint reports status `ahead`, ahead_by 12, behind_by 0, with b9844ed as both base and merge base. This contradictory metadata is recorded without claiming mergeability confirmation.
+remains separate. PR #45 is open and pushed; do not self-merge. Final GitHub
+metadata is recorded after the current integrated branch is pushed.

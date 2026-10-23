@@ -4188,16 +4188,16 @@ gates.
 ## T37 PR #45 coordinator review revision (2026-10-23)
 
 This focused revision reproduced each requested defect before changing the
-policy. No live or paid provider calls were made. It integrates current
-`origin/main` at `b9844ed3301793601a3ba5adee1eabcda0c50dab`, including Gray PR
-#46 and PR #42. The #46 workspace CSS conflict was resolved by retaining the
-responsive two-column Model/Google and Thinking/ChatGPT layout and removing
-T37's conflicting narrow three-column rule. PR #42's Lean-logo changes are
-inherited from main and were not edited. The only content conflict during
-integration was `docs/STATUS.md`; both T37 review evidence and T22 Gate C
-evidence were preserved. The final main advancement after the Chrome run only
-changed T22 ticket/status documentation, with no application code, CSS, or
-artwork changes.
+policy. No live or paid provider calls were made. It now integrates
+`origin/main` at `cd85552a3a0ec9f947f95254c70c7267044d4d2f`, including seven
+newer main commits for T39 evaluation, adversarial fixtures, and verification
+workflow. The earlier #46 workspace CSS resolution retains the responsive
+two-column Model/Google and Thinking/ChatGPT layout; PR #42's Lean-logo changes
+are inherited from main and were not edited. The integration merge was clean.
+The newly merged T39 files initially failed this checkout's Ruff checks (one
+exception type, an import order, and formatting in three files). Three small
+lint/format-only corrections allowed the required full suite to pass; they do
+not change T39 behavior.
 
 | Review issue | Result | Reproducer and correction |
 | --- | --- | --- |
@@ -4237,10 +4237,12 @@ case runs through `_agent_context`, not only the selection helper. The existing
 continuation integration test starts real local fixture sessions and checks
 that an earlier unresolved obligation reaches the subsequent Investigator.
 
-Verification on tested integrated head: `f8ee8571ad87a22c2d0acdbc2fcb6a53abfaebd2`.
-Base integrated: `b9844ed3301793601a3ba5adee1eabcda0c50dab` (includes #42 and requested #46 at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
+Verification on tested code head: `0fccdad57ef2167b3637268360300ec91a644a5b`.
+Integrated base:
+`cd85552a3a0ec9f947f95254c70c7267044d4d2f` (includes #42 and requested #46
+at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
 
-- `./sigma test` — **passed** on the final integrated head, including T37 research session/concurrency scenarios, T22 Gate C tests, computational evidence, project reports, Ruff, format check (69 files), Pyright (0 diagnostics), frontend typecheck, and production build.
+- `./sigma test` — first stopped at Ruff failures in newly merged T39 files; after the narrow lint/format-only corrections, **passed** on the current integrated tree, including T37 research session/concurrency scenarios, T39/T22 tests, computational evidence, project reports, Ruff, format check (72 files), Pyright (0 diagnostics), frontend typecheck, and production build.
 - `uv run --locked --no-sync python tests/research_sessions.py` — **passed**
   after the review changes, including 10-strategy concurrency and continuation.
 - `uv run --locked --no-sync python tests/project_reports.py` — **passed** report
@@ -4256,14 +4258,10 @@ Base integrated: `b9844ed3301793601a3ba5adee1eabcda0c50dab` (includes #42 and re
 - No live model/provider calls were made. Fixture tests verify deterministic
   context plumbing and billing/call boundaries, not empirical research quality.
 
-The branch is integrated with the latest `main` and pushed to PR #45. PR #42's
+The branch is integrated with the latest `main`. PR #42's
 `frontend/public/lean-logo.svg` and its CSS change are inherited from main; T37
-made no additional Lean-logo edits. GitHub PR metadata and mergeability are
-recorded in the final handoff: PR #45 is open at head
-`cf4a67310314735de2249fda3d2768b9b801dc73`, GitHub reports
-`mergeable=false`, and GitHub's compare endpoint reports the PR branch is ahead
-12 / behind 0 with latest main as its merge base. This status is reported as-is;
-it is not presented as GitHub mergeability confirmation.
+made no additional Lean-logo edits. Final PR head and mergeability metadata
+are recorded in `messages/t37_blue_r4r.txt`.
 
 Remaining limits: model-reported addressed/superseded/retracted statuses are
 still unverified judgments; bounded extracts cannot replace original source
