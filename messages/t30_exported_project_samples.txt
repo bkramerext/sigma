@@ -1,6 +1,9 @@
 T30 coordinator handoff — exported project samples
 
-Status: implementation complete; PR opened for review (not merged).
+Status: implementation complete; PR #40 is open for review (not merged).
+Reconciled branch against current `main` without rewriting branch history.
+Base at verification: `e58eccd525e475a53319364b1eb8175d711f66f2`.
+T30 code head at verification: `ed1bbf8179fd9a9850277ce7b21be2723191adb1`.
 
 The `sigma make_sample exported_project.json --name sample_name` command now
 validates SIGMA export v2, sanitizes private data, and creates an entry consumed
@@ -10,10 +13,14 @@ agentic evidence. Available histories, outcomes, computational source/output,
 and provenance survive. Existing source projects remain unchanged.
 
 Verification:
-- `uv run --locked --no-sync python tests/make_sample.py` passed the mandatory
-  export/CLI/load/edit/redaction acceptance scenario.
-- `./sigma test` passed all backend tests, Ruff and formatting, Pyright (0
+- `uv run --locked --no-sync python tests/make_sample.py` passed after the
+  latest-main merge, including export/CLI/load/edit/redaction and provenance.
+- `./sigma test` passed after the latest-main merge: all backend tests, Ruff
+  and formatting, Pyright (0
   errors/warnings/informations), frontend typecheck, and production build.
+- The full suite also ran `tests/make_sample.py` successfully as an included
+  acceptance step.
+- No merge conflicts occurred; latest main contributed `docs/SOFTWARE_FACTORY.md`.
 - No live or paid provider calls were made.
 
 Limitations: export v2 contains computation metadata and available previews but
