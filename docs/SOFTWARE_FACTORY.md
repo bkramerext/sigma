@@ -111,7 +111,24 @@ The normal work cycle is **ASSIGNED → IMPLEMENTING → R4R → REVIEW → (CHA
 
 **Review means more than reading the PR description.** The coordinator reads the worker's `messages/` handoff file, examines changed code and tests, compares against the ticket, checks merge state and relevant dependencies, and evaluates whether the claimed checks actually support the acceptance criteria. A green test report from the author is evidence, not independent verification. If review is incomplete, report it as pending rather than silently merging.
 
-**Requirement traceability is a mandatory approval gate.** For every substantive PR, the coordinator constructs a review checklist from the **canonical ticket**, subsequent **human-confirmed clarifications**, earlier **review corrections**, and **applicable acceptance criteria**. Compare each requirement against the delivered code, tests, and observed evidence; distinguish MET, UNMET, UNVERIFIED, and explicitly deferred items. A passing test suite or worker's R4R claim cannot substitute for this reconciliation. **Missing or unverified required behavior blocks approval** unless the coordinator explicitly records the deferral **and the human authorizes it**. Preserve clarifications in the ticket or an auditable handoff so they cannot disappear across worker iterations.
+### Requirement Traceability and Review Completeness
+
+**Requirement completeness is a merge gate.** Before approving a substantive PR, the ChatGPT coordinator must reconcile the delivered implementation against:
+
+1. The canonical ticket and its acceptance criteria.
+2. Subsequent human-approved clarifications and decisions.
+3. Corrections requested during earlier review rounds.
+4. Applicable integration, security, compatibility, and UX requirements.
+
+For **each substantive requirement**, record its disposition and supporting evidence in the PR review or a durable, linked review handoff:
+
+- **MET:** The implementation and relevant verification evidence demonstrate the requirement.
+- **UNMET:** The implementation is missing, incorrect, or violates the requirement.
+- **UNVERIFIED:** The implementation may exist, but sufficient evidence is unavailable.
+
+Worker-reported test results are **evidence, not independent verification**. The reviewer inspects the actual code and tests, challenges test coverage, and explicitly distinguishes what was established by source inspection, what the worker reports executing, and what the coordinator independently executed or observed. A green suite does not excuse missing acceptance coverage. Review the **current PR head**, not an earlier revision.
+
+**Do not approve or merge a PR with UNMET mandatory requirements.** UNVERIFIED requirements must receive sufficient additional verification before approval or be explicitly documented as outstanding, with the human's informed acceptance. Any change or deferral of mandatory ticket scope requires **explicit human authorization**, recorded with the affected requirement and rationale; a coordinator cannot unilaterally drop it. Preserve subsequent clarifications and authorized deferrals in the ticket or a durable linked handoff so they are not lost in later iterations. An accepted PR-level limitation is not automatically a release acceptance or authorization to bypass separate security/deployment gates.
 
 **Corrections stay in the same PR.** The coordinator sends one consolidated correction message to the original color; the worker updates the branch, executes appropriate regressions, updates its message file, and announces **R4R again**. ChatGPT re-reads the changed head and message file before approving. Do not merge on the basis of an earlier review after the branch changes.
 
