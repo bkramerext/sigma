@@ -2910,3 +2910,140 @@ the session, matching A18's provider preflight guard. A three-branch regression
 changes the project while the first computation is active and verifies that
 its result is saved while the two waiting programs never start. Existing
 historical executions remain inspectable under their original provenance.
+
+## T24: research outcome metrics (2026-10-23)
+
+Outcome metrics are derived when persisted research sessions are read, with
+independent operational and research-quality groups. Operational evidence
+includes provider steps, token usage, durations, Python execution IDs, saved
+file sizes, failures, retries and cost; research-quality evidence covers
+investigated strategies, per-strategy cycles, outcome, verification, current
+obligations, cited conclusions, attribution and unresolved objections. JSON
+audit exports and text/HTML reports carry the same read-time projection.
+Following PR #13 review, T24 supplies data only; T25 owns the Outcome UI.
+The proposed Outcome metrics table and its CSS have been removed.
+
+Call status accounting uses distinct persisted step IDs; interrupted requests,
+timeouts, HTTP rejections and other failures stay separate. Repeated
+strategy/role/cycle steps are shown as later attempts, with no automatic retry
+assumed. A mismatch between the saved call counter and unique step records is
+visible and leaves unrecorded statuses unavailable. Python totals use unique
+execution IDs, so restart recovery and cross-cycle reuse do not add a second
+run or duplicate captured file bytes. Concurrent strategy cycles are keyed by
+strategy and cycle; session wall time is kept separate from summed call
+durations, which can overlap.
+
+Token aggregates are computed only from persisted validated provider usage.
+Missing input/output metadata yields unavailable totals; a missing cached-token
+field is unavailable rather than zero. Cached input remains a subset of input
+when total tokens are calculated. ChatGPT-plan spend is reported as unknown,
+including the historical T18/T19 plan trials whose allowance consumption could
+not be quantified. Timeouts, interruptions, and provider rejections with no
+usage evidence also keep API dollar cost unavailable. API-key estimates require
+complete input/output/cached usage and a known model rate. The existing
+standard, short-context model rates were checked against the [official API
+pricing page](https://developers.openai.com/api/docs/pricing) on 2026-10-23;
+values are labeled estimates and are not invoices. No provider calls were made
+for T24.
+
+Deterministic regressions now cover incomplete/mismatched records, absent token
+and cache metadata, an actual mocked HTTP 400 response recorded as rejected,
+timeout classification, cancellation and resumed retries, two concurrently
+investigated strategies, duplicate step IDs, reused Python execution IDs,
+artifact deduplication, cost availability, evidence-linked conclusions and
+historical unknowns. Project report tests assert the metrics survive text and
+HTML output. The pre-review Chrome run checked the proposed table, which has
+since been removed per the T25 presentation contract. The revised Chrome
+scenario checks the metrics/source inventory through the API and preserves
+existing desktop/mobile Outcome interactions instead of prescribing T25 UI.
+
+Early suite runs caught two Ruff formatting issues and one stale assertion after
+the unavailable-token wording was clarified; the formatting and assertion were
+corrected. After the last call-accounting and cost-date changes, final
+`./sigma test` passed: all executable scenarios, 57 formatted Python files,
+Pyright with 0 errors/warnings/information, frontend typecheck, and production
+Vite build. The 10-strategy load completed 20/20 calls and 10 artifacts at max
+concurrency 3. The original Chrome run passed with the table assertions before review;
+post-review checks are recorded below. No live provider calls were made. Metrics improve attribution and
+make gaps visible; they do not measure agent competence, establish research
+effectiveness, or convert numerical/model evidence into mathematical
+verification.
+
+
+### T24 review revisions
+
+The review identified a real export defect: `zip` truncated unequal metric
+groups. Text and HTML exports now render each nonempty group independently;
+HTML uses semantic label/value lists. Regressions cover either longer group,
+either empty group, both empty, and escaped/delimiter-containing row content.
+The last row of both groups survives in every applicable case.
+
+`outcome.metrics.sources` adds a structured, deduplicated inventory of session,
+step, artifact, execution and investigated-strategy IDs. The source records
+remain unchanged and inspectable through session JSON and saved execution APIs.
+This inventory is not per-row claim provenance or verification authority.
+The [T24 data contract](T24-DATA-CONTRACT.md) documents existing claim citations,
+role/cycle context, model/effort scope, exact Python evidence and file hashes,
+and missing fields (notably explicit artifact-to-role-step foreign keys and
+provider receipt IDs). T25 must preserve these unknowns rather than infer exact
+attempt attribution from a strategy/cycle match.
+
+The new `docs/ASSIGNMENT-A24.md` has been removed and the legacy assignment
+tracker restored to avoid conflicting with PR #11's pending ticket migration.
+The canonical T24 ticket will come from that PR; the supporting data-contract
+document is not a replacement. PR #11 was still open when revisions began;
+its unfinished migration has not been merged into this feature branch.
+
+Post-review verification on 2026-10-23 passed: `./sigma test` (all scenarios,
+Ruff, 57 formatted source files, zero Pyright errors, frontend typecheck and
+Vite build), plus the real Chrome workspace scenario using fresh isolated
+fixture servers on ports 8016/5187. The browser asserts that metrics and source
+IDs remain available via the session API while the proposed Outcome table is
+absent; existing plain/Markdown and mobile flows pass.
+
+An additional real Chrome report experiment retained unequal metric groups at
+desktop and 320px widths, with no page overflow. Visual inspection caught a
+header-ordering issue when no outcome summary existed: metrics appeared inside
+the session header before its status facts. HTML headings now flush that header;
+a regression checks their order. The full suite and report experiment passed
+again after the fix. I inspected the corrected mobile report and workspace
+captures (`/tmp/sigma-t24-review-report-mobile.png` and
+`/tmp/sigma-a18-coordinator-review-mobile.png`). Owned fixture/dev servers were
+stopped. No paid or live-provider calls were made. PR #13 remains open for
+review; T25 presentation and the pending PR #11 migration are separate work.
+
+
+### T24 post-migration validation (2026-10-23)
+
+PR #11 merged as `ccb6157`. Its current main was merged into the T24 branch
+without conflicts; no old assignment files or legacy tracker were restored.
+All 44 migrated historical documents were checked byte-for-byte against main.
+Canonical `tickets/t24.md` and `TICKET_TRACKING.md` now point to PR #13's
+reviewed implementation and pending final merge approval. The supporting
+[T24 data contract](T24-DATA-CONTRACT.md) links to the canonical tickets;
+T25 continues to own the Outcome UI.
+
+Post-merge `./sigma test` passed: all executable/backend scenarios, Ruff checks,
+57 formatted files, Pyright with zero errors/warnings, frontend typecheck and
+production build. The 10-strategy regression completed 20/20 calls and ten
+artifacts at concurrency three. The suite includes unequal/empty report groups
+and escaped row content. No live or paid provider calls were made.
+
+The real Chrome `browser_checks/a17_research.py` scenario passed again using
+fresh isolated fixtures on 8016/5187. Strengthened assertions compare all metrics
+and source IDs from the downloaded JSON audit to the session API, verify all
+16 metric rows in the actual downloaded HTML and text reports, and retain the
+existing desktop/mobile, Markdown, concurrent strategy, stop/resume and export
+failure checks. A backend regression independently compares the persisted
+session's metrics/source inventory to its JSON audit and every text/HTML row.
+Thus operational/research-quality metrics and the documented provenance remain
+available for T25 without adding Outcome markup.
+
+A separate Chrome report experiment passed with either group longer, correct
+session-header ordering, every metric row retained, and desktop/320px layouts
+without page overflow. I inspected the new mobile report and desktop workspace
+captures (`/tmp/sigma-t24-migration-report-research_quality-mobile.png` and
+`/tmp/sigma-a18-coordinator-review-desktop.png`). Owned test servers were stopped.
+PR #13 is ready for final merge approval; it has not been self-merged. Existing
+provenance limitations in the data contract remain explicit, including absent
+artifact-to-step foreign keys and unknown provider receipt/plan consumption.

@@ -903,6 +903,18 @@ with sync_playwright() as playwright:
     first_session.get_by_role("button", name=re.compile("Session #1")).press("Space")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     expect(first_session.locator(".session-outcome")).to_contain_text("Outcome:")
+    # T24 supplies data; T25 owns the Outcome presentation.
+    expect(first_session.get_by_role("region", name="Research outcome metrics")).to_have_count(0)
+    metrics_session = page.evaluate(
+        """async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.find(session => session.session_number === 1)""",
+        path,
+    )
+    saved_metrics = metrics_session["outcome"]["metrics"]
+    assert saved_metrics["operational"] and saved_metrics["research_quality"]
+    assert saved_metrics["sources"]["session_id"] == metrics_session["id"]
+    assert set(saved_metrics["sources"]["step_ids"]) == {
+        step["id"] for step in metrics_session["steps"]
+    }
     outcome_toggle = first_session.get_by_role("button", name="Render outcome as Markdown")
     conversion_count = len(provider_calls)
     outcome_toggle.click()
@@ -993,6 +1005,7 @@ with sync_playwright() as playwright:
     assert [session["session_number"] for session in export_data["research_sessions"]] == [1, 3]
     assert export_data["research_sessions"][0]["artifacts"]
     assert export_data["research_sessions"][0]["outcome"]["assessment"] == "mixed"
+    assert export_data["research_sessions"][0]["outcome"]["metrics"] == saved_metrics
     assert "fixture-token" not in json.dumps(export_data)
     for toast in page.locator(".request-toast").all():
         dismiss = toast.get_by_role("button", name="Dismiss request error")
@@ -1040,6 +1053,19 @@ with sync_playwright() as playwright:
     assert "<!doctype html>" in html_report.lower() and "Research Report" in html_report
     expect(popup.locator("h1")).to_be_visible()
     expect(popup.locator("h2", has_text="Research sessions")).to_be_visible()
+    # Every projected metric must survive the actual downloaded HTML report.
+    report_groups = popup.locator("article.report-session").first.locator(
+        "dl.report-outcome-metrics"
+    )
+    expect(report_groups).to_have_count(2)
+    for index, group in enumerate(("operational", "research_quality")):
+        for item in saved_metrics[group]:
+            row = (
+                report_groups.nth(index)
+                .locator("div")
+                .filter(has=popup.get_by_text(item["label"], exact=True))
+            )
+            expect(row.locator("dd")).to_have_text(item["value"])
     assert popup.locator("pre").count() == 0
     popup.emulate_media(media="print")
     assert popup.locator("body").evaluate("e => getComputedStyle(e).maxWidth") == "none"
@@ -1062,6 +1088,10 @@ with sync_playwright() as playwright:
         export_dialog.get_by_role("button", name="Download", exact=True).click()
     page.evaluate("() => { window.open = window.__originalOpen; delete window.__originalOpen; }")
     assert blocked_download.value.suggested_filename == "a17-blocked-tab.txt"
+    text_report = Path(blocked_download.value.path()).read_text(encoding="utf-8")
+    for group in ("operational", "research_quality"):
+        for item in saved_metrics[group]:
+            assert f"{item['label']}: {item['value']}" in text_report
     expect(export_dialog).to_be_visible()
     expect(export_dialog.get_by_role("alert")).to_have_text(
         "The browser blocked or closed the new tab. The file was still downloaded."
