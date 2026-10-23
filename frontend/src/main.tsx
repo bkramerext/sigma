@@ -686,15 +686,15 @@ function useDocumentScrollLock(enabled = true) {
   }, [enabled]);
 }
 
-function ProjectExportDialog({ path, title, onCancel, open = true }: { path: string; title: string; onCancel: () => void; open?: boolean }) {
+function ProjectExportDialog({ path, title, onCancel, open = true, demo = false }: { path: string; title: string; onCancel: () => void; open?: boolean; demo?: boolean }) {
   useDocumentScrollLock(open);
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'audit' | 'text' | 'html'>('audit');
+  const [exportType, setExportType] = useState<'audit' | 'text' | 'html' | 'tex'>('audit');
   const isReport = exportType !== 'audit';
-  const reportFormat = exportType === 'text' ? 'txt' : 'html';
+  const reportFormat = exportType === 'text' ? 'txt' : exportType === 'tex' ? 'tex' : 'html';
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -723,9 +723,10 @@ function ProjectExportDialog({ path, title, onCancel, open = true }: { path: str
     if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const route = exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report';
-      const query = new URLSearchParams({ path, ...(isReport ? { format: reportFormat } : {}) });
-      const response = await fetch(`${route}?${query}`, { cache: 'no-store' });
+      const route = demo ? (exportType === 'audit' ? '/api/cloud-demo/' : '/api/cloud-demo/report') : (exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report');
+      const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}) });
+      const suffix = query.toString();
+      const response = await fetch(`${route}${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
@@ -746,7 +747,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true }: { path: str
           opened.document.body.replaceChildren(pre);
         }
       }
-      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : exportType === 'tex' ? 'application/x-tex;charset=utf-8' : 'text/plain;charset=utf-8';
       const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
@@ -762,7 +763,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true }: { path: str
     onCancel={event => { event.preventDefault(); cancel(); }}>
     <form onSubmit={exportFile}>
       <header className="settings-header">
-        <h2 id="export-project-heading">Export Project</h2>
+        <h2 id="export-project-heading">{demo ? 'Export Demo Project' : 'Export Project'}</h2>
         <div className="settings-actions">
           <button type="button" className="settings-cancel" title="Close without downloading" disabled={busy} onClick={() => cancel()}>Cancel</button>
         </div>
@@ -773,6 +774,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true }: { path: str
           <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
+          <label><input type="radio" name="export-type" value="tex" checked={exportType === 'tex'} onChange={() => setExportType('tex')}/> LaTeX report</label>
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
@@ -2540,6 +2542,40 @@ type CloudAccountSession = { email: string; role: string; expires_at: number };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
+
+type CloudDemoAudit = { export_version: 2; project: ProjectView['project']; agentic_runs: Record<string, any>[]; research_sessions: Record<string, any>[] };
+function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail: string | null; authenticated: boolean; user: CloudStatus['user'] }) {
+  const [audit, setAudit] = useState<CloudDemoAudit | null>(null);
+  const [error, setError] = useState('');
+  const [exportOpen, setExportOpen] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/cloud-demo/', { cache: 'no-store', signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('The curated Demo is temporarily unavailable.');
+      const value = await response.json() as CloudDemoAudit;
+      if (value.export_version !== 2 || !value.project || !Array.isArray(value.agentic_runs) || !Array.isArray(value.research_sessions)) throw new Error('The curated Demo data could not be verified.');
+      setAudit(value);
+    }).catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)); });
+    return () => controller.abort();
+  }, []);
+  const project = audit?.project;
+  return <main className="cloud-demo-page">
+    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Continue with Google</a>}</nav></header>
+    <section className="cloud-demo-intro"><p className="cloud-auth-kicker">Public read-only preview</p><h1>Explore a SIGMA research project</h1><p>Inspect a curated saved project, its strategies, research sessions, outcomes, computational evidence and report exports. This shared Demo does not create a workspace or run agents.</p></section>
+    {error && <section className="cloud-demo-state" role="alert"><h2>Demo unavailable</h2><p>{error}</p></section>}
+    {!audit && !error && <p className="cloud-demo-state" role="status">Loading saved Demo data…</p>}
+    {audit && project && <>
+      <section className="cloud-demo-project"><div><p className="cloud-auth-kicker">{researchTypeLabel(project.investigation_type)} · {difficultyLabel(project.difficulty)}</p><h2>{project.title}</h2><div className="cloud-demo-markdown"><RenderedMarkdown body={project.problem}/></div></div><button className="cloud-demo-export" onClick={() => setExportOpen(true)}>Export project</button></section>
+      <section className="cloud-demo-section"><h2>Strategies <span>{project.strategies.length}</span></h2><div className="cloud-demo-grid">{project.strategies.map(strategy => <details className="cloud-demo-card" key={strategy.id} open><summary><span>{strategy.title}</span><small>{strategy.stage} · {strategy.author_kind}</small></summary><p>{strategy.summary}</p><div className="cloud-demo-markdown"><RenderedMarkdown body={strategy.approach}/></div></details>)}</div></section>
+      <section className="cloud-demo-section"><h2>Research sessions <span>{audit.research_sessions.length}</span></h2>{audit.research_sessions.map(session => <details className="cloud-demo-card cloud-demo-session" key={session.id}><summary><span>Session #{session.session_number}: {session.strategy_title}</span><small>{session.status} · {session.started_at?.slice(0, 10)}</small></summary><div className="cloud-demo-columns"><div><h3>Outcome</h3><p>{session.outcome?.solution_review?.claim}</p><p>{session.outcome?.solution_review?.argument_summary}</p><h3>Strategy assessment</h3>{session.strategy_assessments?.map((item: any) => <p key={item.strategy_id}>{item.assessment}: {item.rationale}</p>)}</div><div><h3>Saved research artifacts</h3>{session.artifacts?.map((artifact: any) => <article className="cloud-demo-evidence" key={artifact.id}><strong>{artifact.claim}</strong><p>{artifact.method}</p><small>Evidence status: {artifact.evidence_status}</small><p>{artifact.skeptic_response}</p>{artifact.computational_evidence && <details><summary>Inspect saved computation</summary><p>{artifact.computational_evidence.interpretation}</p><pre>{artifact.computational_evidence.source}{'\n'}{artifact.computational_evidence.stdout}</pre>{artifact.computational_evidence.files?.map((file: any) => <details key={file.filename}><summary>Captured artifact: {file.filename}</summary><pre>{file.content}</pre><small>SHA-256: {file.sha256}</small></details>)}</details>}</article>)}</div></div></details>)}</section>
+      <section className="cloud-demo-section"><h2>Saved analysis <span>{audit.agentic_runs.length}</span></h2>{audit.agentic_runs.map(run => <details className="cloud-demo-card" key={run.run_id}><summary><span>Research run · {run.status}</span><small>{run.started_at?.slice(0, 10)}</small></summary><p>{run.timeline?.map((entry: any) => entry.message).join(' ')}</p>{run.steps?.map((step: any, index: number) => <article className="cloud-demo-evidence" key={index}><strong>{step.output?.title}</strong><p>{step.output?.approach}</p><small>{step.output?.evidence_boundary}</small></article>)}</details>)}</section>
+      <footer className="cloud-demo-footer"><p>Read-only curated data · exports are generated from this saved snapshot</p><button className="cloud-demo-export" onClick={() => setExportOpen(true)}>Export Project Audit or Research Report</button></footer>
+      {exportOpen && <ProjectExportDialog demo path="" title={project.title} onCancel={() => setExportOpen(false)}/>}
+    </>}
+  </main>;
+}
+
+
 function GoogleSignInPlaceholder() {
   const description = 'Google sign-in is unavailable in the local workspace and is coming soon.';
   return <div className="project-google-signin" role="status" aria-label={description} title={description} data-tooltip={description}>
@@ -2549,8 +2585,8 @@ function GoogleSignInPlaceholder() {
 function CloudIdentityControls({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
   if (!cloud?.enabled) return null;
-  if (!cloud.authenticated) return cloud.deniedEmail ? null : <div className={`cloud-home-controls${compact ? ' compact' : ''}`}><a className="cloud-signin-control" href="/api/cloud-auth/login">Continue with Google</a></div>;
-  return <div className={`cloud-home-controls cloud-home-user${compact ? ' compact' : ''}`}><span className="cloud-user-email">{cloud.user?.email}</span>{cloud.user?.role === 'admin' && <button type="button" onClick={cloud.openAccessManagement}>Access Management</button>}<button type="button" onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/'); }}>Sign out</button></div>;
+  if (!cloud.authenticated) return cloud.deniedEmail ? null : <div className={`cloud-home-controls${compact ? ' compact' : ''}`}><a className="cloud-secondary-button" href="/demo">Explore Demo</a><a className="cloud-signin-control" href="/api/cloud-auth/login">Continue with Google</a></div>;
+  return <div className={`cloud-home-controls cloud-home-user${compact ? ' compact' : ''}`}><a className="cloud-secondary-button" href="/demo">Explore Demo</a><span className="cloud-user-email">{cloud.user?.email}</span>{cloud.user?.role === 'admin' && <button type="button" onClick={cloud.openAccessManagement}>Access Management</button>}<button type="button" onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/'); }}>Sign out</button></div>;
 }
 function CloudAuthGate() {
   const [status, setStatus] = useState<CloudStatus | null>(null);
@@ -2606,7 +2642,7 @@ function CloudAuthGate() {
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <AIProvider><App/></AIProvider>;
   if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
-  if (window.location.pathname === '/demo') return <main className="cloud-auth-shell"><section className="cloud-auth-card"><p className="cloud-auth-kicker">Public read-only preview</p><h1>SIGMA Demo</h1><p>The shared curated Demo is part of the T22 guest experience and is not provisioned as a private workspace.</p><p>This route is ready for that read-only Demo surface; its project and report views will be delivered with the T22 guest access work.</p><a className="cloud-auth-button" href="/">Return to sign in</a></section></main>;
+  if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   return <CloudIdentityContext.Provider value={context}><>{status.authenticated ? <AIProvider><App/></AIProvider> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}{accessOpen && <div className="cloud-access-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAccessOpen(false); }}><section className="cloud-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-access-title"><button className="cloud-access-close" onClick={() => setAccessOpen(false)} aria-label="Close access management">×</button><p className="cloud-auth-kicker">Administrator</p><h2 id="cloud-access-title">Access Management</h2><p>Invitations are authorization entries. SIGMA does not send email.</p><form onSubmit={addGrant}><label>Entry type<select value={kind} onChange={event => setKind(event.target.value as 'email' | 'domain')}><option value="email">Email address</option><option value="domain">Exact verified email domain</option></select></label><label>{kind === 'email' ? 'Email address' : 'Domain'}<input required value={value} onChange={event => setValue(event.target.value)} placeholder={kind === 'email' ? 'person@example.org' : 'example.org'}/></label>{kind === 'email' && <label>Access<select value={role} onChange={event => setRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Administrator</option></select></label>}<button disabled={busy}>Add authorization</button></form><h3>Accounts and sessions</h3><p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>{accountSessions.length ? <ul aria-label="Authorized account sessions">{accountSessions.map(session => <li key={session.email}><span><strong>{session.email}</strong><small>{session.role} · session expires {new Date(session.expires_at * 1000).toLocaleString()}</small></span></li>)}</ul> : <p className="cloud-access-bootstrap">No active authorized sessions.</p>}<h3>Authorized entries</h3><ul>{grants.map(grant => <li key={`${grant.kind}:${grant.value}`}><span><strong>{grant.value}</strong><small>{grant.kind} · {grant.role}{grant.active ? '' : ' · revoked'}</small></span>{grant.active === 1 && <button disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}</li>)}</ul>{failure && <p role="alert">{failure}</p>}</section></div>}</></CloudIdentityContext.Provider>;
 }
 
@@ -2616,7 +2652,7 @@ function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail
   const requestHref = contactEmail
     ? `mailto:${contactEmail}?${new URLSearchParams({ subject, body })}`
     : undefined;
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore Demo</a>{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div></section>;
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo?access=denied">Explore Demo</a>{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div></section>;
 }
 
 installRequestErrorToasts();

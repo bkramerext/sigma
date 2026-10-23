@@ -18,6 +18,7 @@ Set these deployment environment values to enable cloud authentication:
 | `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` | Verified email permitted to establish the first administrator. Its first Google subject is permanently bound in the auth database. |
 | `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public contact address used to prefill an invitation request. SIGMA opens a mail draft and never sends it. |
 | `SIGMA_CLOUD_AUTH_HOME=/var/lib/sigma-auth` | Absolute, service-owned private directory; mode 0700. The SQLite database is mode 0600. |
+| `SIGMA_CLOUD_DEMO_AUDIT=/opt/sigma/cloud-demo/handshake-demo-audit.json` | Absolute path to the curated, server-owned, read-only Project Audit v2 snapshot served to guests. It is separate from private project storage and required for the public Demo. |
 
 Create a Google OAuth client for a web application. Register the exact redirect
 URI `${SIGMA_CLOUD_PUBLIC_ORIGIN}/api/cloud-auth/callback`. SIGMA uses Google's
@@ -54,9 +55,19 @@ or workspace, and is deleted when Use Another Account starts a fresh
 `prompt=select_account` login. The screen offers the `/demo` guest-route
 handoff and a prefilled `mailto:` invitation request to the configured contact.
 The contact address is intentionally public; access rules and other accounts
-remain private. The `/demo` route is currently a no-workspace handoff surface.
-T22 still owns the curated shared Demo, guest-safe read-only APIs and exports;
-this ticket does not implement that full experience.
+remain private. `/demo` serves the same read-only curated project to anonymous
+visitors, denied identities and signed-in users. Its dedicated API accepts no
+project ID or filesystem path: it loads only `SIGMA_CLOUD_DEMO_AUDIT`, a
+service-owned saved audit snapshot kept outside private project storage. The
+snapshot contains the project, saved strategies, sessions, outcomes, research
+evidence and analysis. JSON audit and Text/HTML/LaTeX reports are generated from
+that snapshot without models, agents, computation, per-visitor copies or writes.
+Keep the configured file in a service-owned directory that is not writable by
+group or others, and review its contents before deployment. The server resolves
+the file and rejects it if it falls under either the configured workspace root
+or `$SIGMA_CLOUD_AUTH_HOME/workspaces`, including paths reached through
+symlinked parents. Missing, incorrectly owned, writable, or private-workspace
+configuration makes the Demo unavailable.
 
 T22.2 adds identity, API access checks, invitation administration, and the
 minimal access UI. Gate A provisions a durable private workspace for each

@@ -1,5 +1,18 @@
 # SIGMA status
 
+## Lean toolbar color feedback (2026-10-23)
+
+Changed the disabled Lean logo in mathematical projects from its darker copper
+filter to the same light copper used by the neighboring Project toolbar icons
+(`#e0c4a0`). Updated the A20 browser assertion to require the unfiltered SVG
+color. `./sigma test` passed. A focused real-Chrome check confirmed the logo is
+visible, disabled, and rendered from the light-copper SVG; screenshot:
+`/tmp/sigma-lean-light-copper.png`. The broader `browser_checks/a20_paper.py`
+scenario did not complete because it expects an obsolete Google-sign-in
+placeholder selector; it fails before reaching paper export. Its existing
+Ruff check also reports two RUF007 findings in unrelated adjacent-gap loops.
+No paid provider calls were made.
+
 ## T20.1: Minor UI acceptance fixes (2026-10-23)
 
 Replaced the Project action's LaTeX wordmark with a compact typographic TeX
@@ -4175,12 +4188,7 @@ gates.
 ## T37 PR #45 coordinator review revision (2026-10-23)
 
 This focused revision reproduced each requested defect before changing the
-policy. No live or paid provider calls were made. It integrates
-`origin/main` at `c4ef4f0af5c795657f0c55579bfef051c9e78f45` (Gray PR #46).
-The only conflict was `frontend/src/workspace.css`; the responsive two-column
-Model/Google and Thinking/ChatGPT layout from main is retained, and T37's
-conflicting three-column narrow layout was removed. Gray's separate Lean-logo
-work was not changed.
+policy. No live or paid provider calls were made. It integrates current `origin/main` at `c4b18d36349170b07e48c4cdf0c38aeb532fc958`, including Gray PR #46 and PR #42. The #46 workspace CSS conflict was resolved by retaining the responsive two-column Model/Google and Thinking/ChatGPT layout and removing T37's conflicting narrow three-column rule. PR #42's Lean-logo changes are inherited from main and were not edited. The only conflict in this latest merge was `docs/STATUS.md`; both T37 review evidence and T22 Gate C evidence were preserved.
 
 | Review issue | Result | Reproducer and correction |
 | --- | --- | --- |
@@ -4188,8 +4196,8 @@ work was not changed.
 | Repeated source artifacts and criticality | **MET** | A 105-artifact fixture repeats one unresolved obligation and casually mentions counterexamples in every ordinary note. Context assembly completes under the 24-source bound, retains the obligation and representative origin/latest support, and explicitly reports 102 omitted source occurrences. Plain keyword mentions are no longer treated as decisive; structured outcomes remain material. |
 | Prior-session obligation continuity | **MET** | The fixture places an ordinary-language unresolved obligation before 13 routine findings. The frozen later-session index selects its original source ahead of routine findings, reports the two omitted findings, preserves strategy/assumption and source provenance, and excludes a different strategy's obligation. The persisted paused-record reload is assembled through `_agent_context`; the actual `start_session` continuation scenario also asserts the prior obligation reaches the provider context and remains frozen in saved session state. |
 | Evidentiary extract availability | **MET** | A current mandatory source with a 2,401-character method and an unresolved obligation now fails before auth/provider preflight rather than silently passing a method whose decisive tail was truncated. A prior-session source with a truncated method remains bounded but is labeled `incomplete_extract_original_not_supplied`; its obligation remains unresolved. Complete bounded extracts and pointer-only references are distinct. No summarization call is introduced. |
-| Current-main responsive header integration | **MET** | The merged main CSS retains the approved two-column compact header on narrow screens. Fixture-backed real Chrome passed `browser_checks/a17_research.py` at 1440, 1280, 390, and 320 CSS pixels, with no unrelated UI or artwork edits. |
-| Tests, handoff, and PR update | **MET** | Full `./sigma test`, focused research-session and report suites, fixture-backed real Chrome checks at 1440/1280/390/320px, handoff update, and push to PR #45 completed. The PR remains open for review; no self-merge. |
+| Current-main responsive header integration | **MET** | The merged main CSS retains the approved two-column compact header on narrow screens and inherits PR #42’s Lean-logo work unchanged. Fixture-backed real Chrome passed `browser_checks/a17_research.py` at 1440, 1280, 390, and 320 CSS pixels, with no unrelated UI or artwork edits. |
+| Tests, handoff, and PR update | **IN PROGRESS** | The full suite, focused research-session/report suites, and fixture-backed Chrome checks passed on current main. The final merge commit and updated handoff still need pushing to PR #45; no self-merge. |
 
 The previous implementation had collapsed same-text obligations despite
 different assumptions, allowed an older addressed disposition to dominate a
@@ -4220,13 +4228,10 @@ case runs through `_agent_context`, not only the selection helper. The existing
 continuation integration test starts real local fixture sessions and checks
 that an earlier unresolved obligation reaches the subsequent Investigator.
 
-Verification on tested code head: `3e57eba9306421282f1e26530fb848e610cd52d1`.
-Base integrated: `c4ef4f0af5c795657f0c55579bfef051c9e78f45`.
+Verification on tested code head: **final integrated merge SHA recorded after commit**.
+Base integrated: `c4b18d36349170b07e48c4cdf0c38aeb532fc958` (includes requested #46 at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
 
-- `./sigma test` — **passed** all steps, including research session and
-  concurrency scenarios, computational evidence, project reports, Ruff,
-  format check (67 files), Pyright (0 diagnostics), frontend typecheck, and
-  production build.
+- `./sigma test` on merged `origin/main` `c4b18d36349170b07e48c4cdf0c38aeb532fc958` — **passed** all steps, including T37 research session/concurrency scenarios, T22 Gate C tests, computational evidence, project reports, Ruff, format check (69 files), Pyright (0 diagnostics), frontend typecheck, and production build.
 - `uv run --locked --no-sync python tests/research_sessions.py` — **passed**
   after the review changes, including 10-strategy concurrency and continuation.
 - `uv run --locked --no-sync python tests/project_reports.py` — **passed** report
@@ -4235,13 +4240,16 @@ Base integrated: `c4ef4f0af5c795657f0c55579bfef051c9e78f45`.
   with isolated UI `127.0.0.1:5174` and fixture `127.0.0.1:8003` — passed in
   installed Google Chrome at 1440/1280 desktop and 390/320 narrow widths. The
   initial attempt against unrelated listeners on 5173/8002 returned 404 and
-  was discarded; those listeners were left untouched.
+  was discarded; those listeners were left untouched. Current main now has
+  four report-type radios; the stale browser assertion expecting three was
+  updated to match Project Audit/Text/HTML/LaTeX, and the full Chrome journey
+  passed afterward.
 - No live model/provider calls were made. Fixture tests verify deterministic
   context plumbing and billing/call boundaries, not empirical research quality.
 
-PR #45 was pushed at the code head above; the following handoff commit contains
-only this status and `messages/t37_blue_r4r.txt` updates. GitHub's PR metadata
-check and mergeability result are documented in the handoff after the push.
+The branch is integrated locally with the latest `main`. The final merge head,
+PR metadata, and push result will be recorded here and in the handoff after the
+integration commit is created.
 
 Remaining limits: model-reported addressed/superseded/retracted statuses are
 still unverified judgments; bounded extracts cannot replace original source
@@ -4249,3 +4257,47 @@ inspection. When an original is not among the supplied sources, the context
 explicitly says so. Deterministic success does not establish that a live model
 will reason correctly or discover new mathematics. T17.8 remains a separate
 evaluation and no scientific-quality claim is made here.
+## T22 Gate C public Demo implementation (2026-10-23)
+
+The hosted `/demo` route now shows one curated, read-only SIGMA research
+experience adapted from `samples/handshake-count-easy/project.json`. It includes
+project details, two strategies, a saved session and outcome, saved analysis,
+research evidence, a finite computation, and its captured CSV artifact. The
+snapshot uses stable IDs and timestamps and explicitly identifies its finite
+check as illustrative evidence, not a proof.
+
+Guests, denied Google identities and signed-in visitors read only the
+server-configured `SIGMA_CLOUD_DEMO_AUDIT` audit snapshot through dedicated
+GET-only endpoints with no client-supplied project ID or path. Reports use the
+existing A17.5 export dialog and project report renderer for JSON audit, Text,
+HTML and LaTeX. Private project routes remain behind cloud authentication;
+missing Demo configuration fails closed. The cloud Home exposes an Explore Demo
+link, the invitation request remains reachable from the denied flow, and local
+SIGMA continues to bypass cloud authorization and show its full project UI.
+Implementation does not alter Green's workspace branch or storage design.
+
+After current main advanced to `113436118514ff7cca2c806c8924f958ff16392f`
+through Gate A private-workspace PR #43, the public-Demo branch integrated that
+head. Conflicts in `src/sigma/api.py` and `docs/STATUS.md` were reconciled: the
+Demo now runs in a mounted read-only sub-application outside the app-wide
+private-workspace dependency while remaining subject to the parent cloud-auth
+middleware, and both Gate A and Gate C status evidence are retained. No
+workspace implementation was rewritten. On this integrated
+tree, `./sigma test` passed all backend scenarios, including Demo and cloud-auth
+security tests, Ruff, formatting, Pyright (zero diagnostics), frontend typecheck
+and production build. Real Chrome checks passed for
+`browser_checks/t22_demo.py` and `browser_checks/t22_access_denied.py` at 1440px
+desktop and 390px mobile. They verified saved-data inspection, read-only controls,
+four exports, the denied invitation flow, anonymous Home Demo navigation, and
+unrestricted local Home. API tests use the real FastAPI middleware and ensure
+guests cannot read or export arbitrary projects, cannot mutate, and do not
+trigger model or execution functions; they also compare the snapshot bytes
+before and after browsing/exports. Browser API payloads and exports use the
+deterministic snapshot fixture. No live Google sign-in or paid provider calls
+were made.
+
+Known integration limit: deployment must install the curated snapshot at its
+configured `SIGMA_CLOUD_DEMO_AUDIT` location. Gate A private-workspace isolation
+is integrated from PR #43; Gate B provider authorization/budget controls and
+cloud deployment remain open in parent T22. This PR does not claim those gates
+are complete.

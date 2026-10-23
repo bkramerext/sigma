@@ -106,6 +106,9 @@ class CloudAuthTests(TestCase):
                 "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.org",
                 "SIGMA_CLOUD_AUTH_HOME": str(self.root),
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "access@example.org",
+                "SIGMA_CLOUD_DEMO_AUDIT": str(
+                    Path(__file__).resolve().parents[1] / "cloud-demo/handshake-demo-audit.json"
+                ),
             },
         )
         self.env.start()
@@ -224,6 +227,9 @@ class CloudAuthTests(TestCase):
             self.client.get("/api/cloud-auth/denied").json(), {"email": "visitor@example.org"}
         )
         self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
+        public_demo = self.client.get("/api/cloud-demo/")
+        self.assertEqual(public_demo.status_code, 200)
+        self.assertEqual(public_demo.json()["project"]["title"], "Counting Pairwise Handshakes")
         self.assertEqual(
             self.client.get(
                 "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}

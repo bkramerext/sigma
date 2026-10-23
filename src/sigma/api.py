@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sigma import (
     chatgpt_auth,
     cloud_auth,
+    cloud_demo,
     cloud_workspaces,
     papers,
     python_sandbox,
@@ -91,6 +92,37 @@ if _cloud_config.origin:
 
     _trusted_hosts.append(urlsplit(_cloud_config.origin).hostname or "")
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
+
+# Keep public Demo endpoints outside the app-wide private-workspace dependency.
+# The parent app's cloud-auth middleware still gates this mount to these two
+# exact GET routes; the mounted app has no write operations or caller paths.
+demo_app = FastAPI(title="SIGMA public Demo", docs_url=None, redoc_url=None)
+app.mount("/api/cloud-demo", demo_app)
+
+
+@demo_app.get("/")
+def cloud_demo_view():
+    """Return the one server-configured public audit snapshot, never a caller path."""
+    if not cloud_auth.config().enabled:
+        raise HTTPException(404, "Hosted Demo is unavailable.")
+    try:
+        return JSONResponse(
+            cloud_demo.audit(),
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+    except ProjectError as exc:
+        raise HTTPException(503, "Hosted Demo is not available.") from exc
+
+
+@demo_app.get("/report")
+def cloud_demo_report_view(format: str = "txt"):
+    if not cloud_auth.config().enabled:
+        raise HTTPException(404, "Hosted Demo is unavailable.")
+    try:
+        body, media_type = cloud_demo.report(format)
+    except ProjectError as exc:
+        raise HTTPException(503, "Hosted Demo is not available.") from exc
+    return Response(body, media_type=media_type, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/ui-instance")
