@@ -70,8 +70,6 @@ def blank_review(case_id: str, transcript_path: str) -> dict[str, Any]:
 
 def validate_review(review: dict[str, Any]) -> dict[str, Any]:
     """Fail closed: no scored outcome without source bytes and reviewer evidence."""
-    import hashlib
-
     case_id = review.get("case_id")
     if case_id not in CASES:
         raise ValueError("Unknown case_id")
@@ -250,12 +248,12 @@ def main() -> None:
         result = capture_session(args.capture, get_session(args.project_path, args.session_id))
         with args.output.open("x", encoding="utf-8") as handle:
             json.dump(result, handle, indent=2, ensure_ascii=False)
-            handle.write("\\n")
+            handle.write(chr(10))
     elif args.captured_review:
         record = json.loads(args.captured_review.read_text(encoding="utf-8"))
         result = captured_review(record["case_id"], str(args.captured_review))
     else:
-        parser.error("Choose --manifest, --review-template, or --score")
+        parser.error("Choose --manifest, --review-template, --capture, --captured-review or --score")
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
