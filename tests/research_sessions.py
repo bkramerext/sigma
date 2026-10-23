@@ -67,6 +67,7 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "strategy_contribution": "productive",
         "contribution_rationale": "The saved derivation advances the objective through the linked strategy.",
         "cross_strategy_relations": [],
+        "retracted_cross_strategy_source_artifact_ids": [],
     }
 
 
@@ -133,6 +134,10 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert payload["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}
         if payload["text"]["format"]["name"] == "research_skeptic":
             assert "stop_reason" in payload["text"]["format"]["schema"]["required"]
+            assert (
+                "retracted_cross_strategy_source_artifact_ids"
+                in payload["text"]["format"]["schema"]["required"]
+            )
         context = json.loads(payload["input"])
         contexts.append((payload["text"]["format"]["name"], context))
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
@@ -2309,6 +2314,7 @@ def test_peer_handoff_noop_and_domain_mismatch_controls():
         "strategy_id": source_id,
         "strategy_title": "Integer route",
         "status": "queued",
+        "artifacts": [source_artifact_id],
     }
     target_branch: dict[str, Any] = {
         "strategy_id": target_id,
@@ -2318,6 +2324,9 @@ def test_peer_handoff_noop_and_domain_mismatch_controls():
     }
     source_artifact = {
         "id": source_artifact_id,
+        "strategy_id": source_id,
+        "strategy_title": "Integer route",
+        "sequence": 1,
         "skeptic_output": {
             "cross_strategy_relations": [
                 {
@@ -2329,7 +2338,19 @@ def test_peer_handoff_noop_and_domain_mismatch_controls():
             ]
         },
     }
-    record = {"strategy_runs": [source_branch, target_branch], "artifacts": [source_artifact]}
+    target_artifact = {
+        "id": target_artifact_id,
+        "strategy_id": target_id,
+        "strategy_title": "Real-analysis route",
+        "sequence": 2,
+        "claim_or_question": "The target argument assumes x is real and positive.",
+        "skeptic_output": {"cross_strategy_relations": []},
+    }
+    target_branch["artifacts"] = [target_artifact_id]
+    record = {
+        "strategy_runs": [source_branch, target_branch],
+        "artifacts": [source_artifact, target_artifact],
+    }
 
     research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
     assert "pending_peer_handoffs" not in target_branch
@@ -2351,6 +2372,77 @@ def test_peer_handoff_noop_and_domain_mismatch_controls():
     # A reported contradiction queues a scoped challenge; it never declares the
     # target branch refuted or changes its saved strategy state automatically.
     assert target_branch["status"] == "queued"
+
+    retraction = {
+        "id": "source-retraction",
+        "strategy_id": source_id,
+        "skeptic_output": {
+            "cross_strategy_relations": [],
+            "retracted_cross_strategy_source_artifact_ids": [source_artifact_id],
+        },
+    }
+    record["artifacts"].append(retraction)
+    research_sessions._retract_peer_handoffs(record, source_branch, retraction)
+    assert "pending_peer_handoffs" not in target_branch
+    assert target_branch["current_question"] == "Continue the real-domain argument."
+    assert target_branch["status"] == "queued"
+    assert record["artifacts"][0]["skeptic_output"]["cross_strategy_relations"]
+    decision = research_sessions._portfolio_decision(record)
+    assert decision["conflict_candidates"] == []
+    assert len(decision["retracted_peer_handoffs"]) == 1
+    assert decision["retracted_peer_handoffs"][0]["retracted_by_artifact_id"] == retraction["id"]
+
+    # A later retraction cannot erase the fact that the target already saw the
+    # handoff. Preserve that causal history while marking it withdrawn.
+    second_source_id = "source-evidence-later"
+    source_branch["artifacts"].append(second_source_id)
+    second_source = {
+        "id": second_source_id,
+        "strategy_id": source_id,
+        "strategy_title": "Integer route",
+        "sequence": 3,
+        "skeptic_output": {
+            "cross_strategy_relations": [
+                {
+                    "strategy_id": target_id,
+                    "artifact_id": target_artifact_id,
+                    "relation": "complements",
+                    "rationale": "A second, later claimed connection.",
+                }
+            ]
+        },
+    }
+    record["artifacts"].append(second_source)
+    research_sessions._queue_peer_handoffs(record, source_branch, second_source)
+    consumed_handoffs = list(target_branch["pending_peer_handoffs"])
+    consumed_target_artifact = {
+        "id": "target-after-handoff",
+        "strategy_id": target_id,
+        "peer_handoffs_prompted": consumed_handoffs,
+    }
+    target_branch.pop("pending_peer_handoffs")
+    target_branch.pop("peer_handoff_base_question")
+    record["artifacts"].append(consumed_target_artifact)
+    retraction_after_use = {
+        "id": "source-retraction-after-use",
+        "strategy_id": source_id,
+        "skeptic_output": {
+            "cross_strategy_relations": [],
+            "retracted_cross_strategy_source_artifact_ids": [second_source_id],
+        },
+    }
+    record["artifacts"].append(retraction_after_use)
+    research_sessions._retract_peer_handoffs(record, source_branch, retraction_after_use)
+    assert consumed_target_artifact["peer_handoffs_prompted"] == consumed_handoffs
+    assert any(
+        item["source_artifact_id"] == second_source_id
+        and item["retracted_by_artifact_id"] == retraction_after_use["id"]
+        for item in record["retracted_peer_handoffs"]
+    )
+    assert all(
+        item["source_artifact_id"] != second_source_id
+        for item in research_sessions._portfolio_decision(record)["cross_strategy_reviews"]
+    )
 
 
 async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path):

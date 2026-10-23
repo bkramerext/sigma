@@ -74,6 +74,16 @@ evaluation. I did not run any API-key-billed call.
   domain/assumption check. This is a prompt-level guard, not a deterministic
   semantic validator; real model rejection of a false transfer remains
   unverified.
+- Added explicit Skeptic retractions for a strategy's own earlier
+  cross-strategy source artifacts. References are validated against that
+  branch's saved evidence. A retraction removes an unconsumed handoff and
+  restores the target's prior question; consumed handoffs remain in history
+  with the retraction source. The coordinator no longer reports a retracted
+  relation as an active conflict/combination. Deterministic controls cover both
+  withdrawal before use and withdrawal after use: the former restores the
+  target question, while the latter preserves the target's prompted-artifact
+  lineage and marks that handoff retracted. Neither deletes the original
+  evidence or marks the target disproven.
 - Corrected the ladder documentation count: it has five runnable samples.
 - Added the run protocol and scoring rubric in
   [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact
@@ -160,12 +170,13 @@ mathematical truth.
   production build. The ladder check confirmed five independent sample copies,
   answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
   checks; its printed note explicitly limits those checks to finite examples.
-- Adversarial lifecycle and peer-handoff regressions passed in the final full
-  `./sigma test` on 2026-10-23, including preflight failure/timeout recovery,
-  queued-branch stop, duration/call-limit resume, and the A-to-B finding that
-  changes B's scheduled next question and survives stop/resume. Ruff check and
-  format, Pyright (zero errors), frontend typecheck, and production Vite build
-  also passed.
+- Adversarial lifecycle and peer-handoff regressions passed in `./sigma test`
+  on 2026-10-23, including preflight failure/timeout recovery, queued-branch
+  stop, duration/call-limit resume, the A-to-B finding that changes B's
+  scheduled next question and survives stop/resume, and source-evidence
+  retraction both before and after the target consumes the handoff. Ruff check
+  and format, Pyright (zero errors), frontend typecheck, and production Vite
+  build also passed.
 - Real Chrome `browser_checks/a17_research.py` passed against a local provider
   fixture at desktop (1440px) and mobile (390px), including multi-strategy
   selection, stop during provider work, resume, and the coordinator panel. I

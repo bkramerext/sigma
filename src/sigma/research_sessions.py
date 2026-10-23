@@ -86,6 +86,7 @@ class Skeptic(BaseModel):
     strategy_contribution: str = Field(pattern="^(solution|productive|unproductive)$")
     contribution_rationale: str = Field(max_length=1000)
     cross_strategy_relations: list[CrossStrategyRelation] = Field(max_length=12)
+    retracted_cross_strategy_source_artifact_ids: list[str] = Field(max_length=12)
 
 
 def _now() -> str:
@@ -454,7 +455,8 @@ INVESTIGATOR_GUIDANCE = (
     "you adopt, reject, or leave unresolved; cite the supplied artifact IDs and do not treat the "
     "peer claim as verified. Before transferring a contradiction or bound, compare the source and "
     "target assumptions and domains; a mismatch is a reason to reject or narrow the transfer, "
-    "not to mark this strategy disproven."
+    "not to mark this strategy disproven. If peer evidence lists a withdrawn source artifact, "
+    "do not rely on that artifact's old cross-strategy relation as current."
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
@@ -472,7 +474,10 @@ SKEPTIC_GUIDANCE = (
     "record the exact peer strategy_id and artifact_id, classify it as supports, contradicts, "
     "complements, overlaps, or unrelated, and give a concise public rationale. Never cite an ID "
     "absent from other_strategy_evidence; return an empty list when no peer evidence is supplied "
-    "or no relationship is justified. These are unverified review claims, not coordinator facts; "
+    "or no relationship is justified. If retracting an earlier relationship from this strategy, "
+    "list the exact earlier source artifact ID in retracted_cross_strategy_source_artifact_ids; "
+    "omission alone does not retract history. Retract only relations from this strategy's own "
+    "saved artifacts, and state the reason in response. These are unverified review claims, not coordinator facts; "
     "a single-strategy session must return an empty list. Request another cycle only for a genuinely "
     "unresolved objective requirement or material objection. Choose stop only with an actual "
     "decisive contradiction, a useful completed conclusion, or no concrete next step. A decisive "
@@ -1340,6 +1345,14 @@ async def _call(
                     "Skeptic returned a cross-strategy reference not present in the supplied peer evidence"
                 )
             seen.add(reference)
+        supplied_own = set(context.get("context_artifact_ids", []))
+        seen_retractions: set[str] = set()
+        for artifact_id in validated["retracted_cross_strategy_source_artifact_ids"]:
+            if artifact_id not in supplied_own or artifact_id in seen_retractions:
+                raise ProjectError(
+                    "Skeptic returned a cross-strategy retraction not linked to this strategy's saved evidence"
+                )
+            seen_retractions.add(artifact_id)
     return validated, _usage(raw)
 
 
@@ -1437,6 +1450,11 @@ def _portfolio_context(
                 ]
                 if isinstance(item, dict)
             ],
+            "retracted_cross_strategy_source_artifact_ids": list(
+                artifact.get("skeptic_output", {}).get(
+                    "retracted_cross_strategy_source_artifact_ids", []
+                )
+            ),
         }
         for artifact in peer_artifacts
     ]
@@ -1510,6 +1528,62 @@ def _queue_peer_handoffs(
             ] + _peer_handoff_question(pending)
 
 
+def _retract_peer_handoffs(
+    record: dict[str, Any], source_branch: dict[str, Any], retraction_artifact: dict[str, Any]
+) -> None:
+    skeptic = retraction_artifact.get("skeptic_output")
+    if not isinstance(skeptic, dict):
+        return
+    retracted_ids = set(skeptic.get("retracted_cross_strategy_source_artifact_ids", []))
+    if not retracted_ids:
+        return
+    history = record.setdefault("retracted_peer_handoffs", [])
+    known = {item.get("handoff_id") for item in history if isinstance(item, dict)}
+
+    def record_retraction(handoff: dict[str, Any]) -> None:
+        if handoff.get("handoff_id") in known:
+            return
+        history.append({**handoff, "retracted_by_artifact_id": retraction_artifact["id"]})
+        known.add(handoff.get("handoff_id"))
+
+    for target in record.get("strategy_runs", []):
+        pending = target.get("pending_peer_handoffs", [])
+        retained = []
+        for handoff in pending:
+            if (
+                handoff.get("source_strategy_id") == source_branch["strategy_id"]
+                and handoff.get("source_artifact_id") in retracted_ids
+            ):
+                record_retraction(handoff)
+            else:
+                retained.append(handoff)
+        if len(retained) != len(pending):
+            if retained:
+                target["pending_peer_handoffs"] = retained
+                target["current_question"] = target.get(
+                    "peer_handoff_base_question", target["current_question"]
+                ) + _peer_handoff_question(retained)
+            else:
+                target.pop("pending_peer_handoffs", None)
+                base_question = target.pop("peer_handoff_base_question", None)
+                if isinstance(base_question, str):
+                    target["current_question"] = base_question
+
+    for target_artifact in record.get("artifacts", []):
+        for handoff in target_artifact.get("peer_handoffs_prompted", []):
+            if (
+                handoff.get("source_strategy_id") == source_branch["strategy_id"]
+                and handoff.get("source_artifact_id") in retracted_ids
+            ):
+                record_retraction(handoff)
+    for source_artifact_id in sorted(retracted_ids):
+        _event(
+            record,
+            "coordinator.handoff_retracted",
+            f"{source_branch['strategy_title']} retracted cross-strategy evidence in artifact {source_artifact_id}.",
+        )
+
+
 def _apply_pending_peer_handoffs(record: dict[str, Any]) -> None:
     for branch in record.get("strategy_runs", []):
         pending = branch.get("pending_peer_handoffs")
@@ -1524,8 +1598,19 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
     """Turn cited peer reviews into bounded, reviewable coordination suggestions."""
     artifacts = record.get("artifacts", [])
     artifact_by_id = {item.get("id"): item for item in artifacts if isinstance(item, dict)}
+    retracted_source_artifact_ids = {
+        artifact_id
+        for item in artifacts
+        if isinstance(item, dict) and isinstance(item.get("skeptic_output"), dict)
+        for artifact_id in item["skeptic_output"].get(
+            "retracted_cross_strategy_source_artifact_ids", []
+        )
+        if isinstance(artifact_id, str)
+    }
     relationships: list[dict[str, Any]] = []
     for source in artifacts:
+        if source.get("id") in retracted_source_artifact_ids:
+            continue
         skeptic = source.get("skeptic_output")
         if not isinstance(skeptic, dict):
             continue
@@ -1683,6 +1768,7 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
         "conflict_candidates": conflict_candidates,
         "overlap_warnings": overlap_warnings,
         "cross_strategy_reviews": relationships,
+        "retracted_peer_handoffs": list(record.get("retracted_peer_handoffs", [])),
         "status": "model_reported_unverified",
         "limitations": [
             "Cross-strategy relations are model-reported and require human review.",
@@ -1871,6 +1957,7 @@ def _commit_portfolio_review(
     branch["status"] = "running" if decision in {"continue", "revise"} else "ended"
     branch["current_action"] = "Investigator" if branch["status"] == "running" else "Completed"
     branch.pop("active_peer_handoffs", None)
+    _retract_peer_handoffs(record, branch, artifact)
     _queue_peer_handoffs(record, branch, artifact)
     record["strategy_assessments"] = _strategy_assessments(record)
     _event(
