@@ -56,7 +56,7 @@
 | T28 | Rich computational artifact inspection and cross-session evidence | Merged, engineering done | Green · ChatGPT authored ticket · [PR #36](https://github.com/bkramerext/sigma/pull/36) |
 | T29 | Human intervention during active concurrent research | Implementation open for review | Blue · ChatGPT authored ticket · [PR #39](https://github.com/bkramerext/sigma/pull/39) |
 
-| T30 | Create Samples entries from exported projects | Implemented; PR open for review | Green · ChatGPT assignment |
+| T30 | Create Samples entries from exported projects | PR #40 merged; legacy canonical-export correction and enriched sample history in review | Green · ChatGPT assignment |
 | T37 | Trustworthy research memory, evidence selection, and continuity | Ready, unassigned until human dispatch | Blue proposed · [ticket](tickets/t37.md) |
 
 ### T23.1 scope
