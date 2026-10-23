@@ -14,6 +14,9 @@ from playwright.sync_api import expect, sync_playwright
 
 from sigma.projects import create_strategy, inspect_project, project_settings, update_project
 
+UI_URL = os.environ.get("SIGMA_UI_URL", "http://127.0.0.1:5173")
+API_URL = os.environ.get("SIGMA_API_URL", "http://127.0.0.1:8001")
+
 
 def choose_research_type(dialog, label, field_label="Research type"):
     picker = dialog.get_by_role("combobox", name=re.compile(f"^{field_label}"))
@@ -29,6 +32,12 @@ def status_handler(data):
     return handle
 
 
+def fetch_fixture(route):
+    headers = dict(route.request.headers)
+    headers["origin"] = "http://127.0.0.1:5173"
+    return route.fetch(url=route.request.url.replace(UI_URL, API_URL), headers=headers)
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(
         executable_path=os.environ.get(
@@ -42,20 +51,14 @@ with sync_playwright() as p:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.route(
         "**/api/**",
-        lambda route: route.fulfill(
-            response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8001"))
-        ),
+        lambda route: route.fulfill(response=fetch_fixture(route)),
     )
     held_connection = []
     page.route("**/api/ai/connection?*", lambda route: held_connection.append(route))
-    page.goto("http://127.0.0.1:5173/")
+    page.goto(UI_URL + "/")
     expect(page.get_by_text("Checking AI…", exact=True)).to_be_visible()
     assert not page.locator(".connection-connected").count()
-    held_connection[0].fulfill(
-        response=held_connection[0].fetch(
-            url=held_connection[0].request.url.replace("127.0.0.1:5173", "127.0.0.1:8001")
-        )
-    )
+    held_connection[0].fulfill(response=fetch_fixture(held_connection[0]))
     page.unroute("**/api/ai/connection?*")
     expect(page.get_by_text("OpenAI API · key billing", exact=True)).to_be_visible()
     assert (
@@ -71,8 +74,16 @@ with sync_playwright() as p:
     dialog = page.get_by_role("dialog")
     expect(dialog.get_by_role("heading", name="New Project", exact=True)).to_be_visible()
     expect(dialog.get_by_label("Project name", exact=True)).to_be_focused()
-    labels = ["Project name", "Research problem", "Research category", "LLM Model", "Thinking level"]
+    labels = [
+        "Project name",
+        "Research problem",
+        "Research category",
+        "Difficulty",
+        "LLM Model",
+        "Thinking level",
+    ]
     assert dialog.locator("label").all_text_contents() == labels
+    expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("medium")
     expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6.1-sol")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("high")
     assert dialog.get_by_label("LLM Model", exact=True).locator("option").count() == 3
@@ -139,13 +150,11 @@ with sync_playwright() as p:
     dialog.press("Escape")
     expect(dialog).to_be_visible()
     assert len(creates) == 1 and not destination.exists()
-    creates[0].fulfill(
-        response=creates[0].fetch(
-            url=creates[0].request.url.replace("127.0.0.1:5173", "127.0.0.1:8001")
-        )
-    )
+    creates[0].fulfill(response=fetch_fixture(creates[0]))
     page.unroute("**/api/projects/create")
     expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
+    difficulty_badge = page.get_by_label("Project difficulty: Medium", exact=True)
+    expect(difficulty_badge).to_be_visible()
     header_icon = page.locator(".project-header-title-row .research-type-icon")
     title_row = page.locator(".project-header-title-row")
     for width in (1672, 390, 320):
@@ -162,9 +171,10 @@ with sync_playwright() as p:
     raw = json.loads(state.read_bytes())
     identity = raw["id"]
     assert (
-        raw["schema_version"] == 6
+        raw["schema_version"] == 8
         and raw["ai_model"] == "gpt-6.1-sol"
         and raw["reasoning_effort"] == "high"
+        and raw["difficulty"] == "medium"
     )
     added = create_strategy(
         destination, "Existing research", "Full existing approach.\nDo not reset this research."
@@ -172,40 +182,21 @@ with sync_playwright() as p:
     strategy_id = added.project.strategies[-1].id
     page.reload()
     expect(page.get_by_role("heading", name="Existing research", exact=True)).to_be_visible()
-    before = state.read_bytes()
-    title_button = page.get_by_role("button", name=f"Edit project title: {title}")
-    title_button.focus()
-    title_button.press("Enter")
-    title_input = page.get_by_role("textbox", name="Project title")
-    expect(title_input).to_be_focused()
-    title_input.fill("Cancelled changes")
-    title_input.press("Escape")
-    expect(title_button).to_be_focused()
-    assert state.read_bytes() == before
-    title_button.click()
-    title_input.fill("Renamed browser investigation")
-    page.locator(".project-title-actions").get_by_role("button", name="Save").click()
-    expect(page.get_by_role("heading", name="Renamed browser investigation")).to_be_visible()
-    description_button = page.get_by_role("button", name="Edit Plain description")
-    description_button.click()
-    description = page.get_by_label("Edit Plain source")
-    description.fill("A revised problem.\nKeep uncertainty explicit.")
-    description.press("Escape")
-    assert "A revised problem" not in state.read_text()
-    description_button.click()
-    description.fill("A revised problem.\nKeep uncertainty explicit.")
-    page.locator(".project-intro").get_by_role("button", name="Save text").click()
-    expect(page.get_by_role("button", name="Edit Plain description")).to_contain_text(
-        "A revised problem"
-    )
-    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
+    settings_button = page.get_by_role("button", name="Project settings", exact=True)
     settings_button.click()
-    expect(dialog.get_by_role("heading", name="Project Settings", exact=True)).to_be_visible()
-    assert dialog.locator("label").all_text_contents() == [
+    expect(dialog.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
+    assert dialog.locator("#settings-panel-main label").all_text_contents() == [
         "Research type",
+        "Difficulty",
         "LLM Model",
         "Thinking level",
     ]
+    category_box = dialog.get_by_role("combobox", name=re.compile("^Research type")).bounding_box()
+    difficulty_box = dialog.get_by_label("Difficulty", exact=True).bounding_box()
+    assert category_box and difficulty_box
+    assert category_box["x"] < difficulty_box["x"]
+    assert category_box["x"] + category_box["width"] <= difficulty_box["x"]
+    page.screenshot(path="/tmp/sigma-settings-classification-side-by-side.png", full_page=True)
     dialog.press("Escape")
     expect(settings_button).to_be_focused()
     constrained = {
@@ -231,13 +222,14 @@ with sync_playwright() as p:
     settings_button.click()
     dialog.get_by_label("LLM Model", exact=True).select_option("gpt-6-luna")
     expect(dialog.get_by_role("alert")).to_contain_text("Choose a supported level explicitly")
-    expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_disabled()
+    expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_disabled()
     dialog.get_by_label("Thinking level", exact=True).select_option("low")
-    expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_enabled()
+    expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_enabled()
     dialog.press("Escape")
     page.unroute("**/api/ai/models")
     settings_button.click()
     choose_research_type(dialog, "Other")
+    dialog.get_by_label("Difficulty", exact=True).select_option("hard")
     dialog.get_by_label("LLM Model", exact=True).select_option("gpt-6-luna")
     dialog.get_by_label("Thinking level", exact=True).select_option("xhigh")
     page.route(
@@ -246,50 +238,57 @@ with sync_playwright() as p:
             status=400, content_type="application/json", body='{"error":"Injected save failure"}'
         ),
     )
-    dialog.get_by_role("button", name="Save Changes", exact=True).click()
+    dialog.get_by_role("button", name="Save", exact=True).click()
     expect(dialog.get_by_role("alert")).to_have_text("Injected save failure")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
+    expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("hard")
     page.unroute("**/api/projects/update")
-    dialog.get_by_role("button", name="Save Changes", exact=True).click()
+    dialog.get_by_role("button", name="Save", exact=True).click()
     expect(settings_button).to_be_focused()
     raw = json.loads(state.read_bytes())
     assert (
         raw["id"] == identity
         and raw["ai_model"] == "gpt-6-luna"
         and raw["reasoning_effort"] == "xhigh"
+        and raw["difficulty"] == "hard"
     )
     assert (
         raw["strategies"][0]["id"] == strategy_id and raw["events"][-1]["kind"] == "project.updated"
     )
     assert inspect_project(destination).path == str(destination)
     page.reload()
-    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
+    settings_button = page.get_by_role("button", name="Project settings", exact=True)
     settings_button.click()
     expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
+    expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("hard")
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(settings_button).to_be_focused()
-    page.get_by_label("New Strategy options", exact=True).click()
-    page.get_by_role("button", name="Generate with AI", exact=True).click()
-    expect(dialog.locator(".provider-context")).to_have_text(
+    page.get_by_role("button", name="Generate", exact=True).click()
+    generation_panel = page.get_by_role("region", name="Generate a strategy")
+    expect(generation_panel.locator(".provider-context")).to_contain_text(
         "OpenAI API · billed separately · gpt-6-luna · Extra high"
     )
-    dialog.press("Escape")
+    page.keyboard.press("Escape")
     settings_button.click()
     research_type = choose_research_type(dialog, "Mathematics")
     latest = inspect_project(destination)
     prior = asdict(project_settings(latest.project))
+    settings_update = dict(prior)
+    settings_update["research_mode"] = settings_update.pop("investigation_type")
     update_project(
-        destination, **{**prior, "title": "Another editor changed this name"}, expected=prior
+        destination,
+        **{**settings_update, "title": "Another editor changed this name"},
+        expected=prior,
     )
     conflict_bytes = state.read_bytes()
-    dialog.get_by_role("button", name="Save Changes", exact=True).click()
+    dialog.get_by_role("button", name="Save", exact=True).click()
     expect(dialog.get_by_role("alert")).to_contain_text("changed elsewhere")
     expect(research_type).to_contain_text("Mathematics")
     assert state.read_bytes() == conflict_bytes
     dialog.press("Escape")
     page.reload()
-    settings_button = page.get_by_role("button", name="Project Settings", exact=True)
+    settings_button = page.get_by_role("button", name="Project settings", exact=True)
     expect(settings_button).to_be_visible()
     no_models = {
         "models": [],
@@ -301,8 +300,8 @@ with sync_playwright() as p:
     settings_button.click()
     expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_text("Provider is offline;", exact=False)).to_be_visible()
-    expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_enabled()
-    dialog.get_by_role("button", name="Save Changes", exact=True).click()
+    expect(dialog.get_by_role("button", name="Save", exact=True)).to_be_enabled()
+    dialog.get_by_role("button", name="Save", exact=True).click()
     expect(settings_button).to_be_focused()
     assert json.loads(state.read_bytes())["ai_model"] == "gpt-6-luna"
     page.unroute("**/api/ai/models")
@@ -333,7 +332,7 @@ with sync_playwright() as p:
             status_handler(data),
         )
         page.reload()
-        expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         expect(
             page.get_by_text(
                 "OpenAI API · key billing" if status == "connected" else label, exact=True
@@ -344,11 +343,31 @@ with sync_playwright() as p:
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-status-{status}-320.png", full_page=True)
         page.unroute("**/api/ai/connection?*")
+    # A legacy document has no evidence for difficulty. It must remain unset and
+    # the project header must not render a guessed difficulty badge.
+    legacy = json.loads(state.read_bytes())
+    legacy["schema_version"] = 7
+    legacy.pop("difficulty", None)
+    for event in legacy["events"]:
+        change = event.get("project_change")
+        if change:
+            for settings in change.values():
+                settings.pop("difficulty", None)
+    state.write_text(json.dumps(legacy, indent=2) + "\n", encoding="utf-8")
+    page.reload()
+    expect(
+        page.get_by_role("heading", name="Another editor changed this name", exact=True)
+    ).to_be_visible()
+    assert page.locator(".project-difficulty-badge").count() == 0
+    settings_button = page.get_by_role("button", name="Project settings", exact=True)
+    settings_button.click()
+    expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("")
+    dialog.press("Escape")
     page.get_by_role("button", name="Back to home", exact=True).click()
     expect(page.get_by_role("button", name="New", exact=True)).to_be_visible()
     page.wait_for_timeout(150)
     page.go_back()
-    expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
     assert (
         state.read_bytes() == json.dumps(json.loads(state.read_bytes()), indent=2).encode() + b"\n"
     )

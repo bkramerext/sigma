@@ -77,6 +77,27 @@ class SampleCopyTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in recent], [second.project.id, first.project.id])
         self.assertEqual([item["path"] for item in recent], [second.path, first.path])
         self.assertTrue(all(item["available"] for item in recent))
+        self.assertIsNone(first.project.difficulty)
+
+    def test_easy_sample_difficulty_survives_sample_copy(self):
+        source = self.projects / "sample-source.sigma"
+        initialize_project(source, "Easy Sample", "A representative easy question")
+        raw = json.loads((source / STATE).read_bytes())
+        raw["difficulty"] = "easy"
+        easy_sample = self.samples / "easy"
+        easy_sample.mkdir()
+        (easy_sample / STATE).write_text(json.dumps(raw), encoding="utf-8")
+
+        copied = samples.open_sample_project("easy")
+
+        assert copied.project.difficulty is not None
+        self.assertEqual(copied.project.difficulty.value, "easy")
+        reopened = inspect_project(copied.path).project
+        assert reopened.difficulty is not None
+        self.assertEqual(reopened.difficulty.value, "easy")
+        catalog = {item["id"]: item for item in samples.sample_projects()["projects"]}
+        self.assertEqual(catalog["easy"]["difficulty"], "easy")
+        self.assertEqual(json.loads((easy_sample / STATE).read_bytes())["difficulty"], "easy")
 
     def test_existing_sample_install_is_preserved(self):
         existing = self.projects / "sample.sigma"

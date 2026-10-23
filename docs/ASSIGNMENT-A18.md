@@ -1,14 +1,26 @@
 # A18 — Research quality and integration
 
-Status: **ready for implementation**. Consolidates the remaining intended scope of A18–A21; A19, A20, and A21 are retired as separate planned assignments. A22 remains a separate cloud-migration assignment.
+Status: **ready for Blue implementation**. A18 is the integrated local research-quality and reliability milestone. The former A19–A21 roadmap is not a dependency; A20 AI-authored papers is a separate, already authorized feature, and A23 project difficulty is implemented. A22 cloud migration remains separate.
 
 Read `docs/HUMAN-AI-INTERACTION.md`, `docs/ASSIGNMENT-A17.6.md`, and `docs/STATUS.md` before implementation. Inspect the current code and tests before proposing changes. Preserve local operation and existing user workflows.
+
+## Why A18 exists: SIGMA's defining product promise
+
+**Blue: this is a long-lived, product-defining assignment, not a collection of small stories.** SIGMA exists to help people make real progress on hard problems that cannot be solved in one prompt, one session, or by a single line of attack. The research may span days or weeks, involve competing ideas and dead ends, and require revisiting assumptions as evidence accumulates. If SIGMA cannot sustain and organize that work, the product does not fulfill its purpose, no matter how polished the interface or how many agents it can launch.
+
+A productive SIGMA user should be able to state a difficult objective, develop or generate several meaningfully different strategies, set multiple agents to work on them, and understand what is happening without micromanaging every step. Agents should do substantive work: derive, test, challenge, compare, revise, and sometimes reject approaches. The system should help the user distinguish a promising mechanism from attractive speculation, recognize when a proof or experiment is incomplete, and decide what to investigate next. Failed approaches and negative findings are valuable if they prevent repeated wasted effort.
+
+The user should be able to interrupt the investigation, inspect a trustworthy record of claims and evidence, fork an approach based on what was learned, redirect effort, and return later without reconstructing the project's intellectual history. SIGMA should preserve *why* decisions were made, what remains unresolved, which strategy contributed what, and how confidence is justified. Human supervision should be practical at the level of research goals and strategy, not an obligation to babysit every model call. Concurrent agents should expand the breadth and critical depth of inquiry while remaining visible, bounded, and accountable.
+
+**Build the integrated experience, not a checklist of disconnected features.** A18 is intentionally ambitious and may take sustained engineering effort. Own the end-to-end product outcome, make coherent architectural improvements when needed, and keep the research loop working as a whole. Use intermediate checkpoints, tests, and PRs to control risk and communicate progress, **not to redefine A18 into a sequence of tiny independent stories or to defer essential capabilities**. If a requirement conflicts with real usability, reliability, or research integrity, investigate and propose the best integrated solution rather than implementing the words mechanically. Escalate material product tradeoffs, but otherwise exercise engineering ownership.
+
+The bar is complete solutions on Easy and Medium problems, and substantive, defensible progress on Hard problems; do not pretend a finite test suite establishes universal coverage. The bar is that SIGMA can pursue them intelligently, make and preserve defensible progress, expose uncertainty and failure honestly, and substantially improve a human researcher's ability to organize and advance difficult work. **That is the reason for A18 and the standard by which it will be judged.**
 
 ## Objective
 
 Make SIGMA a dependable local research system that produces useful, evidence-backed progress through bounded agentic investigation, preserves that progress, and can be meaningfully supervised by a human. Improve the actual research mechanism and end-to-end reliability, not the number of features or panes.
 
-A18 may proceed **in parallel with A17.6**, but avoid modifying A17.6's outcome-recognition, verification-label, and Strategy Assessments contracts until that implementation is integrated. Resolve conflicts against the latest code, not assumptions about the earlier roadmap.
+A17.6–A17.8 are integrated. Read and preserve their current outcome-recognition, verification-label, Strategy Assessments, and evidence contracts. In particular, `docs/STATUS.md` records that A17.8's Maximum Regions live trial **did not demonstrate independent discovery** because the sample strategy already contained the solution. Do not repeat that leakage or count that trial as A18 research acceptance. Integrate with A20 paper generation and A23 difficulty without broadening their scope.
 
 ## Scope inherited from A18–A21
 
@@ -47,11 +59,61 @@ A18 may proceed **in parallel with A17.6**, but avoid modifying A17.6's outcome-
 
 ## Implementation order and coordination
 
-1. **Begin now, without waiting for A17.6:** inspect research-cycle code, document specific quality gaps, add isolated deterministic tests, and implement improvements that do not overlap A17.6's files/contracts.
-2. **Integrate after A17.6 lands:** rebase/re-read current interfaces; exercise outcome/assessment semantics, continuity, and cross-strategy coordination against the merged implementation. Do not overwrite Codex's concurrent changes.
-3. **Close with integrated verification:** run `./sigma test`, focused browser checks, and the end-to-end local scenario. Fix regressions before adding enhancements.
+1. **Baseline:** inspect the merged research-cycle code and A17.8 findings. Establish falsifiable quality criteria and answer-leakage controls before changing behavior. Record actual failure cases, not guesses.
+2. **Improve:** implement bounded, domain-general research-cycle and continuity corrections; retain the current UI and A17 outcome/assessment contracts. Add adversarial fixtures and avoid sample-specific keyword heuristics.
+3. **Integrate:** re-read main before opening the PR, preserve A20/A23 behavior, and run `./sigma test`, focused browser checks, and an end-to-end local scenario. Fix regressions before enhancements.
+4. **Evaluate:** complete deterministic quality checks and prepare the live evaluation protocol. Execute real-provider trials **only after explicit user authorization**, with a bounded call/time budget. Report research acceptance separately from engineering acceptance.
 
-Prefer a small number of coherent, independently testable increments over a broad rewrite. Avoid schema changes unless necessary for durable evidence or continuation, and preserve legacy-session compatibility.
+Maintain coherent, testable checkpoints while delivering the integrated research product; checkpoints are risk controls, not a reason to split A18 into small feature stories or drop core scope. Avoid schema changes unless necessary for durable evidence or continuation, and preserve legacy-session compatibility.
+
+## Difficulty-tier product expectations
+
+**Easy and Medium problems are solution targets, not merely progress targets.** The product ambition is that SIGMA solves **every legitimately classified Easy or Medium problem** in its supported research domains, subject to a well-defined, solvable task and the resources made available. This is an ambitious product requirement, **not a claim of achieved reliability or a guarantee that any present model can solve all such tasks**. Treat failures as defects or capability gaps to diagnose, not as acceptable success under a weaker progress rubric.
+
+- **Easy:** expect a complete correct solution, independently checked against a hidden reference answer or other objective oracle where possible. No partial-credit substitution for completion.
+- **Medium:** expect a complete correct solution, potentially after sustained multi-strategy research, critique, forking, and additional bounded sessions. Do not call defensible partial progress a solved Medium problem.
+- **Hard:** expect meaningful, defensible progress, honest unresolved obligations, and a well-organized continuing investigation; a complete solution is a bonus, not a universal requirement.
+- **Evaluation integrity:** difficulty labels are fixed before each test, with externally held answers/rubrics and explicit task assumptions. Do not relabel failures, leak solutions into strategy prompts, cherry-pick runs, or silently extend budgets. Use diverse samples and report per-tier solve rate, verification method, failures, and resource consumption. Report the gap to the universal Easy/Medium aspiration honestly; do not claim that a finite benchmark proves 'every problem.'
+- **Acceptance reporting:** the engineering gate may pass while the Easy/Medium universal solution target remains unmet. Report this distinction explicitly. For A18's live research evaluation, a defensible partial result on an Easy/Medium sample counts as *research progress*, **not** as meeting its tier's solve requirement. Additional live calls require user authorization.
+
+## Complete strategy lifecycle and concurrent research (required A18 scope)
+
+A18 encompasses **all remaining research-quality work**, including strategy generation, evolution, multi-strategy agent execution, human supervision, and evaluation. Do not defer these core behaviors to another research-quality milestone. Reuse existing capabilities when sound; implement missing behavior when demonstrated by the end-to-end workflow.
+
+- **Generate and author strategies:** exercise the actual product's AI candidate-generation and manual authoring workflows. Create genuinely distinct candidate approaches, not paraphrases of one answer; validate persistence, provenance, enable/disable state, and error handling. Generation must not quietly supply an evaluator's reference answer.
+- **Fork and improve:** after an investigation, fork at least one strategy using specific saved findings, objections, or failed tests. Preserve parent identity and rationale. Compare the revised strategy against its original in a later bounded session, and ensure assessments distinguish their evidence and outcomes. Do not silently rewrite historical strategy text or results.
+- **Concurrent multi-strategy research:** demonstrate multiple enabled strategies being investigated concurrently, with distinct agent work and provenance, not merely multiple strategies listed in a prompt or a single Investigator/Skeptic pair sequentially rotating through them. Keep execution bounded by existing concurrency, model, time, token and call limits; isolate failures and avoid duplicate or orphaned calls. Blue may choose the smallest suitable orchestration architecture, but actual concurrent execution is an acceptance requirement.
+- **Live supervision:** within the existing Research Session pane, show which strategies/agents are active concurrently, their meaningful current states, completed artifacts, objections, and overall progress. Preserve usable stop/cancel and error handling; no new dashboard or speculative agent cockpit. Do not claim live visibility from a post-run summary alone.
+- **Stop, recover, continue:** start research, stop during concurrent activity, verify completed evidence remains durable and incomplete calls are not represented as results, reload, and start a new session that explicitly incorporates prior findings. Exercise duplicate-start, one-agent failure, provider rejection, timeout, budget exhaustion, and user cancellation.
+- **End-to-end acceptance scenario:** create/open a fresh project; generate multiple distinct strategies; enable/disable and fork strategies; start a bounded concurrent research session; observe live per-agent/per-strategy state; stop while active; inspect and compare durable evidence; fork an improved strategy based on outcomes; run a follow-up session comparing original and fork; assess contributions and export a faithful report. Verify through real browser plus deterministic/mock provider, and separately through bounded live-provider evaluation only with explicit user authorization.
+
+## Stress-point ownership under concurrent research
+
+Blue must proactively **discover, measure, and fix stress points** exposed by real multi-agent, multi-strategy workloads. Do not wait for the user to identify bottlenecks, and do not equate a passing single-strategy fixture with production readiness. Treat stress investigation as core A18 engineering, not optional performance polish.
+
+Exercise increasing numbers of enabled strategies and concurrent agent calls, repeated research rounds, long histories, large artifact sets, stop/restart races, partial provider failures, slow and out-of-order completions, budget pressure, and browser reloads during execution. Inspect both backend and UI for bottlenecks, unbounded queues, resource contention, duplicate work, starvation, memory/context growth, persistence latency, stale status, event ordering, cancellation leakage, and unusable progress displays. Ensure concurrency does not silently multiply cost or exceed user-configured limits.
+
+For each material stress point: reproduce it, identify the root cause, define a measurable invariant or bound, implement a domain-general correction, and add a deterministic regression or load scenario. Capture observed concurrency, latency, call/budget use, cancellation behavior, and artifact integrity in `docs/STATUS.md`. Prefer bounded backpressure, explicit scheduling, and recoverable states over optimistic UI or hidden retries. Escalate only consequential architecture/product tradeoffs or additional live-provider spending; routine diagnosis and fixes are Blue's responsibility.
+
+## Research-quality evaluation and acceptance gates
+
+**The goal is a product that does real research work, not just a working research UI.** Engineering acceptance and research acceptance are distinct; passing one never implies the other.
+
+- **Engineering gate:** the complete strategy lifecycle, genuine concurrent multi-strategy execution, live visibility, stop/recovery, persistence, provenance, honest outcome labels, and reports pass deterministic tests and relevant real-browser checks. A failure must show a toast or equivalent clear UI error and return to a recoverable state, never silently promote failure to a research conclusion.
+- **Research gate:** in an authorized real-provider trial, SIGMA starts with no answer in the research input, independently produces a correct result, defensible partial result, or evidence-backed elimination of a candidate mechanism, and records the Investigator/Skeptic/coordinator exchanges that justify that outcome. Assess the substance against an external rubric; an agent's confidence or agreement is not verification.
+- **Breadth:** evaluate at least two distinct research domains, with separate evidence and rubrics. A single successful mathematical fixture does not establish generality. Record negative results, repeats, and unsupported claims, even if the software ran correctly.
+- **No answer leakage:** inspect project problem, seeded strategies, prompts, continuation context, prior artifacts, and evaluator materials. Keep reference answers/rubrics outside the agents' inputs. The shipped Maximum Regions sample currently includes the proof in a strategy; use a fresh answer-free project for independent discovery tests, not that seeded strategy.
+- **Suggested samples:** (1) Maximum Regions (Easy) for regression and an independently prepared *answer-free* mathematical trial; (2) Incremental Dependency Scheduler (Computer Science, Medium) for algorithm, proof, complexity, and adversarial-case reasoning; (3) Unexpected Oscillation (Physics, Medium) for scientific method under missing data and non-fabrication; (4) Warp Drive Design (Physics, Hard) for disciplined speculative reasoning and explicit proof obligations, **not** claims of a breakthrough. Military Planning can exercise coordination separately. A sealed-answer math task should supplement Maximum Regions. These are evaluation targets, not permission for unbounded live runs.
+- **Precommit before live testing:** write per-sample scoring rubrics and failure criteria, baseline expectations, allowed inputs, selected model/effort, call/time budget, and what constitutes independent progress. Save exact prompts, session IDs, artifacts, and evaluator judgments. Separate deterministic/mock evidence from real-provider observations. Do not run provider calls without explicit authorization.
+
+## Blue progress reporting and escalation
+
+Blue owns the long-lived assignment autonomously. **Do not send routine kickoff, milestone, or progress notifications.** Continue working as long as useful progress is possible. Diagnose failures, change approach, and move between workstreams without asking the user to manage the queue.
+
+- **Blocked workstream:** if an aspect cannot progress after reasonable independent investigation, record the blocker and its evidence in `docs/STATUS.md`, then **move to another productive aspect of A18**. A blocker in one area does not stop the assignment. Do not notify the user merely because a particular test failed or one workstream is stuck.
+- **Notify only when the assignment as a whole cannot make useful progress without user intervention**, or when explicit authorization is required before a consequential action (for example, additional live-provider spending, destructive changes, or a material product decision). Make one concise request stating the blocker, attempted remedies, exact decision needed, and the recommended path. Do not ask for decisions Blue can reasonably make independently.
+- **Durable status reporting:** keep `docs/STATUS.md` current as work proceeds, without sending chat updates. Explicitly track **completed**, **in progress**, **blocked/uncompleted**, and **not tested** items, with reasons, attempted fixes, evidence/links, impact, and what would unblock each. Record significant research failures and stress findings, not just passing checks. Never imply an incomplete feature or unrun live evaluation has passed.
+- **Final handoff:** when no further useful authorized work remains, open a dedicated PR and provide one concise completion report. Include delivered behavior, exact verification commands/results, any authorized real-provider trial IDs and evidence, and a clear list of **what could not be completed and why**. State **Engineering gate: pass/fail/not tested** and **Research gate: pass/fail/not tested** separately. Keep detailed evidence in `docs/STATUS.md`. **Do not self-merge**; ChatGPT reviews and merges the PR.
 
 ## Acceptance criteria
 
@@ -68,4 +130,4 @@ Prefer a small number of coherent, independently testable increments over a broa
 
 Cloud hosting, authentication, multi-user access, public demo and security migration (A22); speculative interface redesign; new agent roles for their own sake; unbounded autonomous research; model training; formal-proof claims without independent proof checking; and unrelated product polish.
 
-**Definition of done:** A reliable, evidence-based **local** research workflow demonstrated end to end. Do not keep A18 open merely to implement every former A19–A21 idea.
+**Definition of done:** A reliable, observable, concurrent and evolving multi-strategy research product **and separately demonstrated substantive research progress** under the research gate above. If live-provider authorization is unavailable, deliver and report engineering completion with research acceptance explicitly **not tested**, not silently passed. Do not prolong A18 for speculative UX or former roadmap features.

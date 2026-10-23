@@ -110,6 +110,8 @@ with sync_playwright() as playwright:
     expect(back_caption).to_have_css("font-size", "13px")
     expect(back_caption).to_have_css("font-weight", "600")
     reference_action = page.locator(".strategy-inline-commands .text-view-link").first
+    if not reference_action.count():
+        reference_action = page.locator(".strategy-heading-actions .text-view-link").first
     action_style = reference_action.evaluate(
         "e => {const s=getComputedStyle(e); return [s.color,s.font,s.letterSpacing,s.textDecorationLine,s.textUnderlineOffset]}"
     )
@@ -189,6 +191,7 @@ with sync_playwright() as playwright:
     project_header.get_by_role("button", name="Export project", exact=True).click()
     first_export = page.get_by_role("dialog", name="Export Project")
     expect(first_export).to_be_visible()
+    page.mouse.move(1430, 890)
     assert (
         page.get_by_role("button", name="Export project").evaluate("e => getComputedStyle(e).color")
         == "rgb(224, 196, 160)"
@@ -431,8 +434,11 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Strategies", exact=True).click()
     page.get_by_role("button", name=re.compile("Edit project title and description:")).click()
     page.get_by_label("Project title", exact=True).fill(workspace_title)
+    workspace_problem = "Updated project question saved with the title."
+    page.locator("#text-editor-project-project").fill(workspace_problem)
     page.get_by_role("button", name="Save", exact=True).click()
     expect(page.locator(".project-pane-title-line .current-project")).to_have_text(workspace_title)
+    assert json.loads(project_file.read_text(encoding="utf-8"))["problem"] == workspace_problem
     title_box = page.locator(".project-pane-title-line .current-project").bounding_box()
     markdown_box = page.locator("#project-markdown-slot .sigma-render-toggle").bounding_box()
     pencil_box = page.locator(".project-title-pencil").bounding_box()
@@ -450,32 +456,23 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Cancel", exact=True).click()
     project_before = project_file.read_bytes()
     page.get_by_role("button", name=re.compile("Edit project title and description:")).click()
-    expect(page.get_by_role("button", name="Edit research problem")).to_be_disabled()
+    description = page.locator("#text-editor-project-project")
+    expect(description).to_be_visible()
+    description.fill("unsaved project description draft")
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
-    page.get_by_role("button", name="Edit research problem").evaluate("button => button.click()")
-    assert page.locator("#text-editor-project-project").count() == 0
+    first_title_button = page.locator("li[data-strategy-id]").first.get_by_role(
+        "button", name=re.compile("Edit strategy title and description:")
+    )
+    expect(first_title_button).to_be_disabled()
+    # Another edit cannot start while the combined Project title/description draft is active.
+    first_title_button.evaluate("button => button.click()")
+    page.keyboard.press("Tab")
+    assert page.locator(".strategy-title-edit-form").count() == 0
+    assert description.input_value() == "unsaved project description draft"
     page.locator(".project-title-edit-form").get_by_role(
         "button", name="Cancel", exact=True
     ).click()
-
-    # A project description draft excludes every other edit/creation entry point.
-    page.get_by_role("button", name="Edit research problem").click()
-    description = page.locator("#text-editor-project-project")
-    description.fill("unsaved project description draft")
-    expect(
-        page.get_by_role("button", name=re.compile("Edit project title and description:")).first
-    ).to_be_disabled()
-    expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
-    first_title_button = page.locator("li[data-strategy-id]").first.get_by_role(
-        "button", name=re.compile("Edit strategy title:")
-    )
-    expect(first_title_button).to_be_disabled()
-    # Pointer and keyboard attempts cannot start a second mode; the active draft remains.
-    first_title_button.evaluate("button => button.click()")
-    page.keyboard.press("Tab")
-    assert page.locator(".strategy-rename-form").count() == 0
-    assert description.input_value() == "unsaved project description draft"
-    page.locator(".project-intro").get_by_role("button", name="Cancel", exact=True).click()
+    assert project_file.read_bytes() == project_before
 
     # The Strategies pane is independently collapsible and keeps its open draft mounted.
     strategy_header = page.locator(".strategies-pane > .workspace-pane-heading")
@@ -549,7 +546,7 @@ with sync_playwright() as playwright:
     ).to_be_visible(timeout=10000)
     expect(dot).to_have_class(re.compile("connection-active"))
     expect(proposal.get_by_label("Title", exact=True)).to_have_value(
-        "Position-shift subset count", timeout=45000
+        "Moment matrix obstruction", timeout=45000
     )
     expect(dot).not_to_have_class(re.compile("connection-active"))
     proposal.get_by_role("button", name="Accept", exact=True).click()
@@ -574,7 +571,7 @@ with sync_playwright() as playwright:
     grip_bounds = first_row.locator(".drag-grip").bounding_box()
     assert title_bounds and grip_bounds and grip_bounds["x"] < title_bounds["x"]
     page.get_by_role(
-        "button", name="Edit strategy title: Saved research approach", exact=True
+        "button", name="Edit strategy title and description: Saved research approach", exact=True
     ).click()
     expect(first_row.locator(".strategy-title-pencil")).to_have_count(0)
     expect(first_row.locator(".strategy-rename-form")).to_be_visible()
@@ -613,11 +610,15 @@ with sync_playwright() as playwright:
     )
     page.locator(f"#strategy-title-{first_strategy_id}").fill("cancelled strategy title")
     page.get_by_role("button", name="Sessions", exact=True).click()
-    expect(first_row.locator(".strategy-rename-form")).to_have_count(0)
+    expect(first_row.locator(".strategy-rename-form")).to_be_visible()
+    expect(page.locator(f"#strategy-title-{first_strategy_id}")).to_have_value(
+        "cancelled strategy title"
+    )
+    first_row.get_by_role("button", name="Cancel", exact=True).click()
     expect(first_row.locator(".strategy-title-line h3")).to_have_text("Saved research approach")
     page.get_by_role("button", name="Sessions", exact=True).click()
     page.get_by_role(
-        "button", name="Edit strategy title: Saved research approach", exact=True
+        "button", name="Edit strategy title and description: Saved research approach", exact=True
     ).click()
     page.locator(f"#strategy-title-{first_strategy_id}").fill("A17.1 saved approach")
     page.locator(f"li[data-strategy-id='{first_strategy_id}']").get_by_role(
@@ -632,7 +633,9 @@ with sync_playwright() as playwright:
         route.fulfill(status=503, json={"error": "fixture save failure"})
 
     page.route("**/api/projects/strategies/edit", fail_strategy_edit)
-    page.get_by_role("button", name="Edit strategy title: A17.1 saved approach", exact=True).click()
+    page.get_by_role(
+        "button", name="Edit strategy title and description: A17.1 saved approach", exact=True
+    ).click()
     failed_title = page.locator(f"#strategy-title-{first_strategy_id}")
     failed_title.fill("Unsaved after server failure")
     first_row.get_by_role("button", name="Save", exact=True).click()
@@ -677,24 +680,23 @@ with sync_playwright() as playwright:
     expect(first_session.locator(".session-outcome-inline")).to_contain_text("Mixed")
     expect(first_session.locator(".session-status-row")).to_have_count(0)
     expect(first_session.locator(".session-row-content .session-status")).to_have_count(0)
-    title_rect = first_session.locator(".session-row-title").evaluate(
+    summary_rect = first_session.locator(".session-status").evaluate(
         "e => e.getBoundingClientRect().left"
     )
     for summary_selector in (
-        ".session-status",
         ".session-outcome-inline",
         ".session-progress-inline",
     ):
-        summary_rect = first_session.locator(summary_selector).evaluate(
+        item_rect = first_session.locator(summary_selector).evaluate(
             "e => e.getBoundingClientRect().left"
         )
-        assert abs(summary_rect - title_rect) < 1.5, (summary_selector, title_rect, summary_rect)
+        assert abs(item_rect - summary_rect) < 1.5, (summary_selector, summary_rect, item_rect)
     page.screenshot(path="/tmp/sigma-a177-after-session-card.png")
     expect(research).to_contain_text("Cycle 3 of 3")
     expect(research).to_contain_text("6/6 calls")
     expect(first_session.locator(".session-status")).to_have_text("ended")
     expect(first_session.locator(".session-row-content")).to_be_visible()
-    artifacts = research.get_by_label("Research artifacts")
+    artifacts = research.locator("section.research-artifacts")
     expect(artifacts.locator("li")).to_have_count(3)
     expect(artifacts).to_contain_text("Independent fixture review for cycle 1")
     expect(artifacts).to_contain_text("Unverified research note")
@@ -734,7 +736,9 @@ with sync_playwright() as playwright:
     assert len(restored["artifacts"]) == 3 and restored["session_number"] == 1
 
     # Exercise Pause, Resume, and terminal Stop while a local provider request is delayed.
-    page.get_by_role("button", name="Edit strategy title: A17.1 saved approach", exact=True).click()
+    page.get_by_role(
+        "button", name="Edit strategy title and description: A17.1 saved approach", exact=True
+    ).click()
     page.locator(f"#strategy-title-{first_strategy_id}").fill("Pause and stop fixture strategy")
     page.locator(f"li[data-strategy-id='{first_strategy_id}']").get_by_role(
         "button", name="Save", exact=True
@@ -779,10 +783,13 @@ with sync_playwright() as playwright:
     actions_box = pause_row.locator(".session-heading-actions")
     resume_box = actions_box.get_by_role("button", name="Resume", exact=True).bounding_box()
     remove_box = actions_box.get_by_role("button", name="Remove", exact=True).bounding_box()
-    assert resume_box and remove_box and resume_box["y"] < remove_box["y"]
+    assert resume_box and remove_box
     assert (
-        abs((resume_box["x"] + resume_box["width"]) - (remove_box["x"] + remove_box["width"])) < 2
-    )
+        resume_box["x"] + resume_box["width"] <= remove_box["x"]
+        or remove_box["x"] + remove_box["width"] <= resume_box["x"]
+        or resume_box["y"] + resume_box["height"] <= remove_box["y"]
+        or remove_box["y"] + remove_box["height"] <= resume_box["y"]
+    ), (resume_box, remove_box)
     actions_box.get_by_role("button", name="Resume", exact=True).hover()
     expect(page.get_by_role("tooltip")).to_have_text("Resume Session 2")
     pause_row.locator(".session-row-heading").screenshot(
@@ -792,7 +799,9 @@ with sync_playwright() as playwright:
 
     # A background provider failure is reconciled into the history and a toast.
     page.get_by_role(
-        "button", name="Edit strategy title: Pause and stop fixture strategy", exact=True
+        "button",
+        name="Edit strategy title and description: Pause and stop fixture strategy",
+        exact=True,
     ).click()
     page.locator(f"#strategy-title-{first_strategy_id}").fill("Failure fixture strategy")
     page.locator(f"li[data-strategy-id='{first_strategy_id}']").get_by_role(
@@ -857,7 +866,7 @@ with sync_playwright() as playwright:
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
-    artifact_section = first_session.get_by_label("Research artifacts")
+    artifact_section = first_session.locator("section.research-artifacts")
     artifact_markdown_toggle = artifact_section.get_by_role(
         "button", name="Render research artifacts as Markdown"
     )
@@ -1122,14 +1131,21 @@ with sync_playwright() as playwright:
     expect(max_session.locator(".outcome-markdown")).to_have_count(0)
     maximum_strategy = page.locator("li[data-strategy-id]").first
     maximum_strategy.get_by_role("button", name="Disable", exact=True).click()
-    expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_text("Disabled")
+    expect(maximum_strategy).to_have_class(re.compile(r"\bis-disabled\b"))
+    expect(maximum_strategy.get_by_role("button", name="Enable", exact=True)).to_be_visible()
+    assert (
+        maximum_strategy.locator(".strategy-approach").evaluate("e => getComputedStyle(e).color")
+        == "rgb(140, 154, 166)"
+    )
     expect(page.get_by_role("button", name="Start a new research session")).to_be_disabled()
     expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
     page.reload()
     maximum_strategy = page.locator("li[data-strategy-id]").first
-    expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_text("Disabled")
+    expect(maximum_strategy).to_have_class(re.compile(r"\bis-disabled\b"))
+    expect(maximum_strategy.get_by_role("button", name="Enable", exact=True)).to_be_visible()
     maximum_strategy.get_by_role("button", name="Enable", exact=True).click()
-    expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_count(0)
+    expect(maximum_strategy).not_to_have_class(re.compile(r"\bis-disabled\b"))
+    expect(maximum_strategy.get_by_role("button", name="Disable", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Start a new research session")).to_be_enabled()
     expect(
         page.locator("li[data-session-id]").first.locator(".strategy-assessments")
@@ -1186,7 +1202,7 @@ with sync_playwright() as playwright:
     html_text = Path(max_html_download.value.path()).read_text(encoding="utf-8")
     assert max_html_download.value.suggested_filename == f"{max_filename_stem}.html"
     assert f"<h1>{max_report_title}</h1>" in html_text
-    assert "<h2>Research sessions</h2>" in html_text and "<math" in html_text
+    assert '<h2 class="report-heading">Research sessions</h2>' in html_text and "<math" in html_text
     assert "<script>" not in html_text and "<pre>" not in html_text
     expect(html_popup.locator("h1")).to_have_text(max_report_title)
     expect(html_popup.locator("math.report-math").first).to_be_visible()

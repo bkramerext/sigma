@@ -1,5 +1,5 @@
 {
-  "schema_version": 6,
+  "schema_version": 8,
   "id": "98e5f7ca-9a39-4e78-a8fb-48a15956e634",
   "title": "Maximum Regions Formed by Lines",
   "problem": "For each integer n >= 0, determine the maximum number of regions into which n distinct straight lines can divide the Euclidean plane. Lines may be placed arbitrarily. Derive a formula for the maximum, prove that no arrangement can exceed it, and show that an arrangement attaining it exists for every n. Include the n = 0 case and check small values. Do not assume a particular proof method.",
@@ -26,6 +26,7 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "The maximum is R(n) = 1 + n(n + 1)/2, obtained by adding lines that each meet all earlier lines at distinct points.",
+      "enabled": true,
       "provenance": {
         "provider": "openai",
         "model": "gpt-6.1-sol",
@@ -38,5 +39,6 @@
     "16d591eb-fd1d-4719-93bc-f2e038a43f85"
   ],
   "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high"
+  "reasoning_effort": "high",
+  "difficulty": "easy"
 }

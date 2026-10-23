@@ -109,6 +109,7 @@ full; identify the exact gap instead of flattening the discussion into a short s
 
 _MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-\s])")
 _SAFE_MATH_COMMANDS = {
+    "displaystyle",
     "frac",
     "sqrt",
     "cdot",
@@ -118,6 +119,16 @@ _SAFE_MATH_COMMANDS = {
     "neq",
     "infty",
     "mathcal",
+    "mathbb",
+    "mathfrak",
+    "mathrm",
+    "mathbf",
+    "operatorname",
+    "text",
+    "left",
+    "right",
+    "overline",
+    "underline",
     "pi",
     "alpha",
     "beta",
@@ -128,6 +139,35 @@ _SAFE_MATH_COMMANDS = {
     "lim",
     "to",
     "in",
+    "notin",
+    "subset",
+    "subseteq",
+    "cap",
+    "cup",
+    "emptyset",
+    "forall",
+    "exists",
+    "implies",
+    "iff",
+    "approx",
+    "equiv",
+    "cdots",
+    "ldots",
+    "max",
+    "min",
+    "sup",
+    "inf",
+    "log",
+    "sin",
+    "cos",
+    "tan",
+    "exp",
+    "mapsto",
+    "colon",
+    "mid",
+    "setminus",
+    "partial",
+    "nabla",
 }
 _MATH_SPAN = re.compile(r"(\$\$.*?\$\$|(?<!\\)\$[^$\n]+\$)")
 _UNICODE_MATH = {
@@ -142,7 +182,13 @@ _UNICODE_MATH = {
     "α": r"\alpha",
     "β": r"\beta",
     "γ": r"\gamma",
+    "∑": r"\sum",
+    "∏": r"\prod",
 }
+_SUPERSCRIPT_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
+_SUPERSCRIPT_SUFFIX = re.compile(
+    r"(?<![A-Za-z0-9])([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)?)([⁰¹²³⁴⁵⁶⁷⁸⁹]+)"
+)
 
 
 def _safe_math(source: str) -> bool:
@@ -158,15 +204,40 @@ def _safe_math(source: str) -> bool:
 
 def _latex_prose(source: str) -> str:
     def plain(text: str) -> str:
+        text = _SUPERSCRIPT_SUFFIX.sub(
+            lambda match: (
+                "$" + match.group(1) + "^{" + match.group(2).translate(_SUPERSCRIPT_DIGITS) + "}$"
+            ),
+            text,
+        )
         for symbol, replacement in _UNICODE_MATH.items():
             if symbol in text:
                 if replacement.startswith("\\"):
                     text = text.replace(symbol, "$" + replacement + "$")
                 else:
                     text = text.replace(symbol, replacement)
-        return _latex(text)
+        escaped: list[str] = []
+        position = 0
+        for match in _MATH_SPAN.finditer(text):
+            escaped.append(_latex(text[position : match.start()]))
+            token = match.group(0)
+            delimiter = "$$" if token.startswith("$$") else "$"
+            body = token[len(delimiter) : -len(delimiter)]
+            if _safe_math(body):
+                escaped.append(r"\[" + body + r"\]" if delimiter == "$$" else "$" + body + "$")
+            else:
+                escaped.append(_latex(token))
+            position = match.end()
+        escaped.append(_latex(text[position:]))
+        return "".join(escaped)
 
     def math_body(body: str) -> str:
+        body = _SUPERSCRIPT_SUFFIX.sub(
+            lambda match: (
+                match.group(1) + "^{" + match.group(2).translate(_SUPERSCRIPT_DIGITS) + "}"
+            ),
+            body,
+        )
         for symbol, replacement in _UNICODE_MATH.items():
             body = body.replace(symbol, replacement)
         return body
@@ -381,18 +452,16 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
         warnings.append(
             "Citation-like external references appear in the draft, but this paper has no verified external-source catalog; treat them as unsupported."
         )
-    evidence_obligations = [
-        value
-        for source in package["sources"]
-        for node in _walk(source["data"])
-        if isinstance(node, dict)
-        for key in ("open_obligations", "proof_obligations", "remaining_obligations")
-        for value in node.get(key, [])
-        if isinstance(value, str) and value.strip()
-    ]
-    if evidence_obligations and not draft.open_obligations:
+    reconciliation = _reconcile_obligations(draft, package)
+    frozen_unlisted = sum(
+        item["status"] == "Not listed by author; not presumed resolved" for item in reconciliation
+    )
+    author_unmatched = sum(
+        item["status"] == "Author-listed; no exact frozen-record match" for item in reconciliation
+    )
+    if frozen_unlisted or author_unmatched:
         warnings.append(
-            f"The frozen evidence records {len(evidence_obligations)} open proof/research obligation(s), but the paper has no open_obligations entries."
+            f"The frozen evidence contains open proof/research obligation(s) requiring reconciliation: {frozen_unlisted} item(s) are not listed by the author and are not presumed resolved; {author_unmatched} author-listed item(s) have no exact frozen-record match. See the obligation reconciliation."
         )
     narrative_links = [
         ("abstract", draft.abstract_claim_ids),
@@ -418,6 +487,57 @@ def _validate(draft: PaperDraft, package: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(warnings))[:20]
 
 
+def _reconcile_obligations(draft: PaperDraft, package: dict[str, Any]) -> list[dict[str, Any]]:
+    """Match author-listed obligations to the frozen evidence without implying resolution."""
+    frozen: dict[str, dict[str, Any]] = {}
+    for source in package["sources"]:
+        for node in _walk(source["data"]):
+            if not isinstance(node, dict):
+                continue
+            for key in ("open_obligations", "proof_obligations", "remaining_obligations"):
+                values = node.get(key, [])
+                if not isinstance(values, list):
+                    continue
+                for value in values:
+                    if not isinstance(value, str) or not value.strip():
+                        continue
+                    normalized = " ".join(value.split()).casefold()
+                    item = frozen.setdefault(
+                        normalized, {"text": " ".join(value.split()), "source_refs": []}
+                    )
+                    ref = f"{source['id']}:{key}"
+                    if ref not in item["source_refs"]:
+                        item["source_refs"].append(ref)
+    author: dict[str, str] = {}
+    for value in draft.open_obligations:
+        normalized = " ".join(value.split()).casefold()
+        author.setdefault(normalized, " ".join(value.split()))
+    result = []
+    matched: set[str] = set()
+    for normalized, item in frozen.items():
+        is_listed = normalized in author
+        if is_listed:
+            matched.add(normalized)
+        result.append(
+            {
+                **item,
+                "status": "Listed as open in paper"
+                if is_listed
+                else "Not listed by author; not presumed resolved",
+            }
+        )
+    for normalized, value in author.items():
+        if normalized not in matched:
+            result.append(
+                {
+                    "text": value,
+                    "source_refs": [],
+                    "status": "Author-listed; no exact frozen-record match",
+                }
+            )
+    return result
+
+
 def _walk(value: Any):
     yield value
     if isinstance(value, dict):
@@ -433,7 +553,12 @@ def _draft_text(draft: PaperDraft) -> str:
 
 
 def _tex(
-    draft: PaperDraft, warnings: list[str], snapshot_hash: str, *, math_style: bool = False
+    draft: PaperDraft,
+    warnings: list[str],
+    snapshot_hash: str,
+    *,
+    math_style: bool = False,
+    obligation_reconciliation: list[dict[str, Any]] | None = None,
 ) -> str:
     esc = _latex
     prose = _latex_prose
@@ -515,6 +640,19 @@ def _tex(
             + [r"\item " + prose(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
+    if obligation_reconciliation:
+        parts.append(r"\section{Frozen obligation reconciliation}")
+        parts.append(
+            prose(
+                "Each item is compared with the complete frozen evidence snapshot. An item not listed by the author is not presumed resolved. Source references identify the saved record and field."
+            )
+        )
+        parts.append(r"\begin{longtable}{p{0.25\textwidth}p{0.65\textwidth}}")
+        parts.append(r"\textbf{Status and source} & \textbf{Obligation}\\\hline")
+        for item in obligation_reconciliation:
+            refs = ", ".join(item["source_refs"]) or "No exact frozen-record match"
+            parts.append(prose(item["status"] + "; " + refs) + " & " + prose(item["text"]) + r"\\")
+        parts.append(r"\end{longtable}")
     parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [prose(item) for item in draft.conclusions]
     if draft.conclusion_claim_ids:
@@ -652,6 +790,7 @@ async def generate(
         package, snapshot_hash = _snapshot(path)
         draft, model = await _provider(package, initial_auth, config)
         validation_warnings = _validate(draft, package)
+        obligation_reconciliation = _reconcile_obligations(draft, package)
         final_auth = await auth_context()
         latest = inspect_project(path)
         if (
@@ -678,6 +817,7 @@ async def generate(
             "snapshot": package,
             "draft": draft.model_dump(),
             "validation_warnings": validation_warnings,
+            "obligation_reconciliation": obligation_reconciliation,
             "author_review_warnings": draft.validation_warnings,
             "generation": {
                 "provider": "openai",
@@ -700,7 +840,13 @@ async def generate(
             )
             pdf = await asyncio.to_thread(
                 _compile_pdf,
-                _tex(draft, warnings, snapshot_hash, math_style=math_style),
+                _tex(
+                    draft,
+                    warnings,
+                    snapshot_hash,
+                    math_style=math_style,
+                    obligation_reconciliation=obligation_reconciliation,
+                ),
             )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
@@ -713,6 +859,7 @@ async def generate(
                 "created_at",
                 "snapshot_sha256",
                 "validation_warnings",
+                "obligation_reconciliation",
                 "author_review_warnings",
                 "generation",
             )

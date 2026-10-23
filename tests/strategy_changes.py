@@ -41,6 +41,9 @@ def fixture(path: Path):
     raw.pop("investigation_type", None)
     for key in ("ai_model", "reasoning_effort", "active_order"):
         raw.pop(key, None)
+    raw.pop("difficulty", None)
+    for item in raw.get("strategies", []):
+        item.pop("enabled", None)
     (path / STATE).write_text(json.dumps(raw))
     view = create_strategy(path, "Original name", "Original description")
     return view, view.project.strategies[0]

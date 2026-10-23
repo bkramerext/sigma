@@ -1,5 +1,225 @@
 # SIGMA status
 
+## A23: project difficulty setting (2026-10-22)
+
+Added descriptive project difficulty with stable values `easy`, `medium`, and
+`hard`, displayed as Easy, Medium, and Hard. New projects default to Medium;
+legacy schema v1–v7 projects retain unknown difficulty (`null`) without a
+write. Unknown difficulty is not shown in the project header or details and is
+omitted from reports. The Settings selector shows “Not set” and preserves that
+state until a difficulty is chosen. Settings edits that leave a legacy
+difficulty unknown preserve the old schema. The first edit that chooses a
+difficulty upgrades to schema v8 and creates the existing exact
+`project.vN.json` backup. Difficulty participates in the settings audit chain, is validated
+when read, and appears in JSON audit exports and human reports only when set.
+The Maximum Regions sample is explicitly Easy, and sample copies retain that
+value. Difficulty does not affect generation, agents, budgets, or research
+outcomes.
+
+The New Project form has a labeled selector defaulting to Medium. In Settings,
+the research category and difficulty controls sit side by side; Difficulty can
+remain unset for legacy projects. The project header shows a compact “Difficulty
+· …” badge only when a value exists, with an accessible “Project difficulty:
+…” name. No other product UI was changed. The existing settings browser
+scenario verifies the field and follows the current combined project-title/
+description and project-settings controls.
+
+Verification passed:
+
+- `./sigma test`: all executable scenarios, Ruff check/format, Pyright (0 errors),
+  frontend TypeScript check, and production Vite build.
+- `uv run --locked --no-sync --with playwright python browser_checks/settings.py`:
+  real Chrome with the isolated HTTP fixture passed default Medium, saving Hard,
+  failed-save draft retention, reload persistence, project-header metadata, and
+  responsive overflow checks. It also verifies the Settings controls are
+  side-by-side and that a schema-v7 project renders no difficulty badge and
+  retains an unset selector. Viewports: 1672×941, 768×844, 390×844 and 320×844.
+  The fixture makes no provider inference calls. Captures inspected:
+  `/tmp/sigma-project-header-type-320.png`, `/tmp/sigma-a8-create-390.png`, and
+  `/tmp/sigma-settings-classification-side-by-side.png`.
+- `git diff --check` and Ruff checks for the updated browser scenario passed.
+
+The captured Settings dialog places Research type and Difficulty in balanced
+side-by-side controls. The captured new-project dialog shows Difficulty beside
+Research category. At 320px wide, the project name wraps cleanly while a set
+difficulty badge remains visible and the page has no horizontal overflow.
+
+## A17.8 Evaluation (2026-10-22)
+
+**Recommendation: A17.8 needs further work before acceptance; do not mark A17
+complete yet.** The implementation now preserves skeptical objections,
+recognizes evidence-backed conclusions with no next step, and labels model
+agreement as unverified. The live trial did not establish that the agents can
+independently discover a solution, because the shipped Maximum Regions sample
+starts with a human-authored strategy that already contains the formula, upper
+bound, attaining construction, and essentially the full insertion proof. A
+further answer-free live trial would be needed to establish that claim. No more
+provider runs are recommended without explicit authorization; this work used
+four bounded sessions (12 ChatGPT-plan calls total) because live failures
+revealed successive implementation defects. Plan usage and dollar cost were
+not exposed by the session records.
+
+### Investigation and changes
+
+I traced the saved project and strategy through Investigator/Skeptic prompts,
+ordered artifact context, coordinator decision, objective review, strategy
+assessment, and report projection. The baseline session (project
+`projects/maximum-regions-by-lines-24.sigma`, session
+`05fd0942-25d6-422b-8d43-1686699207e5`, artifact
+`3a52e4b0-9d71-409b-88af-9f8f4e264d34`) consumed two calls at one round. The
+Skeptic correctly identified that the Investigator asserted, rather than
+justified, the link between half-plane sign sets and connected components.
+SIGMA kept that result mixed and incomplete. This was sound calibration, but
+not an independent solution: the sample's original human-authored strategy
+already gives the same formula, the `y = kx + k²` construction, and the
+insertion argument almost in full. Thus an answer in the agent output cannot
+be credited as independent discovery.
+
+The baseline also exposed two software defects. First,
+`_maximum_regions_proof_obligations` was a Maximum Regions keyword recognizer
+that could replace the Skeptic's explicit incomplete decision with an achieved
+assessment. Running the previous implementation directly with complete-looking
+keywords and a Skeptic objection phrased as “region/sign-set identification
+remains asserted” returned all four proof obligations anyway. A stale server
+then reproduced the end-to-end failure: session
+`994131fc-fc7c-4daa-8f9f-4d642c5e6e9f` ended positive although its Skeptic marked
+the objective `not_achieved`, verification `incomplete`, and retained an
+unresolved component-identification obligation. This run was captured as
+evidence of the old implementation, not counted as a post-fix result.
+
+Second, the reserved/cost-estimation prompt told the Skeptic to review the full
+ordered evidence set, while the actual provider prompt showed only the current
+Investigator claim. The context builder also silently supplied only the two
+latest artifacts. I removed the problem-specific recognizer, made the actual
+request and reservation share the same role guidance, and pass the full
+ordered history subject to the existing 48,000-character safety bound. If the
+complete history exceeds that limit, the call now fails safely instead of
+silently omitting evidence. The coordinator accepts a candidate only when the
+Skeptic explicitly marks it achieved and unverified, supplies a claim,
+argument, proof obligations, and valid supporting cycles, and leaves no
+unresolved objections or remaining obligations. It can close Investigator
+notes against that complete review; an achieved review with no concrete next
+step is normalized to a productive conclusion. A follow-up live run caught
+the old false negative in that path: session
+`ea3df69e-0b6b-4a71-86dd-fa9161f42e62` ended `stop_no_progress` despite the final
+Skeptic explicitly reviewing both artifacts as achieved. The coordinator
+correction now covers that case. Finally, resolved historical obligations no
+longer produce a stale top-level “Open obligations remain” caveat.
+
+### Before and after evidence
+
+| Run | Configuration and evidence | Result |
+|---|---|---|
+| Baseline | `gpt-6.1-sol`, High, ChatGPT plan; 1 round, 2 calls, 10 minutes, 4,000 output tokens/call. Project `maximum-regions-by-lines-24.sigma`; session `05fd0942-25d6-422b-8d43-1686699207e5`; artifact `3a52e4b0-9d71-409b-88af-9f8f4e264d34`. | Mixed / incomplete. Skeptic asked for a two-direction component/sign-set justification. Coordinator correctly did not claim success. The supplied strategy already contains the proof idea. |
+| Stale-process reproduction | Same model/effort; 1 round, 2 calls. Project `maximum-regions-by-lines-25.sigma`; session `994131fc-fc7c-4daa-8f9f-4d642c5e6e9f`. Backend had been started before the source change. | Incorrect positive under the old code, despite the Skeptic's explicit `not_achieved`, `incomplete`, and unresolved objection. This is a failure reproduction, not post-fix evidence. |
+| Intermediate corrected source | Same model/effort; 3 rounds, 6 calls. Project `maximum-regions-by-lines-26.sigma`; session `ea3df69e-0b6b-4a71-86dd-fa9161f42e62`; artifacts `2df24548-e127-4180-9247-06b4d6c95bfb` and `13461143-fc85-4ec0-803b-c2ba09daaac4`. | Skeptic's final review explicitly said achieved, cited both cycles, and had no next question, but provider used `stop_reason=unresolved` and the Investigator retained an open note. Coordinator ended `stop_no_progress`. This exposed and motivated the generic no-next-step correction. |
+| Final corrected live run | `gpt-6.1-sol`, High, ChatGPT plan; 3 rounds, 6 calls, 30 minutes, 4,000 output tokens/call; no API-key cost cap (`null`) in plan mode. Fresh sample copy `projects/maximum-regions-by-lines-27.sigma`, displayed as “Maximum Regions Formed by Lines v7”; session `124d2b7f-9f9b-4060-86dd-fa9161f42e62`; four calls, two cycles. Artifacts `0261791f-ebc1-4eb6-8d0e-58a709a745aa` and `5c105ed4-8bf1-4f0d-92ad-5a4f129452e3`. | Positive, `stop_productive_conclusion`, achieved but `convincing_unverified`. Cycle 1's Skeptic found that small-value checks merely substituted into the formula; cycle 2 directly counted 1, 2, 4, and 7 regions and closed the objection. The final review cites both artifacts and has no unresolved objections or next question. The sample strategy still disclosed the main proof, so this does not establish independent discovery. |
+
+The final Investigator argument covers the sign-pattern components, exact
+insertion increment, upper bound, explicit construction, and `n = 0`. The final
+Skeptic checks the ordered record, distinguishes the real small-value evidence
+gap from a counterexample, and accepts the combined argument as unverified.
+The strategy assessment is **Contributed to solution**, based on both saved
+artifact IDs. No external source, symbolic checker, or independent human proof
+checker was used. The live outcome is a model-generated candidate, not a
+mathematical certification. The final browser capture, including the corrected
+caveat projection, is `/tmp/sigma-a178-live-postfix-final-render.png`; the
+browser report capture is
+`/tmp/sigma-a1771-after-maximum-regions-html.png`.
+
+### Current product strength assessment
+
+SIGMA is looking strong as a research-workflow product and promising, but not
+yet proven, as an autonomous research system. Its engineering supports a
+substantial end-to-end loop: parallel Investigator and Skeptic work, saved and
+ordered evidence, criticism that can change the coordinator's decision,
+strategy attribution, resumable sessions, and an outcome that exposes its
+uncertainty. A17.8's deterministic regressions show that important failure
+modes in this loop are testable and that the coordinator no longer treats
+proof-shaped language as proof.
+
+The live Maximum Regions run is encouraging evidence of useful review: the
+Skeptic caught a concrete gap in the initial small-case evidence, the
+Investigator supplied direct counts, and the coordinator recognized the
+resolved objection while preserving the “unverified” qualification. This is
+credible evidence of review and coordination working together. It does not
+show that SIGMA can originate a result: the sample strategy already contained
+the central formula and proof outline, and no independent checker validated
+the mathematics. SIGMA is a capable, evidence-centered research assistant and
+review workspace; its autonomous discovery quality remains unestablished.
+
+### What would improve research-trustworthiness evaluation
+
+**Preparation request for ChatGPT:** assemble a reviewable evaluation packet for
+one answer-free live research run. Do not place the reference answer or proof
+in SIGMA's project, sample, repository, or prompt context. Keep it in a separate
+sealed evaluator file for comparison after the run. The packet should contain:
+
+- The research question SIGMA will receive, precise success criteria, domain
+  constraints, and permitted sources or tools.
+- A leakage review confirming that the answer and proof outline are absent from
+  the project, samples, repository history, and supplied context; include any
+  likely leakage paths that should be checked before the run.
+- The sealed expected result and independent validation material: for
+  mathematics, a proof sketch or mechanically checkable result where feasible;
+  for empirical work, authoritative sources and a qualified domain reviewer.
+  SIGMA's agents must not be the sole judges of correctness.
+- A scoring rubric with explicit pass/fail anchors for correctness, independent
+  discovery, evidence quality, counterevidence handling, calibration, and
+  reproducibility. Mark which items require human judgment.
+- A proposed bounded configuration: model/effort, call and time limits, and
+  usage constraints. Running it requires explicit authorization; plan-mode
+  records may not expose monetary cost.
+
+ChatGPT should return the participant-facing task separately from the sealed
+answer/reference, plus the leakage checklist, rubric, and proposed run bounds.
+This lets the task be reviewed before execution without accidentally giving
+SIGMA the answer. Once approved and run, preserve the prompts and ordered
+artifacts, compare the result against the sealed reference, and have the
+reviewer assess the reasoning.
+
+With those conditions, we can preserve the prompts, ordered artifacts, and
+decision trail, compare SIGMA's answer with the held-back reference, and have a
+qualified reviewer assess the reasoning. Without them, deterministic tests
+can improve system behavior but cannot establish research discovery; SIGMA
+should be described as a research assistant rather than a trustworthy
+autonomous researcher.
+
+### Exit criteria
+
+| Criterion | Status | Evidence and limits |
+|---|---|---|
+| 1. Solution quality | **Unmet** | Final live artifacts `0261791f-…` and `5c105ed4-…` contain the formula, upper bound, and attaining construction; the Skeptic closes the remaining checks. However, `samples/maximum-regions-by-lines/project.json` is a human-authored solution-bearing strategy. The agents elaborated and checked it, but this run cannot demonstrate independent discovery. |
+| 2. Meaningful criticism | **Met** | Baseline artifact `3a52e4b0-…` identifies the missing component/sign-set justification. Final artifact `0261791f-…` points out that numeric substitution is not an independent small-value check; cycle 2 answers with direct geometric counts. Deterministic tests retain incomplete objections rather than promoting keyword-complete text. Criticism was useful and recoverable, not evidence that the mathematical claim was false. |
+| 3. Sound coordination | **Met** | Final session `124d2b7f-…` ended `stop_productive_conclusion` after the Skeptic marked the multi-artifact objective achieved and returned an empty next question. The actual coordinator bug seen in `ea3df69e-…` is covered by the no-next-step regression. |
+| 4. Calibrated conclusions | **Met** | Final outcome is “Positive · solution candidate (unverified)” with no independent-verification claim. The old false positive in `994131fc-…` is reproduced in a regression and rejected by the new structured evidence rule. A deterministic projection test verifies resolved historical obligations do not leave a stale open-obligations caveat. |
+| 5. Evidence-based attribution | **Met** | Final strategy assessment is `contributed_to_solution` and cites artifacts `0261791f-…` and `5c105ed4-…`. Research-session scenarios retain project order, eligibility snapshots, and unknown attribution for legacy records. |
+| 6. Generalization | **Met, deterministic only** | `test_generic_objective_review_on_binary_strings` exercises a distinct final-symbol partition/Fibonacci recurrence proof and an incomplete version. No second live problem was run; this is not empirical evidence of live generalization. No problem-specific completion heuristic remains. |
+| 7. Operational reliability | **Met** | `./sigma test` passed all executable scenarios, Ruff, Pyright, frontend typecheck, and production build. Real Chrome `browser_checks/a17_research.py` passed the isolated-provider A17.7.1 / A17.6 persistence, outcome Markdown, dialogs, exports, and responsive checks. The live result persisted with separate execution status, objective outcome, and strategy contribution. Existing Starlette/httpx TestClient deprecation warnings remain non-failing. |
+| 8. Reproducible evidence | **Met** | Baseline, stale-runtime reproduction, intermediate failure, and final run are identified above with exact session/artifact IDs, model, effort, limits, calls, outcomes, test commands, and screenshot paths. Connected-plan usage/cost is not returned by session records; no API-key billing path was used. |
+
+The red/green coordinator regression specifically models a complete-looking
+Maximum Regions argument paired with a material unresolved Skeptic objection.
+The previous recognizer returned success for that case; the revised scenario
+ends mixed. Separate tests cover a complete unverified conclusion with an empty
+next step, a retracted spurious counterexample, a distributed proof across
+cycles, an oversized full-history failure, and the binary-string generalization.
+`tests/research_sessions.py` passes with these checks. The old-context behavior
+was also directly exercised from the pre-change revision, where the Skeptic
+prompt/history contract omitted earlier saved artifacts. This provides
+deterministic regression evidence; it does not make the model roles
+independent.
+
+**Decision:** do not accept A17.8 or declare A17 complete yet. The engineering
+corrections are supported by deterministic regressions and a successful
+bounded live review, but exit criterion 1 remains unmet because the shipped
+strategy contains the answer. A future answer-free Maximum Regions trial or a
+human-approved comparable problem is needed to establish independent solving.
+Any additional provider experiment should be separately authorized and
+bounded; the four sessions above already exceeded the assignment's default
+one-baseline/one-post-fix trial count while fixing defects discovered in the
+earlier runs.
+
 ## Session controls, elapsed time, reports, and editing follow-up (2026-10-22)
 
 Session elapsed time now freezes at Stop and excludes stopped intervals if the
@@ -1965,6 +2185,32 @@ separate capability, then verify compatibility against the accepted integrated
 A17 work on the latest `main` before any merge. Do not mark A20 complete until
 human review and an authorized quality trial or an explicit decision to leave
 that criterion open.
+
+### PR #5 review follow-up
+
+Integrated the current `main` into `feature/a20-ai-authored-paper`, retaining
+the A20 legacy-report verification-status behavior and the A23 optional
+difficulty display. No merge into `main` was performed. Corrected PDF prose math
+handling for Unicode superscripts and common mathematical commands, including
+claim statements and reasoning. Frozen open obligations are now deduplicated
+with their source/field references and reconciled against the author's list;
+unlisted items are explicitly not presumed resolved. The complete reconciliation
+is persisted in each new paper record and shown in both the PDF and saved-paper
+preview. Older records remain readable without this field.
+
+Added recovery coverage for provider rejection and malformed JSON in the real
+Chrome workflow; a partial ChatGPT stream is rejected by the paper adapter, and
+an ASGI disconnect cancels in-flight authoring without publishing a version or
+holding the generation gate. The Maximum Regions browser fixture deliberately
+contains twelve frozen proof obligations while the paper lists none, and checks
+that all twelve remain visible and source-linked in the reconciliation.
+
+After integrating latest `main` and the review fixes, `./sigma test` passed the
+full suite, including Ruff, Pyright, frontend typecheck, and production build.
+Real Chrome A20 workflow passed against the isolated provider fixture, including
+rejection, malformed-response recovery, all twelve obligation records, and PDF
+retrieval. No live provider request was made. A17.8 remains an acceptance gate;
+A20 is not merged pending compatibility review against accepted A17 work.
 
 ### Mathematics paper structure and exposition follow-up
 

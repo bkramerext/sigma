@@ -132,6 +132,11 @@ def main() -> None:
     legacy_report, _ = render_report(legacy_data, "txt")
     assert isinstance(legacy_report, str)
     assert "Verification status:" not in legacy_report
+    assert "Difficulty:" not in plain
+    data["project"]["difficulty"] = "easy"
+    plain_with_difficulty, _ = render_report(data, "txt")
+    assert isinstance(plain_with_difficulty, str)
+    assert "Difficulty: Easy" in plain_with_difficulty
 
     html_report, html_type = render_report(data, "html")
     assert isinstance(html_report, str)

@@ -185,6 +185,22 @@ public-file scan. Copy now happens during config evaluation, before that scan;
 canonical PNG bytes are unchanged. This fixes first-launch artwork availability
 and requires no human file copying.
 
+## A23: descriptive project difficulty
+
+Schema v8 adds `difficulty` with the stable values `easy`, `medium`, and `hard`.
+New projects default to `medium`; documents from v1–v7 read with unknown
+difficulty (`null`) without being rewritten. The UI omits the header badge and
+project-details row when difficulty is unknown, and reports omit the field. An
+edit that leaves a legacy difficulty unknown retains its existing schema; the
+first edit that chooses a difficulty upgrades the document through the
+existing exact-version backup, lock, validation, and atomic replacement path.
+Project settings audit snapshots include difficulty; historical snapshots that
+predate the field are interpreted as unknown. Invalid stored values are
+rejected as invalid project data. Difficulty is descriptive metadata only and
+does not affect agent prompts, scheduling, budgets, or outcomes. The Maximum
+Regions sample is explicitly `easy`, and the sample-copy path preserves the
+source value. JSON audit exports and deterministic reports include the field.
+
 ## A8.1: local configuration and foreground instance ownership
 
 Use pinned python-dotenv 1.2.1 parsing (without shell/variable expansion or parser

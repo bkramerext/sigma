@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
@@ -11,6 +12,7 @@ from unittest.mock import patch
 import httpx
 
 from sigma import papers
+from sigma.api import app
 from sigma.plan_stream import completed
 from sigma.projects import ProjectError, initialize_project, inspect_project
 
@@ -55,7 +57,107 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
     )
 
 
+def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
+    events = [
+        {"type": "response.created", "sequence_number": 0, "response": {"id": "resp-paper"}},
+        {"type": "response.output_text.delta", "sequence_number": 1, "delta": "partial JSON"},
+    ]
+    stream = "".join("data: " + json.dumps(event) + "\n\n" for event in events)
+
+    async def handler(_request):
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=stream)
+
+    real_client = httpx.AsyncClient
+    with patch(
+        "sigma.papers.httpx.AsyncClient",
+        side_effect=lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    ):
+        try:
+            asyncio.run(
+                papers._provider(
+                    {"sources": []},
+                    {"mode": "chatgpt", "token": "fixture"},
+                    {"model": "gpt-6.1-sol", "reasoning_effort": "high"},
+                )
+            )
+        except ProjectError as exc:
+            assert "without a valid response.completed" in str(exc)
+        else:
+            raise AssertionError("Partial provider streams must not produce a paper draft")
+
+
+def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
+    async def check() -> None:
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+        credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+
+        async def slow_provider(*_args):
+            started.set()
+            try:
+                await asyncio.sleep(20)
+            finally:
+                cancelled.set()
+
+        queue = asyncio.Queue()
+        body = {
+            "path": str(path),
+            "expected_project_id": inspect_project(path).project.id,
+            "expected_binding": credential["identity"],
+        }
+        await queue.put(
+            {"type": "http.request", "body": json.dumps(body).encode(), "more_body": False}
+        )
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/api/projects/papers",
+            "raw_path": b"/api/projects/papers",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [(b"host", b"testserver"), (b"content-type", b"application/json")],
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+        }
+        with (
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider", new=slow_provider),
+        ):
+            serving = asyncio.create_task(app(scope, queue.get, send))
+            await asyncio.wait_for(started.wait(), timeout=2)
+            await queue.put({"type": "http.disconnect"})
+            await asyncio.wait_for(serving, timeout=2)
+        assert papers.list_papers(str(path)) == []
+        assert cancelled.is_set()
+        assert not papers._gate.locked()
+
+    asyncio.run(check())
+
+
 def main() -> None:
+    test_incomplete_chatgpt_paper_stream_is_rejected()
+    with TemporaryDirectory() as temporary:
+        cancelled_path = Path(temporary) / "cancelled.sigma"
+        initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
+        test_api_disconnect_cancels_paper_before_publication(cancelled_path)
+
     class StreamResponse:
         def __init__(self, content: bytes):
             self.headers = {"content-type": "text/event-stream"}
@@ -182,6 +284,39 @@ def main() -> None:
     assert any("counterexample or contradiction" in item for item in adversarial_warnings)
     assert any("Citation-like external references" in item for item in adversarial_warnings)
     assert any("open proof/research obligation" in item for item in adversarial_warnings)
+    frozen_obligations = {
+        "sources": [
+            {
+                "id": "artifact:max-regions:proof",
+                "data": {"open_obligations": [f"Frozen obligation {index}" for index in range(12)]},
+            }
+        ]
+    }
+    reconciliation = papers._reconcile_obligations(
+        parsed.model_copy(update={"open_obligations": []}), frozen_obligations
+    )
+    assert len(reconciliation) == 12
+    assert all(
+        item["source_refs"] == ["artifact:max-regions:proof:open_obligations"]
+        for item in reconciliation
+    )
+    assert all(
+        item["status"] == "Not listed by author; not presumed resolved" for item in reconciliation
+    )
+    reconciled_tex = papers._tex(
+        parsed,
+        [],
+        "a" * 64,
+        obligation_reconciliation=reconciliation,
+    )
+    assert r"\section{Frozen obligation reconciliation}" in reconciled_tex
+    assert "Frozen obligation 11" in reconciled_tex
+    listed = papers._reconcile_obligations(
+        parsed.model_copy(update={"open_obligations": ["  Frozen   obligation 0 "]}),
+        frozen_obligations,
+    )
+    assert listed[0]["status"] == "Listed as open in paper"
+    assert listed[1]["status"] == "Not listed by author; not presumed resolved"
     try:
         papers._validate(draft("artifact:unknown"), package)
     except ProjectError as exc:
@@ -194,6 +329,25 @@ def main() -> None:
     notation = papers._latex_prose(r"Let $R(\mathcal{A})$ denote the region count.")
     assert r"$R(\mathcal{A})$" in notation
     assert r"\textbackslash{}mathcal" not in notation
+    formula_draft = parsed.model_copy(
+        update={
+            "claims": [
+                parsed.claims[0].model_copy(
+                    update={
+                        "statement": r"The count is $R(n)=1+\sum_{j=1}^n j²$.",
+                        "reasoning": r"The line family lies in $\mathbb{R}^2$.",
+                    }
+                )
+            ]
+        }
+    )
+    formula_tex = papers._tex(formula_draft, warnings, "a" * 64, math_style=True)
+    assert r"$R(n)=1+\sum_{j=1}^n j^{2}$" in formula_tex
+    assert r"$\mathbb{R}^2$" in formula_tex
+    assert r"\textbackslash{}sum" not in formula_tex
+    assert r"\textbackslash{}mathbb" not in formula_tex
+    unicode_superscript = papers._latex_prose("The saved construction uses j².")
+    assert "$j^{2}$" in unicode_superscript
     math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True)
     assert r"\section{Introduction}" in math_tex
     assert r"\section{Evidence and scope}" in math_tex

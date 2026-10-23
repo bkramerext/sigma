@@ -68,6 +68,29 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("4 MB streamed-response cap in ChatGPT-plan mode")
     expect(dialog).to_contain_text("1 MB response cap in API-key mode")
     expect(dialog).to_contain_text("120-second timeout")
+
+    def reject_provider(route):
+        route.fulfill(
+            status=502,
+            content_type="application/json",
+            body=json.dumps({"error": "Fixture provider rejected the request."}),
+        )
+
+    page.route("**/api/projects/papers", reject_provider)
+    dialog.get_by_role("button", name="Generate paper", exact=True).click()
+    expect(dialog.get_by_role("alert")).to_contain_text("Fixture provider rejected the request")
+    expect(dialog.locator(".ai-paper-preview")).to_have_count(0)
+    page.unroute("**/api/projects/papers", reject_provider)
+
+    def malformed_response(route):
+        route.fulfill(status=200, content_type="application/json", body="not-json")
+
+    page.route("**/api/projects/papers", malformed_response)
+    dialog.get_by_role("button", name="Generate paper", exact=True).click()
+    expect(dialog.get_by_role("alert")).to_contain_text("invalid server response")
+    expect(dialog.locator(".ai-paper-preview")).to_have_count(0)
+    page.unroute("**/api/projects/papers", malformed_response)
+
     dialog.get_by_role("button", name="Generate paper", exact=True).click()
     expect(dialog).to_contain_text("The Maximum Number of Regions Formed by Lines", timeout=30000)
     expect(dialog).to_contain_text("not a formally certified theorem")
@@ -81,6 +104,9 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("artifact:")
     expect(dialog).to_contain_text("Conclusion claim links: C1")
     expect(dialog).to_contain_text("Abstract claim links: C1")
+    expect(dialog).to_contain_text("Frozen obligation reconciliation")
+    expect(dialog).to_contain_text("not presumed resolved")
+    expect(dialog).to_contain_text("artifact:")
     expect(dialog.get_by_role("link", name="Open compiled PDF in new tab")).to_be_visible()
     article = dialog.locator(".ai-paper-preview")
     article.screenshot(path="/tmp/sigma-a20-paper-preview.png")
@@ -103,6 +129,11 @@ with sync_playwright() as playwright:
     )
     assert detail["snapshot"]["project_id"] == record["project"]["id"]
     assert detail["draft"]["claims"][0]["evidence_refs"]
+    assert len(detail["obligation_reconciliation"]) == 12
+    assert all(
+        item["status"] == "Not listed by author; not presumed resolved" and item["source_refs"]
+        for item in detail["obligation_reconciliation"]
+    )
     source_ids = {item["id"] for item in detail["snapshot"]["sources"]}
     assert all(
         ref in source_ids for claim in detail["draft"]["claims"] for ref in claim["evidence_refs"]
