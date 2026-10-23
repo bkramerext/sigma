@@ -104,6 +104,7 @@ The next implementation step is a constrained research loop with checkable actio
 
 **Theme: turn SIGMA's research workspace into an auditable research system, then hand off sustained development to two autonomous coding sessions.**
 
+- Completed substantial **A17.7 UI cleanup and standardization** across Home, investigation controls, collapsible panes, strategy rows, settings/header behavior, and responsive interaction details.
 - Advanced the research-session UX and agentic workflow through **A17.8**, then reviewed and merged its evidence-based coordination improvements.
 - Defined **A18** as a substantial autonomous research milestone: multiple active strategies and agents, live supervision, honest benchmarks, concurrent execution, and durable evidence. Assigned it to **Blue**.
 - Implemented and merged **A20**, the AI-authored research-paper workflow, with attention to evidence reconciliation, mathematical presentation, exports, and response-size limits.
@@ -111,6 +112,14 @@ The next implementation step is a constrained research loop with checkable actio
 - Documented research trustworthiness expectations and a future **Lean verification** plan without treating model agreement as formal proof.
 - Prepared **A19**, an isolated Python research executor, for **Green**; its standalone implementation can proceed while Blue builds A18.
 - Ended the day with **two independent Codex CLI sessions** assigned overnight work in separate checkouts, after resolving Green's startup configuration and working around a locked previous conversation.
+
+### UI cleanup and standardization (A17.7)
+
+A substantial part of Day 2 was devoted to making SIGMA feel like one coherent application rather than a collection of separately developed controls. The investigation workspace gained consistent pane headings and collapse behavior for Projects, Sessions, and Strategies; cleaner strategy disclosures and editing states; more predictable navigation back to Home; and refinements to Settings and the header. The Research Session pane was positioned as the operational center of an investigation, with visible session state and artifacts rather than relying on ambiguous strategy labels.
+
+The Home and workspace interactions received additional polish: sample-copy naming and Recent navigation were checked, redundant strategy previews were removed in favor of clearer expansion, and research artifacts gained a Plain/Markdown viewing toggle. Visual work included alignment, spacing, borders on collapsed pane headings, and small artwork-credit hover/click effects tested at desktop and mobile sizes. Real-Chrome scenarios were extended to cover these behaviors and regressions.
+
+The lesson was practical: **UI standardization is not just styling**. Shared disclosure, navigation, editing, and loading conventions reduce confusion precisely when long-running agents and their results make the interface more complex.
 
 ### Research sessions and the A17.8 handoff
 
