@@ -16,7 +16,7 @@ SIGMA must distinguish (1) whether the research objective was achieved, (2) whet
 4. **Consistent durable results.** Persist the evidence, rationale, outcome, and strategy assessments so reloads, exports and session history report the same result. Preserve compatibility with legacy sessions, and label missing historical evidence as unknown rather than fabricating attribution.
 5. **Failure and error handling.** If assessment generation fails, report a recoverable error through the normal toast/UI path, preserve already saved research, and do not silently assign a negative outcome or present partial assessment text as a completed result.
 
-## Primary regression: Maximum Regions Formed by Lines
+## Deterministic regression: Maximum Regions Formed by Lines
 
 Given a project seeking the maximum number of regions formed by `n` lines and a strategy of incremental region counting with an explicit general-position maximizing construction, a completed argument should establish:
 
@@ -25,6 +25,8 @@ Given a project seeking the maximum number of regions formed by `n` lines and a 
 - Therefore `R(n) = 1 + n(n+1)/2`.
 
 When the agents produce a complete, supported proof with no unresolved material objection, the research outcome must be **successful / objective achieved**, not **Negative — no useful next path identified**. The incremental-counting strategy should be **Contributed to solution** with evidence references. If the proof is incomplete or unverified, preserve the appropriate provisional assessment rather than asserting verified success.
+
+The broader live-agent solution-quality evaluation and final integrated A17.6 acceptance pass are assigned to **A17.8**. Preserve the deterministic regression here as an implementation contract; do not rerun live quality trials as part of A17.7.
 
 ## Tests and acceptance
 
