@@ -10,6 +10,8 @@ from sigma.t39_evaluation import (
     SCORE_AXES,
     blank_review,
     challenge_manifest,
+    capture_session,
+    captured_review,
     validate_review,
 )
 
@@ -64,6 +66,63 @@ def main() -> None:
         must_reject({**review, "scores": dict.fromkeys(SCORE_AXES, 2)}, "unverified numeric scoring")
         transcript.write_text("tampered", encoding="utf-8")
         must_reject(scored, "post-review transcript mutation")
+
+    # A saved outcome alone is not evidence a challenge was delivered to the
+    # Skeptic. Require exact matching intervention, delivery, acknowledgment,
+    # completed step and same-cycle artifact before permitting review.
+    challenge = CASES["RH-SYM"][0]
+    step_output = {
+        "response": "Reflection pairs are not necessarily fixed points.",
+        "human_guidance_reviews": [{"intervention_id": "intervention-1", "uptake": "addressed"}],
+    }
+    session = {
+        "id": "session-1",
+        "session_number": 1,
+        "status": "ended",
+        "mode": "api_key",
+        "model": "fixture-model",
+        "steps": [
+            {"id": "step-1", "role": "skeptic", "status": "completed", "strategy_id": "strategy-1", "cycle": 1, "output": step_output}
+        ],
+        "interventions": [{
+            "id": "intervention-1", "text": challenge,
+            "deliveries": [{"role": "skeptic", "status": "acknowledged", "attempts": [{"step_id": "step-1", "status": "acknowledged"}]}],
+        }],
+        "artifacts": [{"id": "artifact-1", "strategy_id": "strategy-1", "strategy_cycle": 1, "claim_or_question": "Original Investigator work"}],
+        "outcome": {"assessment": "mixed", "label": "Unverified"},
+    }
+    captured = capture_session("RH-SYM", session)
+    assert captured["artifact_id"] == "artifact-1"
+    assert captured["skeptic_output"] == step_output
+    assert captured["provenance"].startswith("evaluator-authored")
+    for changed, reason in (
+        ({**session, "interventions": []}, "no injection"),
+        ({**session, "interventions": [{**session["interventions"][0], "text": "unrelated"}]}, "wrong challenge"),
+        ({**session, "interventions": [{**session["interventions"][0], "deliveries": []}]}, "undelivered challenge"),
+        ({**session, "steps": []}, "unsaved step"),
+        ({**session, "artifacts": []}, "missing artifact"),
+        ({**session, "steps": [{**session["steps"][0], "output": {"response": "text", "human_guidance_reviews": []}}]}, "unacknowledged output"),
+    ):
+        try:
+            capture_session("RH-SYM", changed)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Accepted invalid capture: {reason}")
+    with TemporaryDirectory() as directory:
+        transcript = Path(directory) / "captured.json"
+        transcript.write_text(json.dumps(captured), encoding="utf-8")
+        review = captured_review("RH-SYM", str(transcript))
+        assert review["status"] == "UNVERIFIED"
+        assert review["session_id"] == "session-1"
+        assert review["artifact_ids"] == ["artifact-1"]
+        validate_review(review)
+        try:
+            captured_review("RH-FIN", str(transcript))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Accepted wrong captured case")
 
     print("PASS T39 manifest redaction, review provenance, score validation and transcript integrity")
 
