@@ -87,6 +87,14 @@ A18 encompasses **all remaining research-quality work**, including strategy gene
 - **Stop, recover, continue:** start research, stop during concurrent activity, verify completed evidence remains durable and incomplete calls are not represented as results, reload, and start a new session that explicitly incorporates prior findings. Exercise duplicate-start, one-agent failure, provider rejection, timeout, budget exhaustion, and user cancellation.
 - **End-to-end acceptance scenario:** create/open a fresh project; generate multiple distinct strategies; enable/disable and fork strategies; start a bounded concurrent research session; observe live per-agent/per-strategy state; stop while active; inspect and compare durable evidence; fork an improved strategy based on outcomes; run a follow-up session comparing original and fork; assess contributions and export a faithful report. Verify through real browser plus deterministic/mock provider, and separately through bounded live-provider evaluation only with explicit user authorization.
 
+## Stress-point ownership under concurrent research
+
+Blue must proactively **discover, measure, and fix stress points** exposed by real multi-agent, multi-strategy workloads. Do not wait for the user to identify bottlenecks, and do not equate a passing single-strategy fixture with production readiness. Treat stress investigation as core A18 engineering, not optional performance polish.
+
+Exercise increasing numbers of enabled strategies and concurrent agent calls, repeated research rounds, long histories, large artifact sets, stop/restart races, partial provider failures, slow and out-of-order completions, budget pressure, and browser reloads during execution. Inspect both backend and UI for bottlenecks, unbounded queues, resource contention, duplicate work, starvation, memory/context growth, persistence latency, stale status, event ordering, cancellation leakage, and unusable progress displays. Ensure concurrency does not silently multiply cost or exceed user-configured limits.
+
+For each material stress point: reproduce it, identify the root cause, define a measurable invariant or bound, implement a domain-general correction, and add a deterministic regression or load scenario. Capture observed concurrency, latency, call/budget use, cancellation behavior, and artifact integrity in `docs/STATUS.md`. Prefer bounded backpressure, explicit scheduling, and recoverable states over optimistic UI or hidden retries. Escalate only consequential architecture/product tradeoffs or additional live-provider spending; routine diagnosis and fixes are Blue's responsibility.
+
 ## Research-quality evaluation and acceptance gates
 
 **The goal is a product that does real research work, not just a working research UI.** Engineering acceptance and research acceptance are distinct; passing one never implies the other.
