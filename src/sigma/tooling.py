@@ -50,6 +50,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/agentic_evidence.py"],
             [*python, "python", "tests/research_sessions.py"],
             [*python, "python", "tests/python_sandbox.py"],
+            [*python, "python", "tests/sage_execution.py"],
             [*python, "python", "tests/project_reports.py"],
             [*python, "python", "tests/papers.py"],
             [*python, "python", "tests/text_views.py"],
@@ -101,3 +102,28 @@ def run_tooling(command: str) -> int:
                 return result.returncode if result.returncode > 0 else 1
     print(f"\nsigma {command}: all steps passed.", flush=True)
     return 0
+
+
+def build_sandbox(runtime_name: str) -> int:
+    """Explicit, optional setup only. Ordinary setup/test never downloads Sage."""
+    from sigma.python_sandbox import runtime_settings
+
+    settings = runtime_settings(runtime_name)
+    filename = "Dockerfile.sage" if runtime_name == "sagemath" else "Dockerfile"
+    command = [
+        "docker",
+        "build",
+        "-f",
+        f"sandbox-poc/{filename}",
+        "-t",
+        settings["image"],
+        "sandbox-poc",
+    ]
+    try:
+        return subprocess.run(command, cwd=ROOT, check=False).returncode
+    except OSError:
+        print(
+            "Docker is unavailable; install/start Docker and retry this explicit build.",
+            file=sys.stderr,
+        )
+        return 2

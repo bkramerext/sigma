@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
@@ -41,6 +41,26 @@ MAX_CAPTURE_ARCHIVE_BYTES = 16 * 1024 * 1024
 _EXECUTION_GATE = threading.BoundedSemaphore(1)
 
 
+RuntimeName = Literal["python", "sagemath"]
+SAGE_IMAGE = "sigma-research-sage:10.8"
+SAGE_TIMEOUT_SECONDS = 60
+
+
+def runtime_settings(runtime_name: str = "python") -> dict[str, Any]:
+    if runtime_name not in {"python", "sagemath"}:
+        raise ProjectError("Unknown research runtime")
+    sage = runtime_name == "sagemath"
+    return {
+        "runtime": runtime_name,
+        "image": SAGE_IMAGE if sage else IMAGE,
+        "version": "10.8" if sage else "3.12.8",
+        "syntax": "sage-preparsed" if sage else "python",
+        "wall_seconds": SAGE_TIMEOUT_SECONDS if sage else EXECUTION_TIMEOUT_SECONDS,
+        "memory_mib": 1024 if sage else 512,
+        "tmp_mib": 128 if sage else 64,
+    }
+
+
 @dataclass(frozen=True)
 class ExecutionResult:
     status: str
@@ -53,10 +73,14 @@ class ExecutionResult:
     artifact_error: str | None = None
     stdout_base64: str | None = None
     stderr_base64: str | None = None
+    runtime: str = "python"
 
 
-def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
+def docker_command(
+    cidfile: str | None = None, image: str | None = None, runtime_name: str = "python"
+) -> list[str]:
     """Return fixed container arguments; user values never enter command tokens."""
+    settings = runtime_settings(runtime_name)
     command = [
         CONTAINER_RUNTIME,
         "run",
@@ -64,21 +88,23 @@ def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
         "--interactive",
         "--pull=never",
         "--network=none",
-        "--memory=512m",
-        "--memory-swap=512m",
+        f"--memory={settings['memory_mib']}m",
+        f"--memory-swap={settings['memory_mib']}m",
         "--cpus=1",
         "--pids-limit=64",
         "--read-only",
-        "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+        f"--tmpfs=/tmp:rw,noexec,nosuid,size={settings['tmp_mib']}m",
         "--tmpfs=/artifacts:rw,noexec,nosuid,size=16m",
         "--user=65532:65532",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--env=MPLCONFIGDIR=/tmp/matplotlib",
     ]
+    if runtime_name == "sagemath":
+        command.extend(["--platform=linux/amd64", "--env=HOME=/tmp"])
     if cidfile:
         command.append(f"--cidfile={cidfile}")
-    command.append(image)
+    command.append(image or settings["image"])
     return command
 
 
@@ -186,11 +212,17 @@ def _validate_source(source: str) -> bytes:
     return encoded
 
 
-def _image_identity() -> str | None:
+def _image_identity(runtime_name: str = "python") -> str | None:
     runtime = CONTAINER_RUNTIME
     try:
         result = subprocess.run(
-            [runtime, "image", "inspect", "--format={{.Id}}", IMAGE],
+            [
+                runtime,
+                "image",
+                "inspect",
+                "--format={{.Id}}",
+                runtime_settings(runtime_name)["image"],
+            ],
             capture_output=True,
             timeout=3,
             check=False,
@@ -207,7 +239,7 @@ def _image_identity() -> str | None:
 
 
 def _run(
-    source: str, image_id: str
+    source: str, image_id: str, runtime_name: str = "python"
 ) -> tuple[int | None, bytes, bytes, str, tuple[tuple[str, str, bytes], ...], str | None]:
     encoded = _validate_source(source)
     cid_fd, cid_name = tempfile.mkstemp(prefix="sigma-python-", suffix=".cid")
@@ -237,7 +269,7 @@ def _run(
 
     try:
         process = subprocess.Popen(
-            docker_command(str(cidfile), image_id),
+            docker_command(str(cidfile), image_id, runtime_name),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -265,7 +297,8 @@ def _run(
     marker_seen = False
     artifacts: tuple[tuple[str, str, bytes], ...] = ()
     artifact_error = None
-    deadline = started + EXECUTION_TIMEOUT_SECONDS
+    wall_seconds = runtime_settings(runtime_name)["wall_seconds"]
+    deadline = started + wall_seconds
 
     def close_pipes() -> None:
         for key in list(selector.get_map().values()):
@@ -390,7 +423,7 @@ def _run(
     cidfile.unlink(missing_ok=True)
     diagnostic = b""
     if status == "timeout":
-        diagnostic = b"\nExecution exceeded the 15-second wall limit."
+        diagnostic = f"\nExecution exceeded the {wall_seconds}-second wall limit.".encode()
         return_code = 124
     elif status == "output_limit":
         diagnostic = b"\nExecution exceeded the 32,000-byte output limit."
@@ -405,22 +438,28 @@ def _run(
     return return_code, bytes(stdout), bytes(stderr), status, artifacts, artifact_error
 
 
-def _execute(source: str) -> ExecutionResult:
+def _execute(source: str, runtime_name: str = "python") -> ExecutionResult:
     _validate_source(source)
-    image_id = _image_identity()
+    runtime_settings(runtime_name)
+    image_id = _image_identity(runtime_name)
     if image_id is None:
         return ExecutionResult(
             "unavailable",
             None,
-            "No locally built research image is available; build sandbox-poc first.",
+            f"Research runtime {runtime_name} unavailable. Run ./sigma sandbox-build --runtime {runtime_name}.",
             "",
             0,
+            runtime=runtime_name,
         )
     started = time.monotonic()
-    return_code, stdout, stderr, status, artifacts, artifact_error = _run(source, image_id)
+    return_code, stdout, stderr, status, artifacts, artifact_error = (
+        _run(source, image_id) if runtime_name == "python" else _run(source, image_id, runtime_name)
+    )
     duration = round((time.monotonic() - started) * 1000)
     if status == "unavailable":
-        return ExecutionResult(status, None, "", stderr.decode("utf-8"), duration, image_id)
+        return ExecutionResult(
+            status, None, "", stderr.decode("utf-8"), duration, image_id, runtime=runtime_name
+        )
     if status == "completed" and return_code != 0:
         status = "failed"
     return ExecutionResult(
@@ -434,6 +473,7 @@ def _execute(source: str) -> ExecutionResult:
         artifact_error,
         _non_utf8_base64(stdout),
         _non_utf8_base64(stderr),
+        runtime=runtime_name,
     )
 
 
@@ -445,11 +485,13 @@ def _non_utf8_base64(value: bytes) -> str | None:
     return None
 
 
-def _execute_admitted(source: str) -> ExecutionResult:
+def _execute_admitted(source: str, runtime_name: str = "python") -> ExecutionResult:
     if not _EXECUTION_GATE.acquire(blocking=False):
-        return ExecutionResult("busy", None, "Another research code run is active.", "", 0)
+        return ExecutionResult(
+            "busy", None, "Another research code run is active.", "", 0, runtime=runtime_name
+        )
     try:
-        return _execute(source)
+        return _execute(source) if runtime_name == "python" else _execute(source, runtime_name)
     finally:
         _EXECUTION_GATE.release()
 
@@ -504,12 +546,22 @@ def _save_record(
                         prior = json.loads(candidate.read_text(encoding="utf-8"))
                     except (OSError, ValueError):
                         continue
-                    if isinstance(prior, dict) and all(
-                        prior.get(key) == record.get(key)
-                        for key in ("project_id", "session_id", "strategy_id", "cycle", "source")
+                    if (
+                        isinstance(prior, dict)
+                        and prior.get("runtime", "python") == record.get("runtime", "python")
+                        and all(
+                            prior.get(key) == record.get(key)
+                            for key in (
+                                "project_id",
+                                "session_id",
+                                "strategy_id",
+                                "cycle",
+                                "source",
+                            )
+                        )
                     ):
                         raise ProjectError(
-                            "This Python proposal is already reserved; no second run was started"
+                            "This research proposal is already reserved; no second run was started"
                         )
             target_record = directory / f"{record['id']}.json"
             previous = 0
@@ -523,6 +575,7 @@ def _save_record(
                 if (
                     not isinstance(reserved, dict)
                     or reserved.get("status") != "running"
+                    or reserved.get("runtime", "python") != record.get("runtime", "python")
                     or any(
                         reserved.get(key) != record.get(key)
                         for key in (
@@ -532,6 +585,10 @@ def _save_record(
                             "strategy_id",
                             "cycle",
                             "source",
+                            "runtime_version",
+                            "syntax",
+                            "source_sha256",
+                            "agent",
                         )
                     )
                 ):
@@ -683,13 +740,15 @@ def find_session_execution(
     cycle: int,
     source: str,
     include_prior_failures: bool = False,
+    runtime_name: str = "python",
 ) -> dict[str, Any] | None:
     """Find a durably saved exact proposal result for crash-safe session recovery."""
     return next(
         (
             record
             for record in list_executions(path)
-            if record.get("session_id") == session_id
+            if record.get("runtime", "python") == runtime_name
+            and record.get("session_id") == session_id
             and record.get("strategy_id") == strategy_id
             and (
                 record.get("cycle") == cycle
@@ -698,6 +757,16 @@ def find_session_execution(
                     and type(record.get("cycle")) is int
                     and record["cycle"] < cycle
                     and record.get("status") in {"failed", "timeout", "output_limit", "interrupted"}
+                    and (
+                        runtime_name == "python"
+                        or (
+                            record.get("runtime_version")
+                            == runtime_settings(runtime_name)["version"]
+                            and record.get("syntax") == runtime_settings(runtime_name)["syntax"]
+                            and record.get("environment", {}).get("image")
+                            == runtime_settings(runtime_name)["image"]
+                        )
+                    )
                 )
             )
             and record.get("source") == source
@@ -706,9 +775,9 @@ def find_session_execution(
     )
 
 
-async def execute(source: str) -> ExecutionResult:
+async def execute(source: str, runtime_name: str = "python") -> ExecutionResult:
     """Execute one bounded code proposal without blocking the event loop."""
-    task = asyncio.create_task(asyncio.to_thread(_execute_admitted, source))
+    task = asyncio.create_task(asyncio.to_thread(_execute_admitted, source, runtime_name))
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
@@ -724,9 +793,13 @@ async def execute_research_code(
     session_id: str | None = None,
     strategy_id: str | None = None,
     cycle: int | None = None,
+    runtime_name: str = "python",
+    step_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute and durably capture one code proposal for later role-loop integration."""
     _validate_source(source)
+    settings = runtime_settings(runtime_name)
+    agent: dict[str, Any] | None = None
     view = inspect_project(path)
     provenance = (session_id, strategy_id, cycle)
     if any(item is not None for item in provenance):
@@ -754,8 +827,33 @@ async def execute_research_code(
         if branch is None or branch.get("cycle") != cycle:
             raise ProjectError("Research strategy and cycle do not match this session")
         session_id, strategy_id = normalized_session, normalized_strategy
+        if step_id is not None:
+            origin = next(
+                (step for step in session.get("steps", []) if step.get("id") == step_id), None
+            )
+            source_field = "sage_code" if runtime_name == "sagemath" else "python_code"
+            if (
+                not origin
+                or origin.get("strategy_id") != strategy_id
+                or origin.get("cycle") != cycle
+                or origin.get("role") != "investigator"
+                or origin.get("status") != "completed"
+                or origin.get("output", {}).get(source_field) != source
+            ):
+                raise ProjectError("Execution step does not match the saved Investigator proposal")
+            agent = {
+                "role": "investigator",
+                "step_id": step_id,
+                "model": session.get("model"),
+                "reasoning_effort": session.get("reasoning_effort"),
+            }
         existing = find_session_execution(
-            path, session_id=session_id, strategy_id=strategy_id, cycle=cycle, source=source
+            path,
+            session_id=session_id,
+            strategy_id=strategy_id,
+            cycle=cycle,
+            source=source,
+            runtime_name=runtime_name,
         )
         if existing is not None:
             if existing["status"] == "running":
@@ -763,8 +861,15 @@ async def execute_research_code(
                     "This Python proposal is already active; no second run was started"
                 )
             return existing
+    if step_id is not None and agent is None:
+        raise ProjectError("Step provenance requires a session")
     record = {
         "schema_version": 1,
+        "runtime": runtime_name,
+        "runtime_version": settings["version"],
+        "syntax": settings["syntax"],
+        "agent": agent,
+        "source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
         "id": str(uuid4()),
         "project_id": view.project.id,
         "session_id": _metadata_id(session_id, "session"),
@@ -779,13 +884,13 @@ async def execute_research_code(
         "source": source,
         "artifact_error": None,
         "environment": {
-            "image": IMAGE,
+            "image": settings["image"],
             "image_id": None,
             "network": "none",
-            "memory_bytes": 512 * 1024 * 1024,
+            "memory_bytes": settings["memory_mib"] * 1024 * 1024,
             "cpu_limit": 1,
             "process_limit": 64,
-            "wall_limit_seconds": EXECUTION_TIMEOUT_SECONDS,
+            "wall_limit_seconds": settings["wall_seconds"],
         },
     }
     directory = _execution_directory(path)
@@ -800,7 +905,9 @@ async def execute_research_code(
         # Reserve before dispatch. A process death at any later point leaves
         # inspectable uncertain evidence and cannot silently trigger a rerun.
         _save_record(directory, record)
-        execution_task = asyncio.create_task(execute(source))
+        execution_task = asyncio.create_task(
+            execute(source) if runtime_name == "python" else execute(source, runtime_name)
+        )
         while True:
             try:
                 result = await asyncio.shield(execution_task)

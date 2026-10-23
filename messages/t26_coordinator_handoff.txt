@@ -1,0 +1,94 @@
+T26 coordinator handoff — Green
+Date: 2026-10-23
+Specification/review: ChatGPT-authored T26 ticket and Green architecture review,
+merged in PR #20. Implementation based on main b917e24.
+PR: the implementation PR containing this message (link added after creation).
+
+Result
+SageMath is integrated alongside Python through the existing Investigator →
+execution → Skeptic workflow. All actual role requests explicitly enumerate
+both tools, local availability, invocation fields, limits and interpretation.
+Investigators dispatch; Skeptics inspect results and request experiments through
+the next Investigator cycle. Runtime capability snapshots are saved on steps;
+request and cost-reservation instructions/schema use the same builder.
+
+Implementation
+- Native .sage preparsing in a pinned official Sage 10.8 amd64-derived image.
+- Shared bounded container transport, artifact capture/storage and admission
+  gate; separate Sage code/result fields and explicit runtime identity.
+- No execution-time network, pulls/builds, host/project/credential mounts or
+  privileges. Sage: 60s/1GiB/128MiB temporary; Python remains 15s/512MiB/64MiB.
+  Both: one CPU, 64 processes, bounded source/output/files, read-only root.
+- Durable exact source/hash, runtime/version/image ID, actual status/output,
+  files/hashes and project/session/strategy/cycle. New Sage agent records also
+  bind the exact Investigator step, role and model/effort configuration.
+- Runtime-separated reservation/recovery/failure reuse. No silent reruns or
+  extra provider retries/calls. Stop prevents queued work; dispatched work
+  drains within the hard limit and its actual result remains inspectable.
+- Peer/prior-session contexts, JSON audit, paper-source exports, T24 metrics,
+  file storage totals and source inventories include Sage without duplicates.
+- Existing Outcome cards include Sage and an escaped source/result disclosure;
+  a scoped CSS reset fixes inherited metric-grid wrapping. T25 hierarchy stays.
+- Optional sigma sandbox-build/sandbox-capabilities/sandbox-execute commands;
+  POST research-executions accepts runtime=sagemath (default remains Python).
+
+Failures investigated and fixed
+1. Non-root startup could not traverse the upstream Sage home; build-time mode
+   corrected. Outer HOME uses existing /tmp before the runner creates its home.
+2. Stop/resume at the last allowed round discarded a pending review. The round
+   guard now lets that already-started cycle finish its Skeptic review without
+   another computation or extra research round.
+3. Mixed-session tests encountered the existing one-active-session guard. This
+   restriction is preserved; mixed concurrent strategies share the code gate.
+4. Screenshot review found a global dl grid squeezing metric labels. The local
+   metric group explicitly uses block layout, preserving label/value semantics.
+
+Verification (all passed, no paid or live-provider calls)
+- ./sigma test: all scenarios, new deterministic Sage tests, lint/format,
+  Pyright zero errors, frontend typecheck/build. Ten-strategy 20/20-call load.
+- Deterministic per-role available/unavailable instructions, typed selection,
+  failures/timeouts/interruptions/unavailable/busy/output limits, role-step
+  provenance, exact file retrieval, metric/export/paper/prior/peer propagation,
+  recovery with no second run, failed-source reuse then revision, mixed-tool
+  queue cancellation and final-round resume without duplicate execution.
+- Explicit builds of Sage and Python using SIGMA tooling.
+- Real Sage suite: native algebra, exact rationals/exponents, number theory,
+  independent elliptic-curve point enumeration, PNG/JSON artifacts, kernel
+  isolation/resource settings, network denial, errors, symlink capture rejection,
+  output and memory exhaustion, timeout, and bounded-completion cancellation.
+  Combined finite experiment 29.751s; hard timeout 60.082s.
+- Real Sage public CLI: factorization and native 2^3=8 (22.336s).
+- Real GAP/Singular helper probe: group order 24 and polynomial x2-1 (47.924s).
+- Rebuilt Python real-container scientific-stack/artifact/security/limit checks.
+- Existing real Chrome workspace and new real Chrome Sage workflow at desktop
+  and 320px, including inspectable code/output/hash, API/artifacts and exports.
+  Last Sage workflow 24.965s. Screenshots visually inspected.
+
+Concrete investigation
+Hypothesis: passing a base-2 Fermat test certifies primality. Investigator code
+searched odd composites below 1000 using Sage exact arithmetic. The result
+contained 341=11*31, yet 2^340 mod 341=1. The Skeptic fixture received and used
+this contradicting evidence. The source, actual stdout and witnesses.json hash
+were preserved. This demonstrates integration and exact finite evidence; the
+provider roles were deterministic fixtures, not a live-model quality evaluation.
+
+Final Sage runtime image
+sha256:893cc1fd570d267cb57235f561ba3c7ac64c08ca2c86e48faba31ac1244bb41e
+Build source, usage and test commands: docs/SAGE-EXECUTION.md.
+Detailed results/failures: docs/STATUS.md (T26 section).
+
+Remaining limitations / blockers
+No implementation blocker remains. Sage is optional and large, pinned to amd64;
+arm64 testing used emulation with 20–30s cold startup and up to ~48s for helper
+interfaces. Stop may wait for bounded completion/cleanup, not immediate kill.
+Admission remains per backend process, with one active research session; there
+is no host-wide multi-process scheduler. Local image availability is an
+observation, not a guarantee of later startup success. Legacy pre-portfolio
+sessions cannot dispatch computation and receive truthful unavailable guidance.
+Agents receive plot/file metadata, not full binary contents (T28 remains).
+Real-model tool-selection/reasoning quality and formal proof are unverified.
+Docker daemon/kernel/image remain trusted. Runtime code has no network.
+
+Coordinator action
+Review the implementation PR and its evidence. Final merge requires coordinator
+approval; Green has not self-merged. This message is created and ready to read.

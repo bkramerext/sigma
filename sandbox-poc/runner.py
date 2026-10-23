@@ -9,7 +9,8 @@ import subprocess
 import sys
 import time
 
-EXECUTION_TIMEOUT_SECONDS = 15
+SAGE = os.environ.get("SIGMA_RESEARCH_RUNTIME") == "sagemath"
+EXECUTION_TIMEOUT_SECONDS = 60 if SAGE else 15
 
 
 def main() -> int:
@@ -28,19 +29,36 @@ def main() -> int:
     token = sys.stdin.buffer.readline(33).strip().decode("ascii", errors="ignore")
     if len(token) != 32 or any(char not in "0123456789abcdef" for char in token):
         return 64
+    child_environment = {"MPLCONFIGDIR": "/tmp/matplotlib"}
+    program = "import sys; exec(compile(sys.stdin.buffer.read(), '<research>', 'exec'))"
+    if SAGE:
+        os.makedirs("/tmp/sigma-sage", exist_ok=True)
+        child_environment.update(
+            HOME="/tmp/sigma-sage",
+            DOT_SAGE="/tmp/sigma-sage",
+            PATH=os.path.dirname(sys.executable)
+            + ":/home/sage/sage/src/bin:/home/sage/sage/local/bin:/usr/bin:/bin",
+            OMP_NUM_THREADS="1",
+            OPENBLAS_NUM_THREADS="1",
+            MKL_NUM_THREADS="1",
+        )
+        program = (
+            "import sys; from sage.all import *; from sage.repl.preparse import preparse; "
+            "exec(compile(preparse(sys.stdin.buffer.read().decode('utf-8')), '<research.sage>', 'exec'))"
+        )
     child = subprocess.Popen(
         [
             sys.executable,
             "-I",
             "-c",
-            "import sys; exec(compile(sys.stdin.buffer.read(), '<research>', 'exec'))",
+            program,
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         bufsize=0,
         start_new_session=True,
-        env={"MPLCONFIGDIR": "/tmp/matplotlib"},
+        env=child_environment,
     )
     assert child.stdin and child.stdout and child.stderr
     child.stdin.write(source)
@@ -77,7 +95,9 @@ def main() -> int:
     child.stdout.close()
     child.stderr.close()
     if timed_out:
-        sys.stderr.buffer.write(b"\nExecution exceeded the 15-second wall limit.\n")
+        sys.stderr.buffer.write(
+            f"\nExecution exceeded the {EXECUTION_TIMEOUT_SECONDS}-second wall limit.\n".encode()
+        )
     try:
         sys.stdout.buffer.write(b"\x1eSIGMA_DONE:" + token.encode("ascii") + b"\x1f\n")
         sys.stdout.buffer.flush()

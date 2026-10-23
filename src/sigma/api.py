@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 from uuid import UUID
 
@@ -43,6 +43,7 @@ from sigma.proposals import (
     register_request,
     unregister_request,
 )
+from sigma.research_tools import execution_capabilities
 from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
@@ -106,7 +107,9 @@ class ResearchSessionRemoveRequest(OpenRequest):
     expected_updated_at: str = Field(min_length=1, max_length=64)
 
 
-class ResearchPythonRequest(OpenRequest):
+class ResearchExecutionRequest(OpenRequest):
+    runtime: Literal["python", "sagemath"] = "python"
+    step_id: str | None = Field(default=None, max_length=36)
     model_config = ConfigDict(extra="forbid", strict=True)
     source: str = Field(min_length=1, max_length=16_000)
     session_id: str | None = Field(default=None, max_length=36)
@@ -226,6 +229,13 @@ def research_session_remove_view(session_id: str, body: ResearchSessionRemoveReq
     return research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
 
 
+@app.get("/api/research-tools")
+async def research_tools_view():
+    import asyncio
+
+    return {"execution_tools": await asyncio.to_thread(execution_capabilities)}
+
+
 @app.get("/api/projects/research-executions")
 def research_executions_view(path: str):
     return {"executions": python_sandbox.list_executions(path)}
@@ -251,13 +261,15 @@ def research_execution_artifact_view(execution_id: str, filename: str, path: str
 
 
 @app.post("/api/projects/research-executions", status_code=201)
-async def research_execution_start_view(body: ResearchPythonRequest):
+async def research_execution_start_view(body: ResearchExecutionRequest):
     return await python_sandbox.execute_research_code(
         body.path,
         body.source,
         session_id=body.session_id,
         strategy_id=body.strategy_id,
         cycle=body.cycle,
+        runtime_name=body.runtime,
+        step_id=body.step_id,
     )
 
 

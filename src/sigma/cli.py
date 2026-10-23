@@ -101,6 +101,15 @@ def main() -> None:
     save_text.add_argument("--body", required=True)
     save_text.add_argument("--expected-digest", required=True)
     commands.add_parser("close")
+    build = commands.add_parser("sandbox-build", help="Build an optional pinned research runtime")
+    build.add_argument("--runtime", choices=["python", "sagemath"], required=True)
+    execute = commands.add_parser(
+        "sandbox-execute", help="Execute a source file in an isolated research runtime"
+    )
+    execute.add_argument("path")
+    execute.add_argument("--runtime", choices=["python", "sagemath"], default="python")
+    execute.add_argument("--source-file", required=True)
+    commands.add_parser("sandbox-capabilities", help="Inspect locally available research runtimes")
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run tests, API/CLI checks, lint, types and build")
     ui_command = commands.add_parser(
@@ -111,6 +120,40 @@ def main() -> None:
     )
     commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
     args = parser.parse_args()
+    if args.command == "sandbox-build":
+        from sigma.tooling import build_sandbox
+
+        sys.exit(build_sandbox(args.runtime))
+    if args.command in {"sandbox-execute", "sandbox-capabilities"}:
+        import asyncio
+        from pathlib import Path
+
+        from sigma.python_sandbox import execute_research_code
+        from sigma.research_tools import execution_capabilities
+
+        try:
+            result = (
+                execution_capabilities()
+                if args.command == "sandbox-capabilities"
+                else asyncio.run(
+                    execute_research_code(
+                        args.path,
+                        Path(args.source_file).read_text(encoding="utf-8"),
+                        runtime_name=args.runtime,
+                    )
+                )
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if (
+                args.command == "sandbox-execute"
+                and isinstance(result, dict)
+                and result["status"] != "completed"
+            ):
+                sys.exit(1)
+        except (ProjectError, OSError, UnicodeError) as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(2)
+        sys.exit(0)
     if args.command == "start":
         sys.exit(run_ui(navigate=args.navigate))
     if args.command == "shutdown":
