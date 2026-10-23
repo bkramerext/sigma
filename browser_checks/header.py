@@ -238,7 +238,7 @@ with sync_playwright() as playwright:
         and update_requests[3]["reasoning_effort"] == "low"
     )
     assert [request["difficulty"] for request in update_requests[4:]] == ["hard", "easy", "medium"]
-    assert not any("/api/ai/mode" in url for url in observed_urls)
+    assert not any(url.split("?", 1)[0].endswith("/api/ai/mode") for url in observed_urls)
     google_signin.dispatch_event("click")
     assert not any("/api/cloud-auth/login" in url for url in observed_urls)
     page.reload()

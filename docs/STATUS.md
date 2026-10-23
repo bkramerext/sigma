@@ -4090,3 +4090,48 @@ per-user provider credentials/budgets. This increment did not add Gate B's
 provider authorization, durable-job controls or compute budgets, and no paid
 calls were made. Public Demo behavior and cloud deployment remain later T22
 gates.
+
+## T22 Gate C public Demo implementation (2026-10-23)
+
+The hosted `/demo` route now shows one curated, read-only SIGMA research
+experience adapted from `samples/handshake-count-easy/project.json`. It includes
+project details, two strategies, a saved session and outcome, saved analysis,
+research evidence, a finite computation, and its captured CSV artifact. The
+snapshot uses stable IDs and timestamps and explicitly identifies its finite
+check as illustrative evidence, not a proof.
+
+Guests, denied Google identities and signed-in visitors read only the
+server-configured `SIGMA_CLOUD_DEMO_AUDIT` audit snapshot through dedicated
+GET-only endpoints with no client-supplied project ID or path. Reports use the
+existing A17.5 export dialog and project report renderer for JSON audit, Text,
+HTML and LaTeX. Private project routes remain behind cloud authentication;
+missing Demo configuration fails closed. The cloud Home exposes an Explore Demo
+link, the invitation request remains reachable from the denied flow, and local
+SIGMA continues to bypass cloud authorization and show its full project UI.
+Implementation does not alter Green's workspace branch or storage design.
+
+After current main advanced to `113436118514ff7cca2c806c8924f958ff16392f`
+through Gate A private-workspace PR #43, the public-Demo branch integrated that
+head. Conflicts in `src/sigma/api.py` and `docs/STATUS.md` were reconciled: the
+Demo now runs in a mounted read-only sub-application outside the app-wide
+private-workspace dependency while remaining subject to the parent cloud-auth
+middleware, and both Gate A and Gate C status evidence are retained. No
+workspace implementation was rewritten. On this integrated
+tree, `./sigma test` passed all backend scenarios, including Demo and cloud-auth
+security tests, Ruff, formatting, Pyright (zero diagnostics), frontend typecheck
+and production build. Real Chrome checks passed for
+`browser_checks/t22_demo.py` and `browser_checks/t22_access_denied.py` at 1440px
+desktop and 390px mobile. They verified saved-data inspection, read-only controls,
+four exports, the denied invitation flow, anonymous Home Demo navigation, and
+unrestricted local Home. API tests use the real FastAPI middleware and ensure
+guests cannot read or export arbitrary projects, cannot mutate, and do not
+trigger model or execution functions; they also compare the snapshot bytes
+before and after browsing/exports. Browser API payloads and exports use the
+deterministic snapshot fixture. No live Google sign-in or paid provider calls
+were made.
+
+Known integration limit: deployment must install the curated snapshot at its
+configured `SIGMA_CLOUD_DEMO_AUDIT` location. Gate A private-workspace isolation
+is integrated from PR #43; Gate B provider authorization/budget controls and
+cloud deployment remain open in parent T22. This PR does not claim those gates
+are complete.

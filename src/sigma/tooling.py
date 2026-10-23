@@ -61,6 +61,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/cli_smoke.py"],
             [*python, "python", "tests/tooling.py"],
             [*python, "python", "tests/local_config.py"],
+            [*python, "python", "tests/cloud_demo.py"],
             [*python, "python", "tests/cloud_auth.py"],
             [*python, "python", "tests/cloud_workspaces.py"],
             [*python, "python", "tests/instance_ownership.py"],
