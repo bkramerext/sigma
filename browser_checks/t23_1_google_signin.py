@@ -47,6 +47,24 @@ with sync_playwright() as playwright:
             body=json.dumps(cloud_status),
         ),
     )
+    page.route(
+        "**/api/cloud-research/budget",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            headers={"Cache-Control": "no-store"},
+            body=json.dumps(
+                {
+                    "allowance_usd": 2.0,
+                    "estimated_usage_usd": 2.0,
+                    "held_usd": 0.0,
+                    "reserved_and_estimated_usd": 2.0,
+                    "remaining_usd": 0.0,
+                    "unknown_provider_attempts": 0,
+                }
+            ),
+        ),
+    )
 
     def begin_login(route):
         login_attempts.append(route.request.url)
@@ -124,10 +142,27 @@ with sync_playwright() as playwright:
     expect(page).to_have_url(UI + "/")
     expect(page.get_by_role("link", name="Continue with Google", exact=True)).to_be_visible()
     assert not cloud_status["authenticated"]
+
+    # Exhaustion is visible to the owner while saved projects remain available.
+    cloud_status.update(
+        authenticated=True,
+        user={"email": "reviewer@example.org", "role": "member"},
+    )
+    page.goto(UI + "/", wait_until="networkidle")
+    budget = page.get_by_role("region", name="Cloud research budget")
+    expect(budget).to_contain_text("$0.00 remaining of $2.00")
+    expect(budget).to_contain_text("allowance is exhausted")
+    expect(page.get_by_role("button", name="New", exact=True)).to_be_enabled()
+    page.get_by_role("tab", name="Recent").click()
+    page.locator(".recent-type-group > summary").click()
+    saved_project = page.locator(".recent-type-group .recent-open").first
+    expect(saved_project).to_be_visible()
+    saved_project.click()
+    expect(page.locator(".project-art-header")).to_be_visible()
     assert not errors, errors
     browser.close()
 
 print(
     "PASS real Chrome cloud Google login route, signed-in project identity, sign-out transition, "
-    "desktop/mobile header placement, and no horizontal overflow; external Google OAuth was not invoked"
+    "desktop/mobile header placement, exhaustion with saved-project access, and no horizontal overflow; external Google OAuth was not invoked"
 )

@@ -18,6 +18,7 @@ from sigma import (
     chatgpt_auth,
     cloud_auth,
     cloud_demo,
+    cloud_research,
     cloud_workspaces,
     papers,
     python_sandbox,
@@ -139,6 +140,20 @@ def require_cloud_research_inference() -> None:
 def ui_instance() -> dict[str, str | None]:
     """Readiness identity only; grants no control or access to configuration."""
     return {"instance": os.environ.get("SIGMA_UI_INSTANCE_ID")}
+
+
+@app.get("/api/cloud-research/budget")
+def cloud_research_budget():
+    """Return only the authenticated workspace's persisted inference budget."""
+    if not cloud_workspaces.enabled():
+        raise HTTPException(404, "Cloud research budget is unavailable.")
+    try:
+        return JSONResponse(
+            cloud_research.snapshot(),
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
 
 
 @app.middleware("http")

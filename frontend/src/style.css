@@ -299,6 +299,17 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   flex-wrap: wrap;
   gap: 6px 16px;
 }
+.home-page .cloud-research-budget {
+  margin: 0 0 1rem;
+  padding: .75rem 1rem;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--surface, #fff) 82%, transparent);
+  font-size: .9rem;
+}
+.home-page .cloud-research-budget > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1rem; }
+.home-page .cloud-research-budget p { margin: .35rem 0; }
+.home-page .cloud-research-budget small { display: block; opacity: .8; }
 .home-page .home-projects-heading h1:focus,
 .home-page .home-projects-heading h1:focus-visible { outline: none; }
 .home-page .home-projects-heading h1 {

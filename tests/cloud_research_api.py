@@ -23,6 +23,7 @@ def main() -> None:
             "SIGMA_STATE_DIR": str(root / "local-state"),
             "SIGMA_CLOUD_OPENAI_API_KEY": "fake-server-credential",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+            "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
             "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
             "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
@@ -35,7 +36,7 @@ def main() -> None:
             import cloud_workspace_test_app
             from fastapi.testclient import TestClient
 
-            from sigma import research_sessions
+            from sigma import cloud_research, research_sessions
 
             credential = {
                 "mode": "api_key",
@@ -94,9 +95,9 @@ def main() -> None:
                 return (investigator if role == "investigator" else skeptic), usage
 
             settings = {
-                "research_rounds": 1,
-                "model_calls": 2,
-                "session_duration_minutes": 5,
+                "research_rounds": 5,
+                "model_calls": 30,
+                "session_duration_minutes": 60,
                 "output_tokens_per_call": 256,
                 "maximum_estimated_cost_usd": 1.0,
             }
@@ -138,6 +139,10 @@ def main() -> None:
                     "/api/projects/research-limits", json={"path": path, **settings}
                 )
                 assert limits.status_code == 200, limits.text
+                assert limits.json()["model_calls"] == 6
+                assert limits.json()["research_rounds"] == 3
+                assert limits.json()["session_duration_minutes"] == 15
+                assert limits.json()["maximum_estimated_cost_usd"] == 0.25
                 key = str(uuid4())
                 start_body = {
                     "path": path,
@@ -145,7 +150,7 @@ def main() -> None:
                     "idempotency_key": key,
                     "expected_project_id": project_id,
                     "expected_binding": credential["identity"],
-                    "expected_limits": settings,
+                    "expected_limits": limits.json(),
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert started.status_code == 200, started.text
@@ -165,12 +170,37 @@ def main() -> None:
                 else:
                     raise AssertionError("HTTP-started cloud research did not reach a saved state")
                 assert saved["status"] == "ended"
-                assert len(saved["steps"]) == 2
-                assert calls.await_count == 2
+                assert len(saved["steps"]) == 6
+                assert calls.await_count == 6
                 duplicate = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert duplicate.status_code == 200, duplicate.text
                 assert duplicate.json()["id"] == session_id
-                assert calls.await_count == 2
+                assert calls.await_count == 6
+
+                budget = client.get(
+                    "/api/cloud-research/budget",
+                    params={"workspace_id": "cloud-b", "owner": "cloud-b"},
+                )
+                assert budget.status_code == 200, budget.text
+                assert budget.headers["cache-control"] == "no-store"
+                assert budget.json()["allowance_usd"] == 0.25
+                assert budget.json()["estimated_usage_usd"] > 0
+                assert budget.json()["remaining_usd"] < 2.0
+                # Simulate cumulative exhaustion; it must block inference only,
+                # while saved research remains readable to its owner.
+                db = cloud_research._connect()
+                db.execute(
+                    "UPDATE calls SET amount_usd=0.25 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                )
+                db.close()
+                exhausted = client.get("/api/cloud-research/budget")
+                assert exhausted.status_code == 200
+                assert exhausted.json()["remaining_usd"] == 0
+                still_readable = client.get(
+                    f"/api/projects/research-sessions/{session_id}", params={"path": path}
+                )
+                assert still_readable.status_code == 200, still_readable.text
 
                 client.headers.update(
                     {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
@@ -184,6 +214,9 @@ def main() -> None:
                 )
                 assert hidden_status.status_code == 404, hidden_status.text
                 assert hidden_control.status_code == 404, hidden_control.text
+                owner_b_budget = client.get("/api/cloud-research/budget")
+                assert owner_b_budget.status_code == 200
+                assert owner_b_budget.json()["reserved_and_estimated_usd"] == 0
 
     print(
         "PASS authenticated HTTP research start/status/idempotency and cross-workspace status/control denial with deterministic provider"

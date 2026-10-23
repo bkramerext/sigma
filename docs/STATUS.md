@@ -69,6 +69,47 @@ unverified. Cloud authentication was not exercised in the local browser pass;
 it remains with the Cloud team. Mobile checks use Chrome viewport emulation,
 not a physical device.
 
+### T22.5 — Per-user cloud research spending limits (2026-10-23)
+
+Implemented on `feature/t22-5-per-user-spending`, based on current `main`
+`703442c`. Cloud inference now requires valid per-user and global ceilings
+configured through `SIGMA_CLOUD_USER_SPEND_CEILING_USD` and
+`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` (both fail closed; values above the
+pilot maxima of `$2.00` and `$15.00` are rejected). SQLite `BEGIN IMMEDIATE`
+reservations atomically include all usage for the verified workspace across
+projects and reserve against both ceilings. Unknown charges remain held across
+a fresh process; no monthly reset or administrator exception was added.
+Cloud session limits are enforced at six calls, 15 minutes, and `$0.25`; the
+shared queue enforces one running session per workspace and two globally.
+Local project settings are covered by a regression proving these caps do not
+change local-mode limits.
+
+Added an authenticated owner-only, no-store budget endpoint and compact Home
+summary for allowance, estimated use, held use, unknown charges, and remaining
+allowance. Exhaustion and invalid configuration do not block project or saved
+research reads. Research Limits explains the cloud caps. Updated
+`docs/CLOUD-AUTH.md` with configuration, durable accounting, and initial pilot
+allocation (five accounts including admin: `$10` combined per-user allowances
+and `$5` global reserve under the `$15` ceiling).
+
+Verification on the implementation tree: deterministic same-user concurrent
+spending race across two projects admitted exactly one of two `$0.10`
+reservations after `$0.15` persisted use; a separate Python process observed
+the same `$0.15` estimate, `$0.10` unknown held charge, and zero remaining.
+Tests also cover missing/malformed/over-policy configs, cross-workspace forged
+reservations and query parameters, cloud session-cap clamping, exhausted-budget
+read access, and local-mode compatibility. `tests/cloud_research.py` and
+`tests/cloud_research_api.py` passed. `./sigma test` passed all backend
+regressions, Ruff/format, Pyright (zero diagnostics), frontend typecheck, and
+production build. Real Chrome `browser_checks/t23_1_google_signin.py` passed
+against an isolated local SIGMA backend and Vite server; its cloud status and
+budget were deterministic browser fixtures, and it opened a saved project
+while showing an exhausted allowance. No live or paid provider calls were
+made. Remaining operational verification: deploy with five authorized pilot
+accounts and explicitly configure the approved `$2`/`$15` values before
+enabling cloud inference; hosted deployment and real provider billing were
+intentionally not exercised.
+
 ## T20.1: Minor UI acceptance fixes (2026-10-23)
 
 Replaced the Project action's LaTeX wordmark with a compact typographic TeX

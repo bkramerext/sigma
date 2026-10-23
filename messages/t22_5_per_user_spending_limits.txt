@@ -1,0 +1,31 @@
+T22.5 — Per-User Cloud Research Spending Limits
+
+Branch: feature/t22-5-per-user-spending
+Base: 703442cfef6be004e8ed28e46f211ecf151e3f6e (current main at branch creation)
+PR: pending creation
+
+MET
+- Durable cloud accounting now requires SIGMA_CLOUD_USER_SPEND_CEILING_USD and SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD. Missing, malformed, non-finite, under-cent, and above-policy values fail closed. User ceilings cannot exceed $2.00; global ceilings cannot exceed $15.00.
+- Each provider call reserves nanodollar-rounded estimated spending in one BEGIN IMMEDIATE transaction against both the verified workspace's cumulative total and the global total. Totals span projects and remain attached to the stable verified Google subject's workspace across sign-out, email changes, revocation, and restart.
+- Reservations with uncertain outcomes remain held and visible as held/unknown; no age-based release or automatic retry was introduced. Previously confirmed usage remains cumulative.
+- Cloud sessions enforce at most $0.25 estimated cost, six model calls, and 15 minutes. Queue policy enforces one running session per user, two queued per user, and two running globally. Larger persisted project settings are effectively clamped for cloud; local limits remain unchanged.
+- Added authenticated GET /api/cloud-research/budget, with no caller-supplied owner selector, no-store responses, and workspace-filtered allowance, estimated usage, held usage, remaining amount, and unknown-attempt count.
+- Cloud Home shows the owner-only budget and explains that exhaustion/configuration errors do not remove access to saved research. The summary refreshes on focus and every 30 seconds.
+- Updated docs/CLOUD-AUTH.md and docs/STATUS.md with launch configuration, accounting semantics, reserve arithmetic, measured validation, and operational limits.
+- Deterministic tests cover a same-user concurrent reserve race across two projects, process restart with an unknown charge, independent user balances, forged workspace/owner selectors, invalid configs, limit clamping, exhausted-budget saved-session reads, and local-mode compatibility.
+
+UNMET
+- No implementation requirement in the scoped T22.5 ticket remains unmet.
+
+UNVERIFIED
+- Production deployment must explicitly configure the approved $2 user and $15 global limits before enabling paid cloud inference. These variables and the five-account invite roster were not inspected in a deployment.
+- No live/paid provider requests or hosted deployment tests were run, by instruction. Provider tests use deterministic fakes.
+- The five-account count is an external pilot invitation policy; this change does not add a maximum-invite administrative control. The $15 global ceiling still bounds total recorded/held spend.
+
+VERIFICATION
+- ./sigma test: PASS (full backend suite, Ruff check/format, Pyright with zero diagnostics, frontend typecheck and production build).
+- Focused: tests/cloud_research.py PASS; tests/cloud_research_api.py PASS.
+- Real Chrome: browser_checks/t23_1_google_signin.py PASS against isolated local backend/Vite on separate ports; budget and cloud identity responses were deterministic browser fixtures. Confirmed exhausted status, New/Open availability, and opening a saved project. No external Google OAuth or paid API call.
+- git diff --check: PASS.
+
+Do not self-merge. R4R requested after PR creation.

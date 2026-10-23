@@ -1535,6 +1535,7 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
   const ai = useAI();
+  const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -1635,6 +1636,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>These limits apply to future sessions. Existing sessions keep the limits captured when they started.</p>
+      {cloud?.enabled && <p className="settings-hint">Cloud research is capped at six calls, 15 minutes, and $0.25 estimated cost per session. Values above these limits are saved at the cloud cap.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
         <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2} max={30} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
@@ -1781,10 +1783,36 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
+type CloudResearchBudget = {
+  allowance_usd: number;
+  estimated_usage_usd: number;
+  held_usd: number;
+  reserved_and_estimated_usd: number;
+  remaining_usd: number;
+  unknown_provider_attempts: number;
+};
+
+function CloudResearchBudgetCard({ budget, error }: {
+  budget: CloudResearchBudget | null; error: string | null;
+}) {
+  const usd = (value: number) => new Intl.NumberFormat(undefined, {
+    style: 'currency', currency: 'USD', maximumFractionDigits: 9,
+  }).format(value);
+  return <section className="cloud-research-budget" aria-label="Cloud research budget" aria-live="polite">
+    <div><strong>Cloud research allowance</strong><span>{budget ? `${usd(budget.remaining_usd)} remaining of ${usd(budget.allowance_usd)}` : 'Loading allowance…'}</span></div>
+    {budget && <p>Estimated usage {usd(budget.estimated_usage_usd)} · held {usd(budget.held_usd)}{budget.unknown_provider_attempts ? ` · ${budget.unknown_provider_attempts} provider attempt${budget.unknown_provider_attempts === 1 ? '' : 's'} with unknown charges` : ''}</p>}
+    {error && <p role="status">{error} Saved projects and research remain available.</p>}
+    {budget && budget.remaining_usd <= 0 && <p role="status">The cloud inference allowance is exhausted. Saved projects and research remain available.</p>}
+    <small>Cloud sessions: up to 6 model calls, 15 minutes, and $0.25 estimated cost each.</small>
+  </section>;
+}
+
 function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
+  const [cloudBudget, setCloudBudget] = useState<CloudResearchBudget | null>(null);
+  const [cloudBudgetError, setCloudBudgetError] = useState<string | null>(null);
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -1797,6 +1825,24 @@ function Home({ initialPath, onOpen }: {
   const [creditStreaks, setCreditStreaks] = useState<number[]>([]);
   const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
+  useEffect(() => {
+    if (!cloud?.enabled || !cloud.authenticated) return;
+    let active = true;
+    const refresh = () => {
+      fetch('/api/cloud-research/budget', { credentials: 'same-origin', cache: 'no-store' })
+        .then(async response => {
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.detail || 'Cloud research budget is unavailable.');
+          return body as CloudResearchBudget;
+        })
+        .then(value => { if (active) { setCloudBudget(value); setCloudBudgetError(null); } })
+        .catch(error => { if (active) setCloudBudgetError(error instanceof Error ? error.message : 'Cloud research budget is unavailable.'); });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, [cloud?.enabled, cloud?.authenticated]);
   useEffect(() => {
     // CSS background-size: cover scales the source image by the larger of
     // viewport-width/image-width and viewport-height/image-height. Apply
@@ -1849,6 +1895,7 @@ function Home({ initialPath, onOpen }: {
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="cloud-home-prompt"><p>Private research workspace</p><h1>Sign in to access projects</h1><span>Your projects and research are available after an administrator authorizes your Google account.</span></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
+        {cloud?.enabled && cloud.authenticated && <CloudResearchBudgetCard budget={cloudBudget} error={cloudBudgetError}/>}
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
