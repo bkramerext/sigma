@@ -8,13 +8,16 @@ the untracked `messages/t22_architecture-assessment.txt` was preserved and was
 not added to the spike. Implementation is isolated in `cloud-spike/`, on
 `cloud/t22-1-feasibility-spike`. See its [report](../cloud-spike/README.md) for
 the six-gate evidence table, source links and reproduction steps.
+[PR #22](https://github.com/bkramerext/sigma/pull/22) is open, stacked on the
+existing PR #21 requirements branch; it has not been merged.
 
 Actual successful verification:
 
 - `./sigma test`: all executable scenarios, Ruff lint/format, Pyright, frontend
   typecheck and production build passed. Local application code and existing
   project data were not migrated or changed.
-- `npm --prefix cloud-spike test` and `npm --prefix cloud-spike run typecheck`:
+- `npm --prefix cloud-spike ci --ignore-scripts --no-audit --no-fund`,
+  `npm --prefix cloud-spike test` and `npm --prefix cloud-spike run typecheck`:
   passed against real local Miniflare D1/R2 bindings. The scenario covers
   concurrent project revision CAS, batch rollback, duplicate enqueue/dispatch,
   global/per-user budgets and concurrency, cross-owner denial, completion

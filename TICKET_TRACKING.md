@@ -45,7 +45,7 @@
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
 | T21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
 | T22 | Cloud deployment | T22.1 local feasibility checked; remote/security gates open | Red · ChatGPT authored ticket |
-| T22.1 | Cloudflare runtime, scientific isolation and durable storage spike | Local checks pass; remote deployment and model access unverified | Red · [requirements PR #21](https://github.com/bkramerext/sigma/pull/21) |
+| T22.1 | Cloudflare runtime, scientific isolation and durable storage spike | Local checks pass; remote deployment and model access unverified | Red · [spike PR #22](https://github.com/bkramerext/sigma/pull/22), stacked on [requirements PR #21](https://github.com/bkramerext/sigma/pull/21) |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
