@@ -410,6 +410,24 @@ capture semantics; queued work never starts after stop. Exact computations
 and agent agreement do not establish formal verification. See
 [Sage execution](SAGE-EXECUTION.md) for setup, contracts and measured limits.
 
+## T22.2: opt-in cloud identity boundary
+
+Cloud authentication is disabled by default and sits at the FastAPI API boundary.
+When enabled, use Google authorization-code OIDC with PKCE, one-use server-side
+state/nonce, strict signed ID-token validation and exact verified-email
+authorization. Store hashed opaque sessions, access rules and change audit in a
+private SQLite database outside research packages. Recheck authorization on
+every request so revocation takes effect without waiting for cookie expiry.
+Keep the configured bootstrap administrator bound to its first stable Google
+subject. Preserve local ChatGPT authorization; hosted Google identity does not
+authorize provider calls, and cloud mode denies the existing process-wide AI
+routes. This ticket establishes access to the current API but deliberately does
+not migrate or isolate project storage by user; it is not a completed
+multi-tenant deployment. Unapproved verified identities get an access screen,
+the configured public invitation contact through `mailto:`, a fresh Google
+account-selection flow, and a no-workspace `/demo` handoff. The curated
+read-only Demo itself remains in parent T22. See [cloud authentication](CLOUD-AUTH.md).
+
 ## T28: Inspect and cite existing computational evidence
 
 Keep artifact comprehension inside the existing Python/SageMath execution and

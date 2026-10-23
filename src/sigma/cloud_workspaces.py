@@ -13,14 +13,15 @@ import os
 import re
 import sqlite3
 import stat
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
 from uuid import uuid4
 
+from sigma.cloud_auth import Principal
 from sigma.ui_instance import private_directory
 
 _SAFE_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -42,14 +43,18 @@ _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", def
 
 def enabled() -> bool:
     """Cloud auth is an explicit opt-in; local SIGMA does not need cloud config."""
-    return os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "false").strip().casefold() == "true"
+    return os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def current() -> Workspace | None:
     return _CURRENT.get()
 
 
-def bind(principal: Any) -> Token[Workspace | None]:
+def bind(principal: Principal) -> Token[Workspace | None]:
     """Provision or load the private workspace for a verified auth principal."""
     subject = getattr(principal, "subject", None)
     if not isinstance(subject, str) or not subject or len(subject) > 255:
@@ -229,7 +234,7 @@ def private_state_directory() -> Path | None:
 
 
 @contextmanager
-def request_scope(principal: Any) -> Iterator[Workspace]:
+def request_scope(principal: Principal) -> Iterator[Workspace]:
     token = bind(principal)
     try:
         workspace = current()

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref, type ReactNode } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -1180,8 +1180,9 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   </div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+  const cloud = useCloudIdentity();
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
@@ -1196,8 +1197,8 @@ function Header({ goHome, close, projectTitle, projectType, projectView, onProje
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in planned for cloud support (coming soon)" data-tooltip="Google sign-in planned for cloud support (coming soon)" aria-label="Google Sign-in planned for cloud support (coming soon)"><span className="connection-dot" aria-hidden="true"/>Google Sign-in</span>
-      <ConnectionStatus disabled={connectionDisabled} projectHeader/>
+      {cloud ? <CloudIdentityControls compact/> : null}
+      {!cloud && <ConnectionStatus disabled={connectionDisabled} projectHeader/>}
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
   </header>;
@@ -1760,6 +1761,7 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
 function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
+  const cloud = useCloudIdentity();
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -1820,15 +1822,17 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><ConnectionStatus/></div>
-      <section className="home-projects" aria-labelledby="home-projects-heading">
+      <div className="home-topline">{cloud ? <CloudIdentityControls/> : <ConnectionStatus/>}</div>
+      {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="cloud-home-prompt"><p>Private research workspace</p><h1>Sign in to access projects</h1><span>Your projects and research are available after an administrator authorizes your Google account.</span></section>}
+      {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
           <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
         </div>
         <HomeCatalog onOpen={onOpen}/>
-      </section>
+      </section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={launchCreditStreak} onClick={launchCreditPlunk}><span>By Brian Kramer, ChatGPT &amp; Codex</span><time dateTime="2026-10">October 2026</time>{creditStreaks.map(id => <span key={id} className="home-credit-streak" aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
@@ -2509,5 +2513,84 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
+type CloudStatus = { enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
+type CloudGrant = { kind: string; value: string; role: string; active: number };
+type CloudAccountSession = { email: string; role: string; expires_at: number };
+type CloudIdentityState = CloudStatus & { deniedEmail: string | null; openAccessManagement: () => void };
+const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
+function useCloudIdentity() { return useContext(CloudIdentityContext); }
+function CloudIdentityControls({ compact = false }: { compact?: boolean }) {
+  const cloud = useCloudIdentity();
+  if (!cloud?.enabled) return null;
+  if (!cloud.authenticated) return cloud.deniedEmail ? null : <div className={`cloud-home-controls${compact ? ' compact' : ''}`}><a className="cloud-signin-control" href="/api/cloud-auth/login">Continue with Google</a></div>;
+  return <div className={`cloud-home-controls cloud-home-user${compact ? ' compact' : ''}`}><span className="cloud-user-email">{cloud.user?.email}</span>{cloud.user?.role === 'admin' && <button type="button" onClick={cloud.openAccessManagement}>Access Management</button>}<button type="button" onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/'); }}>Sign out</button></div>;
+}
+function CloudAuthGate() {
+  const [status, setStatus] = useState<CloudStatus | null>(null);
+  const [failure, setFailure] = useState('');
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [grants, setGrants] = useState<CloudGrant[]>([]);
+  const [accountSessions, setAccountSessions] = useState<CloudAccountSession[]>([]);
+  const [bootstrapAdmin, setBootstrapAdmin] = useState('');
+  const [kind, setKind] = useState<'email' | 'domain'>('email');
+  const [value, setValue] = useState('');
+  const [role, setRole] = useState<'member' | 'admin'>('member');
+  const [busy, setBusy] = useState(false);
+  const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch('/api/cloud-auth/status', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('Cloud authentication could not be checked.');
+      const current = await response.json() as CloudStatus;
+      if (current.enabled && !current.authenticated && new URLSearchParams(window.location.search).get('access') === 'denied') {
+        const denied = await fetch('/api/cloud-auth/denied', { credentials: 'same-origin', cache: 'no-store' });
+        if (denied.ok) setDeniedEmail((await denied.json() as { email: string }).email);
+        else { setDeniedEmail(null); window.history.replaceState(null, '', '/'); }
+      } else setDeniedEmail(null);
+      setStatus(current); setFailure(current.ready ? '' : 'Cloud sign-in is not configured correctly.');
+    } catch { setFailure('SIGMA could not check sign-in. Refresh this page or contact the administrator.'); }
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const loadGrants = useCallback(async () => {
+    const response = await fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('Access rules could not be loaded.');
+    const result = await response.json() as { grants: CloudGrant[]; sessions: CloudAccountSession[]; bootstrap_admin: string };
+    setGrants(result.grants); setAccountSessions(result.sessions); setBootstrapAdmin(result.bootstrap_admin);
+  }, []);
+  async function addGrant(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setFailure('');
+    try {
+      const response = await fetch('/api/cloud-auth/admin/grants', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, value, role: kind === 'domain' ? 'member' : role }) });
+      if (!response.ok) throw new Error((await response.json() as { error?: string }).error || 'Access rule could not be saved.');
+      setValue(''); await loadGrants();
+    } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be saved.'); }
+    finally { setBusy(false); }
+  }
+  async function revoke(grant: CloudGrant) {
+    setBusy(true); setFailure('');
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/grants/${grant.kind}/${encodeURIComponent(grant.value)}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Access rule could not be revoked.');
+      await loadGrants();
+    } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be revoked.'); }
+    finally { setBusy(false); }
+  }
+  const context: CloudIdentityState | null = status?.enabled ? { ...status, deniedEmail, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(String(error))); } } : null;
+  if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
+  if (!status.enabled) return <AIProvider><App/></AIProvider>;
+  if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
+  if (window.location.pathname === '/demo') return <main className="cloud-auth-shell"><section className="cloud-auth-card"><p className="cloud-auth-kicker">Public read-only preview</p><h1>SIGMA Demo</h1><p>The shared curated Demo is part of the T22 guest experience and is not provisioned as a private workspace.</p><p>This route is ready for that read-only Demo surface; its project and report views will be delivered with the T22 guest access work.</p><a className="cloud-auth-button" href="/">Return to sign in</a></section></main>;
+  return <CloudIdentityContext.Provider value={context}><>{status.authenticated ? <AIProvider><App/></AIProvider> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}{accessOpen && <div className="cloud-access-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAccessOpen(false); }}><section className="cloud-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-access-title"><button className="cloud-access-close" onClick={() => setAccessOpen(false)} aria-label="Close access management">×</button><p className="cloud-auth-kicker">Administrator</p><h2 id="cloud-access-title">Access Management</h2><p>Invitations are authorization entries. SIGMA does not send email.</p><form onSubmit={addGrant}><label>Entry type<select value={kind} onChange={event => setKind(event.target.value as 'email' | 'domain')}><option value="email">Email address</option><option value="domain">Exact verified email domain</option></select></label><label>{kind === 'email' ? 'Email address' : 'Domain'}<input required value={value} onChange={event => setValue(event.target.value)} placeholder={kind === 'email' ? 'person@example.org' : 'example.org'}/></label>{kind === 'email' && <label>Access<select value={role} onChange={event => setRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Administrator</option></select></label>}<button disabled={busy}>Add authorization</button></form><h3>Accounts and sessions</h3><p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>{accountSessions.length ? <ul aria-label="Authorized account sessions">{accountSessions.map(session => <li key={session.email}><span><strong>{session.email}</strong><small>{session.role} · session expires {new Date(session.expires_at * 1000).toLocaleString()}</small></span></li>)}</ul> : <p className="cloud-access-bootstrap">No active authorized sessions.</p>}<h3>Authorized entries</h3><ul>{grants.map(grant => <li key={`${grant.kind}:${grant.value}`}><span><strong>{grant.value}</strong><small>{grant.kind} · {grant.role}{grant.active ? '' : ' · revoked'}</small></span>{grant.active === 1 && <button disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}</li>)}</ul>{failure && <p role="alert">{failure}</p>}</section></div>}</></CloudIdentityContext.Provider>;
+}
+
+function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {
+  const subject = 'SIGMA invitation request';
+  const body = `Hello,\n\nI signed in to SIGMA with my Google account (${email}), but access has not yet been granted. Please consider inviting me.\n\nThank you.`;
+  const requestHref = contactEmail
+    ? `mailto:${contactEmail}?${new URLSearchParams({ subject, body })}`
+    : undefined;
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore Demo</a>{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div></section>;
+}
+
 installRequestErrorToasts();
-createRoot(document.getElementById('root')!).render(<AIProvider><App/><RequestErrorToasts/></AIProvider>);
+createRoot(document.getElementById('root')!).render(<><CloudAuthGate/><RequestErrorToasts/></>);

@@ -1,6 +1,6 @@
 """Two-subject production API isolation, restart, revocation, and restore test."""
 
-import json
+import asyncio
 import os
 import shutil
 import socket
@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from uuid import uuid4
 
 import httpx
 
@@ -34,7 +35,9 @@ class Server:
                 "SIGMA_STATE_DIR": str(root / "shared-local-state"),
             }
         )
-        test_path = os.pathsep.join((str(Path(__file__).parent), str(Path(__file__).parents[1] / "src")))
+        test_path = os.pathsep.join(
+            (str(Path(__file__).parent), str(Path(__file__).parents[1] / "src"))
+        )
         environment["PYTHONPATH"] = test_path + os.pathsep + environment.get("PYTHONPATH", "")
         self.process = subprocess.Popen(
             [
@@ -98,6 +101,39 @@ def request(client: httpx.Client, method: str, path: str, **kwargs) -> httpx.Res
     return response
 
 
+def check_proposal_cancellation_scope() -> None:
+    """A guessed cancellation UUID in B cannot cancel A's in-flight proposal."""
+    from sigma import cloud_workspaces, proposals
+
+    async def exercise_cancel_scope() -> None:
+        request_id = str(uuid4())
+        task = asyncio.create_task(asyncio.Event().wait())
+        first = cloud_workspaces.Workspace("a" * 32, "a" * 64, Path("/workspace-a"))
+        second = cloud_workspaces.Workspace("b" * 32, "b" * 64, Path("/workspace-b"))
+        token = cloud_workspaces._CURRENT.set(first)
+        proposals.register_request(request_id, task)
+        cloud_workspaces.reset(token)
+        try:
+            token = cloud_workspaces._CURRENT.set(second)
+            try:
+                assert not await proposals.cancel_request(request_id)
+                assert not task.cancelled()
+            finally:
+                cloud_workspaces.reset(token)
+            token = cloud_workspaces._CURRENT.set(first)
+            try:
+                assert await proposals.cancel_request(request_id)
+                assert task.cancelling()
+                proposals.unregister_request(request_id, task)
+            finally:
+                cloud_workspaces.reset(token)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    asyncio.run(exercise_cancel_scope())
+
+
 def exercise(root: Path) -> tuple[str, str, str, str]:
     server = Server(root)
     try:
@@ -129,8 +165,7 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             assert not any(path.suffix == ".sigma" for path in workspace_b.iterdir())
 
             local_project = root / "local-projects" / "local-only.sigma"
-            local_project.mkdir(parents=True, mode=0o700)
-            (local_project / "project.json").write_text("local private sentinel", encoding="utf-8")
+            assert (local_project / "project.json").is_file()
             hidden_local = request(
                 user_a,
                 "GET",
@@ -166,14 +201,21 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
                 headers=identity("subject-a", email="changed@example.test"),
             )
             try:
-                assert request(changed_email, "GET", "/api/projects/recent").json()["projects"][0][
-                    "id"
-                ] == a_id
+                assert (
+                    request(changed_email, "GET", "/api/projects/recent").json()["projects"][0][
+                        "id"
+                    ]
+                    == a_id
+                )
             finally:
                 changed_email.close()
             assert request(admin, "GET", "/api/projects/recent").json()["projects"] == []
-            assert request(user_a, "GET", "/api/projects/recent").json()["projects"][0]["id"] == a_id
-            assert request(user_b, "GET", "/api/projects/recent").json()["projects"][0]["id"] == b_id
+            assert (
+                request(user_a, "GET", "/api/projects/recent").json()["projects"][0]["id"] == a_id
+            )
+            assert (
+                request(user_b, "GET", "/api/projects/recent").json()["projects"][0]["id"] == b_id
+            )
 
             b_strategy = request(
                 user_b,
@@ -194,6 +236,16 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             )
             assert execution_response.status_code == 201, execution_response.text
             execution_id = execution_response.json()["id"]
+            failed_execution = request(
+                user_b,
+                "POST",
+                "/api/projects/research-executions",
+                json={"path": b_path, "source": "# deterministic failure"},
+            )
+            assert failed_execution.status_code == 201, failed_execution.text
+            failed_execution_id = failed_execution.json()["id"]
+            assert failed_execution.json()["status"] == "failed"
+            assert failed_execution.json()["stderr"] == "fixture failure\n"
             artifact = request(
                 user_b,
                 "GET",
@@ -204,13 +256,22 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
 
             cross_reads = [
                 user_a.get("/api/projects/inspect", params={"path": b_path}),
+                user_a.post("/api/projects/open", json={"path": b_path}),
                 user_a.get("/api/projects/strategies", params={"path": b_path}),
                 user_a.get("/api/projects/export", params={"path": b_path}),
                 user_a.get("/api/projects/export/report", params={"path": b_path}),
                 user_a.get("/api/projects/research-sessions", params={"path": b_path}),
+                user_a.get(
+                    "/api/projects/research-sessions/00000000-0000-4000-8000-000000000000",
+                    params={"path": b_path},
+                ),
                 user_a.get("/api/projects/research-executions", params={"path": b_path}),
                 user_a.get(
                     f"/api/projects/research-executions/{execution_id}", params={"path": b_path}
+                ),
+                user_a.get(
+                    f"/api/projects/research-executions/{failed_execution_id}",
+                    params={"path": b_path},
                 ),
                 user_a.get(
                     f"/api/projects/research-executions/{execution_id}/artifacts/evidence.txt",
@@ -219,8 +280,11 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
                 user_a.get("/api/projects/papers", params={"path": b_path}),
                 user_a.get("/api/projects/events", params={"path": b_path}),
                 user_a.get("/api/projects/text", params={"path": b_path, "scope": "project"}),
+                user_a.get("/api/projects/proposals/config", params={"path": b_path}),
+                user_a.get("/api/projects/proposals/agentic/runs", params={"path": b_path}),
                 user_a.get(
-                    "/api/projects/proposals/config", params={"path": b_path}
+                    "/api/projects/papers/00000000-0000-4000-8000-000000000000/pdf",
+                    params={"path": b_path},
                 ),
             ]
             assert all(response.status_code == 404 for response in cross_reads), [
@@ -228,6 +292,21 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             ]
             for response in cross_reads:
                 assert response.json() == {"error": "Project not found or access denied."}
+
+            # A guessed user B project ID is scoped to user A's Recent index;
+            # forgetting it cannot remove or reveal user B's entry.
+            assert (
+                request(
+                    user_a,
+                    "POST",
+                    "/api/projects/recent/forget",
+                    json={"project_id": b_id},
+                ).status_code
+                == 200
+            )
+            assert (
+                request(user_b, "GET", "/api/projects/recent").json()["projects"][0]["id"] == b_id
+            )
 
             cross_write = request(
                 user_a,
@@ -258,7 +337,9 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             )
             expect_hidden(remove_cross)
 
-            traversal = str(Path(a_path).parent / ".." / Path(b_path).parent.name / Path(b_path).name)
+            traversal = str(
+                Path(a_path).parent / ".." / Path(b_path).parent.name / Path(b_path).name
+            )
             expect_hidden(
                 request(user_a, "GET", "/api/projects/inspect", params={"path": traversal})
             )
@@ -279,9 +360,7 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             )
 
             # A forged request with no validated principal fails closed.
-            unauthenticated = httpx.get(
-                f"{server.url}/api/projects/recent", timeout=5
-            )
+            unauthenticated = httpx.get(f"{server.url}/api/projects/recent", timeout=5)
             assert unauthenticated.status_code == 401, unauthenticated.text
             revoked = httpx.get(
                 f"{server.url}/api/projects/recent",
@@ -290,7 +369,9 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             )
             assert revoked.status_code == 401
             assert (Path(a_path) / "project.json").is_file()
-            assert request(user_a, "GET", "/api/projects/recent").json()["projects"][0]["id"] == a_id
+            assert (
+                request(user_a, "GET", "/api/projects/recent").json()["projects"][0]["id"] == a_id
+            )
 
             db_bytes = (workspaces / "workspaces.sqlite3").read_bytes()
             assert b"subject-a" not in db_bytes and b"subject-b" not in db_bytes
@@ -309,6 +390,7 @@ def stat_mode(path: Path) -> int:
 
 
 def main() -> None:
+    check_proposal_cancellation_scope()
     with TemporaryDirectory(prefix="sigma-cloud-workspaces-") as temporary:
         root = Path(temporary)
         os.chmod(root, 0o700)

@@ -105,6 +105,147 @@ Validation: `browser_checks/recents.py`, `browser_checks/settings.py`,
 `tests/project_reports.py`, and `./sigma test` passed on the integrated main
 state. No paid provider calls were made.
 
+## T17.8 deterministic acceptance on current main (2026-10-23)
+
+This pass starts from current `main` at `ef3aadc` (T21 PR #38), which includes
+A17.6/A17.7, T27's research-intelligence changes, and T28's computational
+evidence integration. No provider/model endpoint was invoked. The two
+`docs/ASSIGNMENT-A17.6.md` and `docs/ASSIGNMENT-A17.7.md` files named in the
+ticket are absent in this checkout; the historical implementation and
+verification records remain in this file. T29's human-intervention branch is
+not part of this main snapshot and is outside this acceptance scope.
+
+At initial PR publication, `main` had advanced to `e58eccd` with
+documentation-only software-factory commits. That base was merged into the
+branch; the application and test tree used for that initial validation did not
+change. GitHub metadata at that earlier PR head reported `mergeable: false`
+despite a clean local merge/compare. The subsequent T29 integration and fresh
+PR state are recorded below.
+
+### Workflow trace and falsifiable rubric
+
+The current pipeline takes the persisted project question and session strategy
+snapshot into `_agent_context` / `_role_request`, saves the validated
+Investigator output and its execution/citations, gives the Skeptic the
+ordered saved artifact history, validates its structured review, and runs the
+coordinator in `src/sigma/research_sessions.py`. The coordinator requires an
+achieved, `convincing_unverified` review with a claim, argument summary,
+obligations, no unresolved objections or remaining obligations, and valid
+supporting artifact references. It persists the objective review, Skeptic
+objections, coordinator decision and strategy review together with the
+artifact. `_outcome_without_metrics` keeps objective state separate from
+session execution state and labels an achieved result as a solution candidate
+(unverified). `_strategy_assessments` derives contribution only from saved,
+strategy-linked review evidence and the eligibility snapshot. Session APIs
+project the same records for the workspace; `src/sigma/project_reports.py`
+exports saved outcomes and evidence. This is a structured evidence contract,
+not a proof checker: the product cannot independently establish that a
+provider's mathematical analysis is sound.
+
+For Maximum Regions, the external acceptance rubric is: an upper bound must
+justify why the k-th inserted line contributes at most k regions; an attaining
+construction must justify that each earlier intersection is distinct; and
+the empty arrangement must be handled. Numerical examples alone do not prove
+the general result. This rubric was not added to either prompt. The
+answer-free regression creates the exact question and a bounded insertion
+strategy, then verifies both captured Investigator and Skeptic request
+contexts contain neither the expected formula nor the known construction.
+No prompt receives the evaluator reference answer.
+
+### Deterministic adversarial evidence
+
+Added `test_maximum_regions_false_candidate_is_rejected` to
+`tests/research_sessions.py`. It sends the Investigator's plausible but false
+candidate `R(n)=n^2+1`, then a specific Skeptic objection: at n=2, two distinct
+lines form at most four regions, contradicting the candidate's predicted
+five. The end-to-end session stops as `stop_decisive_counterexample`, persists
+the objection and `not_achieved` review, projects a negative outcome, and
+marks its strategy unproductive. The test also confirms the reference formula
+and counterexample were absent from the initial Investigator context and
+checks the saved response after reopening the session.
+
+Existing deterministic cases cover the other boundaries: a complete
+Maximum Regions argument can end positively with no next question while
+remaining `convincing_unverified`; an unsupported component-identification
+step with an explicit Skeptic objection remains incomplete; and a three-cycle
+proof can close obligations only after the Skeptic reviews ordered evidence.
+`test_answer_free_maximum_regions_prompt` checks prompt leakage. The
+binary-string Fibonacci scenario applies the same achieved/partial contract to
+a different proof mechanism. Outcome and strategy attribution tests cover
+unknown legacy attribution, project-order snapshots, noncontributors,
+disabled strategies, and strategy edits after the session. T28 scenarios
+cover saved computational execution, citation validation, captured artifacts
+and cross-session evidence. The Chrome A17 scenario exercises the workspace
+and report projection of historical, interrupted and completed sessions.
+
+### Acceptance matrix
+
+| Criterion | Status | Evidence and limit |
+|---|---|---|
+| 1. Solution quality | **UNVERIFIED** | No real provider calls were made under the no-paid-call restriction. The historical 2026-10-22 Maximum Regions run in the earlier A17.8 section is preserved, but it used a shipped solution-bearing strategy and therefore does not qualify as independent discovery. Deterministic fixtures cannot establish agent discovery. |
+| 2. Meaningful criticism | **MET** | Deterministic Maximum Regions complete/incomplete/counterexample cases exercise an explicit material objection, a contradicted false claim, a retracted false alarm, and an adequately supported conclusion. The live-model tendency to critique remains empirically unverified. |
+| 3. Sound coordination | **MET** | `test_maximum_regions_solution_and_frozen_attribution` and the generic binary-string scenario prove that an achieved review with an empty next question ends productively; the new false-candidate case ends on a decisive counterexample. |
+| 4. Calibrated conclusions | **MET** | Unsupported and incomplete reviews remain unresolved; a refuted candidate is negative; successful model-style agreement stays `convincing_unverified`. Historical and current code paths do not call agreement independent proof verification. |
+| 5. Evidence-based attribution | **MET** | Deterministic session tests tie solution contribution to referenced saved artifacts and preserve project order, eligibility snapshots, disabled/not-used/unproductive states, and historical labels after strategy edits. |
+| 6. Generalization | **MET** | The same structured review path is exercised by the different Fibonacci recurrence proof and an incomplete variant. This establishes deterministic contract reuse only; no second live problem was run. |
+| 7. Operational reliability | **MET** | Current-main `./sigma test` passed; real Chrome `browser_checks/a17_research.py` passed against the isolated provider fixture. Research-session, computational-evidence, report, persistence, recovery, lifecycle, export and browser scenarios passed. Live provider reliability and quality remain unverified. |
+| 8. Reproducible evidence | **MET** | Exact commands/results, the new adversarial fixture, screenshot locations and historical session/artifact IDs are recorded here and in `messages/t17.8_gray_acceptance.txt`. Test-generated sessions assert persisted artifact/session linkage. No live usage or cost is claimed. |
+
+### Verification and decision
+
+Passed after adding the false-candidate regression:
+
+- `uv run --locked --no-sync python tests/research_sessions.py`
+- `uv run --locked --no-sync python tests/project_reports.py`
+- `uv run --locked --no-sync python tests/computational_evidence.py`
+- `uv run --locked --no-sync python tests/agentic_evidence.py`
+- `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8022 uv run --with playwright python browser_checks/a17_research.py` (real Chrome; isolated local fixture)
+- `./sigma test` (all steps passed after the final regression addition)
+
+Chrome captures from the A17 journey include `/tmp/sigma-a177-after-maximum-regions.png`,
+`/tmp/sigma-a1771-after-maximum-regions-html.png`,
+`/tmp/sigma-a1771-after-maximum-regions-export-mobile.png`, and
+`/tmp/sigma-a177-after-export-mobile.png`. The browser journey emitted
+`PASS real Chrome A18: existing workspace and export flows, multi-strategy
+selection, concurrent live activity, and stop during provider work` (the
+script is `browser_checks/a17_research.py`; “live activity” here is fixture
+traffic, not a live model).
+
+No product workflow defect requiring implementation changes was found. The
+new test closes a deterministic acceptance gap; existing product behavior
+passed. Recommendation: accept the deterministic/evidence-contract portion
+for human review, keep T17.8 open, and leave genuine real-agent solution
+quality **UNVERIFIED** until a separately authorized bounded real-provider
+trial can be run. This restriction does not authorize such a trial.
+
+### T29 integration recheck (2026-10-23)
+
+After T29 PR #39 merged as `aaf0995`, I merged current `main` into the T17.8
+branch at `29d5d53`. Git merged the overlapping ticket tracker, STATUS, and
+research-session test files automatically; there were no content conflicts or
+manual resolutions. The T17.8 false-candidate regression remains at
+`tests/research_sessions.py::test_maximum_regions_false_candidate_is_rejected`.
+
+On this integrated source tree, focused `tests/research_sessions.py`,
+`tests/project_reports.py`, `tests/computational_evidence.py`, and
+`tests/agentic_evidence.py` passed. Real Chrome also passed
+`browser_checks/a17_research.py` against a fresh isolated fixture and
+`browser_checks/t29_intervention.py` against another fresh fixture. The latter
+confirmed an objection can be submitted during fixture-backed research without
+spending a provider call, and that acknowledgement/provenance and mobile layout
+remain intact. Full `./sigma test` passed after the merge, including T29's
+service, export-sample, lint, Pyright, frontend typecheck, and production-build
+checks. No live or paid provider calls were made. Screenshots include
+`/tmp/sigma-t29-intervention-mobile.png` and the A17 outcome/report captures
+listed above.
+
+No T17.8/T29 conflict or acceptance blocker was found. T17.8 remains open for
+human sign-off; real-model solution quality remains **UNVERIFIED**.
+After pushing this integration, GitHub's pull-request REST state reports PR #41
+as `mergeable: true`, `mergeable_state: clean`, with base `aaf0995` and head
+`c1fe8ea`. A prior connector snapshot still returned `mergeable: false`; the
+current REST state confirms that is stale connector metadata, not a conflict.
+
 ## PR #35 review follow-up (2026-10-23)
 
 The A17 0/30 stop came from the cost-limit input, not a provider or
@@ -3486,6 +3627,83 @@ Verification after these review changes passed on 2026-10-23: focused
 the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
 frontend typecheck, and production build. No live provider calls were made.
 
+## T22.2: Google authentication and invited access (2026-10-23)
+
+Implemented cloud authentication as an explicit deployment opt-in. When enabled,
+the FastAPI boundary requires a live server-side session for every API route
+except readiness/status and the OIDC begin/callback endpoints; mutating requests
+require the configured exact Origin. Local mode stays on the existing behavior.
+The Google flow uses authorization code plus PKCE S256, one-time state and
+nonce, fixed Google discovery/token endpoints, published JWKS signature
+verification, exact issuer/audience, expiry, nonce, subject and `email_verified`
+checks. Access is limited to normalized exact email entries, exact email domains,
+and the configured bootstrap administrator. Explicit revoked email rules win
+over domain rules. Session cookies are Secure, HttpOnly, SameSite=Lax host-only
+cookies; only SHA-256 session digests are stored in a private SQLite file.
+
+Administrators can list, add and revoke email/domain entries and grant an email
+administrator role through the copper/dark Access Management UI. No invitation
+emails are sent. Cloud mode denies the process-wide `/api/ai/*` endpoints so a
+Google account cannot inherit local ChatGPT authorization or AI billing. The
+bootstrap email is bound to its first Google subject. Configuration and setup
+are documented in [CLOUD-AUTH](CLOUD-AUTH.md).
+
+`tests/cloud_auth.py` uses generated local RSA signing keys and mocked Google
+responses; it verifies successful bootstrap and individual invitation, exact
+domain matching, lookalike denial, signature/issuer/audience/expiry/nonce/email
+claim rejection, OAuth state replay, session expiry, revocation against existing
+sessions, API route protection, spoofed identity-header rejection, missing
+configuration fail-closed behavior, and local-mode compatibility. No live Google
+or model-provider calls are involved.
+
+Following the T22.2 acceptance update, an unauthorized valid identity now lands
+on a distinct “Access not yet granted” page. Its three actions link to the
+parent-T22 `/demo` route without creating a workspace, open a prefilled
+`mailto:` invitation request using `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`, or restart
+Google sign-in with `prompt=select_account`. The public status response exposes
+only the configured contact and the current caller's own identity state; it
+does not expose grants or other users. `/demo` is a no-workspace handoff page;
+the curated read-only Demo and guest APIs remain T22 work.
+
+Explicit limits: no per-user project/workspace isolation or migration, guest
+Demo, durable job scheduling, cloud deployment, or hosted AI-provider auth was
+implemented. The existing file-backed project API remains shared across
+authorized cloud users, so this auth increment alone must not be treated as a
+private multi-tenant research deployment. No deployment credentials or Google
+OAuth client were created.
+
+Final verification on 2026-10-23 passed: `./sigma test` (including six focused
+cloud-auth tests, all backend scenarios, the 10-strategy 20/20-call load case,
+Ruff, Pyright with zero errors/warnings, frontend typecheck, and production
+build), plus `browser_checks/t22_access_denied.py` in real Chrome at desktop and
+mobile viewport sizes. The browser check verified the denied screen, configured
+prefilled `mailto:` request, account-switch link, and `/demo` handoff without
+project or AI API calls. No live Google or model-provider calls were made.
+
+## T22.2 PR #37 corrections (2026-10-23)
+
+Moved cloud sign-in into the existing copper/dark Home header above Projects;
+authenticated account actions now stay in the Home/project headers. Removed the
+legacy Google placeholder. Unauthenticated cloud visitors render Home without
+mounting the private App/catalog, so the screen makes no private project or AI
+requests and creates no workspace. The local-disabled branch continues to mount
+the original local App and APIs without cloud identity.
+
+An unauthorized callback now issues no session and stores the verified email
+only in a short-lived private denial record accessible through an opaque,
+Secure/HttpOnly cookie. The denial endpoint is separate from status and exposes
+only that attempt's email. The Home denial experience shows it and places it in
+the prefilled invitation draft. Starting account selection removes the record
+and cookie and retains Google's `prompt=select_account`. Curated Demo and private
+workspace storage remain in parent T22 scope.
+
+Correction verification passed on 2026-10-23: `./sigma test` (including eight
+focused cloud-auth tests, all backend scenarios, the 10-strategy 20/20-call load
+case, Ruff, Pyright with zero errors/warnings, frontend typecheck and production
+build); `uv run --with playwright python browser_checks/t22_access_denied.py`
+passed in real Chrome with cloud-denied and local-mode coverage at desktop and
+mobile widths. No live Google or model-provider calls were made.
+
 ## T28: Computational evidence and artifact comprehension (2026-10-23)
 
 T28 extends the existing Python and SageMath execution evidence. Agents now
@@ -3716,3 +3934,119 @@ tree at desktop and 390px mobile. It verified guidance submitted during an
 in-flight request causes no extra call, the targeted agent-step acknowledgment
 and provenance persist, and the mobile UI has no horizontal overflow. No live
 provider calls were made.
+
+## T22.2 PR #37 review corrections on current main (2026-10-23)
+
+Starting `/api/cloud-auth/login` now deletes the presented prior session digest
+from the private auth database and expires the host-only session cookie before
+beginning account selection. The denied callback also defensively deletes any
+presented session and expires its cookie, so a valid but unauthorized Google
+identity cannot leave an earlier account active. Authorized account switching
+uses the same fresh-login boundary. Local mode continues to bypass cloud auth.
+
+The administrator Access Management dialog now shows the configured bootstrap
+administrator and currently authorized sessions with role and expiry. Its
+backend summary removes expired or revoked sessions before returning them.
+Current-main project difficulty/catalog/header changes are retained, while the
+legacy Google placeholder is removed from project headers in favor of the cloud
+identity control when cloud auth is enabled.
+
+Deterministic `tests/cloud_auth.py` coverage now exercises authorized A to
+unauthorized B, authorized A to authorized B, and unauthorized B to Use Another
+Account against the real FastAPI middleware, SQLite session database, cookie
+responses, and protected API routes. It checks prior-session deletion and the
+appropriate private API access at each transition. The domain/revocation test
+uses separate browser clients for administrator and member identities.
+
+Validation on this integrated head passed: `./sigma test` (backend scenarios,
+all 10 cloud-auth tests, concurrency workloads, Ruff, format, Pyright with zero
+errors/warnings, frontend typecheck, and production build) and
+`uv run --with playwright python browser_checks/t22_access_denied.py` in real
+Chrome. The browser check covers the denied screen and request, account switch,
+Demo handoff, unrestricted local Home, and administrator session summary. No
+live Google or model-provider calls were made.
+
+### PR #37 refresh against main (2026-10-23)
+
+Fetched main at `6b6d1e458495d93dec0f78b2b983cf3b3acf39cc` and merged it into
+T22.2 at `e8ccb8e21b5bc87d738b67cc190a3bf5f2d54bd2`. The only textual conflict
+was `docs/STATUS.md`: retained T29's new intervention evidence and the existing
+T22.2 auth correction evidence together. `TICKET_TRACKING.md` and the T29 API,
+research-session service/tests, and frontend UI merged automatically; no
+functional hunk was discarded. T22.2 account-switch invalidation, admin
+session summary, cloud API protection, and local unrestricted mode remain in
+the integrated tree.
+
+On the integrated tree, `./sigma test` passed all backend scenarios, including
+10 cloud-auth tests, Ruff, format check, Pyright (zero diagnostics), frontend
+typecheck, and production build. Real Chrome checks also passed:
+`browser_checks/t22_access_denied.py` covered denied-account actions, request
+prefill, Demo handoff, local unrestricted Home, and Access Management session
+summary; `browser_checks/t29_intervention.py` covered intervention submission,
+no extra provider call, acknowledgment provenance, and mobile layout. T29's
+isolated fixture ran on port 8003 because port 8002 was already occupied by a
+different checkout; that listener was left untouched. No live provider calls
+were made.
+
+## T22 Gate A private workspaces against merged PR #37 (2026-10-23)
+
+Integrated current `main` at `24ca812f8502c594a673e7233bd7962e9b8c907b`
+(`24ca812`) into the private-workspace branch. Resolved the `src/sigma/api.py`
+conflict by retaining PR #37's cloud-auth middleware, trusted-host setup and
+router while adding a FastAPI request dependency that consumes the middleware's
+actual `cloud_auth.Principal`. Protected requests fail closed without that
+principal. Workspace selection uses only its verified Google `subject`; email,
+role, request headers, browser-supplied workspace IDs and paths do not select
+storage. Authorized OIDC callbacks provision an empty workspace before issuing
+the session. An unauthorized callback creates no workspace, and storage failure
+prevents session issuance.
+
+The mapping database stores a domain-separated subject hash and a random
+server-generated workspace ID. Project creation and all project-path services
+run under that request's workspace root; symlink, traversal and cross-root paths
+map to a generic 404. Recent-project state and proposal-cancellation IDs are
+workspace-scoped. Existing local project roots, recents, ChatGPT authorization,
+and CLI behavior remain active when cloud auth is disabled. The shared Samples
+catalog is read-only; opening a sample copies it into the current user's root.
+No legacy local projects are migrated or copied automatically.
+
+Added deterministic two-user integration coverage using a separate Uvicorn
+process around the production FastAPI app and real persistent project services.
+It checks isolation for projects, strategies, sessions, exports/reports,
+executions (including failed records), artifacts, paper URLs, proposals,
+text, and Recent IDs; forged headers; copied IDs and paths; traversal and
+symlinks; revocation data retention; server restart; and an offline workspace
+backup/restore preserving owner mappings and artifact bytes. A focused
+cancellation regression checks that another workspace cannot cancel a proposal
+by guessing its request ID. `tests/cloud_auth.py` now also verifies the actual
+mock-Google -> session -> merged middleware -> workspace path and proves
+forged subject/email/workspace headers cannot override the principal or cause a
+second mapping. An unauthorized identity does not provision a workspace.
+
+Real Chrome `browser_checks/t22_private_workspaces.py` passed with separate A/B
+browser contexts routed through the actual API/storage fixture: each created
+project appeared only in its own Recent list and a copied cross-user project
+path returned the generic 404. The existing OIDC/auth regressions passed all 10
+cases. Final `./sigma test` passed, including all backend tests, the new
+workspace and auth regressions, Ruff, format check, Pyright (zero diagnostics),
+frontend typecheck and production build. No Google or provider service calls
+were made. Ruff initially found import ordering/formatting issues and the test
+suite caught a bad test expectation on the stateless `/api/projects/close`
+endpoint; those were corrected before the final passing run. Starlette's
+existing `httpx` deprecation warnings remain informational.
+
+API ownership review found no uncovered private project/session/artifact path
+in the current route set: path-bearing operations reach the common
+`projects.project_path` boundary, root-based create/destination operations use
+the bound workspace, and recents/cancellation use workspace state. `/api/ui-instance`,
+the read-only shared Samples catalog, general execution-capability metadata,
+and authenticated `/api/cloud-auth/*` administration are separate surfaces.
+Gate B remains a required dependency before cloud research execution is
+deployment-ready: current cloud auth blocks `/api/ai/*`, but model-backed
+project routes such as proposal generation, research-session start, paper
+generation and text conversion still use the process-level provider context if
+configured. They are project-path scoped but not yet authorized against
+per-user provider credentials/budgets. This increment did not add Gate B's
+provider authorization, durable-job controls or compute budgets, and no paid
+calls were made. Public Demo behavior and cloud deployment remain later T22
+gates.

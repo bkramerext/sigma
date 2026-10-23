@@ -1,0 +1,46 @@
+T22 Gate A — private workspace integration
+
+Coordinator handoff from Green
+Date: 2026-10-23
+Branch: feature/t22-private-workspaces
+Integration base: origin/main merge commit 24ca812f8502c594a673e7233bd7962e9b8c907b (PR #37)
+
+Implementation
+
+- Reconciled the private-workspace work with merged PR #37 and its actual
+  `cloud_auth.Principal` / `request.state.cloud_principal` middleware contract.
+- Verified Google subjects map to durable, random internal workspace IDs. Email,
+  role, browser headers, supplied workspace IDs, and project paths do not choose
+  the workspace. An authorized callback provisions an empty workspace before a
+  session is issued; unauthorized identities create none.
+- Bound each protected API request to one owner root. Existing project services
+  enforce project paths under that root, while Recent state and proposal
+  cancellation IDs are also workspace scoped. Local mode remains unchanged when
+  cloud auth is off.
+- Added offline backup/restore instructions and deterministic regression tests.
+
+Verification
+
+- `./sigma test` — passed: backend suite, 10 cloud-auth cases, workspace
+  isolation/restart/restore/cancellation cases, Ruff, formatting, Pyright,
+  frontend typecheck and production build.
+- `uv run --with playwright python browser_checks/t22_private_workspaces.py` —
+  passed in real Chrome with separate A/B browser contexts and the production
+  API/storage fixture.
+- No live Google, model-provider, or paid API calls.
+- Workspace integration tested successful and failed Python execution records,
+  raw artifact retrieval, copied project paths/IDs, traversal, symlinks,
+  restart recovery, retained revoked-user data, and offline restore.
+
+Remaining dependency / limitation
+
+Gate A's workspace ownership checks cover the private project and research-data
+routes reviewed in the current API. Gate B is still needed before hosted research
+execution is deployment-ready. Cloud auth blocks `/api/ai/*`, but model-backed
+project routes can still use a process-level provider context if configured.
+Proposal generation, session start, paper generation and text conversion need
+per-user provider authorization and budgets before a cloud pilot. This was not
+implemented in Gate A, and no provider calls were made. Public Demo and cloud
+deployment are also outside Gate A.
+
+PR: to be added after branch push.
