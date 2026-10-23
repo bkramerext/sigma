@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response, Streamin
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chatgpt_auth, papers, python_sandbox, research_sessions
+from sigma import chatgpt_auth, cloud_auth, papers, python_sandbox, research_sessions
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
@@ -48,7 +48,13 @@ from sigma.text_conversion import convert_text
 from sigma.text_views import inspect_text, save_source
 
 app = FastAPI(title="SIGMA", docs_url=None, redoc_url=None)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
+_cloud_config = cloud_auth.config()
+_trusted_hosts = ["127.0.0.1", "localhost", "testserver"]
+if _cloud_config.origin:
+    from urllib.parse import urlsplit
+
+    _trusted_hosts.append(urlsplit(_cloud_config.origin).hostname or "")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 
 @app.get("/api/ui-instance")
@@ -60,11 +66,15 @@ def ui_instance() -> dict[str, str | None]:
 @app.middleware("http")
 async def local_browser_only(request: Request, call_next):
     origin = request.headers.get("origin")
+    allowed_origins = {"http://127.0.0.1:5173", "http://localhost:5173"}
+    cfg = cloud_auth.config()
+    if cfg.origin:
+        allowed_origins.add(cfg.origin)
     if (
         request.url.path.startswith("/api/ai/")
         and request.method == "POST"
         and (
-            origin not in {"http://127.0.0.1:5173", "http://localhost:5173"}
+            origin not in allowed_origins
             or request.headers.get("content-type", "").split(";")[0] != "application/json"
         )
     ):
@@ -72,9 +82,9 @@ async def local_browser_only(request: Request, call_next):
             {"error": "Account changes require the local SIGMA browser origin and JSON."},
             status_code=403,
         )
-    if origin and origin not in {"http://127.0.0.1:5173", "http://localhost:5173"}:
+    if origin and origin not in allowed_origins:
         return JSONResponse({"error": "Untrusted browser origin"}, status_code=403)
-    response = await call_next(request)
+    response = await cloud_auth.middleware(request, call_next)
     if request.url.path.startswith("/api/ai/"):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -732,3 +742,6 @@ def forget_recent_view(body: ForgetRecentRequest):
 
     forget_recent(body.project_id)
     return {"forgotten": True}
+
+
+app.include_router(cloud_auth.router)

@@ -3388,3 +3388,56 @@ Verification after these review changes passed on 2026-10-23: focused
 `tests/research_sessions.py` and `./sigma test`, including all backend scenarios,
 the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
 frontend typecheck, and production build. No live provider calls were made.
+
+## T22.2: Google authentication and invited access (2026-10-23)
+
+Implemented cloud authentication as an explicit deployment opt-in. When enabled,
+the FastAPI boundary requires a live server-side session for every API route
+except readiness/status and the OIDC begin/callback endpoints; mutating requests
+require the configured exact Origin. Local mode stays on the existing behavior.
+The Google flow uses authorization code plus PKCE S256, one-time state and
+nonce, fixed Google discovery/token endpoints, published JWKS signature
+verification, exact issuer/audience, expiry, nonce, subject and `email_verified`
+checks. Access is limited to normalized exact email entries, exact email domains,
+and the configured bootstrap administrator. Explicit revoked email rules win
+over domain rules. Session cookies are Secure, HttpOnly, SameSite=Lax host-only
+cookies; only SHA-256 session digests are stored in a private SQLite file.
+
+Administrators can list, add and revoke email/domain entries and grant an email
+administrator role through the copper/dark Access Management UI. No invitation
+emails are sent. Cloud mode denies the process-wide `/api/ai/*` endpoints so a
+Google account cannot inherit local ChatGPT authorization or AI billing. The
+bootstrap email is bound to its first Google subject. Configuration and setup
+are documented in [CLOUD-AUTH](CLOUD-AUTH.md).
+
+`tests/cloud_auth.py` uses generated local RSA signing keys and mocked Google
+responses; it verifies successful bootstrap and individual invitation, exact
+domain matching, lookalike denial, signature/issuer/audience/expiry/nonce/email
+claim rejection, OAuth state replay, session expiry, revocation against existing
+sessions, API route protection, spoofed identity-header rejection, missing
+configuration fail-closed behavior, and local-mode compatibility. No live Google
+or model-provider calls are involved.
+
+Following the T22.2 acceptance update, an unauthorized valid identity now lands
+on a distinct “Access not yet granted” page. Its three actions link to the
+parent-T22 `/demo` route without creating a workspace, open a prefilled
+`mailto:` invitation request using `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`, or restart
+Google sign-in with `prompt=select_account`. The public status response exposes
+only the configured contact and the current caller's own identity state; it
+does not expose grants or other users. `/demo` is a no-workspace handoff page;
+the curated read-only Demo and guest APIs remain T22 work.
+
+Explicit limits: no per-user project/workspace isolation or migration, guest
+Demo, durable job scheduling, cloud deployment, or hosted AI-provider auth was
+implemented. The existing file-backed project API remains shared across
+authorized cloud users, so this auth increment alone must not be treated as a
+private multi-tenant research deployment. No deployment credentials or Google
+OAuth client were created.
+
+Final verification on 2026-10-23 passed: `./sigma test` (including six focused
+cloud-auth tests, all backend scenarios, the 10-strategy 20/20-call load case,
+Ruff, Pyright with zero errors/warnings, frontend typecheck, and production
+build), plus `browser_checks/t22_access_denied.py` in real Chrome at desktop and
+mobile viewport sizes. The browser check verified the denied screen, configured
+prefilled `mailto:` request, account-switch link, and `/demo` handoff without
+project or AI API calls. No live Google or model-provider calls were made.

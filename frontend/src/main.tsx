@@ -2273,5 +2273,67 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
+type CloudStatus = { enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
+type CloudGrant = { kind: string; value: string; role: string; active: number };
+function CloudAuthGate() {
+  const [status, setStatus] = useState<CloudStatus | null>(null);
+  const [failure, setFailure] = useState('');
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [grants, setGrants] = useState<CloudGrant[]>([]);
+  const [kind, setKind] = useState<'email' | 'domain'>('email');
+  const [value, setValue] = useState('');
+  const [role, setRole] = useState<'member' | 'admin'>('member');
+  const [busy, setBusy] = useState(false);
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch('/api/cloud-auth/status', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('Cloud authentication could not be checked.');
+      const current = await response.json() as CloudStatus;
+      setStatus(current); setFailure(current.ready ? '' : 'Cloud sign-in is not configured correctly.');
+    } catch { setFailure('SIGMA could not check sign-in. Refresh this page or contact the administrator.'); }
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const loadGrants = useCallback(async () => {
+    const response = await fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error('Access rules could not be loaded.');
+    const result = await response.json() as { grants: CloudGrant[] };
+    setGrants(result.grants);
+  }, []);
+  async function addGrant(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setFailure('');
+    try {
+      const response = await fetch('/api/cloud-auth/admin/grants', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, value, role: kind === 'domain' ? 'member' : role }) });
+      if (!response.ok) throw new Error((await response.json() as { error?: string }).error || 'Access rule could not be saved.');
+      setValue(''); await loadGrants();
+    } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be saved.'); }
+    finally { setBusy(false); }
+  }
+  async function revoke(grant: CloudGrant) {
+    setBusy(true); setFailure('');
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/grants/${grant.kind}/${encodeURIComponent(grant.value)}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Access rule could not be revoked.');
+      await loadGrants();
+    } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be revoked.'); }
+    finally { setBusy(false); }
+  }
+  if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
+  if (!status.enabled) return <AIProvider><App/></AIProvider>;
+  if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
+  if (window.location.pathname === '/demo') return <main className="cloud-auth-shell"><section className="cloud-auth-card"><p className="cloud-auth-kicker">Public read-only preview</p><h1>SIGMA Demo</h1><p>The shared curated Demo is part of the T22 guest experience and is not provisioned as a private workspace.</p><p>This route is ready for that read-only Demo surface; its project and report views will be delivered with the T22 guest access work.</p><a className="cloud-auth-button" href="/">Return to sign in</a></section></main>;
+  if (!status.authenticated && new URLSearchParams(window.location.search).get('access') === 'denied') return <AccessNotGranted contactEmail={status.admin_contact_email}/>;
+  if (!status.authenticated) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><p className="cloud-auth-kicker">Private research workspace</p><h1>Sign in to SIGMA</h1><p>Use an invited Google account to continue. Access is controlled by the SIGMA administrator.</p><a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a><p className="cloud-auth-footnote">Google identity is separate from AI provider access and billing.</p></section></main>;
+  return <AIProvider><><div className="cloud-account-bar"><span>Signed in as <strong>{status.user?.email}</strong></span>{status.user?.role === 'admin' && <button onClick={() => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(String(error))); }}>Access Management</button>}<button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/'); }}>Sign out</button></div><App/>{accessOpen && <div className="cloud-access-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAccessOpen(false); }}><section className="cloud-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-access-title"><button className="cloud-access-close" onClick={() => setAccessOpen(false)} aria-label="Close access management">×</button><p className="cloud-auth-kicker">Administrator</p><h2 id="cloud-access-title">Access Management</h2><p>Invitations are authorization entries. SIGMA does not send email.</p><form onSubmit={addGrant}><label>Entry type<select value={kind} onChange={event => setKind(event.target.value as 'email' | 'domain')}><option value="email">Email address</option><option value="domain">Exact verified email domain</option></select></label><label>{kind === 'email' ? 'Email address' : 'Domain'}<input required value={value} onChange={event => setValue(event.target.value)} placeholder={kind === 'email' ? 'person@example.org' : 'example.org'}/></label>{kind === 'email' && <label>Access<select value={role} onChange={event => setRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Administrator</option></select></label>}<button disabled={busy}>Add authorization</button></form><h3>Authorized entries</h3><ul>{grants.map(grant => <li key={`${grant.kind}:${grant.value}`}><span><strong>{grant.value}</strong><small>{grant.kind} · {grant.role}{grant.active ? '' : ' · revoked'}</small></span>{grant.active === 1 && <button disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}</li>)}</ul>{failure && <p role="alert">{failure}</p>}<p className="cloud-access-bootstrap">Bootstrap administrator: configured with SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL.</p></section></div>}</></AIProvider>;
+}
+
+function AccessNotGranted({ contactEmail }: { contactEmail: string | null }) {
+  const subject = 'SIGMA invitation request';
+  const body = 'Hello,\n\nI signed in to SIGMA with my Google account, but access has not yet been granted. Please consider inviting me.\n\nThank you.';
+  const requestHref = contactEmail
+    ? `mailto:${contactEmail}?${new URLSearchParams({ subject, body })}`
+    : undefined;
+  return <main className="cloud-auth-shell"><section className="cloud-auth-card cloud-access-not-granted"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA. Ask the SIGMA administrator to authorize your verified email address or domain.</p><div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo">Explore Demo</a>{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div><p className="cloud-auth-footnote">This screen does not disclose SIGMA's invitation list or other users. Google identity is separate from AI provider access and billing.</p></section></main>;
+}
+
 installRequestErrorToasts();
-createRoot(document.getElementById('root')!).render(<AIProvider><App/><RequestErrorToasts/></AIProvider>);
+createRoot(document.getElementById('root')!).render(<><CloudAuthGate/><RequestErrorToasts/></>);
