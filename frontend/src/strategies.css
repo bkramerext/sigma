@@ -576,6 +576,75 @@
 .workspace-page .session-outcome.outcome-negative > p:first-child span { color: #e6a69a; }
 .workspace-page .session-outcome.outcome-pending > p:first-child span,
 .workspace-page .session-outcome.outcome-mixed > p:first-child span { color: #e2be91; }
+
+/* T25: keep each session's outcome in one readable, nested column. */
+.workspace-page .session-row { grid-template-columns: minmax(0, 1fr); }
+.workspace-page .session-row-heading,
+.workspace-page .session-row-content { grid-column: 1; grid-row: auto; }
+.workspace-page .session-row-content { padding: 12px 0 4px; border-left: 0; border-top: 1px solid #243441; }
+.workspace-page .session-row-content[hidden] { display: none !important; }
+.workspace-page .session-outcome { min-width: 0; padding: 14px 16px; border: 1px solid #6e583f; border-radius: 7px; background: linear-gradient(120deg,#17212a,#0b1620); }
+.workspace-page .outcome-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.workspace-page .outcome-heading-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; min-width: 0; }
+.workspace-page .outcome-heading h3 { margin: 0; color: #f0d0a4; font: 400 19px/1.35 Georgia,serif; }
+.workspace-page .outcome-label { color: #e2be91; font-size: 13px; overflow-wrap: anywhere; }
+.workspace-page .outcome-label.outcome-positive { color: #a5d1b3; }
+.workspace-page .outcome-label.outcome-negative { color: #e6a69a; }
+.workspace-page .outcome-general { margin: 7px 0 12px; }
+.workspace-page .outcome-subsections { display: grid; gap: 7px; min-width: 0; }
+.workspace-page .outcome-subsection { min-width: 0; border: 1px solid #344754; border-radius: 5px; background: #09141e; }
+.workspace-page .outcome-subsection > summary { display: flex; align-items: center; gap: 8px; padding: 9px 11px; color: #e4c39c; font-size: 13px; font-weight: 600; list-style: none; cursor: pointer; overflow-wrap: anywhere; }
+.workspace-page .outcome-subsection > summary::-webkit-details-marker { display: none; }
+.workspace-page .outcome-subsection > summary:hover { color: #f1c58d; }
+.workspace-page .outcome-subsection > summary:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; border-radius: 4px; }
+.workspace-page .outcome-subsection > summary .disclosure-chevron { width: 11px; height: 11px; flex-basis: 11px; }
+.workspace-page .outcome-subsection[open] > summary { border-bottom: 1px solid #283c49; }
+.workspace-page .outcome-subsection[open] > summary .disclosure-chevron { transform: rotate(90deg); }
+.workspace-page .outcome-subsection-content { min-width: 0; padding: 10px 12px 12px; color: #c4d0da; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.workspace-page .outcome-subsection-content > :first-child { margin-top: 0; }
+.workspace-page .outcome-subsection-content > :last-child { margin-bottom: 0; }
+.workspace-page .outcome-subsection-content h4 { margin: 13px 0 6px; color: #ead0ae; font-size: 13px; }
+.workspace-page .outcome-subsection-content h5 { margin: 8px 0 5px; color: #d7b585; font-size: 12px; }
+.workspace-page .outcome-subsection-content p { margin: 5px 0; }
+.workspace-page .outcome-subsection-intro,
+.workspace-page .outcome-unavailable { color: #9eacb7; }
+.workspace-page .outcome-integrity-note { color: #d6b88f; }
+.workspace-page .outcome-label-value { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-top: 1px solid #263641; }
+.workspace-page .outcome-label-value:first-child { border-top: 0; }
+.workspace-page .outcome-label-value dt { margin: 0; color: #98aab8; }
+.workspace-page .outcome-label-value dd { min-width: 0; margin: 0; color: #d5dfe7; overflow-wrap: anywhere; }
+.workspace-page .outcome-label-value dd small { display: block; margin-top: 2px; color: #9eacb7; font-size: 11px; }
+.workspace-page .outcome-assessment-list,
+.workspace-page .outcome-metrics-groups { display: grid; gap: 12px; min-width: 0; }
+.workspace-page .outcome-assessment { min-width: 0; padding: 8px 10px; border: 1px solid #293d49; border-radius: 4px; background: #0b1721; }
+.workspace-page .outcome-assessment h4 { margin: 0 0 4px; }
+.workspace-page .outcome-metric-group { min-width: 0; }
+.workspace-page .outcome-metric-group h5 { margin: 0 0 3px; color: #e4be91; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.workspace-page .outcome-metric-group dl { margin: 0; }
+.workspace-page .outcome-provenance-group { min-width: 0; margin-top: 13px; }
+.workspace-page .outcome-provenance-group:first-child { margin-top: 0; }
+.workspace-page .outcome-provenance-list { margin: 4px 0 0; padding-left: 20px; }
+.workspace-page .outcome-provenance-list > li { margin: 8px 0; padding-left: 2px; }
+.workspace-page .outcome-provenance-list p { margin: 3px 0; }
+.workspace-page .outcome-provenance-list pre { max-width: 100%; margin: 5px 0; padding: 8px; border: 1px solid #293d49; border-radius: 4px; background: #050d14; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-page .outcome-provider-attempts ul { margin: 4px 0; padding-left: 20px; }
+.workspace-page .outcome-provider-attempts li { display: grid; gap: 2px; margin: 6px 0; }
+.workspace-page .outcome-provider-attempts li > span { color: #bac8d3; }
+.workspace-page .outcome-subsection .research-activity { margin-top: 12px; }
+.workspace-page .outcome-subsection .research-activity h4 { margin-top: 0; }
+.workspace-page .outcome-subsection .research-activity h4 button { display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: #c7a87d; font: 500 12px/1.4 Inter,ui-sans-serif,system-ui,sans-serif; text-align: left; cursor: pointer; }
+.workspace-page .outcome-subsection .research-activity h4 button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.workspace-page .outcome-evidence-subsection .research-artifacts { margin: 8px 0 0; padding: 0; border: 0; background: transparent; }
+.workspace-page .outcome-evidence-subsection .research-artifacts h4 { margin: 0; color: #ead0ae; }
+.workspace-page .outcome-evidence-subsection .research-artifacts > ol { padding-left: 22px; }
+.workspace-page .outcome-evidence-subsection .research-artifacts summary { padding: 9px 12px 9px 30px; }
+.workspace-page .outcome-evidence-subsection .solution-review { margin-top: 0; padding-top: 0; border-top: 0; }
+.workspace-page .outcome-evidence-subsection .solution-review h4 { margin-top: 0; }
+.workspace-page .session-outcome .outcome-markdown { margin: 7px 0 12px; }
+@media (max-width: 700px) {
+  .workspace-page .session-outcome { padding: 11px 10px; }
+  .workspace-page .outcome-label-value dt { font-size: 11px; }
+}
 .workspace-page .sessions-pane .research-artifacts { padding: 14px 16px; border: 1px solid #6e583f; border-radius: 7px; background: linear-gradient(120deg,#17212a,#0b1620); }
 .workspace-page .sessions-pane .research-artifacts h3 { color: #f0d0a4; }
 .workspace-page .sessions-pane .research-artifacts details > summary::-webkit-details-marker { display: none; }
@@ -860,3 +929,11 @@
  .workspace-page .session-row-content { grid-column: 1; grid-row: auto; }
  .project-settings-dialog .settings-footer { padding-inline: 18px; }
 }
+
+/* The Outcome hierarchy has one reading column at every viewport width. */
+.workspace-page .session-columns { grid-template-columns: minmax(0, 1fr); }
+.workspace-page .session-columns > span:nth-child(2) { display: none; }
+.workspace-page .session-row { grid-template-columns: minmax(0, 1fr); }
+.workspace-page .session-row-heading,
+.workspace-page .session-row-content { grid-column: 1; grid-row: auto; }
+.workspace-page .session-row-content { padding-left: 0; border-left: 0; }

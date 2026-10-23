@@ -1,0 +1,40 @@
+SIGMA T25 coordinator handoff
+
+Ticket: T25 — Outcome visual hierarchy and collapsible subsections
+Owner: Gray
+Branch: codex/t25-outcome-hierarchy
+Base: main at 6f5979f (includes merged T24 and T25 tickets)
+
+Completed implementation
+
+- Replaced the side-by-side session/outcome layout with one vertical reading flow.
+- Added independently collapsible Status, Strategy Assessments, Metrics, and
+  Provenance subsections. Evidence & Obligations appears when a review or saved
+  artifacts exist.
+- Preserved the Outcome Markdown toggle and research artifact Markdown action.
+- Metrics use T24's persisted operational and research-quality groups as
+  label/value rows, without a table or recalculating the projection.
+- Provenance shows source IDs, model-call attempts and statuses, artifact
+  origins, prior-session links, Python execution status, and captured-file
+  hashes where those fields are recorded. Missing historical values remain
+  unavailable. Session configuration is labeled as configuration, not as a
+  provider receipt; recorded verification is distinguished from independent
+  proof.
+- Browser checks now exercise disclosure keyboard behavior, no Outcome tables,
+  desktop/mobile widths, saved metrics/provenance, interrupted attempts,
+  historic records, and multi-strategy assessment/recommendation content.
+- Outcome detail labels and values are stacked vertically throughout; no table
+  or side-by-side Outcome layout remains.
+
+Validation
+
+- `./sigma test` passed, including backend scenarios, Ruff, Pyright, frontend
+  typecheck, and production build. It required local callback listener access
+  for the fixture-based ChatGPT authentication tests. No paid/live provider call
+  was made.
+- `browser_checks/a17_research.py` passed in real Chrome against the current
+  branch and isolated provider fixture, including 1440/1280/390/320 px layouts,
+  historical/interrupted sessions, multi-strategy activity, disclosure keyboard
+  operation, T24 metrics/provenance, and absence of Outcome tables/columns.
+
+PR: pending publication.
