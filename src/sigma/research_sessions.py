@@ -44,6 +44,9 @@ MAX_PEER_CONTEXT_ARTIFACTS = 12
 MAX_CONTEXT_OBLIGATIONS = 64
 MAX_CONTEXT_OMISSION_POINTERS = 32
 MAX_CONTEXT_MANIFEST_BYTES = 12_000
+MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY = 24
+MAX_PRIOR_OBLIGATION_CONTEXT_BYTES = 32_000
+MAX_OBLIGATION_SOURCE_ARTIFACTS = 32
 MAX_RESEARCH_RESPONSE_BYTES = 1_000_000
 MAX_SESSION_INTERVENTIONS = 24
 MAX_REJECTED_INTERVENTIONS = 8
@@ -1407,6 +1410,10 @@ INVESTIGATOR_GUIDANCE = (
     "Do not install packages or spawn processes. Treat its output "
     "as evidence to be reviewed, not as proof. Do not claim external checking or formal verification. "
     "Review obligation_ledger entries and make the next test address unresolved obligations; unknown is not resolved. "
+    "An obligation with source_artifact_availability=pointer_only_original_not_supplied is only a pointer: "
+    "you have not received its original source, so do not claim to have inspected or verified it. "
+    "Use only supplied_source_artifact_ids as evidence and plan inspection of the original. "
+    "If text_complete is false or prior_session_obligations_omitted is nonzero, explicitly preserve that uncertainty. "
     "When other_strategy_evidence is supplied, treat "
     "it as unverified peer work; state whether it changes this strategy's reasoning and never "
     "silently present another branch's result as independently derived. When a peer_handoff is "
@@ -1457,7 +1464,7 @@ SKEPTIC_GUIDANCE = (
     "entries, use obligation_reviews for at most twelve material items. Cite the exact obligation_id "
     "and only supplied basis_artifact_ids. Classify as unresolved, addressed, superseded, retracted, "
     "or unknown; never infer resolution from absence in a newer artifact. Addressed, superseded, and "
-    "retracted judgments are model-reported and unverified, not independent proof. Leave unsupported "
+    "retracted judgments are model-reported and unverified, not independent proof. A pointer-only source was not supplied as evidence. Leave unsupported "
     "items unknown. Criticism alone never ends "
     "research; approval is never verification. In a multi-strategy session, compare the supplied "
     "other_strategy_evidence with this branch's evidence. For each material relationship, "
@@ -2242,10 +2249,28 @@ async def start_session(
             }
             record["outcome"] = _outcome(record)
             (
+                record["prior_session_obligations"],
+                record["prior_session_obligations_omitted"],
+                record["prior_session_obligation_omitted_ids"],
+                record["prior_session_obligation_omitted_by_strategy"],
+                record["prior_session_obligation_omitted_ids_by_strategy"],
+            ) = _prior_session_obligations_index(view.path, record["id"], record["strategy_ids"])
+            obligation_source_ids = {
+                artifact_id
+                for item in record["prior_session_obligations"]
+                for artifact_id in item.get("source_artifact_ids", [])
+                if isinstance(artifact_id, str)
+            }
+            (
                 record["prior_session_findings"],
                 record["prior_session_findings_omitted"],
                 record["prior_session_findings_omitted_source_ids"],
-            ) = _prior_session_findings_index(view.path, record["id"])
+            ) = _prior_session_findings_index(
+                view.path,
+                record["id"],
+                strategy_ids=record["strategy_ids"],
+                obligation_source_ids=obligation_source_ids,
+            )
             (
                 record["prior_session_failures"],
                 record["prior_session_failures_omitted"],
@@ -2654,6 +2679,7 @@ async def _call(
                 )
             reviewed_obligations.add(obligation_id)
             supplied_sources = set(context.get("context_artifact_ids", []))
+            supplied_sources.update(context.get("prior_session_artifact_ids", []))
             supplied_steps = (
                 {context["investigator_step_id"]}
                 if isinstance(context.get("investigator_step_id"), str)
@@ -2699,6 +2725,26 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         for item in prior_session_findings
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     ]
+    prior_session_obligations = record.get("prior_session_obligations", [])
+    if not isinstance(prior_session_obligations, list):
+        prior_session_obligations = []
+    strategy_id = record.get("strategy_id")
+    prior_session_obligations = [
+        item
+        for item in prior_session_obligations
+        if isinstance(item, dict) and item.get("strategy_id") == strategy_id
+    ]
+    omitted_by_strategy = record.get("prior_session_obligation_omitted_by_strategy")
+    relevant_omission_count = (
+        omitted_by_strategy.get(strategy_id, 0)
+        if isinstance(omitted_by_strategy, dict)
+        else record.get("prior_session_obligations_omitted", 0)
+    )
+    if relevant_omission_count:
+        raise ResearchContextLimitError(
+            "Prior-session unresolved obligations exceeded the frozen context bound. "
+            "No provider call was made; all saved records remain intact. Narrow the strategy or review the omitted obligation IDs."
+        )
     prior_session_failures = record.get("prior_session_failures")
     prior_session_failures_omitted = record.get("prior_session_failures_omitted", 0)
     prior_failure_omitted_attempt_ids = record.get("prior_session_failure_omitted_attempt_ids", [])
@@ -2725,14 +2771,61 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         None,
     )
     obligations, omitted_obligation_count, omitted_obligation_ids = _obligation_ledger(
-        artifacts, pending_investigation, investigator_step_id
+        artifacts,
+        pending_investigation,
+        investigator_step_id,
+        project_id=record.get("project_id"),
+        strategy_id=strategy_id,
+        prior_obligations=prior_session_obligations,
     )
+    if any(
+        item.get("status") == "unresolved" and not item.get("text_complete", True)
+        for item in obligations
+    ):
+        raise ResearchContextLimitError(
+            "An unresolved obligation exceeds the safe extract bound. No provider call was made; "
+            "the original obligation remains saved and must be reviewed before continuing."
+        )
     strategy_snapshot, omitted_strategy_count, omitted_strategy_ids = _compact_strategy_snapshot(
         record.get("strategy_snapshot"), record.get("strategy_id")
     )
     selected, manifest = _select_context_artifacts(
         artifacts, role, record.get("project_path"), obligations
     )
+    artifact_availability = {
+        item["id"]: item.get(
+            "evidence_availability", "bounded_deterministic_extract_original_not_supplied"
+        )
+        for item in selected
+        if isinstance(item.get("id"), str)
+    }
+    prior_finding_by_id = {
+        item["id"]: item
+        for item in prior_session_findings
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    for obligation in obligations:
+        source_ids = [
+            item for item in obligation.get("source_artifact_ids", []) if isinstance(item, str)
+        ]
+        supplied = [
+            item
+            for item in source_ids
+            if item in artifact_availability or item in prior_finding_by_id
+        ]
+        obligation["supplied_source_artifact_ids"] = supplied
+        if not supplied:
+            obligation["source_artifact_availability"] = "pointer_only_original_not_supplied"
+        elif any(
+            artifact_availability.get(item) == "incomplete_extract_original_not_supplied"
+            or prior_finding_by_id.get(item, {}).get("extract_truncated_fields")
+            for item in supplied
+        ):
+            obligation["source_artifact_availability"] = "incomplete_extract_original_not_supplied"
+        else:
+            obligation["source_artifact_availability"] = (
+                "adequate_bounded_extract_original_not_supplied"
+            )
     context: dict[str, Any] = {
         "problem": record["problem"],
         "strategy": {
@@ -2745,6 +2838,12 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         # These are deterministic extracts, not replacements for durable originals.
         "prior_artifacts": selected,
         "prior_session_findings": prior_session_findings,
+        "prior_session_obligations_omitted": relevant_omission_count,
+        "prior_session_obligation_omitted_ids": (
+            record.get("prior_session_obligation_omitted_ids_by_strategy", {}).get(strategy_id, [])
+            if isinstance(record.get("prior_session_obligation_omitted_ids_by_strategy"), dict)
+            else record.get("prior_session_obligation_omitted_ids", [])
+        ),
         "prior_session_artifact_ids": prior_session_artifact_ids,
         "prior_session_findings_omitted": record.get("prior_session_findings_omitted", 0),
         "prior_session_findings_omitted_source_ids": record.get(
@@ -2790,6 +2889,12 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "bounded frozen prior-session extract; inspect linked original before relying on details",
             "deterministic_extract",
         ),
+        _manifest_source_group(
+            "prior_session_obligation",
+            [item.get("obligation_id") for item in prior_session_obligations],
+            "unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed",
+            "bounded_obligation_ledger",
+        ),
     ):
         if group is not None:
             manifest["sources"].append(group)
@@ -2797,6 +2902,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "count": context["prior_session_findings_omitted"],
         "source_ids": context["prior_session_findings_omitted_source_ids"],
         "reason": "lower priority than selected material findings or the fixed prior-session count/byte bound",
+    }
+    manifest["omitted_prior_session_obligations"] = {
+        "count": relevant_omission_count,
+        "obligation_ids": context["prior_session_obligation_omitted_ids"],
+        "reason": "bounded strategy-scoped historical obligation snapshot; saved originals remain intact",
     }
     group = _manifest_source_group(
         "prior_operational_failure",
@@ -2916,134 +3026,248 @@ def _compact_strategy_snapshot(
     return selected, len(omitted_entries), omitted
 
 
+def _normalized_obligation_text(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _obligation_identity(
+    text: str,
+    *,
+    project_id: Any,
+    strategy_id: Any,
+    assumptions: list[str],
+) -> str:
+    payload = {
+        "policy": "t37-obligation-v2",
+        "project_id": project_id if isinstance(project_id, str) else None,
+        "strategy_id": strategy_id if isinstance(strategy_id, str) else None,
+        "assumptions": sorted({_normalized_obligation_text(item) for item in assumptions}),
+        "text": _normalized_obligation_text(text),
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _legacy_obligation_identity(text: str) -> str:
+    """Reproduce the v1 text-only identity for unambiguous historical lookup."""
+    legacy_text = _bounded_note(text.strip(), 700).casefold()
+    return hashlib.sha256(legacy_text.encode("utf-8")).hexdigest()
+
+
 def _obligation_ledger(
     artifacts: list[dict[str, Any]],
     pending_investigation: Any = None,
     investigator_step_id: Any = None,
+    *,
+    project_id: Any = None,
+    strategy_id: Any = None,
+    prior_obligations: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
-    """Build a conservative ledger; absence from a newer artifact never resolves an item."""
+    """Apply obligation events chronologically; missing later notes do not resolve."""
     entries: dict[str, dict[str, Any]] = {}
-    explicitly_open: set[str] = set()
-    explicit_dispositions: dict[str, dict[str, Any]] = {}
-    for artifact in artifacts:
+    legacy_ids: dict[str, set[str]] = {}
+
+    def entry_for(
+        text: str, *, source_project_id: Any, source_strategy_id: Any, assumptions: list[str]
+    ) -> dict[str, Any]:
+        obligation_id = _obligation_identity(
+            text,
+            project_id=source_project_id,
+            strategy_id=source_strategy_id,
+            assumptions=assumptions,
+        )
+        item = entries.setdefault(
+            obligation_id,
+            {
+                "obligation_id": obligation_id,
+                "legacy_obligation_id": _legacy_obligation_identity(text),
+                "text": _bounded_note(text.strip(), 700),
+                "text_complete": len(text.strip()) <= 700,
+                "scope_assumptions": assumptions,
+                "status": "unknown",
+                "source_artifact_ids": [],
+                "source_refs": [],
+                "source_artifact_count": 0,
+                "source_step_ids": [],
+                "basis_artifact_ids": [],
+                "basis_step_ids": [],
+                "rationale": "",
+            },
+        )
+        legacy_ids.setdefault(_legacy_obligation_identity(text), set()).add(obligation_id)
+        return item
+
+    def add_source(item: dict[str, Any], artifact: dict[str, Any]) -> None:
         artifact_id = artifact.get("id")
-        objective_review: dict[str, Any] = {}
-        if isinstance(artifact.get("objective_review"), dict):
-            objective_review = artifact["objective_review"]
-        skeptic: dict[str, Any] = {}
-        if isinstance(artifact.get("skeptic_output"), dict):
-            skeptic = artifact["skeptic_output"]
-        for field, notes in (
-            ("open_obligations", artifact.get("open_obligations")),
-            ("objections", artifact.get("objections")),
-            ("unresolved_objections", objective_review.get("unresolved_objections")),
-            ("unresolved_objections", skeptic.get("unresolved_objections")),
-            ("remaining_obligations", skeptic.get("remaining_obligations")),
-            ("proof_obligations", skeptic.get("proof_obligations")),
+        if not isinstance(artifact_id, str) or artifact_id in item["source_artifact_ids"]:
+            return
+        item["source_artifact_count"] += 1
+        ref = {
+            "project_id": artifact.get("project_id", project_id),
+            "session_id": artifact.get("session_id"),
+            "strategy_id": artifact.get("strategy_id", strategy_id),
+            "artifact_id": artifact_id,
+            "sequence": artifact.get("sequence"),
+        }
+        ids: list[str] = item["source_artifact_ids"]
+        refs: list[dict[str, Any]] = item["source_refs"]
+        if len(ids) < MAX_OBLIGATION_SOURCE_ARTIFACTS:
+            ids.append(artifact_id)
+            refs.append(ref)
+        else:
+            # Keep early origin pointers and a rolling tail. Counts preserve how
+            # many repeat occurrences are represented by this bounded sample.
+            ids[-1] = artifact_id
+            refs[-1] = ref
+
+    def note_scope(
+        artifact: dict[str, Any], objective_review: dict[str, Any], skeptic: dict[str, Any]
+    ) -> tuple[Any, Any, list[str]]:
+        assumptions: list[str] = []
+        for collection in (
+            artifact.get("assumptions"),
+            objective_review.get("assumptions"),
+            skeptic.get("assumptions_reviewed"),
         ):
+            if isinstance(collection, list):
+                assumptions.extend(
+                    item.strip() for item in collection if isinstance(item, str) and item.strip()
+                )
+        source_project_id = artifact.get("project_id", project_id)
+        source_strategy_id = artifact.get("strategy_id", strategy_id)
+        return source_project_id, source_strategy_id, list(dict.fromkeys(assumptions))
+
+    # Prior-session obligations are frozen at session creation and seed the
+    # current ledger. A later current-session note can explicitly reopen one.
+    for saved in prior_obligations or []:
+        if not isinstance(saved, dict) or not isinstance(saved.get("obligation_id"), str):
+            continue
+        item = dict(saved)
+        item.setdefault("status", "unresolved")
+        item.setdefault("source_artifact_ids", [])
+        item.setdefault("source_refs", [])
+        item.setdefault("source_artifact_count", len(item["source_artifact_ids"]))
+        item.setdefault("source_step_ids", [])
+        item.setdefault("basis_artifact_ids", [])
+        item.setdefault("basis_step_ids", [])
+        item.setdefault("rationale", "")
+        entries[item["obligation_id"]] = item
+        legacy_id = item.get("legacy_obligation_id")
+        if isinstance(legacy_id, str):
+            legacy_ids.setdefault(legacy_id, set()).add(item["obligation_id"])
+
+    for artifact in artifacts:
+        objective_review = artifact.get("objective_review")
+        objective_review = objective_review if isinstance(objective_review, dict) else {}
+        skeptic = artifact.get("skeptic_output")
+        skeptic = skeptic if isinstance(skeptic, dict) else {}
+        source_project_id, source_strategy_id, assumptions = note_scope(
+            artifact, objective_review, skeptic
+        )
+        note_fields = (
+            artifact.get("open_obligations"),
+            artifact.get("objections"),
+            objective_review.get("unresolved_objections"),
+            skeptic.get("unresolved_objections"),
+            skeptic.get("remaining_obligations"),
+            skeptic.get("proof_obligations"),
+        )
+        for notes in note_fields:
             for note in notes if isinstance(notes, list) else []:
                 if not isinstance(note, str) or not note.strip():
                     continue
-                text = _bounded_note(note.strip(), 700)
-                key = text.casefold()
-                if key not in entries:
-                    entries[key] = {
-                        "text": text,
-                        "source_artifact_ids": [],
-                        "source_artifact_count": 0,
-                        "source_step_ids": [],
-                    }
-                # Every saved obligation/objection remains active until an explicit
-                # disposition cites evidence. Its absence from a newer artifact is
-                # not evidence that it was resolved.
-                explicitly_open.add(key)
-                if artifact_id:
-                    entries[key]["source_artifact_count"] += 1
-                    if (
-                        artifact_id not in entries[key]["source_artifact_ids"]
-                        and len(entries[key]["source_artifact_ids"]) < MAX_CONTEXT_OMISSION_POINTERS
-                    ):
-                        entries[key]["source_artifact_ids"].append(artifact_id)
-        saved_dispositions = artifact.get("obligation_dispositions", [])
-        dispositions = list(saved_dispositions) if isinstance(saved_dispositions, list) else []
-        if isinstance(skeptic.get("obligation_reviews"), list):
-            dispositions.extend(skeptic["obligation_reviews"])
+                item = entry_for(
+                    note,
+                    source_project_id=source_project_id,
+                    source_strategy_id=source_strategy_id,
+                    assumptions=assumptions,
+                )
+                add_source(item, artifact)
+                # This artifact explicitly restates the obligation, so reopen it
+                # before applying any disposition saved alongside this artifact.
+                item["status"] = "unresolved"
+                item["epistemic_status"] = "not_reviewed_in_current_evidence"
+
+        dispositions = artifact.get("obligation_dispositions", [])
+        dispositions = list(dispositions) if isinstance(dispositions, list) else []
+        reviews = skeptic.get("obligation_reviews")
+        if isinstance(reviews, list):
+            dispositions.extend(reviews)
         for disposition in dispositions:
             if not isinstance(disposition, dict):
                 continue
             state = disposition.get("status")
-            key = (
-                disposition.get("text", "").strip().casefold()
-                if isinstance(disposition.get("text"), str)
-                else None
-            )
-            if key is None and isinstance(disposition.get("obligation_id"), str):
-                key = disposition["obligation_id"]
-            if key and state in {"addressed", "superseded", "retracted", "unresolved", "unknown"}:
-                explicit_dispositions[key] = {
-                    "status": state,
-                    "basis_artifact_ids": disposition.get("basis_artifact_ids", []),
-                    "rationale": disposition.get("rationale", ""),
-                    "epistemic_status": (
-                        "model_reported_unverified"
-                        if "obligation_id" in disposition
-                        else "explicit_saved_disposition_unverified"
-                    ),
-                }
+            if state not in {"addressed", "superseded", "retracted", "unresolved", "unknown"}:
+                continue
+            key = disposition.get("obligation_id")
+            target_ids: set[str] = set()
+            if isinstance(key, str) and key in entries:
+                target_ids.add(key)
+            elif isinstance(disposition.get("text"), str):
+                target_ids.add(
+                    _obligation_identity(
+                        disposition["text"],
+                        project_id=source_project_id,
+                        strategy_id=source_strategy_id,
+                        assumptions=assumptions,
+                    )
+                )
+            elif isinstance(key, str):
+                target_ids.update(legacy_ids.get(key, set()))
+                if len(target_ids) != 1:
+                    for candidate_id in target_ids:
+                        entries[candidate_id].setdefault(
+                            "ambiguous_legacy_dispositions", []
+                        ).append(
+                            {
+                                "legacy_obligation_id": key,
+                                "status": state,
+                                "source_artifact_id": artifact.get("id"),
+                            }
+                        )
+                    continue
+            for obligation_id in target_ids:
+                item = entries.get(obligation_id)
+                if item is None:
+                    continue
+                item["status"] = state
+                item["basis_artifact_ids"] = disposition.get("basis_artifact_ids", [])
+                item["basis_step_ids"] = disposition.get("basis_step_ids", [])
+                item["rationale"] = disposition.get("rationale", "")
+                item["disposition_source_artifact_id"] = artifact.get("id")
+                item["epistemic_status"] = (
+                    "model_reported_unverified"
+                    if "obligation_id" in disposition
+                    else "explicit_saved_disposition_unverified"
+                )
+
     if isinstance(pending_investigation, dict):
+        assumptions = pending_investigation.get("assumptions", [])
+        assumptions = (
+            [item for item in assumptions if isinstance(item, str)]
+            if isinstance(assumptions, list)
+            else []
+        )
         for note in pending_investigation.get("open_obligations", []):
             if not isinstance(note, str) or not note.strip():
                 continue
-            text = _bounded_note(note.strip(), 700)
-            key = text.casefold()
-            if key not in entries:
-                entries[key] = {
-                    "text": text,
-                    "source_artifact_ids": [],
-                    "source_artifact_count": 0,
-                    "source_step_ids": [],
-                }
+            item = entry_for(
+                note,
+                source_project_id=project_id,
+                source_strategy_id=strategy_id,
+                assumptions=assumptions,
+            )
             if (
                 isinstance(investigator_step_id, str)
-                and investigator_step_id not in entries[key]["source_step_ids"]
+                and investigator_step_id not in item["source_step_ids"]
             ):
-                entries[key]["source_step_ids"].append(investigator_step_id)
-            explicitly_open.add(key)
-            # A fresh Investigator proposal reopens an older model-reported
-            # disposition; the current Skeptic must review it again.
-            explicit_dispositions[key] = {"status": "unresolved"}
-    latest = artifacts[-1] if artifacts else {}
-    for item in (
-        latest.get("open_obligations", [])
-        if isinstance(latest.get("open_obligations"), list)
-        else []
-    ):
-        if isinstance(item, str):
-            explicitly_open.add(item.strip().casefold())
-    latest_review: dict[str, Any] = {}
-    if isinstance(latest.get("objective_review"), dict):
-        latest_review = latest["objective_review"]
-    for item in latest_review.get("unresolved_objections", []):
-        if isinstance(item, str):
-            explicitly_open.add(item.strip().casefold())
-    latest_skeptic: dict[str, Any] = {}
-    if isinstance(latest.get("skeptic_output"), dict):
-        latest_skeptic = latest["skeptic_output"]
-    for field in ("unresolved_objections", "remaining_obligations", "proof_obligations"):
-        for item in (
-            latest_skeptic.get(field, []) if isinstance(latest_skeptic.get(field), list) else []
-        ):
-            if isinstance(item, str):
-                explicitly_open.add(item.strip().casefold())
-    result = []
-    for key, item in entries.items():
-        obligation_id = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        prior = explicit_dispositions.get(
-            obligation_id,
-            explicit_dispositions.get(key, {}),
-        )
-        status = prior.get("status", "unresolved" if key in explicitly_open else "unknown")
-        result.append({**item, "obligation_id": obligation_id, "status": status, **prior})
+                item["source_step_ids"].append(investigator_step_id)
+            item["status"] = "unresolved"
+            item["epistemic_status"] = "current_investigator_open_obligation"
+
+    result = list(entries.values())
+    for item in result:
+        item.pop("_seen_source_ids", None)
     if len(result) <= MAX_CONTEXT_OBLIGATIONS:
         return result, 0, []
     mandatory = [item for item in result if item["status"] == "unresolved"]
@@ -3073,17 +3297,24 @@ def _obligation_ledger(
 
 
 def _artifact_is_critical(artifact: dict[str, Any]) -> bool:
-    searchable_parts = [
-        str(artifact.get(key, "")) for key in ("evidence_status", "claim_or_question", "method")
-    ]
-    searchable_parts.extend(
-        str(item) for item in artifact.get("objections", []) if isinstance(item, str)
-    )
-    searchable = " ".join(searchable_parts).casefold()
-    return any(
-        marker in searchable
-        for marker in ("counterexample", "disprov", "refut", "contradict", "retract", "falsif")
-    )
+    """Recognize structured decisive/retraction outcomes, never keyword mentions."""
+    if artifact.get("coordinator_decision") in {
+        "stop_decisive_counterexample",
+        "stop_retracted_claim",
+    }:
+        return True
+    skeptic = artifact.get("skeptic_output")
+    if isinstance(skeptic, dict):
+        if skeptic.get("stop_reason") in {"decisive_counterexample", "claim_retracted"}:
+            return True
+        if skeptic.get("retracted_cross_strategy_source_artifact_ids"):
+            return True
+        if any(
+            isinstance(item, dict) and item.get("status") == "retracted"
+            for item in skeptic.get("obligation_reviews", [])
+        ):
+            return True
+    return bool(artifact.get("retracted_by_artifact_ids"))
 
 
 def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any) -> dict[str, Any]:
@@ -3117,6 +3348,50 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
     ):
         if key in result:
             result[key] = _bounded_note(result[key], limit)
+    result["extract_truncated_fields"] = [
+        key
+        for key, limit in (
+            ("claim_or_question", 1600),
+            ("method", 2400),
+            ("evidence_status", 500),
+            ("next_question", 700),
+        )
+        if isinstance(source.get(key), str) and len(source[key].strip()) > limit
+    ]
+    objective = source.get("objective_review")
+    if isinstance(objective, dict):
+        result["objective_review"] = {
+            key: objective.get(key)
+            for key in (
+                "status",
+                "claim",
+                "argument_summary",
+                "assumptions",
+                "proof_obligations",
+                "verification_status",
+                "unresolved_objections",
+                "resolved_objections",
+                "basis_artifact_ids",
+            )
+            if key in objective
+        }
+        for key, limit in (("claim", 2000), ("argument_summary", 2500)):
+            if isinstance(objective.get(key), str):
+                result["objective_review"][key] = _bounded_note(objective[key], limit)
+                if len(objective[key].strip()) > limit:
+                    result["extract_truncated_fields"].append(f"objective_review.{key}")
+        for key, count, limit in (
+            ("assumptions", 8, 300),
+            ("proof_obligations", 12, 600),
+            ("unresolved_objections", 12, 600),
+            ("resolved_objections", 12, 600),
+        ):
+            if isinstance(objective.get(key), list):
+                result["objective_review"][key] = _bounded_notes(objective[key], count, limit)
+                if len(objective[key]) > count or any(
+                    isinstance(note, str) and len(note.strip()) > limit for note in objective[key]
+                ):
+                    result["extract_truncated_fields"].append(f"objective_review.{key}")
     for key, count, limit in (
         ("assumptions", 8, 300),
         ("objections", 12, 600),
@@ -3124,6 +3399,17 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
     ):
         if key in result:
             result[key] = _bounded_notes(result[key], count, limit)
+    for key, count, limit in (
+        ("assumptions", 8, 300),
+        ("objections", 12, 600),
+        ("open_obligations", 12, 600),
+    ):
+        raw = source.get(key)
+        if isinstance(raw, list) and (
+            len(raw) > count
+            or any(isinstance(note, str) and len(note.strip()) > limit for note in raw)
+        ):
+            result["extract_truncated_fields"].append(key)
     investigator = source.get("investigator_output")
     if isinstance(investigator, dict):
         result["investigator_output"] = {
@@ -3162,6 +3448,21 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
         result["skeptic_output"]["response"] = _bounded_note(
             result["skeptic_output"].get("response"), 1800
         )
+        if isinstance(skeptic.get("response"), str) and len(skeptic["response"].strip()) > 1800:
+            result["extract_truncated_fields"].append("skeptic_output.response")
+        for key, count, limit in (
+            ("objections", 12, 600),
+            ("remaining_obligations", 12, 600),
+            ("proof_obligations", 12, 600),
+            ("unresolved_objections", 12, 600),
+            ("assumptions_reviewed", 8, 300),
+        ):
+            if isinstance(skeptic.get(key), list):
+                result["skeptic_output"][key] = _bounded_notes(skeptic[key], count, limit)
+                if len(skeptic[key]) > count or any(
+                    isinstance(note, str) and len(note.strip()) > limit for note in skeptic[key]
+                ):
+                    result["extract_truncated_fields"].append(f"skeptic_output.{key}")
     return result
 
 
@@ -3173,17 +3474,48 @@ def _select_context_artifacts(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Keep the latest and material evidence first, then fill a stable optional tail."""
     by_id = {item.get("id"): item for item in artifacts if isinstance(item.get("id"), str)}
-    unresolved_source_ids = {
-        source_id
-        for item in obligation_ledger
-        if item.get("status") == "unresolved"
-        for source_id in item.get("source_artifact_ids", [])
-    }
+    unresolved_source_ids: set[str] = set()
+    source_omissions: list[dict[str, Any]] = []
+    for item in obligation_ledger:
+        if item.get("status") != "unresolved":
+            continue
+        sources = [
+            value
+            for value in item.get("source_artifact_ids", [])
+            if isinstance(value, str) and value in by_id
+        ]
+        # Repeated restatements are supporting history, not 32 mandatory
+        # artifacts. Preserve origin and latest material support, while the
+        # ledger retains the complete bounded pointer/count accounting.
+        chosen = list(dict.fromkeys(sources[:1] + sources[-2:]))
+        unresolved_source_ids.update(chosen)
+        omitted_sources = [source for source in sources if source not in chosen]
+        omitted_source_count = max(
+            len(omitted_sources),
+            int(item.get("source_artifact_count", len(sources))) - len(chosen),
+        )
+        if omitted_source_count:
+            source_omissions.append(
+                {
+                    "obligation_id": item.get("obligation_id"),
+                    "omitted_count": omitted_source_count,
+                    "omitted_source_ids": omitted_sources[:MAX_CONTEXT_OMISSION_POINTERS],
+                    "omitted_source_id_pointer_count": min(
+                        len(omitted_sources), MAX_CONTEXT_OMISSION_POINTERS
+                    ),
+                }
+            )
+        unresolved_source_ids.update(
+            source_id
+            for source_id in item.get("basis_artifact_ids", [])
+            if isinstance(source_id, str) and source_id in by_id
+        )
     critical_ids = {
         item_id
         for item_id, item in by_id.items()
         if item_id in unresolved_source_ids or _artifact_is_critical(item)
     }
+    protected_extract_ids = set(critical_ids)
     mandatory_ids = set(critical_ids)
     if artifacts and isinstance(artifacts[-1].get("id"), str):
         mandatory_ids.add(artifacts[-1]["id"])
@@ -3200,6 +3532,17 @@ def _select_context_artifacts(
     mandatory_bytes = 0
     for item_id in ordered_ids:
         item = _compact_context_artifact(by_id[item_id], project_path_value)
+        item["evidence_availability"] = (
+            "incomplete_extract_original_not_supplied"
+            if item.get("extract_truncated_fields")
+            else "bounded_deterministic_extract_original_not_supplied"
+        )
+        if item_id in protected_extract_ids and item.get("extract_truncated_fields"):
+            raise ResearchContextLimitError(
+                "A mandatory research evidence extract is incomplete "
+                f"({', '.join(item['extract_truncated_fields'])}). No provider call was made; "
+                "the original artifact remains saved and must be inspected before continuing."
+            )
         selected.append(item)
         mandatory_bytes += _json_bytes(item)
     if mandatory_bytes > MAX_AGENT_CONTEXT_BYTES // 2:
@@ -3214,6 +3557,11 @@ def _select_context_artifacts(
         if len(selected) >= MAX_CONTEXT_ARTIFACTS:
             break
         item = _compact_context_artifact(by_id[item_id], project_path_value)
+        item["evidence_availability"] = (
+            "incomplete_extract_original_not_supplied"
+            if item.get("extract_truncated_fields")
+            else "bounded_deterministic_extract_original_not_supplied"
+        )
         size = _json_bytes(item)
         if optional_bytes + size > MAX_AGENT_CONTEXT_BYTES // 2:
             continue
@@ -3237,7 +3585,7 @@ def _select_context_artifacts(
             _manifest_source_group(
                 "current_session_material_evidence",
                 ordered_ids,
-                "explicitly unresolved obligations, marked counterexamples, and newest saved artifact; selected before optional history",
+                "representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history",
                 "deterministic_extract",
             ),
             _manifest_source_group(
@@ -3265,6 +3613,7 @@ def _select_context_artifacts(
         "omitted_pointer_count": min(len(omitted), MAX_CONTEXT_OMISSION_POINTERS),
         "omitted_pointer_limit": MAX_CONTEXT_OMISSION_POINTERS,
         "sources": entries,
+        "obligation_source_omissions": source_omissions,
         "note": "Deterministic extracts are untrusted summaries of saved originals, not original evidence or verification.",
     }
     return selected, manifest
@@ -5072,7 +5421,11 @@ def _prior_session_findings(project_path: Any, current_session_id: Any) -> list[
 
 
 def _prior_session_findings_index(
-    project_path: Any, current_session_id: Any
+    project_path: Any,
+    current_session_id: Any,
+    *,
+    strategy_ids: list[str] | None = None,
+    obligation_source_ids: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], int, list[str]]:
     if not isinstance(project_path, str) or not isinstance(current_session_id, str):
         return [], 0, []
@@ -5087,9 +5440,12 @@ def _prior_session_findings_index(
         and item.get("status") not in {"queued", "running"}
         and isinstance(item.get("artifacts"), list)
     ]
+    allowed_strategies = set(strategy_ids or [])
     for session in previous:
         for artifact in reversed(session.get("artifacts", [])):
             if not isinstance(artifact, dict):
+                continue
+            if allowed_strategies and artifact.get("strategy_id") not in allowed_strategies:
                 continue
             objective_review = artifact.get("objective_review")
             objective_review = objective_review if isinstance(objective_review, dict) else {}
@@ -5128,6 +5484,29 @@ def _prior_session_findings_index(
                 "strategy_id": artifact.get("strategy_id"),
                 "strategy_title": session.get("strategy_title"),
             }
+            finding["extract_truncated_fields"] = [
+                key
+                for key, limit in (
+                    ("claim_or_question", 1200),
+                    ("method", 1000),
+                    ("evidence_status", 300),
+                    ("next_question", 500),
+                )
+                if isinstance(artifact.get(key), str) and len(artifact[key].strip()) > limit
+            ]
+            for key, count, limit in (
+                ("assumptions", 6, 250),
+                ("objections", 4, 350),
+                ("open_obligations", 6, 350),
+            ):
+                raw_notes = artifact.get(key)
+                if isinstance(raw_notes, list) and (
+                    len(raw_notes) > count
+                    or any(
+                        isinstance(note, str) and len(note.strip()) > limit for note in raw_notes
+                    )
+                ):
+                    finding["extract_truncated_fields"].append(key)
             reviews = skeptic_output.get("obligation_reviews")
             if isinstance(reviews, list) and reviews:
                 finding["obligation_reviews"] = [
@@ -5146,7 +5525,14 @@ def _prior_session_findings_index(
                 computation = _peer_python_evidence(artifact, field, session.get("project_path"))
                 if computation is not None:
                     finding[field] = computation
-            candidates.append((0 if _artifact_is_critical(artifact) else 1, finding))
+            priority = (
+                0
+                if artifact.get("id") in (obligation_source_ids or set())
+                else 1
+                if _artifact_is_critical(artifact)
+                else 2
+            )
+            candidates.append((priority, finding))
     candidates.sort(key=lambda item: item[0])
     findings: list[dict[str, Any]] = []
     omitted_ids: list[str] = []
@@ -5158,6 +5544,90 @@ def _prior_session_findings_index(
             continue
         findings = candidate
     return findings, len(omitted_ids), omitted_ids[:MAX_CONTEXT_OMISSION_POINTERS]
+
+
+def _prior_session_obligations_index(
+    project_path: Any, current_session_id: Any, strategy_ids: list[str]
+) -> tuple[list[dict[str, Any]], int, list[str], dict[str, int], dict[str, list[str]]]:
+    """Freeze scoped unresolved obligations from completed history for this session."""
+    if not isinstance(project_path, str) or not isinstance(current_session_id, str):
+        return [], 0, [], {}, {}
+    selected: list[dict[str, Any]] = []
+    omitted_ids: list[str] = []
+    omitted_count = 0
+    omitted_by_strategy: dict[str, int] = {}
+    omitted_ids_by_strategy: dict[str, list[str]] = {}
+    sessions = [
+        item
+        for item in _all(project_path)
+        if item.get("id") != current_session_id
+        and item.get("status") not in {"queued", "running"}
+        and isinstance(item.get("artifacts"), list)
+    ]
+    sessions.sort(key=lambda item: str(item.get("created_at", "")))
+    for strategy_id in dict.fromkeys(strategy_ids):
+        history: list[dict[str, Any]] = []
+        for session in sessions:
+            for raw in session.get("artifacts", []):
+                if not isinstance(raw, dict) or raw.get("strategy_id") != strategy_id:
+                    continue
+                artifact = dict(raw)
+                artifact.setdefault("session_id", session.get("id"))
+                artifact.setdefault("project_id", session.get("project_id"))
+                history.append(artifact)
+        ledger, _, _ = _obligation_ledger(
+            history,
+            project_id=None,
+            strategy_id=strategy_id,
+        )
+        unresolved = [item for item in ledger if item.get("status") == "unresolved"]
+        unresolved.sort(
+            key=lambda item: (item.get("source_artifact_count", 0), item.get("obligation_id", "")),
+            reverse=True,
+        )
+        for obligation in unresolved:
+            compact = {
+                "obligation_id": obligation["obligation_id"],
+                "legacy_obligation_id": obligation.get("legacy_obligation_id"),
+                "text": obligation.get("text", ""),
+                "text_complete": obligation.get("text_complete", False),
+                "scope_assumptions": obligation.get("scope_assumptions", []),
+                "status": "unresolved",
+                "strategy_id": strategy_id,
+                "source_artifact_ids": obligation.get("source_artifact_ids", []),
+                "source_refs": obligation.get("source_refs", []),
+                "source_artifact_count": obligation.get("source_artifact_count", 0),
+                "source_step_ids": obligation.get("source_step_ids", []),
+                "basis_artifact_ids": obligation.get("basis_artifact_ids", []),
+                "basis_step_ids": obligation.get("basis_step_ids", []),
+                "rationale": obligation.get("rationale", ""),
+            }
+            if (
+                len([item for item in selected if item.get("strategy_id") == strategy_id])
+                >= MAX_PRIOR_SESSION_OBLIGATIONS_PER_STRATEGY
+            ):
+                omitted_count += 1
+                omitted_ids.append(compact["obligation_id"])
+                omitted_by_strategy[strategy_id] = omitted_by_strategy.get(strategy_id, 0) + 1
+                omitted_ids_by_strategy.setdefault(strategy_id, []).append(compact["obligation_id"])
+                continue
+            if _json_bytes([*selected, compact]) > MAX_PRIOR_OBLIGATION_CONTEXT_BYTES:
+                omitted_count += 1
+                omitted_ids.append(compact["obligation_id"])
+                omitted_by_strategy[strategy_id] = omitted_by_strategy.get(strategy_id, 0) + 1
+                omitted_ids_by_strategy.setdefault(strategy_id, []).append(compact["obligation_id"])
+                continue
+            selected.append(compact)
+    return (
+        selected,
+        omitted_count,
+        omitted_ids[:MAX_CONTEXT_OMISSION_POINTERS],
+        omitted_by_strategy,
+        {
+            key: values[:MAX_CONTEXT_OMISSION_POINTERS]
+            for key, values in omitted_ids_by_strategy.items()
+        },
+    )
 
 
 def _prior_session_failures(

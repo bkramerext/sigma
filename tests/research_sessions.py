@@ -857,10 +857,17 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
             "session_number": completed["session_number"],
             "strategy_id": strategy.id,
             "strategy_title": strategy.title,
+            "extract_truncated_fields": [],
         }
     ], next_context["prior_session_findings"]
     assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]
+    assert any(
+        item["text"] == "Obligation 1" and item["status"] == "unresolved"
+        for item in next_context["obligation_ledger"]
+    )
     persisted = research_sessions.get_session(str(path), next_session["id"])
+    assert persisted["prior_session_obligations"]
+    assert persisted["prior_session_obligations"][0]["strategy_id"] == strategy.id
     assert (
         persisted["steps"][0]["prior_session_artifact_ids"]
         == next_context["prior_session_artifact_ids"]
@@ -1064,6 +1071,7 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
             "claim_or_question": "A plausible claim is refuted by x=7.",
             "method": "Substitute x=7 into the claimed identity; the two sides differ.",
             "evidence_status": "Concrete counterexample; claim is false under stated assumptions.",
+            "coordinator_decision": "stop_decisive_counterexample",
             "objections": ["The proposed universal claim fails at x=7."],
             "open_obligations": [],
         },
@@ -1197,6 +1205,9 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
                     "evidence_status": "Concrete counterexample at x=7"
                     if index == 1
                     else "Unverified note",
+                    "coordinator_decision": "stop_decisive_counterexample"
+                    if index == 1
+                    else "continue",
                     "objections": [],
                     "open_obligations": [],
                 }
@@ -1215,7 +1226,9 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
     status_ids = {}
     for status in explicit_statuses:
         text = f"Disposition evidence for {status}."
-        obligation_id = research_sessions.hashlib.sha256(text.casefold().encode()).hexdigest()
+        obligation_id = research_sessions._obligation_identity(
+            text, project_id=None, strategy_id=None, assumptions=[]
+        )
         artifact_id = str(uuid4())
         status_ids[status] = obligation_id
         status_artifacts.append(
@@ -1278,6 +1291,340 @@ def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
         raise AssertionError("UTF-8 over-budget mandatory question was accepted")
 
 
+def test_t37_obligation_identity_lifecycle_and_history(path: Path):
+    view = initialize_project(path, "Scoped obligation history", "Check an exact claim.")
+    strategy = str(uuid4())
+    text = "Prove the boundary case under the stated domain."
+    a1, a2, reopen = str(uuid4()), str(uuid4()), str(uuid4())
+    id_integer = research_sessions._obligation_identity(
+        text, project_id=view.project.id, strategy_id=strategy, assumptions=["x is integer"]
+    )
+    id_real = research_sessions._obligation_identity(
+        text, project_id=view.project.id, strategy_id=strategy, assumptions=["x is real"]
+    )
+    scoped = [
+        {
+            "id": a1,
+            "strategy_id": strategy,
+            "project_id": view.project.id,
+            "assumptions": ["x is integer"],
+            "open_obligations": [text],
+            "obligation_dispositions": [
+                {
+                    "obligation_id": id_integer,
+                    "status": "addressed",
+                    "basis_artifact_ids": [a1],
+                    "rationale": "Explicit fixture.",
+                }
+            ],
+        },
+        {
+            "id": a2,
+            "strategy_id": strategy,
+            "project_id": view.project.id,
+            "assumptions": ["x is real"],
+            "open_obligations": [text],
+        },
+        {
+            "id": reopen,
+            "strategy_id": strategy,
+            "project_id": view.project.id,
+            "assumptions": ["x is integer"],
+            "open_obligations": [text],
+        },
+    ]
+    initial_ledger, _, _ = research_sessions._obligation_ledger(
+        scoped[:2], project_id=view.project.id, strategy_id=strategy
+    )
+    initial_by_id = {item["obligation_id"]: item for item in initial_ledger}
+    assert initial_by_id[id_integer]["status"] == "addressed"
+    assert initial_by_id[id_real]["status"] == "unresolved"
+    ledger, omitted, _ = research_sessions._obligation_ledger(
+        scoped, project_id=view.project.id, strategy_id=strategy
+    )
+    assert omitted == 0 and len(ledger) == 2
+    by_id = {item["obligation_id"]: item for item in ledger}
+    assert by_id[id_integer]["status"] == "unresolved"  # later restatement reopens it
+    assert by_id[id_real]["status"] == "unresolved"  # integer disposition cannot cross scope
+    assert by_id[id_integer]["source_artifact_ids"] == [a1, reopen]
+
+    prefix = "P" * 705
+    long_a, long_b = prefix + "A", prefix + "B"
+    long_ledger, _, _ = research_sessions._obligation_ledger(
+        [
+            {"id": "long-a", "strategy_id": strategy, "open_obligations": [long_a]},
+            {"id": "long-b", "strategy_id": strategy, "open_obligations": [long_b]},
+        ],
+        project_id=view.project.id,
+        strategy_id=strategy,
+    )
+    assert len(long_ledger) == 2
+    assert all(item["text_complete"] is False for item in long_ledger)
+
+    # Old text-only IDs remain readable only when the mapping is unambiguous.
+    old_text = "Legacy obligation without a stored identifier."
+    old_id = research_sessions._legacy_obligation_identity(old_text)
+    legacy, _, _ = research_sessions._obligation_ledger(
+        [
+            {"id": "legacy-source", "strategy_id": strategy, "open_obligations": [old_text]},
+            {
+                "id": "legacy-review",
+                "strategy_id": strategy,
+                "obligation_dispositions": [
+                    {
+                        "obligation_id": old_id,
+                        "status": "addressed",
+                        "basis_artifact_ids": ["legacy-source"],
+                    }
+                ],
+            },
+        ],
+        project_id=view.project.id,
+        strategy_id=strategy,
+    )
+    assert legacy[0]["status"] == "addressed"
+    ambiguous, _, _ = research_sessions._obligation_ledger(
+        [
+            {
+                "id": "legacy-i",
+                "strategy_id": strategy,
+                "assumptions": ["integer"],
+                "open_obligations": [old_text],
+            },
+            {
+                "id": "legacy-r",
+                "strategy_id": strategy,
+                "assumptions": ["real"],
+                "open_obligations": [old_text],
+            },
+            {
+                "id": "legacy-d",
+                "strategy_id": strategy,
+                "obligation_dispositions": [
+                    {
+                        "obligation_id": old_id,
+                        "status": "addressed",
+                        "basis_artifact_ids": ["legacy-i"],
+                    }
+                ],
+            },
+        ],
+        project_id=view.project.id,
+        strategy_id=strategy,
+    )
+    assert all(item["status"] == "unresolved" for item in ambiguous)
+    assert all(item.get("ambiguous_legacy_dispositions") for item in ambiguous)
+
+    repeated = [
+        {
+            "id": f"repeat-{i}",
+            "sequence": i,
+            "strategy_id": strategy,
+            "claim_or_question": "Routine discussion mentions a counterexample but proves nothing.",
+            "method": "Routine discussion.",
+            "evidence_status": "Unverified.",
+            "open_obligations": ["One unresolved shared obligation."],
+            "objections": [],
+        }
+        for i in range(105)
+    ]
+    ledger, _, _ = research_sessions._obligation_ledger(
+        repeated, project_id=view.project.id, strategy_id=strategy
+    )
+    selected, manifest = research_sessions._select_context_artifacts(
+        repeated, "investigator", view.path, ledger
+    )
+    assert len(selected) <= research_sessions.MAX_CONTEXT_ARTIFACTS
+    assert len(ledger) == 1 and ledger[0]["source_artifact_count"] == 105
+    assert manifest["obligation_source_omissions"][0]["omitted_count"] >= 100
+    assert not any(research_sessions._artifact_is_critical(item) for item in repeated)
+    routine_context = research_sessions._agent_context(
+        {
+            "id": str(uuid4()),
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "problem": view.project.problem,
+            "strategy_id": strategy,
+            "strategy_title": "Routine repeats",
+            "strategy_text": "Continue carefully.",
+            "current_question": "Resolve the repeated open obligation.",
+            "strategy_snapshot": [],
+            "artifacts": repeated,
+        },
+        "investigator",
+        106,
+    )
+    assert len(routine_context["prior_artifacts"]) <= research_sessions.MAX_CONTEXT_ARTIFACTS
+    assert routine_context["outstanding_obligations"] == ["One unresolved shared obligation."]
+    assert (
+        routine_context["context_manifest"]["obligation_source_omissions"][0]["omitted_count"]
+        >= 100
+    )
+
+    # A required proof source with decisive content beyond the deterministic
+    # extract bound must not be represented to a provider as supplied evidence.
+    decisive = {
+        "id": "truncated-proof",
+        "strategy_id": strategy,
+        "open_obligations": ["Resolve this proof obligation."],
+        "claim_or_question": "Claim",
+        "method": "M" * 2401 + " decisive final line",
+        "evidence_status": "Unverified",
+    }
+    before = json.dumps(decisive)
+    record = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "problem": view.project.problem,
+        "strategy_id": strategy,
+        "strategy_title": "Scoped",
+        "strategy_text": "Investigate",
+        "current_question": "Continue",
+        "strategy_snapshot": [],
+        "artifacts": [decisive],
+    }
+    try:
+        research_sessions._agent_context(record, "investigator", 1)
+    except research_sessions.ResearchContextLimitError as exc:
+        assert "extract is incomplete" in str(exc)
+        assert "No provider call was made" in str(exc)
+    else:
+        raise AssertionError("A mandatory artifact with truncated decisive content was supplied")
+    assert json.dumps(decisive) == before
+
+    # Freeze an ordinary-language obligation ahead of thirteen routine notes,
+    # and keep its strategy scope when assembled for a later session.
+    prior_id = str(uuid4())
+    other_strategy = str(uuid4())
+    prior_artifacts = [
+        {
+            "id": "old-open",
+            "sequence": 1,
+            "strategy_id": strategy,
+            "assumptions": ["integer domain"],
+            "open_obligations": ["Establish the induction step for every integer n."],
+        }
+    ]
+    prior_artifacts.extend(
+        {
+            "id": f"routine-{i}",
+            "sequence": i + 1,
+            "strategy_id": strategy,
+            "claim_or_question": f"Ordinary routine finding {i}.",
+            "open_obligations": [],
+        }
+        for i in range(13)
+    )
+    prior_artifacts.append(
+        {
+            "id": "other-domain",
+            "strategy_id": other_strategy,
+            "open_obligations": ["Do not transfer this unrelated domain obligation."],
+        }
+    )
+    research_sessions._save(
+        view.path,
+        {
+            "id": prior_id,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy,
+            "status": "ended",
+            "created_at": research_sessions._now(),
+            "artifacts": prior_artifacts,
+        },
+    )
+    (
+        frozen,
+        frozen_omitted,
+        frozen_omitted_ids,
+        frozen_omitted_by_strategy,
+        frozen_omitted_ids_by_strategy,
+    ) = research_sessions._prior_session_obligations_index(view.path, str(uuid4()), [strategy])
+    assert frozen_omitted == 0 and not frozen_omitted_ids
+    assert len(frozen) == 1 and frozen[0]["source_artifact_ids"] == ["old-open"]
+    findings, findings_omitted, findings_omitted_ids = (
+        research_sessions._prior_session_findings_index(
+            view.path,
+            str(uuid4()),
+            strategy_ids=[strategy],
+            obligation_source_ids={"old-open"},
+        )
+    )
+    assert findings[0]["id"] == "old-open"
+    assert findings[0]["extract_truncated_fields"] == []
+    assert findings_omitted == 2 and len(findings_omitted_ids) == 2
+    resumed_record = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "problem": view.project.problem,
+        "strategy_id": strategy,
+        "strategy_title": "Scoped",
+        "strategy_text": "Continue",
+        "current_question": "Review remaining proof obligation.",
+        "strategy_snapshot": [],
+        "artifacts": [],
+        "prior_session_obligations": frozen,
+        "prior_session_findings": findings,
+        "prior_session_findings_omitted": findings_omitted,
+        "prior_session_findings_omitted_source_ids": findings_omitted_ids,
+        "prior_session_obligations_omitted": frozen_omitted,
+        "prior_session_obligation_omitted_by_strategy": frozen_omitted_by_strategy,
+        "prior_session_obligation_omitted_ids_by_strategy": frozen_omitted_ids_by_strategy,
+    }
+    research_sessions._save(view.path, {**resumed_record, "status": "paused"})
+    restored = research_sessions._read(view.path, resumed_record["id"])
+    resumed_context = research_sessions._agent_context(restored, "investigator", 1)
+    assert (
+        resumed_context["obligation_ledger"][0]["text"] == prior_artifacts[0]["open_obligations"][0]
+    )
+    assert resumed_context["obligation_ledger"][0]["status"] == "unresolved"
+    assert (
+        resumed_context["obligation_ledger"][0]["source_artifact_availability"]
+        == "adequate_bounded_extract_original_not_supplied"
+    )
+    assert all(
+        "unrelated domain" not in item["text"] for item in resumed_context["obligation_ledger"]
+    )
+
+    # The same historical obligation remains present when its early source is
+    # too large for the bounded prior-finding extract, but its evidence must be
+    # explicitly unavailable rather than represented as inspected.
+    prior_artifacts[0]["method"] = "Beginning of method. " + "tail" * 400
+    research_sessions._save(
+        view.path,
+        {
+            "id": prior_id,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "strategy_id": strategy,
+            "status": "ended",
+            "created_at": research_sessions._now(),
+            "artifacts": prior_artifacts,
+        },
+    )
+    truncated_findings, _, _ = research_sessions._prior_session_findings_index(
+        view.path, str(uuid4()), strategy_ids=[strategy], obligation_source_ids={"old-open"}
+    )
+    assert truncated_findings[0]["id"] == "old-open"
+    assert "method" in truncated_findings[0]["extract_truncated_fields"]
+    truncated_record = {
+        **resumed_record,
+        "id": str(uuid4()),
+        "prior_session_findings": truncated_findings,
+    }
+    truncated_context = research_sessions._agent_context(truncated_record, "investigator", 1)
+    carried = next(
+        item
+        for item in truncated_context["obligation_ledger"]
+        if item["text"] == prior_artifacts[0]["open_obligations"][0]
+    )
+    assert carried["status"] == "unresolved"
+    assert carried["source_artifact_availability"] == "incomplete_extract_original_not_supplied"
+
+
 async def test_t37_mandatory_context_blocks_before_provider(path: Path):
     view, strategy, _, _ = await setup(path)
     session_id = str(uuid4())
@@ -1291,6 +1638,7 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
             "claim_or_question": f"Counterexample candidate {index}",
             "method": f"Explicit counterexample investigation {index}.",
             "evidence_status": "Concrete counterexample candidate; preserve for Skeptic review.",
+            "coordinator_decision": "stop_decisive_counterexample",
             "assumptions": ["The domain is fixed."],
             "objections": [],
             "open_obligations": [],
@@ -1349,6 +1697,50 @@ async def test_t37_mandatory_context_blocks_before_provider(path: Path):
         "mandatory current-session evidence sources exceed" in saved["strategy_runs"][0]["reason"]
     )
     assert any(event["kind"] == "research.context_blocked" for event in saved["events"])
+
+    # A required obligation whose deterministic text extract would truncate
+    # must also stop at assembly, before the authentication/provider boundary.
+    truncated_session_id = str(uuid4())
+    truncated_branch = {**branch, "status": "queued", "calls_used": 0, "artifacts": []}
+    truncated_record = {
+        **record,
+        "id": truncated_session_id,
+        "strategy_runs": [truncated_branch],
+        "artifacts": [
+            {
+                "id": "long-open-obligation",
+                "sequence": 1,
+                "strategy_id": strategy.id,
+                "open_obligations": ["Resolve " + "x" * 710],
+                "method": "Saved complete source remains in the original artifact.",
+            }
+        ],
+        "status": "running",
+        "calls_used": 0,
+        "steps": [],
+        "events": [],
+    }
+    research_sessions._save(view.path, truncated_record)
+    credential_mock.reset_mock()
+    with (
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(research_sessions, "auth_context", new=credential_mock),
+    ):
+        allowed = await research_sessions._portfolio_role_call(
+            truncated_session_id,
+            view.path,
+            strategy.id,
+            "investigator",
+            1,
+            asyncio.Semaphore(1),
+            asyncio.Lock(),
+        )
+    blocked = research_sessions._read(view.path, truncated_session_id)
+    assert allowed is False and credential_mock.await_count == 0
+    assert blocked["calls_used"] == 0 and blocked["steps"] == []
+    assert "obligation exceeds the safe extract bound" in blocked["strategy_runs"][0]["reason"], (
+        blocked["strategy_runs"][0]["reason"]
+    )
 
 
 async def test_pause_counts_interrupted_call(path: Path):
@@ -4873,6 +5265,7 @@ def main():
         )
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         test_t37_context_selection_is_stable_and_loss_visible(root / "t37-context.sigma")
+        test_t37_obligation_identity_lifecycle_and_history(root / "t37-obligation-review.sigma")
         asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))

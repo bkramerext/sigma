@@ -773,6 +773,28 @@ live provider inference was not used for this UI/configuration assignment. The
 ChatGPT control was exercised against the local fixture and its existing
 connection dialog/actions, not a live sign-in or account.
 
+### T23.1 local/cloud Google-pill acceptance follow-up (2026-10-23)
+
+The local project header had no Google pill after cloud identity integration,
+and the cloud project header omitted the ChatGPT connection control. The header
+now always retains ChatGPT status, shows the noninteractive “Google Sign-in ·
+Coming soon” placeholder in local workspaces, and shows the existing cloud
+identity control in cloud workspaces. The narrow layout keeps Model | Google
+above Thinking | ChatGPT, with Difficulty on its separate first row. No auth
+flow or provider behavior was changed.
+
+Verification passed on the current main base `1134361`:
+
+- `./sigma test` passed all scenario, lint, type, and production-build steps.
+- `browser_checks/header.py` passed in real Chrome at 1280, 1100, 700, 390,
+  and 320px. It checks local placeholder availability/accessibility,
+  non-interactivity, no login request, and existing control behavior.
+- `browser_checks/t23_1_google_signin.py` passed in real Chrome at 1280, 390,
+  and 320px for cloud signed-out login-route availability, authenticated
+  project identity/sign-out state, ChatGPT visibility, row ordering, and no
+  horizontal overflow. Authentication endpoints were deterministic local
+  fixtures; external Google OAuth was not invoked.
+
 ## A17.8 Evaluation (2026-10-22)
 
 **Recommendation: A17.8 needs further work before acceptance; do not mark A17
