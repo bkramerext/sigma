@@ -1,0 +1,27 @@
+T30 coordinator handoff — exported project samples
+
+Status: implementation complete; PR opened for review (not merged).
+
+The `sigma make_sample exported_project.json --name sample_name` command now
+validates SIGMA export v2, sanitizes private data, and creates an entry consumed
+by the existing Samples browser. Opening the entry creates a separate editable
+project and rebinds project identity/path for imported research session and
+agentic evidence. Available histories, outcomes, computational source/output,
+and provenance survive. Existing source projects remain unchanged.
+
+Verification:
+- `uv run --locked --no-sync python tests/make_sample.py` passed the mandatory
+  export/CLI/load/edit/redaction acceptance scenario.
+- `./sigma test` passed all backend tests, Ruff and formatting, Pyright (0
+  errors/warnings/informations), frontend typecheck, and production build.
+- No live or paid provider calls were made.
+
+Limitations: export v2 contains computation metadata and available previews but
+does not bundle raw execution-store binary artifacts. The converter preserves
+only evidence present in the export and does not fabricate missing bytes.
+Sanitization covers known private fields, common credential forms, and
+recognized user home paths; it cannot reliably identify arbitrary unlabeled
+secret-like prose.
+
+No UI changes or active research execution changes were made. Review and merge
+remain with the coordinator; Green did not self-merge.
