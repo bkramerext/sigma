@@ -14,7 +14,7 @@ The user should be able to interrupt the investigation, inspect a trustworthy re
 
 **Build the integrated experience, not a checklist of disconnected features.** A18 is intentionally ambitious and may take sustained engineering effort. Own the end-to-end product outcome, make coherent architectural improvements when needed, and keep the research loop working as a whole. Use intermediate checkpoints, tests, and PRs to control risk and communicate progress, **not to redefine A18 into a sequence of tiny independent stories or to defer essential capabilities**. If a requirement conflicts with real usability, reliability, or research integrity, investigate and propose the best integrated solution rather than implementing the words mechanically. Escalate material product tradeoffs, but otherwise exercise engineering ownership.
 
-The bar is not that SIGMA always solves hard problems; no system can promise that. The bar is that SIGMA can pursue them intelligently, make and preserve defensible progress, expose uncertainty and failure honestly, and substantially improve a human researcher's ability to organize and advance difficult work. **That is the reason for A18 and the standard by which it will be judged.**
+The bar is complete solutions on Easy and Medium problems, and substantive, defensible progress on Hard problems; do not pretend a finite test suite establishes universal coverage. The bar is that SIGMA can pursue them intelligently, make and preserve defensible progress, expose uncertainty and failure honestly, and substantially improve a human researcher's ability to organize and advance difficult work. **That is the reason for A18 and the standard by which it will be judged.**
 
 ## Objective
 
@@ -65,6 +65,16 @@ A17.6–A17.8 are integrated. Read and preserve their current outcome-recognitio
 4. **Evaluate:** complete deterministic quality checks and prepare the live evaluation protocol. Execute real-provider trials **only after explicit user authorization**, with a bounded call/time budget. Report research acceptance separately from engineering acceptance.
 
 Maintain coherent, testable checkpoints while delivering the integrated research product; checkpoints are risk controls, not a reason to split A18 into small feature stories or drop core scope. Avoid schema changes unless necessary for durable evidence or continuation, and preserve legacy-session compatibility.
+
+## Difficulty-tier product expectations
+
+**Easy and Medium problems are solution targets, not merely progress targets.** The product ambition is that SIGMA solves **every legitimately classified Easy or Medium problem** in its supported research domains, subject to a well-defined, solvable task and the resources made available. This is an ambitious product requirement, **not a claim of achieved reliability or a guarantee that any present model can solve all such tasks**. Treat failures as defects or capability gaps to diagnose, not as acceptable success under a weaker progress rubric.
+
+- **Easy:** expect a complete correct solution, independently checked against a hidden reference answer or other objective oracle where possible. No partial-credit substitution for completion.
+- **Medium:** expect a complete correct solution, potentially after sustained multi-strategy research, critique, forking, and additional bounded sessions. Do not call defensible partial progress a solved Medium problem.
+- **Hard:** expect meaningful, defensible progress, honest unresolved obligations, and a well-organized continuing investigation; a complete solution is a bonus, not a universal requirement.
+- **Evaluation integrity:** difficulty labels are fixed before each test, with externally held answers/rubrics and explicit task assumptions. Do not relabel failures, leak solutions into strategy prompts, cherry-pick runs, or silently extend budgets. Use diverse samples and report per-tier solve rate, verification method, failures, and resource consumption. Report the gap to the universal Easy/Medium aspiration honestly; do not claim that a finite benchmark proves 'every problem.'
+- **Acceptance reporting:** the engineering gate may pass while the Easy/Medium universal solution target remains unmet. Report this distinction explicitly. For A18's live research evaluation, a defensible partial result on an Easy/Medium sample counts as *research progress*, **not** as meeting its tier's solve requirement. Additional live calls require user authorization.
 
 ## Complete strategy lifecycle and concurrent research (required A18 scope)
 
