@@ -107,6 +107,7 @@ def main() -> None:
                     "strategy_contribution": "productive",
                     "contribution_rationale": "The bounded computation checks the selected finite case.",
                     "cross_strategy_relations": [],
+                    "retracted_cross_strategy_source_artifact_ids": [],
                 }
             return httpx.Response(200, json=provider_response(result))
 

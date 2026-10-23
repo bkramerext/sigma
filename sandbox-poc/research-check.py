@@ -184,6 +184,7 @@ def review(cycle: int, method: str, status: str) -> dict:
         "strategy_contribution": "productive",
         "contribution_rationale": "The experiment or its diagnosed failure supplies a specific next step.",
         "cross_strategy_relations": [],
+        "retracted_cross_strategy_source_artifact_ids": [],
     }
 
 
