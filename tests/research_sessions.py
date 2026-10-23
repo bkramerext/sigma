@@ -2,19 +2,24 @@
 
 import asyncio
 import json
+import time
+from datetime import UTC, datetime, timedelta
+from html import escape
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import httpx
 
-from sigma import research_sessions
+from sigma import agentic, papers, proposals, python_sandbox, research_sessions, text_views
 from sigma.projects import (
     ProjectError,
     create_strategy,
     edit_strategy,
     initialize_project,
+    project_path,
     set_strategy_enabled,
 )
 
@@ -43,6 +48,7 @@ def investigation(n):
         "assumptions": [f"Assumption {n}"],
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
+        "python_code": None,
     }
 
 
@@ -64,6 +70,8 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "verification_status": "convincing_unverified",
         "strategy_contribution": "productive",
         "contribution_rationale": "The saved derivation advances the objective through the linked strategy.",
+        "cross_strategy_relations": [],
+        "retracted_cross_strategy_source_artifact_ids": [],
     }
 
 
@@ -130,6 +138,10 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert payload["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}
         if payload["text"]["format"]["name"] == "research_skeptic":
             assert "stop_reason" in payload["text"]["format"]["schema"]["required"]
+            assert (
+                "retracted_cross_strategy_source_artifact_ids"
+                in payload["text"]["format"]["schema"]["required"]
+            )
         context = json.loads(payload["input"])
         contexts.append((payload["text"]["format"]["name"], context))
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
@@ -192,6 +204,20 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert exported["export_version"] == 2
     assert exported_session["strategy_text"] == strategy.approach
     assert exported_session["problem"] == view.project.problem
+    metrics = exported_session["outcome"]["metrics"]
+    assert metrics == finished["outcome"]["metrics"]
+    assert metrics["sources"]["session_id"] == finished["id"]
+    assert metrics["sources"]["step_ids"] == sorted(step["id"] for step in finished["steps"])
+    from sigma.project_reports import render_report
+
+    plain_report, _ = render_report(exported, "txt")
+    html_report, _ = render_report(exported, "html")
+    assert isinstance(plain_report, str) and isinstance(html_report, str)
+    for group in ("operational", "research_quality"):
+        for item in metrics[group]:
+            assert f"{item['label']}: {item['value']}" in plain_report
+            assert f"<dt>{escape(item['label'])}</dt>" in html_report
+            assert f"<dd>{escape(item['value'])}</dd>" in html_report
     assert exported_session["steps"][0]["output"] == investigation(1)
     assert (
         exported_session["artifacts"][0]["id"] in exported_session["outcome"]["basis_artifact_ids"]
@@ -205,6 +231,611 @@ async def test_three_cycles_and_idempotency(path: Path):
         range(1, len(finished["events"]) + 1)
     )
     assert any(event["kind"] == "coordinator.started" for event in finished["events"])
+
+
+async def test_investigator_python_is_run_and_reviewed(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 1
+    research_sessions.save_limits(str(path), limits)
+    code = "print(6 * 7)"
+    first = {**investigation(1), "python_code": code}
+    execution = {
+        "id": str(uuid4()),
+        "status": "timeout",
+        "exit_code": 124,
+        "stdout": "",
+        "stderr": "Execution exceeded the 15-second wall limit.",
+        "duration_ms": 15_000,
+        "source": code,
+        "artifacts": [],
+        "environment": {"network": "none", "memory_bytes": 536870912},
+    }
+    outputs = [first, skeptic(1, "stop", "no_progress")]
+    contexts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        contexts.append((payload["text"]["format"]["name"], context))
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(
+            research_sessions,
+            "execute_research_code",
+            new=AsyncMock(return_value=execution),
+        ) as sandbox,
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        finished = await wait_for(path, started["id"])
+
+    sandbox.assert_awaited_once()
+    sandbox_call = sandbox.await_args
+    assert sandbox_call is not None
+    assert sandbox_call.args[1] == code
+    assert sandbox_call.kwargs == {
+        "session_id": started["id"],
+        "strategy_id": strategy.id,
+        "cycle": 1,
+    }
+    assert [role for role, _ in contexts] == [
+        "research_investigator",
+        "research_skeptic",
+    ], (contexts, finished)
+    skeptic_context = contexts[1][1]["investigator_output"]
+    assert skeptic_context["python_code"] == code
+    assert skeptic_context["python_execution"] == execution
+    assert skeptic_context["python_execution"]["status"] == "timeout"
+    assert finished["steps"][0]["output"] == skeptic_context
+    sources = finished["outcome"]["metrics"]["sources"]
+    assert sources["session_id"] == started["id"]
+    assert sources["execution_ids"] == [execution["id"]]
+    assert sources["artifact_ids"] == [finished["artifacts"][0]["id"]]
+    assert sources["step_ids"] == sorted(step["id"] for step in finished["steps"])
+    artifact = finished["artifacts"][0]
+    assert artifact["session_id"] == started["id"] and artifact["strategy_id"] == strategy.id
+    assert artifact["strategy_cycle"] == 1
+    assert artifact["investigator_output"]["python_execution"] == execution
+    assert finished["artifacts"][0]["investigator_output"] == skeptic_context
+    assert (
+        finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
+    )
+    assert any(event["kind"] == "python.started" for event in finished["events"])
+    completed_event = next(
+        event for event in finished["events"] if event["kind"] == "python.completed"
+    )
+    assert execution["id"] in completed_event["message"]
+    assert execution["status"] in completed_event["message"]
+    from sigma.api import export_project_view
+
+    exported = export_project_view(str(path))
+    exported_artifact = exported["research_sessions"][0]["artifacts"][0]
+    assert exported_artifact["investigator_output"]["python_code"] == code
+    assert exported_artifact["investigator_output"]["python_execution"] == execution
+    with patch("sigma.api.export_project_view", return_value=exported):
+        paper_evidence, _ = papers._snapshot(str(path))
+    paper_sources = {item["id"]: item["data"] for item in paper_evidence["sources"]}
+    paper_artifact = next(
+        value for key, value in paper_sources.items() if key.startswith("artifact:")
+    )
+    assert paper_artifact["investigator_output"]["python_code"] == code
+    assert paper_artifact["investigator_output"]["python_execution"]["source"] == code
+    # Cross-strategy coordination must see the failure, not only the original
+    # pre-execution claim. Its preview leaves the original exact evidence intact.
+    peer_branch = {
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Peer approach",
+        "strategy_text": "Review the computation independently.",
+        "current_question": "Does peer evidence change the approach?",
+        "pending_investigation": investigation(1),
+    }
+    for role in ("investigator", "skeptic"):
+        peer_context = research_sessions._portfolio_context(finished, peer_branch, role, 1)
+        preview = peer_context["other_strategy_evidence"][0]["python_execution"]
+        assert preview["id"] == execution["id"] and preview["status"] == "timeout"
+        assert preview["source"] == code and preview["stderr"] == execution["stderr"]
+    assert finished["artifacts"][0]["investigator_output"]["python_execution"] == execution
+    large_preview_record = json.loads(json.dumps(finished))
+    large_execution = large_preview_record["artifacts"][0]["investigator_output"][
+        "python_execution"
+    ]
+    large_execution.update(stdout="x" * 3000, stderr="e" * 2000)
+    peer_context = research_sessions._portfolio_context(
+        large_preview_record, peer_branch, "skeptic", 1
+    )
+    preview = peer_context["other_strategy_evidence"][0]["python_execution"]
+    assert preview["stdout_truncated"] and len(preview["stdout"]) == 2000
+    assert preview["stderr_truncated"] and len(preview["stderr"]) == 1000
+    assert large_execution["stdout"] == "x" * 3000 and preview["source"] == code
+    prior_findings = research_sessions._prior_session_findings(str(path), str(uuid4()))
+    assert prior_findings[0]["python_execution"]["id"] == execution["id"]
+    assert prior_findings[0]["python_execution"]["status"] == "timeout"
+
+
+async def test_recovery_reuses_saved_python_execution(path: Path):
+    view, strategy, _, _ = await setup(path)
+    session_id = str(uuid4())
+    code = "print('persist before session update')"
+    investigation_output = {**investigation(1), "python_code": code}
+    record = {
+        "id": session_id,
+        "project_path": str(project_path(path)),
+        "project_id": view.project.id,
+        "status": "running",
+        "strategy_runs": [
+            {
+                "strategy_id": strategy.id,
+                "strategy_title": "Saved approach",
+                "cycle": 1,
+                "pending_investigation": investigation_output,
+                "current_action": "Python execution",
+            }
+        ],
+        "steps": [
+            {
+                "id": str(uuid4()),
+                "strategy_id": strategy.id,
+                "role": "investigator",
+                "cycle": 1,
+                "output": investigation_output,
+            }
+        ],
+        "events": [],
+    }
+    research_sessions._save(str(path), record)
+    container_result = python_sandbox.ExecutionResult(
+        "completed", 0, "persist before session update\n", "", 50, "sha256:" + "a" * 64
+    )
+    with patch.object(python_sandbox, "execute", return_value=container_result):
+        saved_execution = await python_sandbox.execute_research_code(
+            str(path),
+            code,
+            session_id=session_id,
+            strategy_id=strategy.id,
+            cycle=1,
+        )
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("recovery must not rerun saved code")),
+    ) as execute:
+        await research_sessions._complete_pending_python(
+            session_id, str(path), strategy.id, 1, asyncio.Lock()
+        )
+    execute.assert_not_awaited()
+    recovered = research_sessions._read(str(path), session_id)
+    branch = recovered["strategy_runs"][0]
+    assert branch["pending_investigation"]["python_execution"] == saved_execution
+    assert recovered["steps"][0]["output"]["python_execution"] == saved_execution
+    assert any(event["kind"] == "python.recovered" for event in recovered["events"])
+
+
+async def test_stop_during_python_execution_preserves_provenance(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 1
+    research_sessions.save_limits(str(path), limits)
+    code = "while True: pass"
+    execution = {
+        "id": str(uuid4()),
+        "status": "timeout",
+        "exit_code": 124,
+        "stdout": "",
+        "stderr": "Execution exceeded the 15-second wall limit.",
+        "duration_ms": 15_000,
+        "source": code,
+        "artifacts": [],
+        "environment": {"network": "none"},
+    }
+    execution_started = asyncio.Event()
+    release_execution = asyncio.Event()
+    provider_calls = []
+
+    async def handler(request):
+        provider_calls.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json=provider_response({**investigation(1), "python_code": code}),
+        )
+
+    async def delayed_execution(*_args, **_kwargs):
+        execution_started.set()
+        await release_execution.wait()
+        return execution
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "execute_research_code", new=delayed_execution),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        await asyncio.wait_for(execution_started.wait(), 2)
+        stop_task = asyncio.create_task(
+            research_sessions.control_session(str(path), started["id"], "stop")
+        )
+        await asyncio.sleep(0)
+        release_execution.set()
+        stopped = await asyncio.wait_for(stop_task, 2)
+
+    assert stopped["status"] == "stopped"
+    assert len(provider_calls) == 1  # the Skeptic is not called after a user stop
+    saved = research_sessions.get_session(str(path), started["id"])
+    pending = saved["strategy_runs"][0]["pending_investigation"]
+    assert pending["python_code"] == code and pending["python_execution"] == execution
+    assert saved["steps"][0]["status"] == "completed"
+    assert saved["steps"][0]["output"] == pending
+    assert any(event["kind"] == "python.completed" for event in saved["events"])
+
+
+async def test_failed_experiment_is_reused_then_revised(path: Path):
+    view, strategy, credential, config = await setup(path)
+    bad_code, repaired_code = (
+        "raise ValueError('singular system')",
+        "print('rank=1; underdetermined')",
+    )
+    calls, contexts = [], []
+
+    async def compute(_path, source, **provenance):
+        calls.append(source)
+        result = python_sandbox.ExecutionResult(
+            "failed" if source == bad_code else "completed",
+            1 if source == bad_code else 0,
+            "" if source == bad_code else "rank=1; underdetermined\n",
+            "ValueError: singular system" if source == bad_code else "",
+            5,
+        )
+        with patch.object(python_sandbox, "execute", return_value=result):
+            return await python_sandbox.execute_research_code(_path, source, **provenance)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        cycle = context["cycle"]
+        if payload["text"]["format"]["name"] == "research_investigator":
+            if cycle > 1:
+                assert (
+                    context["prior_artifacts"][-1]["investigator_output"]["python_execution"][
+                        "status"
+                    ]
+                    == "failed"
+                )
+            output = {
+                **investigation(cycle),
+                "python_code": bad_code if cycle < 3 else repaired_code,
+            }
+        else:
+            evidence = context["investigator_output"]
+            contexts.append(evidence)
+            assert evidence["python_execution"]["source"] == evidence["python_code"]
+            output = skeptic(cycle)
+            output["next_question"] = (
+                "Use rank-revealing least squares and report the null space; failure is not mathematical refutation."
+            )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execute_research_code", new=compute),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+    assert finished["status"] == "ended" and len(finished["artifacts"]) == 3, finished
+    assert calls == [bad_code, repaired_code]
+    assert contexts[0]["python_execution"] == contexts[1]["python_execution"]
+    assert contexts[1]["python_execution"]["cycle"] == 1
+    assert "original" in contexts[1]["python_execution_reuse_reason"]
+    assert contexts[2]["python_execution"]["status"] == "completed"
+    assert any(event["kind"] == "python.reused" for event in finished["events"])
+
+
+async def test_restart_during_python_has_no_automatic_rerun(path: Path):
+    await test_recovery_reuses_saved_python_execution(path)
+    record = research_sessions._all(str(path))[0]
+    branch = record["strategy_runs"][0]
+    prior = branch["pending_investigation"].pop("python_execution")
+    stored = path / "research-executions" / f"{prior['id']}.json"
+    # Reproduce a real crash state: intent was published, terminal result was
+    # never written. The host cannot infer whether the program actually ran.
+    prior.update(status="running", exit_code=None, stdout="", stderr="", duration_ms=None)
+    stored.write_text(json.dumps(prior))
+    research_sessions._save(str(path), record)
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("uncertain execution must not rerun")),
+    ):
+        await research_sessions._complete_pending_python(
+            record["id"], str(path), branch["strategy_id"], 1, asyncio.Lock()
+        )
+    recovered = research_sessions._read(str(path), record["id"])
+    evidence = recovered["strategy_runs"][0]["pending_investigation"]["python_execution"]
+    assert evidence["status"] == "interrupted" and evidence["exit_code"] is None
+    assert evidence["stdout"] == "" and "may have run" in evidence["interruption_reason"]
+    recovered["deadline_at"] = "2000-01-01T00:00:00+00:00"
+    pending = recovered["strategy_runs"][0]["pending_investigation"]
+    pending.pop("python_execution")
+    pending["python_code"] = "print('new work after deadline')"
+    research_sessions._save(str(path), recovered)
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("expired work must not dispatch")),
+    ):
+        await research_sessions._complete_pending_python(
+            record["id"], str(path), branch["strategy_id"], 1, asyncio.Lock()
+        )
+    expired = research_sessions._read(str(path), record["id"])
+    assert "python_execution" not in expired["strategy_runs"][0]["pending_investigation"]
+
+
+async def test_portfolio_python_queue_and_stop(path: Path):
+    for action in ("complete", "stop", "project-change"):
+        stopping = action != "complete"
+        case = path.with_name(action + ".sigma")
+        view, first, credential, config = await setup(case)
+        strategies = [first] + [
+            create_strategy(
+                case, f"Computation {i}", "Run an independently attributed finite experiment."
+            ).project.strategies[-1]
+            for i in (2, 3)
+        ]
+        limits = research_sessions.get_limits(str(case))
+        limits.update(research_rounds=1, model_calls=6)
+        limits = research_sessions.save_limits(str(case), limits)
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        provider_investigations = []
+        state = {"active": 0, "maximum": 0}
+
+        async def handler(request, provider_investigations=provider_investigations):
+            payload = json.loads(request.content)
+            context = json.loads(payload["input"])
+            if payload["text"]["format"]["name"] == "research_investigator":
+                provider_investigations.append(context["strategy"]["id"])
+                output = {**investigation(1), "python_code": "print('finite check')"}
+            else:
+                assert context["investigator_output"]["python_execution"]["status"] == "completed"
+                output = skeptic(1, "stop", "productive_conclusion")
+            return httpx.Response(200, json=provider_response(output))
+
+        async def compute(
+            _path,
+            source,
+            calls=calls,
+            state=state,
+            entered=entered,
+            release=release,
+            stopping=stopping,
+            **provenance,
+        ):
+            calls.append(provenance)
+            state["active"] += 1
+            state["maximum"] = max(state["maximum"], state["active"])
+            entered.set()
+            try:
+                if stopping:
+                    await release.wait()
+                else:
+                    await asyncio.sleep(0.05)
+                return {
+                    "id": str(uuid4()),
+                    "source": source,
+                    "status": "completed",
+                    "exit_code": 0,
+                    "stdout": "finite check\n",
+                    "stderr": "",
+                    "artifacts": [],
+                    **provenance,
+                }
+            finally:
+                state["active"] -= 1
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "execute_research_code", new=compute),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(case),
+                first.id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+                strategy_ids=[item.id for item in strategies],
+            )
+            if stopping:
+                await entered.wait()
+                for _ in range(100):
+                    if len(provider_investigations) == 3:
+                        break
+                    await asyncio.sleep(0.01)
+                assert len(provider_investigations) == 3
+                if action == "stop":
+                    stop = asyncio.create_task(
+                        research_sessions.control_session(str(case), started["id"], "stop")
+                    )
+                    await asyncio.sleep(0.02)
+                    release.set()
+                    finished = await stop
+                else:
+                    set_strategy_enabled(case, first.id, False)
+                    release.set()
+                    finished = await wait_for(case, started["id"])
+            else:
+                finished = await wait_for(case, started["id"])
+        assert state["maximum"] == 1 and state["active"] == 0
+        assert len(calls) == (1 if stopping else 3), calls
+        assert (
+            finished["status"]
+            == {"complete": "ended", "stop": "stopped", "project-change": "paused"}[action]
+        ), finished
+        if stopping:
+            assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 1
+            assert len(finished["steps"]) == 3 and finished["calls_used"] == 3
+        else:
+            assert len(finished["artifacts"]) == 3 and finished["calls_used"] == 6
+
+
+async def test_new_session_receives_prior_saved_findings(path: Path):
+    view, strategy, credential, config = await setup(path)
+    outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    contexts = []
+    continuation_started = asyncio.Event()
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        contexts.append((payload["text"]["format"]["name"], context))
+        if context.get("prior_session_findings"):
+            continuation_started.set()
+            await asyncio.Event().wait()
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        first = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        completed = await wait_for(path, first["id"])
+        assert completed["status"] == "ended" and len(completed["artifacts"]) == 1
+        next_session = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(continuation_started.wait(), 2)
+        await research_sessions.control_session(str(path), next_session["id"], "stop")
+
+    next_context = next(
+        item[1]
+        for item in reversed(contexts)
+        if item[0] == "research_investigator" and item[1].get("prior_session_findings")
+    )
+    assert next_context["prior_session_findings"] == [
+        {
+            "id": completed["artifacts"][0]["id"],
+            "sequence": 1,
+            "claim_or_question": completed["artifacts"][0]["claim_or_question"],
+            "method": completed["artifacts"][0]["method"],
+            "evidence_status": completed["artifacts"][0]["evidence_status"],
+            "objections": completed["artifacts"][0]["objections"],
+            "open_obligations": completed["artifacts"][0]["open_obligations"],
+            "coordinator_decision": completed["artifacts"][0]["coordinator_decision"],
+            "next_question": completed["artifacts"][0]["next_question"],
+            "session_id": completed["id"],
+            "session_number": completed["session_number"],
+            "strategy_id": strategy.id,
+            "strategy_title": strategy.title,
+        }
+    ], next_context["prior_session_findings"]
+    assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]
+    persisted = research_sessions.get_session(str(path), next_session["id"])
+    assert (
+        persisted["steps"][0]["prior_session_artifact_ids"]
+        == next_context["prior_session_artifact_ids"]
+    )
+
+
+def test_continuation_context_is_bounded(path: Path):
+    view = initialize_project(path, "Long-history project", "A bounded research question.")
+    source_id = str(uuid4())
+    source = {
+        "id": source_id,
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "session_number": 1,
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Long history approach",
+        "status": "ended",
+        "created_at": research_sessions._now(),
+        "updated_at": research_sessions._now(),
+        "artifacts": [
+            {
+                "id": str(uuid4()),
+                "sequence": sequence,
+                "strategy_id": str(uuid4()),
+                "claim_or_question": f"Finding {sequence} " + "x" * 3000,
+                "method": "Method " + "y" * 3000,
+                "evidence_status": "Unverified " + "z" * 3000,
+                "objections": ["Objection " + "o" * 300 for _ in range(12)],
+                "open_obligations": ["Obligation " + "p" * 300 for _ in range(12)],
+                "coordinator_decision": "continue",
+                "next_question": "Next " + "q" * 3000,
+            }
+            for sequence in range(1, 21)
+        ],
+    }
+    research_sessions._save(view.path, source)
+    current = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "problem": view.project.problem,
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Current approach",
+        "strategy_text": "Continue from saved findings.",
+        "current_question": "Avoid repeating prior work.",
+        "strategy_snapshot": [],
+        "artifacts": [],
+    }
+    context = research_sessions._agent_context(current, "investigator", 1)
+    encoded = json.dumps(context, ensure_ascii=False)
+    findings = context["prior_session_findings"]
+    assert 1 <= len(findings) <= 12
+    assert "Finding 20" in findings[0]["claim_or_question"]
+    assert "[truncated; inspect the original saved artifact]" in findings[0]["claim_or_question"]
+    assert len(encoded) < 48000
+    assert source["artifacts"][0]["claim_or_question"].endswith("x" * 3000)
 
 
 async def test_pause_counts_interrupted_call(path: Path):
@@ -246,6 +877,11 @@ async def test_pause_counts_interrupted_call(path: Path):
         paused = research_sessions.get_session(str(path), started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 1
     assert paused["steps"][-1]["status"] == "interrupted"
+    paused_metrics = {
+        item["label"]: item["value"] for item in paused["outcome"]["metrics"]["operational"]
+    }
+    assert "1 interrupted / cancelled" in paused_metrics["Model calls by status"]
+    assert "1 later attempt(s)" not in paused_metrics["Provider failures / retries"]
     from sigma import agentic, proposals, text_views
 
     for gate in (agentic._gate, proposals._gate, text_views._gate, research_sessions._gate):
@@ -270,6 +906,11 @@ async def test_pause_counts_interrupted_call(path: Path):
         await asyncio.sleep(0.02)
         stopped = research_sessions.get_session(str(path), started["id"])
         assert stopped["calls_used"] == 2 and stopped["steps"][-1]["status"] == "interrupted"
+        stopped_metrics = {
+            item["label"]: item["value"] for item in stopped["outcome"]["metrics"]["operational"]
+        }
+        assert "2 interrupted / cancelled" in stopped_metrics["Model calls by status"]
+        assert "1 later attempt(s)" in stopped_metrics["Provider failures / retries"]
         stopped_elapsed = stopped["elapsed_seconds"]
         await asyncio.sleep(0.02)
         assert (
@@ -458,6 +1099,45 @@ async def test_chatgpt_stream(path: Path):
     assert result == (output, {"input_tokens": 25, "cached_input_tokens": 5, "output_tokens": 12})
 
 
+async def test_session_deadline_bounds_generous_call_timeout(path: Path):
+    _, _, credential, _ = await setup(path)
+    assert research_sessions.CALL_TIMEOUT == 900
+    cancelled = asyncio.Event()
+
+    async def handler(request):
+        try:
+            await asyncio.sleep(5)
+        finally:
+            cancelled.set()
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    record = {
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "mode": credential["mode"],
+        "identity_hash": research_sessions._digest(credential["identity"]),
+        "deadline_at": (datetime.now(UTC) + timedelta(seconds=0.05)).isoformat(),
+    }
+    started = time.monotonic()
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await asyncio.wait_for(research_sessions._call(record, "investigator", {}), 1)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError("An in-flight call must stop at the session deadline")
+    assert time.monotonic() - started < 0.8
+    assert cancelled.is_set()
+
+
 async def test_limits_snapshot_and_usage_cost(path: Path):
     view, strategy, credential, config = await setup(path)
     assert research_sessions.get_limits(str(path)) == research_sessions.DEFAULT_LIMITS
@@ -498,6 +1178,13 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     assert finished["maximum_estimated_cost_usd"] == 0.1
     assert finished["cost_status"] == "available" and finished["estimated_cost_usd"] > 0
     assert all(step["token_usage"]["input_tokens"] == 120 for step in finished["steps"])
+    operational_metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert operational_metrics["Tokens · input / output / cached / total"] == "240 / 160 / 40 / 400"
+    assert operational_metrics["Estimated monetary cost"] == (
+        "$0.002004 estimated (rates checked 2026-10-23)"
+    )
     assert research_sessions.get_limits(str(path)) == future
 
 
@@ -765,6 +1452,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
+        "python_code": None,
     }
     review = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -810,7 +1498,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "artifact-3",
         "artifact-4",
     ]
-    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 50000}]}
+    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 300000}]}
     try:
         research_sessions._agent_context(oversized_context, "skeptic", 2)
     except ProjectError as exc:
@@ -838,7 +1526,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         finished = await wait_for(path, started["id"])
-        assert "entire ordered set of saved artifacts" in provider_requests[1]["instructions"]
+        assert (
+            "entire ordered set of current-session saved artifacts"
+            in provider_requests[1]["instructions"]
+        )
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
@@ -1017,6 +1708,1369 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert reopened["strategy_assessments"][0]["strategy_title"] == strategy.title
 
 
+async def test_answer_free_maximum_regions_prompt(path: Path):
+    view = initialize_project(
+        path,
+        "Maximum Regions · answer-free regression",
+        "Determine the greatest number of regions formed by n distinct straight lines in the plane. State assumptions, derive an upper bound, and give a construction if you can.",
+        research_mode="mathematical",
+        difficulty="easy",
+    )
+    strategy = create_strategy(
+        path,
+        "Incremental line insertion",
+        "Study what one newly inserted line can add. Bound its segments by its intersections with the earlier lines, and seek a configuration attaining the bound.",
+    ).project.strategies[0]
+    credential = {
+        "identity": "fixture-account",
+        "mode": "api_key",
+        "token": "fixture-token",
+        "status": "connected",
+    }
+    config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+    outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    inputs = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        inputs.append(json.loads(payload["input"]))
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended" and finished["artifacts"]
+    assert len(inputs) == 2
+    for context in inputs:
+        assert context["problem"] == view.project.problem
+        assert context["strategy"]["approach"] == strategy.approach
+        prompt = json.dumps(context)
+        assert "1 + n(n+1)/2" not in prompt
+        assert "y=kx+k^2" not in prompt
+    # This is an answer-leakage regression fixture, not evidence that a model
+    # can independently solve the problem; the provider is mocked above.
+
+
+async def test_concurrent_strategy_portfolio(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Boundary-first", "Start with degenerate and small boundary cases."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Counterexample search", "Search for assumptions that make the claim fail."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits["model_calls"] = 8
+    limits = research_sessions.save_limits(str(path), limits)
+    state = {"active": 0, "maximum": 0}
+    request_contexts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        request_contexts.append((payload["text"]["format"]["name"], context))
+        state["active"] += 1
+        state["maximum"] = max(state["maximum"], state["active"])
+        try:
+            await asyncio.sleep(0.04)
+            strategy_name = context["strategy"]["title"]
+            cycle = context["cycle"]
+            if payload["text"]["format"]["name"] == "research_investigator":
+                output = {
+                    **investigation(cycle),
+                    "claim": f"{strategy_name} claim for branch cycle {cycle}.",
+                }
+            else:
+                output = skeptic(cycle)
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            state["active"] -= 1
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended", (
+        finished["status"],
+        finished["message"],
+        finished["calls_used"],
+        finished["strategy_runs"],
+    )
+    expected_strategy_ids = {first.id, second.id, third.id}
+    assert finished["strategy_ids"] == [first.id, second.id, third.id]
+    assert state["maximum"] == 3, state
+    assert state["maximum"] <= 3
+    assert finished["calls_used"] == 8
+    assert len(finished["artifacts"]) == 4
+    assert {item["strategy_id"] for item in finished["artifacts"]} == expected_strategy_ids
+    assert {
+        item["strategy_id"]
+        for item in finished["strategy_assessments"]
+        if item["assessment"] != "not_used"
+    } == expected_strategy_ids
+    assert all(step["status"] == "completed" for step in finished["steps"])
+    assert finished.get("current_steps", []) == []
+    assert any(step.get("peer_strategy_artifact_ids") for step in finished["steps"])
+    assert len(request_contexts) == 8
+    assert {context["strategy"]["id"] for _, context in request_contexts} == expected_strategy_ids
+    assert finished["portfolio_decision"]["basis_artifact_ids"] == [
+        item["id"] for item in finished["artifacts"]
+    ]
+    assert len(finished["portfolio_decision"]["strategy_actions"]) == 3
+    assert finished["portfolio_decision"]["status"] == "model_reported_unverified"
+
+
+async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Complementary route", "Derive a separate invariant and compare its consequences."
+    ).project.strategies[-1]
+    project_before = (path / "project.json").read_bytes()
+    limits = research_sessions.get_limits(str(path))
+    limits.update({"research_rounds": 2, "model_calls": 8})
+    limits = research_sessions.save_limits(str(path), limits)
+    seen_contexts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        context = json.loads(payload["input"])
+        seen_contexts.append((role, context))
+        strategy = context["strategy"]
+        cycle = context["cycle"]
+        if role == "research_investigator":
+            result = investigation(cycle)
+            result["claim"] = f"{strategy['title']} finding in cycle {cycle}."
+            if cycle == 1:
+                result["method"] = (
+                    "Derive a branch-local invariant, leaving an explicit comparison question."
+                )
+            else:
+                peers = context["other_strategy_evidence"]
+                assert len(peers) == 1
+                result["method"] = (
+                    "Revised after comparing peer artifact "
+                    + peers[0]["artifact_id"]
+                    + "; the mechanisms are complementary, not a shared proof."
+                )
+        else:
+            result = skeptic(
+                cycle,
+                "revise" if cycle == 1 else "stop",
+                "recoverable_objection" if cycle == 1 else "productive_conclusion",
+            )
+            if cycle == 1:
+                result["next_question"] = (
+                    "Compare this invariant against the other strategy's saved evidence."
+                )
+            else:
+                peers = context["other_strategy_evidence"]
+                assert len(peers) == 1
+                result["cross_strategy_relations"] = [
+                    {
+                        "strategy_id": peers[0]["strategy_id"],
+                        "artifact_id": peers[0]["artifact_id"],
+                        "relation": "complements",
+                        "rationale": "The distinct invariant supplies a missing case needed by the peer route.",
+                    }
+                ]
+                result["next_question"] = ""
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended" and finished["calls_used"] == 8
+    assert len(finished["artifacts"]) == 4
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    second_cycle_investigations = [
+        context
+        for role, context in seen_contexts
+        if role == "research_investigator" and context["cycle"] == 2
+    ]
+    assert len(second_cycle_investigations) == 2
+    assert all(
+        len(context["other_strategy_evidence"]) == 1 for context in second_cycle_investigations
+    )
+    second_cycle_skeptics = [
+        context
+        for role, context in seen_contexts
+        if role == "research_skeptic" and context["cycle"] == 2
+    ]
+    assert len(second_cycle_skeptics) == 2
+    assert all(len(context["other_strategy_evidence"]) == 1 for context in second_cycle_skeptics)
+    assert all(
+        artifact["skeptic_output"]["cross_strategy_relations"][0]["artifact_id"]
+        in {item["id"] for item in finished["artifacts"]}
+        for artifact in finished["artifacts"]
+        if artifact["strategy_cycle"] == 2
+    )
+    decision = finished["portfolio_decision"]
+    assert len(decision["strategy_actions"]) == 2
+    assert len(decision["combination_candidates"]) == 1
+    combination = decision["combination_candidates"][0]
+    assert set(combination["strategy_ids"]) == {first.id, second.id}
+    assert combination["status"] == "unverified_candidate_for_human_review"
+    assert len(combination["basis_artifact_ids"]) == 4
+    assert decision["status"] == "model_reported_unverified"
+    assert any("never edit" in item for item in decision["limitations"])
+    assert (path / "project.json").read_bytes() == project_before
+
+
+async def test_peer_finding_changes_target_investigator_after_stop_and_resume(path: Path):
+    view, source, credential, config = await setup(path)
+    target = create_strategy(
+        path, "Target route", "Derive an independent invariant and check its consequences."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits.update({"research_rounds": 3, "model_calls": 10})
+    limits = research_sessions.save_limits(str(path), limits)
+    preflight_waiting = asyncio.Event()
+    preflight_interrupted = False
+    observed = []
+
+    async def configuration_gate(*_args, **_kwargs):
+        nonlocal preflight_interrupted
+        relation_saved = any(
+            artifact.get("skeptic_output", {}).get("cross_strategy_relations")
+            for record in research_sessions._all(str(path))
+            for artifact in record.get("artifacts", [])
+        )
+        if relation_saved and not preflight_interrupted:
+            preflight_interrupted = True
+            preflight_waiting.set()
+            await asyncio.Event().wait()
+        return config
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        context = json.loads(payload["input"])
+        strategy_id = context["strategy"]["id"]
+        cycle = context["cycle"]
+        observed.append((role, strategy_id, cycle, context))
+        if role == "research_investigator":
+            result = investigation(cycle)
+            if cycle == 3:
+                assert (
+                    "directly examine its cited source and target artifacts"
+                    in payload["instructions"]
+                )
+                assert (
+                    "compare the source and target assumptions and domains"
+                    in payload["instructions"]
+                )
+                assert strategy_id == target.id
+                assert len(context["peer_handoffs"]) == 1
+                handoff = context["peer_handoffs"][0]
+                assert handoff["source_strategy_id"] == source.id
+                assert handoff["target_strategy_id"] == target.id
+                assert handoff["relation"] == "complements"
+                assert handoff["source_artifact_id"] in context["question"]
+                assert handoff["target_artifact_id"] in context["question"]
+                result["method"] = (
+                    "Tested the complementary claim in source artifact "
+                    f"{handoff['source_artifact_id']} against target artifact "
+                    f"{handoff['target_artifact_id']}; this changes the next step to compare "
+                    "the two invariant boundaries before extending the target derivation."
+                )
+            return httpx.Response(200, json=provider_response(result))
+
+        result = skeptic(cycle)
+        if cycle == 1:
+            result["next_question"] = "Continue the distinct branch-local derivation."
+        elif cycle == 2:
+            result["next_question"] = "Test the next consequence of this branch's invariant."
+            if strategy_id == source.id:
+                peer = next(
+                    item
+                    for item in context["other_strategy_evidence"]
+                    if item["strategy_id"] == target.id
+                )
+                result["cross_strategy_relations"] = [
+                    {
+                        "strategy_id": target.id,
+                        "artifact_id": peer["artifact_id"],
+                        "relation": "complements",
+                        "rationale": "The source route's boundary lemma supplies the missing case in the target route's invariant.",
+                    }
+                ]
+        elif strategy_id == target.id:
+            result = skeptic(cycle, "stop", "productive_conclusion")
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=configuration_gate),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            source.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[source.id, target.id],
+        )
+        await asyncio.wait_for(preflight_waiting.wait(), 5)
+        before_stop = research_sessions.get_session(str(path), started["id"])
+        source_artifact = next(
+            artifact
+            for artifact in before_stop["artifacts"]
+            if artifact["strategy_id"] == source.id and artifact["strategy_cycle"] == 2
+        )
+        target_first_artifact = next(
+            artifact
+            for artifact in before_stop["artifacts"]
+            if artifact["strategy_id"] == target.id and artifact["strategy_cycle"] == 1
+        )
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+
+        stopped_target = next(
+            item for item in stopped["strategy_runs"] if item["strategy_id"] == target.id
+        )
+        pending = stopped_target["pending_peer_handoffs"]
+        assert len(pending) == 1
+        assert pending[0]["source_artifact_id"] == source_artifact["id"]
+        assert pending[0]["target_artifact_id"] == target_first_artifact["id"]
+        assert stopped["calls_used"] == 8
+
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 10
+    cycle_three_investigators = [
+        item for item in observed if item[0] == "research_investigator" and item[2] == 3
+    ]
+    assert [
+        (role, strategy_id, cycle) for role, strategy_id, cycle, _ in cycle_three_investigators
+    ] == [("research_investigator", target.id, 3)]
+    target_third = next(
+        artifact
+        for artifact in finished["artifacts"]
+        if artifact["strategy_id"] == target.id and artifact["strategy_cycle"] == 3
+    )
+    assert "changes the next step" in target_third["investigator_output"]["method"]
+    assert target_third["peer_handoffs_prompted"] == pending
+    target_third_step = next(
+        step
+        for step in finished["steps"]
+        if step["strategy_id"] == target.id
+        and step["role"] == "investigator"
+        and step["cycle"] == 3
+    )
+    assert target_third_step["peer_handoff_artifact_ids"] == [
+        source_artifact["id"],
+        target_first_artifact["id"],
+    ]
+    assert target_third_step["peer_handoff_ids"] == [pending[0]["handoff_id"]]
+    assert target_third["peer_handoffs_prompted"][0]["handoff_id"] == pending[0]["handoff_id"]
+
+
+async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_pool(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Alternate route", "Try an independent structural decomposition."
+    ).project.strategies[-1]
+    project_before = (path / "project.json").read_bytes()
+    limits = research_sessions.get_limits(str(path))
+    limits["model_calls"] = 6
+    limits = research_sessions.save_limits(str(path), limits)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        strategy_id = context["strategy"]["id"]
+        cycle = context["cycle"]
+        if role == "research_investigator":
+            output = investigation(cycle)
+            output["claim"] = f"Candidate claim for {context['strategy']['title']}."
+        elif strategy_id == first.id:
+            output = skeptic(cycle, "stop", "no_progress")
+            output["next_question"] = ""
+            output["objections"] = ["The proposed invariant does not control the boundary case."]
+            output["remaining_obligations"] = []
+            output["strategy_contribution"] = "unproductive"
+            output["contribution_rationale"] = "This route did not produce a useful consequence."
+        else:
+            output = skeptic(
+                cycle,
+                "stop" if cycle == 2 else "continue",
+                "productive_conclusion" if cycle == 2 else "recoverable_objection",
+            )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended" and finished["calls_used"] == 6
+    branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
+    assert branches[first.id]["status"] == "ended"
+    assert branches[first.id]["last_decision"] == "stop_no_progress"
+    actions = {
+        item["strategy_id"]: item for item in finished["portfolio_decision"]["strategy_actions"]
+    }
+    assert actions[first.id]["action"] == "abandon_for_session"
+    assert "no concrete next step" in actions[first.id]["rationale"]
+    assert actions[first.id]["basis_artifact_ids"]
+    assert branches[second.id]["artifacts"]
+    assert (path / "project.json").read_bytes() == project_before
+    persisted = research_sessions.inspect_project(str(path)).project
+    assert all(strategy.enabled for strategy in persisted.strategies)
+
+
+async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path):
+    view, first, credential, config = await setup(path)
+    strategies = [first]
+    for index in range(1, 10):
+        strategies.append(
+            create_strategy(
+                path,
+                f"Independent route {index}",
+                f"Use a distinct route and explicitly test boundary {index}.",
+            ).project.strategies[-1]
+        )
+    limits = research_sessions.get_limits(str(path))
+    limits["model_calls"] = 20
+    limits = research_sessions.save_limits(str(path), limits)
+    state = {"active": 0, "maximum": 0}
+    delays = {
+        strategy.id: (len(strategies) - index) * 0.005 for index, strategy in enumerate(strategies)
+    }
+    completion_order = []
+    started_at = time.perf_counter()
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        assert all(
+            gate.locked()
+            for gate in (proposals._gate, agentic._gate, text_views._gate, research_sessions._gate)
+        )
+        state["active"] += 1
+        state["maximum"] = max(state["maximum"], state["active"])
+        try:
+            await asyncio.sleep(delays[context["strategy"]["id"]])
+            role = payload["text"]["format"]["name"]
+            output = (
+                investigation(context["cycle"])
+                if role == "research_investigator"
+                else skeptic(context["cycle"])
+            )
+            completion_order.append((context["strategy"]["id"], role))
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            state["active"] -= 1
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[strategy.id for strategy in strategies],
+        )
+        finished = await wait_for(path, started["id"])
+
+    expected_ids = {strategy.id for strategy in strategies}
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 20
+    assert len(finished["steps"]) == 20
+    assert len(finished["artifacts"]) == 10
+    assert {artifact["strategy_id"] for artifact in finished["artifacts"]} == expected_ids
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    assert state["maximum"] == 3
+    assert state["maximum"] <= 3
+    assert not any(
+        gate.locked()
+        for gate in (proposals._gate, agentic._gate, text_views._gate, research_sessions._gate)
+    )
+    assert completion_order[0][0] != first.id, completion_order
+    print(
+        "PASS 10-strategy load: "
+        f"max provider concurrency {state['maximum']}, 20/20 calls, "
+        f"10 artifacts, out-of-order responses, {time.perf_counter() - started_at:.3f}s"
+    )
+
+
+async def test_forked_strategy_followup_preserves_parent_comparison(path: Path):
+    view, parent, credential, config = await setup(path)
+    first_outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+
+    async def first_handler(_request):
+        return httpx.Response(200, json=provider_response(first_outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(first_handler), **kwargs
+            ),
+        ),
+    ):
+        first_start = await research_sessions.start_session(
+            str(path), parent.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        first_session = await wait_for(path, first_start["id"])
+
+    assert len(first_session["artifacts"]) == 1
+    source = first_session["artifacts"][0]
+    fork = create_strategy(
+        path,
+        "Evidence-based revision",
+        "Fork rationale: revise parent strategy "
+        f"{parent.id} after Session #{first_session['session_number']}. "
+        f"Saved finding: {source['claim_or_question']} "
+        f"Objections: {', '.join(source['objections'])}. "
+        f"Open obligations: {', '.join(source['open_obligations'])}. "
+        f"Next question: {source['next_question']}",
+    ).project.strategies[-1]
+    assert parent.approach == "Derive a recurrence and check its boundary cases."
+    assert parent.id in fork.approach and source["claim_or_question"] in fork.approach
+    followup_contexts = []
+
+    async def followup_handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        followup_contexts.append(context)
+        role = payload["text"]["format"]["name"]
+        if role == "research_investigator":
+            result = {
+                **investigation(context["cycle"]),
+                "claim": f"{context['strategy']['title']} makes a distinct claim.",
+            }
+        else:
+            result = skeptic(context["cycle"], "stop", "productive_conclusion")
+        return httpx.Response(200, json=provider_response(result))
+
+    limits = research_sessions.get_limits(str(path))
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(followup_handler), **kwargs
+            ),
+        ),
+    ):
+        followup_start = await research_sessions.start_session(
+            str(path),
+            parent.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[parent.id, fork.id],
+        )
+        followup = await wait_for(path, followup_start["id"])
+
+    assert followup["status"] == "ended"
+    assert followup["strategy_ids"] == [parent.id, fork.id]
+    assert len(followup["artifacts"]) == 2
+    assert {artifact["strategy_id"] for artifact in followup["artifacts"]} == {
+        parent.id,
+        fork.id,
+    }
+    assert len(followup["strategy_assessments"]) == 2
+    assert all(item["assessment"] == "productive" for item in followup["strategy_assessments"])
+    assert all(context["prior_session_findings"] for context in followup_contexts)
+    assert {item["strategy_id"] for item in followup["strategy_assessments"]} == {
+        parent.id,
+        fork.id,
+    }
+
+
+async def test_stop_concurrent_portfolio_preserves_completed_boundary(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(path, "Second line", "Try a distinct derivation.").project.strategies[
+        -1
+    ]
+    third = create_strategy(path, "Third line", "Search for a counterexample.").project.strategies[
+        -1
+    ]
+    entered = asyncio.Event()
+    request_state = {"count": 0, "active": 0, "maximum": 0}
+    project_before = (path / "project.json").read_bytes()
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        request_state["count"] += 1
+        request_state["active"] += 1
+        request_state["maximum"] = max(request_state["maximum"], request_state["active"])
+        entered.set()
+        try:
+            context = json.loads(payload["input"])
+            role = payload["text"]["format"]["name"]
+            if (
+                request_state["count"] <= 3
+                and context["strategy"]["id"] != first.id
+                and role == "research_investigator"
+            ):
+                await asyncio.Event().wait()
+            elif request_state["count"] <= 3:
+                await asyncio.sleep(0.03)
+            cycle = context["cycle"]
+            output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            request_state["active"] -= 1
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        for _ in range(100):
+            if request_state["count"] >= 3 and request_state["active"] == 2:
+                break
+            await asyncio.sleep(0.01)
+        assert request_state["count"] == 3
+        assert request_state["active"] == 2
+        assert request_state["maximum"] == 3
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
+        assert request_state["count"] == 3
+        assert request_state["active"] == 0
+        interrupted = research_sessions.get_session(str(path), started["id"])
+        assert interrupted["artifacts"] == []
+        assert interrupted["calls_used"] == 3
+        assert len(interrupted["steps"]) == 3
+        assert sum(step["status"] == "completed" for step in interrupted["steps"]) == 1
+        assert sum(step["status"] == "interrupted" for step in interrupted["steps"]) == 2
+        completed = next(step for step in interrupted["steps"] if step["status"] == "completed")
+        assert completed["output"]["claim"]
+        assert interrupted["current_steps"] == []
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert finished["status"] == "ended", (
+        finished["status"],
+        finished["message"],
+        finished["calls_used"],
+        finished["strategy_runs"],
+    )
+    assert finished["calls_used"] == 6
+    assert request_state["count"] == 6
+    assert len(finished["artifacts"]) == 2
+    assert any(step["status"] == "completed" and step.get("output") for step in finished["steps"])
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    assert finished["portfolio_decision"]["basis_artifact_ids"] == [
+        artifact["id"] for artifact in finished["artifacts"]
+    ]
+    assert len(finished["portfolio_decision"]["strategy_actions"]) == 3
+    assert len({artifact["id"] for artifact in finished["artifacts"]}) == 2
+    assert (path / "project.json").read_bytes() == project_before
+
+
+async def test_stop_reconciles_queued_portfolio_branches(path: Path):
+    view, first, credential, config = await setup(path)
+    additional = [
+        create_strategy(
+            path, f"Approach {index}", "Try an independent derivation."
+        ).project.strategies[-1]
+        for index in range(2, 5)
+    ]
+    entered = asyncio.Event()
+    state = {"count": 0, "active": 0}
+    limits = research_sessions.get_limits(str(path))
+    limits["model_calls"] = 8
+    limits = research_sessions.save_limits(str(path), limits)
+
+    async def handler(_request):
+        state["count"] += 1
+        state["active"] += 1
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            state["active"] -= 1
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, *(item.id for item in additional)],
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        for _ in range(100):
+            if state["count"] == 3:
+                break
+            await asyncio.sleep(0.01)
+        assert state["count"] == state["active"] == 3
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+
+    assert stopped["status"] == "stopped"
+    assert state["active"] == 0
+    assert len(stopped["strategy_runs"]) == 4
+    assert all(branch["status"] == "stopped" for branch in stopped["strategy_runs"]), stopped[
+        "strategy_runs"
+    ]
+    assert stopped["portfolio_decision"]["active_strategies"] == []
+    assert all(
+        action["action"] not in {"continue", "revise"}
+        for action in stopped["portfolio_decision"]["strategy_actions"]
+    )
+
+
+async def test_portfolio_preflight_failure_terminates_instead_of_spinning(path: Path):
+    view, strategy, credential, config = await setup(path)
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(
+            research_sessions,
+            "configuration",
+            new=AsyncMock(
+                side_effect=[config, ProjectError("temporary configuration service failure")]
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "paused"
+    assert finished["calls_used"] == 0
+    assert all(branch["status"] == "paused" for branch in finished["strategy_runs"])
+    assert "configuration service failure" in finished["message"].lower()
+
+
+async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
+    path: Path,
+):
+    view, strategy, credential, config = await setup(path)
+    config_calls = 0
+
+    async def configuration_with_one_timeout(*_args, **_kwargs):
+        nonlocal config_calls
+        config_calls += 1
+        if config_calls == 2:
+            await asyncio.Event().wait()
+        return config
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"], "stop", "productive_conclusion")
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=configuration_with_one_timeout),
+        patch.object(research_sessions, "PREFLIGHT_TIMEOUT", 0.01),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        paused = await wait_for(path, started["id"])
+        assert paused["status"] == "paused"
+        assert paused["calls_used"] == 0
+        assert "timed out" in paused["message"].lower()
+        assert all(branch["status"] == "paused" for branch in paused["strategy_runs"])
+
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 2
+    assert len(finished["artifacts"]) == 1
+    assert finished["strategy_runs"][0]["status"] == "ended"
+
+
+async def test_resume_limits_reconcile_portfolio_terminal_state(path: Path):
+    for limit_kind in ("deadline", "calls"):
+        case_path = path.with_name(f"{limit_kind}.sigma")
+        view, strategy, credential, config = await setup(case_path)
+        entered = asyncio.Event()
+
+        async def handler(_request, entered=entered):
+            entered.set()
+            await asyncio.Event().wait()
+            return httpx.Response(200, json=provider_response(investigation(1)))
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(case_path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            await asyncio.wait_for(entered.wait(), 2)
+            await research_sessions.control_session(str(case_path), started["id"], "pause")
+
+        record = research_sessions._read(str(case_path), started["id"])
+        record.pop("stopped_at", None)
+        record["status"] = "paused"
+        if limit_kind == "deadline":
+            record["deadline_at"] = "2000-01-01T00:00:00+00:00"
+        else:
+            record["deadline_at"] = "2999-01-01T00:00:00+00:00"
+            record["calls_used"] = record["call_limit"]
+        # Simulate a stale/older snapshot whose coordinator still advertises active work.
+        record["portfolio_decision"] = research_sessions._portfolio_decision(record)
+        for branch in record["strategy_runs"]:
+            branch["status"] = "paused"
+        research_sessions._save(str(case_path), record)
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        ):
+            ended = await research_sessions.control_session(str(case_path), started["id"], "resume")
+        assert ended["status"] == "ended", (limit_kind, ended["status"], ended["message"])
+        assert all(branch["status"] == "ended" for branch in ended["strategy_runs"])
+        assert ended["portfolio_decision"]["active_strategies"] == []
+        assert all(
+            action["action"] not in {"continue", "revise"}
+            for action in ended["portfolio_decision"]["strategy_actions"]
+        )
+
+
+async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent approach", "Use a different derivation."
+    ).project.strategies[-1]
+    roles = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        roles.append((context["strategy"]["id"], payload["text"]["format"]["name"]))
+        if context["strategy"]["id"] == first.id:
+            return httpx.Response(400, json={"error": {"message": "fixture request rejected"}})
+        role = payload["text"]["format"]["name"]
+        cycle = context["cycle"]
+        output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
+    assert branches[first.id]["status"] == "failed"
+    assert branches[first.id]["reason"]
+    rejected = next(step for step in finished["steps"] if step["strategy_id"] == first.id)
+    assert rejected["failure_kind"] == "provider_rejected"
+    assert rejected["provider_http_status"] == 400
+    metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert "1 rejected" in metrics["Model calls by status"]
+    assert "1 provider failure(s) (1 rejected" in metrics["Provider failures / retries"]
+    assert branches[second.id]["status"] == "ended"
+    assert finished["artifacts"]
+    assert {item["strategy_id"] for item in finished["artifacts"]} == {second.id}
+    assert any(
+        strategy_id == first.id and role == "research_investigator" for strategy_id, role in roles
+    )
+    assert all(strategy_id == second.id for strategy_id, _ in roles if strategy_id != first.id)
+
+
+async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent approach", "Use a different derivation."
+    ).project.strategies[-1]
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        if context["strategy"]["id"] == first.id:
+            await asyncio.sleep(0.1)
+        role = payload["text"]["format"]["name"]
+        cycle = context["cycle"]
+        output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "CALL_TIMEOUT", 0.01),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
+    actions = {
+        item["strategy_id"]: item for item in finished["portfolio_decision"]["strategy_actions"]
+    }
+    failed_steps = [step for step in finished["steps"] if step["strategy_id"] == first.id]
+    assert branches[first.id]["status"] == "failed"
+    assert "timed out" in branches[first.id]["reason"]
+    assert failed_steps[0]["status"] == "failed"
+    assert failed_steps[0]["failure_kind"] == "timeout"
+    assert failed_steps[0]["timeout_seconds"] == 0.01
+    assert "remote processing may still complete" in failed_steps[0]["failure_message"].lower()
+    assert failed_steps[0].get("output") is None
+    assert branches[second.id]["status"] == "ended"
+    assert branches[second.id]["artifacts"]
+    assert actions[first.id]["action"] == "hold_after_failure"
+    assert "not evidence" in actions[first.id]["rationale"]
+    assert actions[second.id]["action"] not in {"continue", "revise"}, actions[second.id]
+    assert finished["status"] == "ended"
+    timeout_metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert "1 timed out" in timeout_metrics["Model calls by status"]
+    assert "1 timed out" in timeout_metrics["Provider failures / retries"]
+
+
+async def test_portfolio_rejects_fabricated_cross_strategy_references(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Peer route", "Try a different proof invariant."
+    ).project.strategies[-1]
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"])
+        )
+        if role == "research_skeptic" and context["strategy"]["id"] == first.id:
+            output["cross_strategy_relations"] = [
+                {
+                    "strategy_id": second.id,
+                    "artifact_id": "fabricated-peer-artifact",
+                    "relation": "complements",
+                    "rationale": "This fabricated peer citation should be rejected.",
+                }
+            ]
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
+    assert finished["status"] == "ended"
+    assert branches[first.id]["status"] == "failed"
+    assert "reference not present" in branches[first.id]["reason"]
+    assert branches[first.id]["artifacts"] == []
+    assert branches[second.id]["status"] == "ended"
+    assert branches[second.id]["artifacts"]
+    assert finished["portfolio_decision"]["cross_strategy_reviews"] == []
+
+
+def test_portfolio_requires_reciprocal_complement_and_surfaces_conflicts():
+    first_id, second_id = str(uuid4()), str(uuid4())
+    first_artifact, second_artifact = str(uuid4()), str(uuid4())
+    record = {
+        "artifacts": [
+            {
+                "id": first_artifact,
+                "strategy_id": first_id,
+                "skeptic_output": {
+                    "cross_strategy_relations": [
+                        {
+                            "strategy_id": second_id,
+                            "artifact_id": second_artifact,
+                            "relation": "complements",
+                            "rationale": "This route may supply an independent missing lemma.",
+                        }
+                    ]
+                },
+            },
+            {"id": second_artifact, "strategy_id": second_id, "skeptic_output": {}},
+        ],
+        "strategy_runs": [
+            {
+                "strategy_id": first_id,
+                "strategy_title": "First route",
+                "status": "running",
+                "artifacts": [first_artifact],
+            },
+            {
+                "strategy_id": second_id,
+                "strategy_title": "Second route",
+                "status": "running",
+                "artifacts": [second_artifact],
+            },
+        ],
+    }
+    decision = research_sessions._portfolio_decision(record)
+    assert decision["combination_candidates"] == []
+
+    record["artifacts"][0]["skeptic_output"]["cross_strategy_relations"][0]["relation"] = (
+        "contradicts"
+    )
+    decision = research_sessions._portfolio_decision(record)
+    assert len(decision["conflict_candidates"]) == 1
+    assert decision["strategy_actions"][0]["action"] == "resolve_cross_strategy_conflict"
+    assert decision["strategy_actions"][1]["action"] == "resolve_cross_strategy_conflict"
+
+
+def test_peer_handoff_noop_and_domain_mismatch_controls():
+    source_id, target_id = "source-strategy", "target-strategy"
+    source_artifact_id, target_artifact_id = "source-evidence", "target-evidence"
+    source_branch = {
+        "strategy_id": source_id,
+        "strategy_title": "Integer route",
+        "status": "queued",
+        "artifacts": [source_artifact_id],
+    }
+    target_branch: dict[str, Any] = {
+        "strategy_id": target_id,
+        "strategy_title": "Real-analysis route",
+        "status": "queued",
+        "current_question": "Continue the real-domain argument.",
+    }
+    source_artifact = {
+        "id": source_artifact_id,
+        "strategy_id": source_id,
+        "strategy_title": "Integer route",
+        "sequence": 1,
+        "skeptic_output": {
+            "cross_strategy_relations": [
+                {
+                    "strategy_id": target_id,
+                    "artifact_id": target_artifact_id,
+                    "relation": "unrelated",
+                    "rationale": "The vocabulary overlaps but no shared claim is identified.",
+                }
+            ]
+        },
+    }
+    target_artifact = {
+        "id": target_artifact_id,
+        "strategy_id": target_id,
+        "strategy_title": "Real-analysis route",
+        "sequence": 2,
+        "claim_or_question": "The target argument assumes x is real and positive.",
+        "skeptic_output": {"cross_strategy_relations": []},
+    }
+    target_branch["artifacts"] = [target_artifact_id]
+    record = {
+        "strategy_runs": [source_branch, target_branch],
+        "artifacts": [source_artifact, target_artifact],
+    }
+
+    research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
+    assert "pending_peer_handoffs" not in target_branch
+    assert target_branch["current_question"] == "Continue the real-domain argument."
+
+    source_artifact["skeptic_output"]["cross_strategy_relations"] = [
+        {
+            "strategy_id": target_id,
+            "artifact_id": target_artifact_id,
+            "relation": "contradicts",
+            "rationale": "This integer-only example may conflict, but the target states x is real and positive.",
+        }
+    ]
+    research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
+    handoff = target_branch["pending_peer_handoffs"][0]
+    assert handoff["source_artifact_id"] == source_artifact_id
+    assert handoff["target_artifact_id"] == target_artifact_id
+    assert "assumptions and domains match" in target_branch["current_question"]
+    # A reported contradiction queues a scoped challenge; it never declares the
+    # target branch refuted or changes its saved strategy state automatically.
+    assert target_branch["status"] == "queued"
+
+    retraction = {
+        "id": "source-retraction",
+        "strategy_id": source_id,
+        "skeptic_output": {
+            "cross_strategy_relations": [],
+            "retracted_cross_strategy_source_artifact_ids": [source_artifact_id],
+        },
+    }
+    record["artifacts"].append(retraction)
+    research_sessions._retract_peer_handoffs(record, source_branch, retraction)
+    assert "pending_peer_handoffs" not in target_branch
+    assert target_branch["current_question"] == "Continue the real-domain argument."
+    assert target_branch["status"] == "queued"
+    assert record["artifacts"][0]["skeptic_output"]["cross_strategy_relations"]
+    decision = research_sessions._portfolio_decision(record)
+    assert decision["conflict_candidates"] == []
+    assert len(decision["retracted_peer_handoffs"]) == 1
+    assert decision["retracted_peer_handoffs"][0]["retracted_by_artifact_id"] == retraction["id"]
+
+    # A later retraction cannot erase the fact that the target already saw the
+    # handoff. Preserve that causal history while marking it withdrawn.
+    second_source_id = "source-evidence-later"
+    source_branch["artifacts"].append(second_source_id)
+    second_source = {
+        "id": second_source_id,
+        "strategy_id": source_id,
+        "strategy_title": "Integer route",
+        "sequence": 3,
+        "skeptic_output": {
+            "cross_strategy_relations": [
+                {
+                    "strategy_id": target_id,
+                    "artifact_id": target_artifact_id,
+                    "relation": "complements",
+                    "rationale": "A second, later claimed connection.",
+                }
+            ]
+        },
+    }
+    record["artifacts"].append(second_source)
+    research_sessions._queue_peer_handoffs(record, source_branch, second_source)
+    consumed_handoffs = list(target_branch["pending_peer_handoffs"])
+    consumed_target_artifact = {
+        "id": "target-after-handoff",
+        "strategy_id": target_id,
+        "peer_handoffs_prompted": consumed_handoffs,
+    }
+    target_branch.pop("pending_peer_handoffs")
+    target_branch.pop("peer_handoff_base_question")
+    record["artifacts"].append(consumed_target_artifact)
+    retraction_after_use = {
+        "id": "source-retraction-after-use",
+        "strategy_id": source_id,
+        "skeptic_output": {
+            "cross_strategy_relations": [],
+            "retracted_cross_strategy_source_artifact_ids": [second_source_id],
+        },
+    }
+    record["artifacts"].append(retraction_after_use)
+    research_sessions._retract_peer_handoffs(record, source_branch, retraction_after_use)
+    assert consumed_target_artifact["peer_handoffs_prompted"] == consumed_handoffs
+    assert any(
+        item["source_artifact_id"] == second_source_id
+        and item["retracted_by_artifact_id"] == retraction_after_use["id"]
+        for item in record["retracted_peer_handoffs"]
+    )
+    assert all(
+        item["source_artifact_id"] != second_source_id
+        for item in research_sessions._portfolio_decision(record)["cross_strategy_reviews"]
+    )
+
+
+async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(path, "Second strategy", "Try another mechanism.").project.strategies[
+        -1
+    ]
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 2
+    limits["model_calls"] = 5
+    limits = research_sessions.save_limits(str(path), limits)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"])
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 4
+    assert finished["outcome"]["assessment"]
+    assert len(finished["strategy_assessments"]) == 2
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    assert finished["events"][-1]["kind"] == "portfolio.completed"
+
+
 async def test_generic_objective_review_on_binary_strings(path: Path):
     problem = (
         "For each integer n >= 0, count binary strings of length n containing no two "
@@ -1049,6 +3103,7 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "assumptions": ["The two classes are defined by the final symbol."],
         "evidence_status": "Complete inductive argument; no formal checker was run.",
         "open_obligations": [],
+        "python_code": None,
     }
     accepted = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -1374,8 +3429,238 @@ async def test_storage_limit_pauses_without_artifact(path: Path):
         paused = await wait_for(path, started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 2
     assert paused["artifacts"] == []
-    assert paused["steps"][-1]["status"] == "interrupted"
+    assert all(step["status"] == "completed" and step.get("output") for step in paused["steps"])
+    assert paused["strategy_runs"][0]["pending_skeptic"]
     assert "storage limit reached" in paused["message"].lower()
+
+
+def test_outcome_metrics_from_persisted_evidence(path: Path):
+    view = initialize_project(path, "Metrics fixture", "A persisted evidence accounting test")
+    session_id = str(uuid4())
+    execution_id = str(uuid4())
+    shared_python = {
+        "id": execution_id,
+        "status": "completed",
+        "artifacts": [{"filename": "result.csv", "size_bytes": 128, "sha256": "same-file-hash"}],
+    }
+    artifacts = [
+        {
+            "id": "finding-a",
+            "strategy_id": "strategy-a",
+            "strategy_cycle": 1,
+            "claim_or_question": "Alpha finding",
+            "coordinator_decision": "continue",
+            "open_obligations": ["Check a boundary", "Check a boundary"],
+            "investigator_output": {"python_execution": shared_python},
+            "objective_review": {
+                "status": "partial",
+                "claim": "Conclusion Alpha",
+                "proof_obligations": ["Check a boundary"],
+                "unresolved_objections": ["Independence is unclear"],
+                "basis_artifact_ids": ["finding-a"],
+            },
+        },
+        {
+            "id": "finding-b",
+            "strategy_id": "strategy-b",
+            "strategy_cycle": 1,
+            "claim_or_question": "Beta finding",
+            "coordinator_decision": "continue",
+            "open_obligations": ["Check a tail case"],
+            "investigator_output": {"python_execution": shared_python},
+            "objective_review": {
+                "status": "partial",
+                "claim": "Conclusion Beta",
+                "proof_obligations": ["Check a tail case"],
+                "unresolved_objections": [],
+                "basis_artifact_ids": ["finding-b"],
+            },
+        },
+    ]
+    duplicate_id = "call-completed"
+    started = "2026-10-23T10:00:00+00:00"
+    record = {
+        "id": session_id,
+        "project_path": str(project_path(path)),
+        "project_id": view.project.id,
+        "session_number": 1,
+        "strategy_id": "strategy-a",
+        "strategy_title": "Alpha",
+        "strategy_snapshot": [],
+        "strategy_runs": [
+            {"strategy_id": "strategy-a", "strategy_title": "Alpha", "calls_used": 3},
+            {"strategy_id": "strategy-b", "strategy_title": "Beta", "calls_used": 1},
+            {"strategy_id": "never-ran", "strategy_title": "Not run", "calls_used": 0},
+        ],
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "medium",
+        "status": "ended",
+        "created_at": started,
+        "started_at": started,
+        "updated_at": "2026-10-23T10:02:00+00:00",
+        "calls_used": 5,
+        "call_limit": 8,
+        "cycle": 1,
+        "artifacts": artifacts,
+        "strategy_assessments": [
+            {"assessment": "productive"},
+            {"assessment": "not_used"},
+        ],
+        "steps": [
+            {
+                "id": duplicate_id,
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": "strategy-a",
+                "strategy_title": "Alpha",
+                "status": "completed",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:10+00:00",
+                "token_usage": {
+                    "input_tokens": 10,
+                    "cached_input_tokens": 3,
+                    "output_tokens": 4,
+                },
+                "output": {"python_execution": shared_python},
+            },
+            {"id": duplicate_id, "role": "investigator", "status": "completed"},
+            {
+                "id": "call-rejected",
+                "role": "skeptic",
+                "cycle": 1,
+                "strategy_id": "strategy-a",
+                "strategy_title": "Alpha",
+                "status": "failed",
+                "failure_kind": "provider_rejected",
+                "provider_http_status": 400,
+                "failure_message": "ChatGPT rejected the request (HTTP 400).",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:12+00:00",
+            },
+            {
+                "id": "call-interrupted",
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": "strategy-b",
+                "strategy_title": "Beta",
+                "status": "interrupted",
+                "failure_kind": "interrupted",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:15+00:00",
+            },
+            {
+                "id": "call-cancelled-retry",
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": "strategy-a",
+                "strategy_title": "Alpha",
+                "status": "interrupted",
+                "failure_kind": "cancelled",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:20+00:00",
+            },
+        ],
+    }
+    research_sessions._save(str(path), record)
+    loaded = research_sessions.get_session(str(path), session_id)
+    metrics = loaded["outcome"]["metrics"]
+    operational = {item["label"]: item["value"] for item in metrics["operational"]}
+    quality = {item["label"]: item["value"] for item in metrics["research_quality"]}
+    assert metrics["sources"] == {
+        "session_id": session_id,
+        "step_ids": sorted({step["id"] for step in record["steps"]}),
+        "artifact_ids": ["finding-a", "finding-b"],
+        "execution_ids": [execution_id],
+        "strategy_ids": ["strategy-a", "strategy-b"],
+    }
+    # The source inventory resolves to unchanged structured evidence, including
+    # interrupted/reused states. Counts alone are not claim provenance.
+    assert loaded["steps"] == record["steps"]
+    assert loaded["artifacts"] == record["artifacts"]
+    assert loaded["artifacts"][1]["investigator_output"]["python_execution"] == shared_python
+    saved = json.loads((path / "research-sessions" / f"{session_id}.json").read_text())
+    assert "metrics" not in saved.get("outcome", {})
+
+    calls = operational["Model calls by status"]
+    assert calls.startswith("5 budget-counted calls (1 step status unavailable")
+    assert "1 completed" in calls and "1 rejected" in calls
+    assert "2 interrupted / cancelled" in calls and "1 status unavailable" in calls
+    provider_failures = operational["Provider failures / retries"]
+    assert "1 provider failure(s)" in provider_failures
+    assert "2 interrupted / cancelled" in provider_failures
+    assert "1 later attempt(s)" in provider_failures
+    assert "no automatic retries" in provider_failures
+    assert (
+        "— (1/5 calls report token usage" in operational["Tokens · input / output / cached / total"]
+    )
+    assert "plan allowance consumption unknown" in operational["Estimated monetary cost"]
+    assert operational["Python runs by status"] == "1 completed"
+    assert "1 Python file(s) (128 B)" in operational["Artifacts and storage"]
+    assert (
+        "Alpha" in quality["Strategies investigated"]
+        and "Beta" in quality["Strategies investigated"]
+    )
+    assert "Not run" not in quality["Strategies investigated"]
+    assert quality["Research cycles"] == "2 completed / 2 started"
+    assert quality["Evidence-backed conclusions"] == "2 conclusion(s) · 2 cited finding(s)"
+    assert "Check a boundary" in quality["Open proof obligations"]
+    assert "Independence is unclear" in quality["Unresolved objections"]
+
+    missing_cached = research_sessions._usage({"usage": {"input_tokens": 7, "output_tokens": 2}})
+    assert missing_cached is not None
+    assert missing_cached == {
+        "input_tokens": 7,
+        "cached_input_tokens": None,
+        "output_tokens": 2,
+    }
+    assert research_sessions._estimate_cost(MODEL, missing_cached) is None
+
+    uncached_metadata = research_sessions._outcome_metrics(
+        {
+            "mode": "api_key",
+            "model": MODEL,
+            "status": "ended",
+            "calls_used": 1,
+            "started_at": started,
+            "updated_at": "2026-10-23T10:00:02+00:00",
+            "steps": [
+                {
+                    "id": "one-api-call",
+                    "role": "investigator",
+                    "cycle": 1,
+                    "status": "completed",
+                    "started_at": started,
+                    "finished_at": "2026-10-23T10:00:01+00:00",
+                    "token_usage": missing_cached,
+                }
+            ],
+            "artifacts": [],
+        },
+        {"label": "Pending", "assessment": "pending", "solution_review": None},
+    )
+    uncached_ops = {item["label"]: item["value"] for item in uncached_metadata["operational"]}
+    assert uncached_ops["Tokens · input / output / cached / total"] == (
+        "7 / 2 / — (0/1 calls include cached-token metadata) / 9"
+    )
+    assert "unavailable" in uncached_ops["Estimated monetary cost"]
+
+    unlinked_execution = research_sessions._outcome_metrics(
+        {
+            "mode": "chatgpt",
+            "model": MODEL,
+            "status": "ended",
+            "calls_used": 0,
+            "steps": [
+                {"id": "broken-step", "output": {"python_execution": {"status": "completed"}}}
+            ],
+            "artifacts": [],
+        },
+        {"label": "Pending", "assessment": "pending", "solution_review": None},
+    )
+    assert {item["label"]: item["value"] for item in unlinked_execution["operational"]}[
+        "Python runs by status"
+    ] == "— (execution record without ID)"
 
 
 def main():
@@ -1383,9 +3668,24 @@ def main():
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
+        asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
+        asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
+        asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))
+        asyncio.run(test_failed_experiment_is_reused_then_revised(root / "python-revision.sigma"))
+        asyncio.run(test_portfolio_python_queue_and_stop(root / "python-queue.sigma"))
+        asyncio.run(
+            test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
+        )
+        asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
+        test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
+        asyncio.run(
+            test_session_deadline_bounds_generous_call_timeout(
+                root / "generous-call-deadline.sigma"
+            )
+        )
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
         test_limits_validation(root / "invalid-limits.sigma")
         asyncio.run(test_legacy_limits_are_preserved(root / "legacy-limits.sigma"))
@@ -1397,8 +3697,83 @@ def main():
         asyncio.run(
             test_maximum_regions_solution_and_frozen_attribution(root / "maximum-regions.sigma")
         )
+        asyncio.run(
+            test_answer_free_maximum_regions_prompt(root / "maximum-regions-answer-free.sigma")
+        )
+        asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        asyncio.run(
+            test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
+                root / "portfolio-cross-review.sigma"
+            )
+        )
+        asyncio.run(
+            test_peer_finding_changes_target_investigator_after_stop_and_resume(
+                root / "portfolio-peer-handoff.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_pool(
+                root / "portfolio-unsuccessful.sigma"
+            )
+        )
+        asyncio.run(
+            test_ten_strategy_portfolio_respects_concurrency_and_budget(
+                root / "portfolio-ten.sigma"
+            )
+        )
+        asyncio.run(
+            test_forked_strategy_followup_preserves_parent_comparison(
+                root / "portfolio-followup.sigma"
+            )
+        )
+        asyncio.run(
+            test_stop_concurrent_portfolio_preserves_completed_boundary(
+                root / "portfolio-stop.sigma"
+            )
+        )
+        asyncio.run(
+            test_stop_reconciles_queued_portfolio_branches(root / "portfolio-stop-queued.sigma")
+        )
+        asyncio.run(
+            test_portfolio_preflight_failure_terminates_instead_of_spinning(
+                root / "portfolio-preflight-failure.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
+                root / "portfolio-preflight-timeout.sigma"
+            )
+        )
+        asyncio.run(
+            test_resume_limits_reconcile_portfolio_terminal_state(
+                root / "portfolio-resume-limits.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_isolates_one_strategy_provider_failure(
+                root / "portfolio-isolated-failure.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_timeout_is_not_misclassified_as_strategy_failure(
+                root / "portfolio-timeout.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_rejects_fabricated_cross_strategy_references(
+                root / "portfolio-fabricated-reference.sigma"
+            )
+        )
+        test_portfolio_requires_reciprocal_complement_and_surfaces_conflicts()
+        test_peer_handoff_noop_and_domain_mismatch_controls()
+        asyncio.run(
+            test_portfolio_budget_too_small_for_next_pair_is_finalized(
+                root / "portfolio-tight-budget.sigma"
+            )
+        )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()
+        test_outcome_metrics_from_persisted_evidence(root / "outcome-metrics.sigma")
         assert research_sessions.coordinate_decision(
             "stop", "recoverable_objection", "Test the omitted boundary case", [], 1, 3, 2, 6
         ) == ("revise", "Test the omitted boundary case")

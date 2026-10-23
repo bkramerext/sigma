@@ -1,0 +1,78 @@
+{
+  "schema_version": 8,
+  "id": "74c892da-1c36-4480-8dac-d9ccc17154ba",
+  "title": "Riemann Hypothesis: A Research Portfolio",
+  "problem": "Determine whether every nontrivial zero of the Riemann zeta function has real part 1/2, by proving the statement or producing a valid counterexample. The objective is open; do not assume it is true or that a proof is within reach. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source, numerical, symbolic, or proof-assistant tools: never claim to have searched, computed, or machine-verified anything. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T06:16:05.808926+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.809526+00:00",
+      "strategy_id": "110615e0-c289-4519-a14e-fa8a042606e2"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.810042+00:00",
+      "strategy_id": "82f288cc-b6ab-40c9-8453-c0e0b0a8bc60"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.810543+00:00",
+      "strategy_id": "80c175ae-d783-4087-bd13-0585f1342664"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "110615e0-c289-4519-a14e-fa8a042606e2",
+      "title": "Explicit formula and prime-counting consequences",
+      "approach": "Examine whether a precise explicit-formula route can connect zero locations to a quantitative statement about prime counting. State the exact implication being targeted, list analytic hypotheses and smoothing/error terms, and attempt to prove one bounded lemma. Test whether the argument actually forces every zero onto the critical line or only gives weaker density or error information. No numerical data or references may be invented.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.809526+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "82f288cc-b6ab-40c9-8453-c0e0b0a8bc60",
+      "title": "Spectral realization with operator obligations",
+      "approach": "Investigate a spectral route in which imaginary parts of zeros would arise from spectral data. Replace analogy with a concrete operator, domain, inner product, and proposed trace relation. The central obligations are self-adjointness, correspondence in both directions, and exact treatment of multiplicity and trivial zeros. If no operator satisfying them can be constructed, record the obstruction rather than treating a formal analogy as progress.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.810042+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "80c175ae-d783-4087-bd13-0585f1342664",
+      "title": "Zero-free region and density estimates",
+      "approach": "Seek a rigorous partial theorem that narrows where zeros may lie or bounds their density, then identify the precise gap between that result and the Riemann Hypothesis. Make every estimate's range and constants explicit. Challenge extrapolations from finite computations and distinguish a zero-free region near Re(s)=1 from a proof on the full critical strip.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.810543+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "110615e0-c289-4519-a14e-fa8a042606e2",
+    "82f288cc-b6ab-40c9-8453-c0e0b0a8bc60",
+    "80c175ae-d783-4087-bd13-0585f1342664"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}

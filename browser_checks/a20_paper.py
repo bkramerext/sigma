@@ -57,6 +57,31 @@ with sync_playwright() as playwright:
     latex_button = page.get_by_role("button", name="LaTeX research paper", exact=True)
     expect(latex_button).to_be_visible()
     assert latex_button.evaluate("element => getComputedStyle(element).color") == "rgb(228, 181, 124)"
+
+    def assert_header_grid():
+        model = page.locator(".project-model-pill")
+        thinking = page.locator(".project-thinking-pill")
+        google = page.locator(".project-google-signin")
+        chatgpt = page.locator(".project-chatgpt-signin")
+        expect(model).to_be_visible()
+        expect(thinking).to_be_visible()
+        expect(google).to_be_visible()
+        expect(chatgpt).to_be_visible()
+        expect(page.locator(".project-back-row .project-latex-button")).to_have_count(1)
+        model_box = model.bounding_box()
+        thinking_box = thinking.bounding_box()
+        google_box = google.bounding_box()
+        chatgpt_box = chatgpt.bounding_box()
+        latex_box = latex_button.bounding_box()
+        back_box = page.locator(".project-back-label").bounding_box()
+        assert model_box and thinking_box and google_box and chatgpt_box and latex_box and back_box
+        assert model_box["y"] < thinking_box["y"] and google_box["y"] < chatgpt_box["y"]
+        assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
+        assert abs(
+            latex_box["y"] + latex_box["height"] / 2 - back_box["y"] - back_box["height"] / 2
+        ) < 2, (back_box, latex_box)
+
+    assert_header_grid()
     latex_button.click()
     direct_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(direct_dialog).to_be_visible()
@@ -154,6 +179,8 @@ with sync_playwright() as playwright:
     expect(page.locator("body")).not_to_contain_text("internal server error")
 
     page.set_viewport_size({"width": 390, "height": 844})
+    assert_header_grid()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     box = dialog.bounding_box()
     assert box and box["x"] >= 0 and box["y"] >= 0
     assert box["x"] + box["width"] <= 390 and box["y"] + box["height"] <= 844

@@ -66,6 +66,11 @@ async def checks():
         assert all(r["connection"]["status"] == "connected" for r in results)
         assert {m["id"] for m in results[0]["models"]} == set(CATALOG)
         assert all(m["efforts"] == ("low", "medium", "high", "xhigh") for m in results[0]["models"])
+        assert {m["id"]: m["relative_cost"] for m in results[0]["models"]} == {
+            "gpt-6-luna": "$",
+            "gpt-6.1-sol": "$$",
+            "gpt-6-astra": "$$$",
+        }
         assert results[0]["default_model"] == "gpt-6.1-sol" and results[0]["default_verified"]
         await connection.connection()
         await connection.connection(refresh=True)
@@ -160,6 +165,28 @@ async def checks():
             path, "Snapshot", "A mathematical question", "mathematical", "gpt-6-luna", "xhigh"
         )
         initial = inspect_project(path)
+        # A saved UI pair cannot become incompatible even if provider
+        # capabilities are narrowed after the project was created.
+        with patch.dict(
+            CATALOG,
+            {"gpt-6-luna": {**CATALOG["gpt-6-luna"], "efforts": ("low", "medium")}},
+        ):
+            prior = asdict(project_settings(initial.project))
+            try:
+                update_project(
+                    path,
+                    prior["title"],
+                    prior["problem"],
+                    prior["investigation_type"],
+                    "gpt-6-luna",
+                    "high",
+                    prior,
+                )
+            except ProjectError as exc:
+                assert "not in the reviewed compatible catalog" in str(exc)
+            else:
+                raise AssertionError("Unsupported model/thinking pair was persisted")
+            assert inspect_project(path) == initial
         request_started = asyncio.Event()
         release = asyncio.Event()
 

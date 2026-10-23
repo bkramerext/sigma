@@ -5,6 +5,7 @@ import json
 import os
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import FastAPI, Request
@@ -12,7 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response, Streamin
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chatgpt_auth, papers, research_sessions
+from sigma import chatgpt_auth, papers, python_sandbox, research_sessions
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
@@ -90,6 +91,7 @@ class OpenRequest(BaseModel):
 
 class ResearchStartRequest(OpenRequest):
     strategy_id: str = Field(min_length=1, max_length=100)
+    strategy_ids: list[str] | None = Field(default=None, min_length=1, max_length=12)
     idempotency_key: str = Field(min_length=36, max_length=36)
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -102,6 +104,14 @@ class ResearchControlRequest(OpenRequest):
 
 class ResearchSessionRemoveRequest(OpenRequest):
     expected_updated_at: str = Field(min_length=1, max_length=64)
+
+
+class ResearchPythonRequest(OpenRequest):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    source: str = Field(min_length=1, max_length=16_000)
+    session_id: str | None = Field(default=None, max_length=36)
+    strategy_id: str | None = Field(default=None, max_length=36)
+    cycle: int | None = Field(default=None, ge=1)
 
 
 class ResearchLimitsRequest(OpenRequest):
@@ -202,6 +212,7 @@ async def research_start_view(body: ResearchStartRequest):
         body.expected_project_id,
         body.expected_binding,
         body.expected_limits,
+        body.strategy_ids,
     )
 
 
@@ -213,6 +224,41 @@ async def research_control_view(session_id: str, body: ResearchControlRequest):
 @app.delete("/api/projects/research-sessions/{session_id}")
 def research_session_remove_view(session_id: str, body: ResearchSessionRemoveRequest):
     return research_sessions.remove_session(body.path, session_id, body.expected_updated_at)
+
+
+@app.get("/api/projects/research-executions")
+def research_executions_view(path: str):
+    return {"executions": python_sandbox.list_executions(path)}
+
+
+@app.get("/api/projects/research-executions/{execution_id}")
+def research_execution_view(execution_id: str, path: str):
+    return python_sandbox.get_execution(path, execution_id)
+
+
+@app.get("/api/projects/research-executions/{execution_id}/artifacts/{filename}")
+def research_execution_artifact_view(execution_id: str, filename: str, path: str):
+    content, media_type = python_sandbox.get_execution_artifact(path, execution_id, filename)
+    return Response(
+        content,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/api/projects/research-executions", status_code=201)
+async def research_execution_start_view(body: ResearchPythonRequest):
+    return await python_sandbox.execute_research_code(
+        body.path,
+        body.source,
+        session_id=body.session_id,
+        strategy_id=body.strategy_id,
+        cycle=body.cycle,
+    )
 
 
 class InitRequest(OpenRequest):

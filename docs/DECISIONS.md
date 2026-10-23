@@ -8,7 +8,7 @@
 - **Services:** Browser, CLI, API, and scenarios share typed Python application services.
 - **Stack:** Python/uv, FastAPI, argparse, React/TypeScript/Vite.
 - **Research direction:** Strategies and forks, independent evaluation, bounded scheduling, human controls.
-- **Testing:** Executable scenarios and real browser checks; agent runtime deferred.
+- **Testing:** Executable scenarios and real browser checks; bounded research agents are active, while arbitrary code execution was deferred until A19.
 
 ## Storage
 
@@ -22,7 +22,7 @@
 
 ## Navigation and interaction
 
-Home `/` launches projects; `/project?path=...` is the research workspace. Strategy creation persists through shared services. Future commands use native nested disclosures with disabled controls, not fake operations. See [design note](asn3-design.md).
+Home `/` launches projects; `/project?path=...` is the research workspace. Strategy creation persists through shared services. Future commands use native nested disclosures with disabled controls, not fake operations. See [design note](../tickets/t3-design.md).
 
 
 ## Manual strategy changes
@@ -256,7 +256,7 @@ fields; key mode retains bounded non-streaming Responses. Both use reviewed
 models/efforts, immutable request snapshots and common structured validation.
 Limits/outages/unsupported capability errors never retry or change billing.
 The exact docs, storage/security limits and fixture-only verification boundary
-are recorded in [A8.2 security notes](asn8.2-security.md). Existing art stays fixed;
+are recorded in [A8.2 security notes](../tickets/t8.2-security.md). Existing art stays fixed;
 only the unmodified official ChatGPT sign-in mark is added. A9 remains separate.
 
 ## A9: application recents, exact example import and bounded dialogs
@@ -362,3 +362,24 @@ start in place and save only when requested; Rendered activates the Markdown
 source editor. Other project options remain in Project Settings. Home stores
 only the last opened path as a convenience pointer and validates it on display;
 the sidebar collapse preference is kept locally across navigation.
+
+## A19: isolated research Python execution
+
+Provide `sigma.python_sandbox.execute_research_code` and a local project API as
+the stable seam for A18 agents. The Investigator may propose one optional
+program, which runs once before the Skeptic review; the Skeptic receives the
+code and its returned status, execution ID, output, and artifact metadata. The
+record is linked from the role step and saved research artifact. Each call runs
+once in a locally built image resolved to its immutable image ID, with no
+network, host mounts, or automatic image pull. One backend process admits at
+most one run to bound aggregate local resource use. Persist the exact code,
+output, exit state, image ID, limits, captured-file metadata, and optional
+session/strategy/cycle references under a private project sidecar. Execution
+results are finite computation evidence, not mathematical verification. Lean
+remains a separate optional checker as specified by `LEAN_VERIFICATION_PLAN.md`.
+
+Use a standalone Docker proof of concept first, then the same fixed isolation
+boundary in the SIGMA service. Pin the Python base image by digest and pin all
+Python dependencies. Build-time downloads are permitted; runtime networking is
+disabled. Container escape protection depends on the trusted host kernel and
+Docker daemon.

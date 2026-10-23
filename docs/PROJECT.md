@@ -6,15 +6,28 @@ A local-first research workspace for exploring competing approaches to difficult
 
 ## Research model
 
-- **Strategies** evolve through investigations, evidence, tests, and revisions. Forks preserve independent histories; generations indicate ancestry, not merit.
-- **Rubrics** guide independent assessments of promise, uncertainty, and proof obligations. Finite tests are not proofs.
-- **Scheduling** will allocate bounded effort under resource limits and human priorities. Agent judgments do not override hard constraints.
-- **Artifacts and events** preserve research and decisions for review.
+- **Strategies** hold distinct candidate approaches. Users can author, generate,
+  disable, and fork them from saved findings. A fork starts a new strategy
+  identity; it does not rewrite its parent or past sessions.
+- **Research sessions** run bounded Investigator/Skeptic cycles for one or
+  several enabled strategies. Calls share the configured budget and run with a
+  local concurrency cap; the user can inspect each branch and stop the session.
+- **Artifacts and events** preserve attributed claims, methods, objections,
+  open obligations, coordinator dispositions, and strategy assessments.
+  Unverified model output is not a proof or an independently checked result.
+- **Continuity** lets a new session cite a bounded set of prior findings while
+  keeping the original session records intact.
 
 ## Implementation
 
 Python/uv, FastAPI, argparse CLI, React/TypeScript/Vite. Browser, CLI, and executable scenarios share typed application services.
 
-**Working now:** local project lifecycle, separate project workspace, and persistent human-authored strategies. **Not yet implemented:** agents, scheduling, evaluation, reports, or forks.
+**Working now:** local project lifecycle; strategy authoring and generation;
+bounded single- and multi-strategy research sessions; persistent evidence,
+continuity, assessments, forks, report exports, and optional isolated Python
+execution for finite Investigator computations. Research still has no external
+source tool or formal proof checker. Python output is unverified evidence, not a
+proof. Live model quality has not been established by the deterministic test
+suite.
 
 See [Getting Started](GETTING-STARTED.md) to run, [STATUS](STATUS.md) for verification, [DECISIONS](DECISIONS.md) for storage, and [BRAINSTORM](BRAINSTORM.md) for future ideas.

@@ -215,6 +215,7 @@ async def handler(request):
                     "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
                     "evidence_status": "Complete unverified mathematical argument; no proof checker was run.",
                     "open_obligations": [],
+                    "python_code": None,
                 }
                 if maximum_regions
                 else {
@@ -223,6 +224,7 @@ async def handler(request):
                     "assumptions": [f"Fixture assumption {cycle}"],
                     "evidence_status": "Unverified model derivation; no tool was run.",
                     "open_obligations": [f"Check obligation {cycle}"],
+                    "python_code": None,
                 }
             )
         else:
@@ -257,6 +259,8 @@ async def handler(request):
                     "verification_status": "convincing_unverified",
                     "strategy_contribution": "solution",
                     "contribution_rationale": "This strategy supplies both the upper-bound induction and an explicit arrangement attaining equality.",
+                    "cross_strategy_relations": [],
+                    "retracted_cross_strategy_source_artifact_ids": [],
                 }
                 if maximum_regions
                 else {
@@ -276,6 +280,8 @@ async def handler(request):
                     "verification_status": "convincing_unverified",
                     "strategy_contribution": "productive",
                     "contribution_rationale": "The saved derivation advances the objective.",
+                    "cross_strategy_relations": [],
+                    "retracted_cross_strategy_source_artifact_ids": [],
                 }
             )
         return httpx.Response(

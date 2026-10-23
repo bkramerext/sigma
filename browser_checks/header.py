@@ -1,13 +1,18 @@
 """Project header title, back navigation and connection disclosure."""
 
+import json
 import os
+import re
 from urllib.parse import urlencode
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
-TITLE = "Nonconsecutive Subset Sums Modulo 3 Copy for Independent Analysis and Verification"
+TITLE = f"Header model controls {uuid4().hex[:8]}"
 STYLE = "e => { const s = getComputedStyle(e); return [s.color, s.backgroundColor, s.backgroundImage, s.borderColor, s.textShadow, s.boxShadow] }"
 PILL = "e => { const s = getComputedStyle(e); return [s.color, s.backgroundColor, s.borderColor, s.borderRadius, s.padding, s.boxShadow, s.fontSize, s.minHeight] }"
+UI_ORIGIN = os.environ.get("SIGMA_HEADER_UI_ORIGIN", "http://127.0.0.1:5173").rstrip("/")
+API_ORIGIN = os.environ.get("SIGMA_HEADER_API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -24,14 +29,56 @@ with sync_playwright() as playwright:
 
     def forward(route):
         route.fulfill(
-            response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8001"))
+            response=route.fetch(
+                url=route.request.url.replace(UI_ORIGIN, API_ORIGIN),
+                headers={**route.request.headers, "origin": "http://127.0.0.1:5173"},
+            )
         )
 
     page.route("**/api/**", forward)
-    page.goto("http://127.0.0.1:5173/")
+    available_models = [
+        {
+            "id": "gpt-6.1-sol",
+            "label": "Sol · Balanced ($$)",
+            "description": "Balanced",
+            "efforts": ["low", "medium", "high", "xhigh"],
+            "relative_cost": "$$",
+            "availability": "available",
+        },
+        {
+            "id": "gpt-6-astra",
+            "label": "Astra · Advanced ($$$)",
+            "description": "Advanced",
+            "efforts": ["low", "medium"],
+            "relative_cost": "$$$",
+            "availability": "available",
+        },
+        {
+            "id": "gpt-6-luna",
+            "label": "Luna · Economy ($)",
+            "description": "Economy",
+            "efforts": ["low", "medium", "high", "xhigh"],
+            "relative_cost": "$",
+            "availability": "available",
+        },
+    ]
+    page.route(
+        "**/api/ai/models",
+        lambda route: route.fulfill(
+            json={
+                "models": available_models,
+                "default_model": "gpt-6.1-sol",
+                "default_effort": "high",
+                "default_verified": True,
+                "message": "fixture catalog",
+            }
+        ),
+    )
+    page.goto(UI_ORIGIN + "/")
     expect(page.locator(".home-slogan")).to_be_visible()
-    home_open = page.locator(".home-entry-actions").get_by_role("button", name="Open Project")
-    home_new = page.locator(".home-entry-actions").get_by_role("button", name="New Project")
+    home_actions = page.locator(".home-projects-heading")
+    home_open = home_actions.get_by_role("button", name="Open", exact=True)
+    home_new = home_actions.get_by_role("button", name="New", exact=True)
     assert home_open.evaluate(STYLE) == home_new.evaluate(STYLE)
     home_open.evaluate("e => e.disabled = true")
     expect(home_open).to_be_disabled()
@@ -40,46 +87,114 @@ with sync_playwright() as playwright:
     page.mouse.move(0, 0)
     home_pill = page.locator(".home-topline .api-connection > summary")
     expect(home_pill).to_be_visible()
-    home_pill_style = home_pill.evaluate(PILL)
-    home_label = home_pill.locator('[role="status"]').inner_text()
-    home_dot = home_pill.locator(".connection-dot").get_attribute("class")
-    home_pill.hover()
-    page.wait_for_timeout(200)
-    home_pill_hover = home_pill.evaluate(PILL)
 
     created = page.request.post(
-        "http://127.0.0.1:8001/api/projects/create",
+        API_ORIGIN + "/api/projects/create",
         data={"title": TITLE, "problem": "Check whether a long header title remains readable."},
     )
     assert created.status == 201
     path = created.json()["path"]
-    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    page.goto(f"{UI_ORIGIN}/project?{urlencode({'path': path})}")
     header = page.locator(".project-art-header")
-    title = header.locator(".current-project")
+    title = header.locator(".project-header-title")
     expect(title).to_have_text(TITLE)
     assert header.locator(".expansion").count() == 0
     expect(page.get_by_role("heading", name=TITLE)).to_be_visible()
     art = header.locator(".project-header-art img")
     assert art.evaluate("e => [e.naturalWidth, e.naturalHeight]") == [1774, 887]
     assert art.get_attribute("src") == "/sigma-project-header.png"
-    close = header.get_by_role("button", name="Close project")
+    close = header.get_by_role("button", name="Back to home", exact=True)
+    controls = header.locator(".header-controls")
+    model_control = controls.get_by_role("button", name=re.compile("^Model"))
+    thinking_control = controls.get_by_role("button", name=re.compile("^Thinking level"))
+    google_signin = controls.locator(".project-google-signin")
+    expect(model_control).to_have_text("Model · Sol $$")
+    expect(thinking_control).to_have_text("Thinking · High")
+    expect(google_signin).to_have_text("Google · Not implemented")
+    expect(google_signin).to_have_attribute("role", "status")
+    assert not google_signin.evaluate("e => e.matches('button, a, input')")
+    assert "not actual research session charges" in header.locator(".sr-only").inner_text()
+    grid = controls.bounding_box()
+    model_box = model_control.bounding_box()
+    thinking_box = thinking_control.bounding_box()
+    google_box = google_signin.bounding_box()
     pill = header.locator(".api-connection > summary")
+    chatgpt_box = pill.bounding_box()
+    assert grid and model_box and thinking_box and google_box and chatgpt_box
+    assert model_box["y"] < thinking_box["y"] and google_box["y"] < chatgpt_box["y"]
+    assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
+    assert grid["x"] + grid["width"] <= 1280
+    assert grid["x"] >= 1280 * 0.55
+    latex_button = header.get_by_role("button", name="LaTeX research paper", exact=True)
+    expect(latex_button).to_be_visible()
+    latex_box = latex_button.bounding_box()
+    back_label_box = header.get_by_role("button", name="Back to home caption").bounding_box()
+    assert latex_box and back_label_box and abs(
+        latex_box["y"] + latex_box["height"] / 2 - back_label_box["y"] - back_label_box["height"] / 2
+    ) < 2
+    expect(header.locator(".project-controls-message")).to_have_text("Next model uses Medium.")
+    update_requests: list[dict] = []
+    observed_urls: list[str] = []
+    page.on("request", lambda request: observed_urls.append(request.url))
+    page.on(
+        "request",
+        lambda request: (
+            update_requests.append(json.loads(request.post_data))
+            if request.url.endswith("/api/projects/update") and request.post_data
+            else None
+        ),
+    )
+    model_control.focus()
+    page.keyboard.press("Enter")
+    expect(model_control).to_have_text("Model · Astra $$$")
+    expect(thinking_control).to_have_text("Thinking · Medium")
+    thinking_control.focus()
+    page.keyboard.press("Enter")
+    expect(thinking_control).to_have_text("Thinking · Low")
+    model_control.focus()
+    page.keyboard.press("Enter")
+    expect(model_control).to_have_text("Model · Luna $")
+    persisted = page.request.get(
+        API_ORIGIN + "/api/projects/inspect", params={"path": path}
+    ).json()["project"]
+    assert persisted["ai_model"] == "gpt-6-luna" and persisted["reasoning_effort"] == "low"
+    assert len(update_requests) == 3
+    assert (
+        update_requests[0]["ai_model"] == "gpt-6-astra"
+        and update_requests[0]["reasoning_effort"] == "medium"
+    )
+    assert (
+        update_requests[1]["ai_model"] == "gpt-6-astra"
+        and update_requests[1]["reasoning_effort"] == "low"
+    )
+    assert update_requests[2]["ai_model"] == "gpt-6-luna" and update_requests[2]["reasoning_effort"] == "low"
+    assert not any("/api/ai/mode" in url for url in observed_urls)
+    page.reload()
+    model_control = page.locator(".project-art-header .project-model-pill")
+    thinking_control = page.locator(".project-art-header .project-thinking-pill")
+    expect(model_control).to_have_text("Model · Luna $")
+    expect(thinking_control).to_have_text("Thinking · Low")
     assert close.locator("svg").count() == 1
     assert header.get_by_text("Close project", exact=True).count() == 0
-    assert pill.evaluate(PILL) == home_pill_style
-    assert pill.locator('[role="status"]').inner_text() == home_label
-    assert pill.locator(".connection-dot").get_attribute("class") == home_dot
+    assert pill.locator('[role="status"]').inner_text().startswith("ChatGPT sign-in · ")
+    assert pill.locator(".connection-dot").get_attribute("class")
     close.hover()
     assert close.evaluate("e => getComputedStyle(e).cursor") == "pointer"
     page.mouse.move(0, 0)
     pill.hover()
     page.wait_for_timeout(200)
-    assert pill.evaluate(PILL) == home_pill_hover
-    pill.click()
-    expect(header.locator(".connection-details")).to_be_visible()
+    assert pill.evaluate("e => getComputedStyle(e).backgroundColor") != "rgba(0, 0, 0, 0)"
+    pill.focus()
+    page.keyboard.press("Enter")
+    connection_dialog = page.get_by_role("dialog", name="AI connection settings")
+    expect(connection_dialog).to_be_visible()
     expect(
-        header.locator(".connection-details").get_by_role("button", name="Retry connection")
+        connection_dialog.get_by_role("button", name="Retry connection")
     ).to_be_visible()
+    assert connection_dialog.get_by_role("button").count() > 1
+    assert connection_dialog.locator("button").evaluate_all(
+        "items => items.some(e => /Continue with ChatGPT|Disconnect|Use ChatGPT plan|Connect another account/.test(e.innerText))"
+    )
     page.keyboard.press("Escape")
     expect(header.locator(".api-connection")).not_to_have_attribute("open", "")
     pill.focus()
@@ -90,25 +205,53 @@ with sync_playwright() as playwright:
         expect(title).to_have_text(TITLE)
         assert title.evaluate("e => getComputedStyle(e).whiteSpace") == "normal"
         assert title.evaluate("e => getComputedStyle(e).overflow") == "visible"
-        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), (
+            width,
+            page.evaluate("[document.documentElement.scrollWidth, innerWidth, ...[...document.querySelectorAll('.project-art-header *')].filter(e => e.getBoundingClientRect().right > innerWidth).map(e => [e.className || e.tagName, e.getBoundingClientRect().x, e.getBoundingClientRect().width, e.getBoundingClientRect().right])]"),
+        )
         art_box = art.bounding_box()
         art_frame = header.locator(".project-header-art").bounding_box()
         workspace_box = page.locator(".workspace-layout").bounding_box()
         title_box = title.bounding_box()
         close_box = close.bounding_box()
         pill_box = pill.bounding_box()
-        assert art_box and art_frame and workspace_box and title_box and close_box and pill_box
+        controls_box = controls.bounding_box()
+        assert (
+            art_box
+            and art_frame
+            and workspace_box
+            and title_box
+            and close_box
+            and pill_box
+            and controls_box
+        )
         assert abs(art_box["x"]) < 1 and abs(art_box["y"]) < 1
         assert abs(art_box["width"] / art_box["height"] - 2) < 0.01
         assert abs(art_frame["height"] / art_box["height"] - 0.64) < 0.02
         assert art_frame["y"] + art_frame["height"] <= workspace_box["y"] + 1
         assert title_box["x"] + title_box["width"] <= width + 1
+        assert controls_box["x"] >= 0 and controls_box["x"] + controls_box["width"] <= width + 1
+        assert model_control.bounding_box() and thinking_control.bounding_box() and google_signin.bounding_box()
+        expect(latex_button).to_be_visible()
+        latex_box = latex_button.bounding_box()
+        back_label_box = header.get_by_role("button", name="Back to home caption").bounding_box()
+        assert latex_box and back_label_box and abs(
+            latex_box["y"] + latex_box["height"] / 2 - back_label_box["y"] - back_label_box["height"] / 2
+        ) < 2
+        model_box = model_control.bounding_box()
+        thinking_box = thinking_control.bounding_box()
+        google_box = google_signin.bounding_box()
+        chatgpt_box = pill.bounding_box()
+        assert model_box and thinking_box and google_box and chatgpt_box
+        assert model_box["y"] < thinking_box["y"] and google_box["y"] < chatgpt_box["y"]
+        assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
+        page.screenshot(path=f"/tmp/sigma-a23-model-controls-{width}.png", full_page=True)
         if width >= 1100:
-            assert workspace_box["y"] <= 130
+            assert workspace_box["y"] <= 140, (width, workspace_box, header.bounding_box(), controls_box)
             assert title_box["x"] >= art_box["x"] + art_box["width"] - 1
-            assert close_box["x"] + close_box["width"] <= pill_box["x"] + 1
+            assert controls_box["x"] >= title_box["x"] + title_box["width"] - 1
         else:
-            assert close_box["y"] <= pill_box["y"] + 1
+            assert controls_box["y"] > close_box["y"]
         page.screenshot(path=f"/tmp/sigma-a13-header-{width}.png", full_page=True)
 
     close.evaluate("e => e.disabled = true")
@@ -122,5 +265,5 @@ with sync_playwright() as playwright:
     assert not errors, errors
     browser.close()
     print(
-        "PASS full header title and back arrow at 1280/1100/700/390/320px, AI pill style, disclosure, focus, close, no overflow or page errors"
+        "PASS 2x2 project header controls, model/effort reconciliation, functional ChatGPT disclosure, Google placeholder, keyboard, persistence, responsive layout and no overflow"
     )
