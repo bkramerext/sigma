@@ -11,19 +11,25 @@ import re
 
 DEFAULT_MODEL = "gpt-6.1-sol"
 EFFORTS = ("low", "medium", "high", "xhigh")
+# Relative tiers reflect published API token prices checked 2026-10-22:
+# Luna $0.10/$0.50, Sol $2/$10, and Astra $10/$50 per million input/output
+# tokens. These symbols are not estimates of a research session's charges.
 CATALOG = {
     "gpt-6.1-sol": {
         "label": "Sol · Balanced ($$)",
+        "relative_cost": "$$",
         "description": "Balance research capability and cost.",
         "efforts": EFFORTS,
     },
     "gpt-6-luna": {
         "label": "Luna · Economy ($)",
+        "relative_cost": "$",
         "description": "Lower-cost exploration of focused questions.",
         "efforts": EFFORTS,
     },
     "gpt-6-astra": {
         "label": "Astra · Advanced ($$$)",
+        "relative_cost": "$$$",
         "description": "For the most demanding research reasoning; higher cost.",
         "efforts": EFFORTS,
     },

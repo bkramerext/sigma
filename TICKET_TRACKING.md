@@ -1,6 +1,6 @@
 # SIGMA Ticket Tracking
 
-**Snapshot:** October 23, 2026 (Days 0–3; updated during PR #11 integration review)  
+**Snapshot:** October 23, 2026 (Days 0–3; updated during PR #11 integration review)
 **Scope:** Cumulative ticket and minor-work tracker. A status of `Done` indicates reported/verified implementation, not proof of research effectiveness. `Proposed` does not mean a Codex worker has started.
 
 ## Foundation and generation
@@ -47,7 +47,7 @@
 | T22 | Cloud deployment | Planned / unverified | Unassigned |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
-| T24 | Outcome metrics and provenance *data* (no presentation table) | [PR #13](https://github.com/bkramerext/sigma/pull/13) reviewed; migration/checks passed; final merge approval pending | Green · ChatGPT authored ticket |
+| T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
 | T25 | Outcome hierarchy and collapsible subsections | Proposed; not started | Gray proposed · ChatGPT authored ticket |
 
 ### T23.1 scope

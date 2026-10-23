@@ -1069,8 +1069,8 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   </div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
@@ -1079,7 +1079,11 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
-    <ConnectionStatus disabled={connectionDisabled}/>
+    {close && projectView && onProjectUpdated ? <>
+      <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
+      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in is not implemented; planned for cloud support" aria-label="Google sign-in is not implemented; planned for cloud support">Google · Not implemented</span>
+      <ConnectionStatus disabled={connectionDisabled} projectHeader/>
+    </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
   </header>;
 }
@@ -1102,9 +1106,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectDifficulty, connectionDisabled = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, connectionDisabled = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; connectionDisabled?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; connectionDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -1117,7 +1121,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectDifficulty={projectDifficulty} projectArtwork connectionDisabled={connectionDisabled}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectDifficulty={projectDifficulty} projectView={projectView} onProjectUpdated={onProjectUpdated} projectArtwork connectionDisabled={connectionDisabled}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -1163,9 +1167,93 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
 }
 
 type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null };
-type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; availability: 'available' | 'unavailable' | 'unverified' };
+type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty });
+
+function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
+  const ai = useAI();
+  const [models, setModels] = useState<CatalogChoice[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const saving = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setCatalogReady(false);
+    fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('Model availability could not be checked.');
+      return response.json();
+    }).then(data => {
+      if (!controller.signal.aborted) setModels(Array.isArray(data.models) ? data.models : []);
+    }).catch(() => {
+      if (!controller.signal.aborted) setMessage('Model availability could not be verified. Saved settings are unchanged.');
+    }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
+    return () => controller.abort();
+  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
+
+  const current = models.find(model => model.id === view.project.ai_model);
+  const available = models.filter(model => model.availability === 'available');
+  const currentAvailableIndex = available.findIndex(model => model.id === view.project.ai_model);
+  const nextModel = available.length > 1
+    ? available[(currentAvailableIndex + 1 + available.length) % available.length]
+    : available.length === 1 && currentAvailableIndex < 0 ? available[0] : undefined;
+  const efforts = current?.availability === 'available' ? current.efforts : [];
+  const currentEffortIndex = efforts.indexOf(view.project.reasoning_effort);
+  const nextEffort = efforts.length > 1
+    ? efforts[(currentEffortIndex + 1 + efforts.length) % efforts.length]
+    : undefined;
+  const effortOrder = ['low', 'medium', 'high', 'xhigh'];
+  const reconciledEffort = (model: CatalogChoice | undefined) => {
+    if (!model?.efforts.length) return undefined;
+    if (model.efforts.includes(view.project.reasoning_effort)) return view.project.reasoning_effort;
+    const oldIndex = effortOrder.indexOf(view.project.reasoning_effort);
+    return [...model.efforts].sort((a, b) => {
+      const distance = Math.abs(effortOrder.indexOf(a) - oldIndex) - Math.abs(effortOrder.indexOf(b) - oldIndex);
+      return distance || effortOrder.indexOf(a) - effortOrder.indexOf(b);
+    })[0];
+  };
+  const nextModelEffort = reconciledEffort(nextModel);
+  const effortWillChange = Boolean(nextModel && nextModelEffort !== view.project.reasoning_effort);
+  const costHelpId = `project-model-cost-help-${view.project.id}`;
+
+  async function update(nextModel: string, nextEffort: string) {
+    if (saving.current || disabled || busy) return;
+    saving.current = true; setBusy(true); setMessage('');
+    const expected = settingsOf(view);
+    try {
+      const saved = await post<ProjectView>('update', {
+        path: view.path, ...expected, ai_model: nextModel, reasoning_effort: nextEffort, expected,
+      });
+      onSaved(saved);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      saving.current = false; setBusy(false);
+    }
+  }
+
+  const modelLabel = current ? `${current.label.split(' · ')[0]} ${current.relative_cost}` : view.project.ai_model;
+  const modelDisabled = !catalogReady || busy || disabled || !nextModel || !nextModelEffort;
+  const thinkingDisabled = !catalogReady || busy || disabled || !nextEffort;
+  const statusMessage = message || !catalogReady
+    ? message || 'Checking model availability…'
+    : current?.availability !== 'available'
+      ? 'Saved model access is not verified; settings were preserved.'
+      : '';
+  const nextEffortNotice = effortWillChange
+    ? ` Switching to ${nextModel?.label.split(' · ')[0]} will also change Thinking from ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort} to ${thinkingLabels[nextModelEffort!]}.`
+    : '';
+  const visibleEffortNotice = effortWillChange ? `Next model uses ${thinkingLabels[nextModelEffort!]}.` : '';
+  return <div className="project-header-controls" aria-label="Project model and thinking controls">
+    <button type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`Cycle through available models.${nextEffortNotice}`} disabled={modelDisabled} onClick={() => nextModel && nextModelEffort && void update(nextModel.id, nextModelEffort)}><span>Model · </span>{modelLabel}</button>
+    <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title="Cycle through thinking levels supported by this model" disabled={thinkingDisabled} onClick={() => nextEffort && void update(view.project.ai_model, nextEffort)}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
+    <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
+    {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
+    {statusMessage && <span className="project-controls-message" role="status">{statusMessage}</span>}
+  </div>;
+}
 
 function ResearchTypeIcon({ type }: { type: ResearchMode }) {
   const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -2030,7 +2118,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
-  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectDifficulty={project.difficulty}>
+  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectDifficulty={project.difficulty} projectView={view!} onProjectUpdated={setView}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
