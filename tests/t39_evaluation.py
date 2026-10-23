@@ -60,10 +60,22 @@ def main() -> None:
         must_reject({**scored, "artifact_ids": []}, "missing artifact provenance")
         must_reject({**scored, "session_id": None}, "missing session provenance")
         must_reject({**scored, "reviewer": None}, "anonymous grading")
-        must_reject({**scored, "scores": {**scored["scores"], "mathematical_judgment": 1}}, "incorrect math pass")
-        must_reject({**scored, "scores": {**scored["scores"], "mathematical_judgment": True}}, "boolean as numeric score")
-        must_reject({**scored, "injection_provenance": "agent_discovery"}, "false discovery provenance")
-        must_reject({**review, "scores": dict.fromkeys(SCORE_AXES, 2)}, "unverified numeric scoring")
+        must_reject(
+            {**scored, "scores": {**scored["scores"], "mathematical_judgment": 1}},
+            "incorrect math pass",
+        )
+        must_reject(
+            {**scored, "scores": {**scored["scores"], "mathematical_judgment": True}},
+            "boolean as numeric score",
+        )
+        must_reject(
+            {**scored, "injection_provenance": "agent_discovery"},
+            "false discovery provenance",
+        )
+        must_reject(
+            {**review, "scores": dict.fromkeys(SCORE_AXES, 2)},
+            "unverified numeric scoring",
+        )
         transcript.write_text("tampered", encoding="utf-8")
         must_reject(scored, "post-review transcript mutation")
 
@@ -82,13 +94,33 @@ def main() -> None:
         "mode": "api_key",
         "model": "fixture-model",
         "steps": [
-            {"id": "step-1", "role": "skeptic", "status": "completed", "strategy_id": "strategy-1", "cycle": 1, "output": step_output}
+            {
+                "id": "step-1",
+                "role": "skeptic",
+                "status": "completed",
+                "strategy_id": "strategy-1",
+                "cycle": 1,
+                "output": step_output,
+            }
         ],
         "interventions": [{
             "id": "intervention-1", "text": challenge,
-            "deliveries": [{"role": "skeptic", "status": "acknowledged", "attempts": [{"step_id": "step-1", "status": "acknowledged"}]}],
+            "deliveries": [
+                {
+                    "role": "skeptic",
+                    "status": "acknowledged",
+                    "attempts": [{"step_id": "step-1", "status": "acknowledged"}],
+                }
+            ],
         }],
-        "artifacts": [{"id": "artifact-1", "strategy_id": "strategy-1", "strategy_cycle": 1, "claim_or_question": "Original Investigator work"}],
+        "artifacts": [
+            {
+                "id": "artifact-1",
+                "strategy_id": "strategy-1",
+                "strategy_cycle": 1,
+                "claim_or_question": "Original Investigator work",
+            }
+        ],
         "outcome": {"assessment": "mixed", "label": "Unverified"},
     }
     captured = capture_session("RH-SYM", session)
@@ -97,11 +129,28 @@ def main() -> None:
     assert captured["provenance"].startswith("evaluator-authored")
     for changed, reason in (
         ({**session, "interventions": []}, "no injection"),
-        ({**session, "interventions": [{**session["interventions"][0], "text": "unrelated"}]}, "wrong challenge"),
-        ({**session, "interventions": [{**session["interventions"][0], "deliveries": []}]}, "undelivered challenge"),
+        (
+            {**session, "interventions": [{**session["interventions"][0], "text": "unrelated"}]},
+            "wrong challenge",
+        ),
+        (
+            {**session, "interventions": [{**session["interventions"][0], "deliveries": []}]},
+            "undelivered challenge",
+        ),
         ({**session, "steps": []}, "unsaved step"),
         ({**session, "artifacts": []}, "missing artifact"),
-        ({**session, "steps": [{**session["steps"][0], "output": {"response": "text", "human_guidance_reviews": []}}]}, "unacknowledged output"),
+        (
+            {
+                **session,
+                "steps": [
+                    {
+                        **session["steps"][0],
+                        "output": {"response": "text", "human_guidance_reviews": []},
+                    }
+                ],
+            },
+            "unacknowledged output",
+        ),
     ):
         try:
             capture_session("RH-SYM", changed)
@@ -124,7 +173,9 @@ def main() -> None:
         else:
             raise AssertionError("Accepted wrong captured case")
 
-    print("PASS T39 manifest redaction, review provenance, score validation and transcript integrity")
+    print(
+        "PASS T39 manifest redaction, review provenance, score validation and transcript integrity"
+    )
 
 
 if __name__ == "__main__":
