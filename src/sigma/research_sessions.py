@@ -27,6 +27,7 @@ from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
+MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60
 MAX_RECORD = 512_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 16_000
@@ -39,9 +40,9 @@ CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
     "research_rounds": 3,
-    "model_calls": 6,
-    "session_duration_minutes": 30,
-    "output_tokens_per_call": 4000,
+    "model_calls": 30,
+    "session_duration_minutes": 60,
+    "output_tokens_per_call": 12000,
     "maximum_estimated_cost_usd": None,
 }
 TOKEN_PRICES_PER_MILLION = {
@@ -168,9 +169,34 @@ def get_limits(path: str) -> dict[str, Any]:
         return _validate_limits(raw)
     except ProjectError as current_error:
         try:
-            return _validate_legacy_limits(raw)
+            return _validate_previous_limits(raw)
         except ProjectError:
-            raise current_error
+            try:
+                return _validate_legacy_limits(raw)
+            except ProjectError:
+                raise current_error
+
+
+def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
+    """Read the prior settings range without replacing values the user already saved."""
+    previous_bounds = {
+        "research_rounds": (1, 10),
+        "model_calls": (2, 20),
+        "session_duration_minutes": (1, 120),
+        "output_tokens_per_call": (256, 16384),
+    }
+    for key, (minimum, maximum) in previous_bounds.items():
+        value = raw.get(key)
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise ProjectError("Research limits are invalid")
+    cost = raw.get("maximum_estimated_cost_usd")
+    if cost is not None and (
+        type(cost) not in {int, float} or not math.isfinite(cost) or not 0.01 <= cost <= 100
+    ):
+        raise ProjectError("Research limits are invalid")
+    if raw["model_calls"] < 2 * raw["research_rounds"]:
+        raise ProjectError("Research limits are invalid")
+    return dict(raw)
 
 
 def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -196,15 +222,20 @@ def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
 def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
     result = dict(raw)
     bounds = {
-        "research_rounds": (1, 10),
-        "model_calls": (2, 20),
-        "session_duration_minutes": (1, 120),
+        "research_rounds": (1, 5),
+        "model_calls": (2, 30),
+        "session_duration_minutes": (1, MAX_SESSION_DURATION_MINUTES),
         "output_tokens_per_call": (256, 16384),
     }
     for key, (minimum, maximum) in bounds.items():
         value = result.get(key)
         if type(value) is not int or not minimum <= value <= maximum:
-            raise ProjectError(f"{key.replace('_', ' ').capitalize()} must be {minimum}–{maximum}")
+            field = (
+                "Skeptic iterations"
+                if key == "research_rounds"
+                else key.replace("_", " ").capitalize()
+            )
+            raise ProjectError(f"{field} must be {minimum}–{maximum}")
     cost = result.get("maximum_estimated_cost_usd")
     if cost is not None and (
         type(cost) not in {float, int} or not math.isfinite(cost) or not 0.01 <= cost <= 100
@@ -214,7 +245,7 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         result["maximum_estimated_cost_usd"] = round(float(cost), 2)
     if result["model_calls"] < 2 * result["research_rounds"]:
         raise ProjectError(
-            "Model calls must be at least twice the research rounds so each round can include Investigator and Skeptic"
+            "Maximum agent calls must be at least twice the Skeptic iterations so each iteration can include Investigator and Skeptic"
         )
     return result
 
@@ -2041,9 +2072,15 @@ async def _call(
         ]
         if len(texts) != 1:
             raise ProjectError("Research provider returned malformed output")
-        if len(texts[0].encode("utf-8")) > record.get("output_token_limit", 4000) * 16 + 2048:
+        token_limit = record.get("output_token_limit", 4000)
+        usage = _usage(raw)
+        reported_output_tokens = usage.get("output_tokens") if usage else None
+        response_bytes = len(texts[0].encode("utf-8"))
+        if (
+            reported_output_tokens is not None and reported_output_tokens > token_limit
+        ) or response_bytes > token_limit * 4:
             raise ProjectError(
-                "Parsed research output exceeded its size bound; no artifact was committed"
+                "Provider output exceeded the configured per-call token limit or conservative response-size bound; no artifact was committed"
             )
         try:
             data = json.loads(texts[0])
@@ -2107,7 +2144,7 @@ async def _call(
             raise ProjectError(
                 "Investigator returned a prior failure reference not present in the supplied history"
             )
-    return validated, _usage(raw)
+    return validated, usage
 
 
 def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:

@@ -119,9 +119,9 @@ class ResearchExecutionRequest(OpenRequest):
 
 class ResearchLimitsRequest(OpenRequest):
     model_config = ConfigDict(extra="forbid", strict=True)
-    research_rounds: int = Field(ge=1, le=10)
-    model_calls: int = Field(ge=2, le=20)
-    session_duration_minutes: int = Field(ge=1, le=120)
+    research_rounds: int = Field(ge=1, le=5)
+    model_calls: int = Field(ge=2, le=30)
+    session_duration_minutes: int = Field(ge=1, le=research_sessions.MAX_SESSION_DURATION_MINUTES)
     output_tokens_per_call: int = Field(ge=256, le=16384)
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
 

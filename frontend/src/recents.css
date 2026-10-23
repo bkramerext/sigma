@@ -7,15 +7,15 @@
 .home-page .home-recents .recent-open {
   flex: 0 1 auto; min-width: 0; width: auto; min-height: 0; padding: 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none;
-  color: #e0aa8b; text-align: left;
+  color: #e0aa8b; text-align: left; font: 400 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
 }
 .home-page .home-recents .recent-open strong {
-  display: inline; font: 400 17px/1.45 Georgia, serif; color: inherit; overflow-wrap: anywhere;
+  display: inline; font: inherit; color: inherit; overflow-wrap: anywhere;
 }
-.home-page .home-recents .recent-open strong.is-current-project { font-weight: 700; }
+.home-page .home-recents .recent-open strong.is-current-project,
+.home-page .home-recents .recent-open strong.is-most-recent-project { font-weight: 700; }
 .home-page .home-recents .recent-meta-row { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; margin-top: 4px; }
-.home-page .home-recents .recent-meta-row > small { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; }
-.home-page .home-recents .recent-meta-row .research-type-icon { display: block; flex: 0 0 15px; width: 15px; height: 15px; color: #d6a36f; }
+.home-page .home-recents .recent-meta-row > small { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; color: #b6c2ce; font-size: 11px; font-weight: 400; }
 .home-page .home-recents .recent-open:hover:not(:disabled) {
   background: transparent; color: #f3d0a4; text-decoration: underline;
   text-underline-offset: 3px;
@@ -85,11 +85,42 @@
 .home-page .home-samples li { border-bottom: 1px solid #a965483d; }
 .home-page .home-samples strong { display: block; }
 .home-page .home-samples small { display: flex; align-items: center; gap: 6px; }
-.home-page .home-samples .research-type-icon { display: block; flex: 0 0 15px; width: 15px; height: 15px; color: #d6a36f; }
-.home-page .home-samples strong { color: #e0aa8b; font: 400 17px/1.45 Georgia, serif; overflow-wrap: anywhere; }
+.home-page .home-samples strong { color: #e0aa8b; font: 400 13px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
 .home-page .home-samples small { color: #b6c2ce; font-size: 11px; font-weight: 400; margin-top: 4px; }
+.home-page .home-samples .sample-open span { margin-left: 0; }
 .home-page .home-samples .sample-open { display: block; width: 100%; min-width: 0; padding: 12px 0; text-align: left; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: #e0aa8b; }
 .home-page .home-samples .sample-open:hover:not(:disabled) { background: #a9654824; }
+.home-page .home-samples .sample-type-group { border-bottom: 1px solid #a965483d; }
+.home-page .home-samples .sample-type-group > summary { display: grid; grid-template-columns: 10px 16px 120px max-content; align-items: center; gap: 8px; min-height: 40px; margin-left: -8px; padding: 6px 8px; color: #e0aa8b; font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; list-style: none; }
+.home-page .home-samples .sample-type-group > summary::-webkit-details-marker { display: none; }
+.home-page .home-samples .sample-type-group > summary::before { content: '›'; width: 10px; color: #d6a36f; font-size: 18px; line-height: 1; transform: rotate(0); transition: transform 120ms ease; }
+.home-page .home-samples .sample-type-group[open] > summary::before { transform: rotate(90deg); }
+.home-page .home-samples .sample-type-group > summary .research-type-icon { width: 16px; height: 16px; flex-basis: 16px; }
+.home-page .home-samples .sample-type-group > summary small { margin: 0; color: #aeb9c4; font-size: 11px; }
+.home-page .home-samples .sample-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
+.home-page { height: 100dvh; min-height: 100dvh; overflow: hidden; }
+.home-page > .home-shell { height: 100%; min-height: 0; overflow: hidden; }
+.home-page .home-effect-definitions { position: absolute; display: block; width: 0; height: 0; }
+.home-page .home-content { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 16px; overflow: hidden; }
+.home-page .home-topline { flex: 0 0 52px; }
+.home-page .home-projects { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.home-page .home-catalog { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.home-page .catalog-tabs { flex: 0 0 auto; }
+.home-page #samples-panel, .home-page #recent-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
+.home-page #samples-panel[hidden], .home-page #recent-panel[hidden] { display: none; }
+.home-page #samples-panel > .home-samples, .home-page #recent-panel > .home-recents { flex: 1 1 auto; height: 100%; min-height: 0; max-height: none; margin: 0; padding: 8px 4px 0 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
+.home-page .home-samples .sample-type-group ul { margin: 0 0 0 20px; }
+.home-page .home-samples .sample-type-group li:last-child { border-bottom: 0; }
+.home-page .home-recents .recent-type-group { border-bottom: 1px solid #a965483d; }
+.home-page .home-recents .recent-type-group > summary { display: grid; grid-template-columns: 10px 16px 120px max-content; align-items: center; gap: 8px; min-height: 40px; margin-left: -8px; padding: 6px 8px; color: #e0aa8b; font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; list-style: none; }
+.home-page .home-recents .recent-type-group > summary::-webkit-details-marker { display: none; }
+.home-page .home-recents .recent-type-group > summary::before { content: '›'; width: 10px; color: #d6a36f; font-size: 18px; line-height: 1; }
+.home-page .home-recents .recent-type-group[open] > summary::before { transform: rotate(90deg); }
+.home-page .home-recents .recent-type-group > summary .research-type-icon { display: block; flex: 0 0 16px; width: 16px; height: 16px; margin: 0; color: #d6a36f; }
+.home-page .home-recents .recent-type-group > summary span { color: #e0aa8b; }
+.home-page .home-recents .recent-type-group > summary small { display: block; margin: 0; color: #aeb9c4; font-size: 11px; }
+.home-page .home-recents .recent-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
+.home-page .home-recents .recent-type-group > ul { margin: 0 0 0 20px; padding: 0; }
 @media (max-width: 400px) {
   .home-page .catalog-tabs { width: 100%; }
   .home-page .catalog-tabs button { flex: 1; padding-inline: 8px; }

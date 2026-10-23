@@ -72,6 +72,9 @@ def check(root: Path, base: Path) -> None:
         second.project.id,
         first.project.id,
     ]
+    recent_by_id = {item["id"]: item for item in recent_projects()["projects"]}
+    assert recent_by_id[first.project.id]["difficulty"] == first.project.difficulty
+    assert recent_by_id[second.project.id]["difficulty"] == second.project.difficulty
     edited = create_strategy(first.path, "My addition", "Investigate this case")
     reopened = open_sample_project(selected["id"])
     assert reopened.project.id not in {first.project.id, second.project.id}
@@ -103,18 +106,32 @@ def check(root: Path, base: Path) -> None:
     assert last_copy.project.id != edited.project.id
 
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
-    actual = [entry["id"] for entry in recent_projects()["projects"]]
-    expected = [view.project.id for view in reversed(created)] + [last_copy.project.id]
-    assert actual == expected, (actual, expected)
+    actual = recent_projects()["projects"]
+    assert [entry["id"] for entry in actual[:4]] == [
+        view.project.id for view in reversed(created[-4:])
+    ]
+    assert all(
+        sum(entry["investigation_type"] == category for entry in actual) <= 4
+        for category in {entry["investigation_type"] for entry in actual}
+    )
     open_project(created[0].path)
     assert recent_projects()["projects"][0]["id"] == created[0].project.id
-    assert len(recent_projects()["projects"]) == 6
+    updated_recent = recent_projects()["projects"]
+    assert [entry["id"] for entry in updated_recent[:4]] == [
+        created[0].project.id,
+        *(view.project.id for view in reversed(created[2:5])),
+    ]
     open_project(first.path)
     assert recent_projects()["projects"][0]["id"] == first.project.id
 
     with TestClient(app) as api:
         before = (state_directory() / "recents.json").read_bytes()
-        assert len(api.get("/api/projects/recent").json()["projects"]) == 6
+        api_recent = api.get("/api/projects/recent").json()["projects"]
+        assert len(api_recent) == len(updated_recent)
+        assert all(
+            sum(entry["investigation_type"] == category for entry in api_recent) <= 4
+            for category in {entry["investigation_type"] for entry in api_recent}
+        )
         assert (state_directory() / "recents.json").read_bytes() == before
         assert api.get("/api/projects/samples").json()["projects"] == sample_projects()["projects"]
         response = api.post("/api/projects/samples/open", json={"sample_id": selected["id"]})
@@ -155,7 +172,7 @@ def check(root: Path, base: Path) -> None:
     assert inspect_project(first.path).project == edited.project
     assert all(path.read_bytes() == original for path, original in sources.items())
     print(
-        "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and six-item LRU"
+        "PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and four-per-category recents"
     )
 
 

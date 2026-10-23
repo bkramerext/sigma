@@ -23,6 +23,11 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    def select_samples():
+        tab = page.get_by_role("tab", name="Samples", exact=True)
+        if tab.get_attribute("aria-selected") != "true":
+            tab.click()
+
     page.route(
         "**/api/**",
         lambda route: route.continue_(
@@ -30,7 +35,7 @@ with sync_playwright() as playwright:
         ),
     )
     page.goto("http://127.0.0.1:5173")
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
     ).click()
@@ -73,7 +78,7 @@ with sync_playwright() as playwright:
     assert maximum_export["agentic_runs"][0]["terminal"]["status"] == "completed"
     maximum_composer.get_by_role("button", name="Cancel", exact=True).click()
     page.get_by_role("button", name="Close project").click()
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Counting Constrained Binary Strings"
     ).click()

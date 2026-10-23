@@ -29,6 +29,32 @@ inspected at `/tmp/sigma-t20-project-download-desktop.png`,
 `/tmp/sigma-t25-outcome-mobile.png`. Paper generation used only the isolated
 provider fixture; no paid provider call was made.
 
+## T20.1 follow-up UI polish (2026-10-23)
+
+Updated research-session limits end to end: defaults are 30 agent calls, 1 hour,
+12,000 output tokens per call, and 3 Skeptic iterations (1–5). The duration
+setting accepts minutes, hours, or days and is converted to backend minutes;
+validation and enforcement are shared with API, CLI, and session execution.
+Existing saved limits remain readable without being reset. The optional dollar
+budget remains unimplemented pending reliable cost accounting.
+
+Recent and Sample projects are grouped by type in an internally scrolling
+home list. Recent shows at most four projects per type, marks the newest in
+bold, and returns with only the active project type expanded. Repeated clicks
+on the selected Samples or Recent tab expand/collapse all groups. Project
+titles use matching Inter 13px styling in both lists, with only the newest
+Recent title bold. Recent and Sample descriptions omit repeated type icons and
+labels and align strategy count and difficulty under the title. Open Project
+Cancel now follows its heading. Tooltip timing and click-to-hide behavior are
+shared across the app.
+
+Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
+320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
+`browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The A17
+research-session browser scenario was attempted but did not reach its result
+assertions: its isolated fixture ended the session at 0/30 calls, so its
+expected research artifacts were unavailable. No paid provider call was made.
+
 ## T20 project-header LaTeX shortcut reconciliation
 
 Reconciled the existing direct paper action with the project header. The initial
