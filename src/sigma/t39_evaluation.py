@@ -13,8 +13,10 @@ SCORE_AXES = ("mathematical_judgment", "discriminating_next_step", "evidence_lab
 SCORE_VALUES = (0, 1, 2)
 CASES: dict[str, tuple[str, str, str]] = {
     "RH-SYM": (
-        ("The functional equation pairs each nontrivial zero with its reflection; "
-         "therefore each zero is fixed by reflection and lies on Re(s)=1/2."),
+        (
+            "The functional equation pairs each nontrivial zero with its reflection; "
+            "therefore each zero is fixed by reflection and lies on Re(s)=1/2."
+        ),
         "Reject set symmetry implying pointwise fixedness; a symmetric pair may be distinct.",
         "invalid_inference",
     ),
@@ -24,17 +26,23 @@ CASES: dict[str, tuple[str, str, str]] = {
         "invalid_inference",
     ),
     "RH-REGION": (
-        ("There are no zeros with Re(s)>7/8, and symmetry excludes Re(s)<1/8, "
-         "so all zeros lie on Re(s)=1/2."),
+        (
+            "There are no zeros with Re(s)>7/8, and symmetry excludes Re(s)<1/8, "
+            "so all zeros lie on Re(s)=1/2."
+        ),
         "Reject interior-to-line collapse: 1/8 <= Re(s) <= 7/8 is not just the line.",
         "invalid_inference",
     ),
     "RH-ETA-PARTIAL": (
-        ("For every complex s and positive integer m, splitting even and odd indices "
-         "gives sum_{n=1}^{2m}(-1)^(n-1)n^(-s) = sum_{n=1}^{2m}n^(-s) "
-         "- 2^(1-s)sum_{n=1}^m n^(-s)."),
-        ("Credit the exact finite identity; require separate convergence and "
-         "continuation arguments for infinite-series claims."),
+        (
+            "For every complex s and positive integer m, splitting even and odd indices "
+            "gives sum_{n=1}^{2m}(-1)^(n-1)n^(-s) = sum_{n=1}^{2m}n^(-s) "
+            "- 2^(1-s)sum_{n=1}^m n^(-s)."
+        ),
+        (
+            "Credit the exact finite identity; require separate convergence and "
+            "continuation arguments for infinite-series claims."
+        ),
         "valid_partial_result",
     ),
 }
@@ -125,10 +133,7 @@ def validate_review(review: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-
-def capture_session(
-    case_id: str, session: dict[str, Any]
-) -> dict[str, Any]:
+def capture_session(case_id: str, session: dict[str, Any]) -> dict[str, Any]:
     """Extract actual saved role evidence only after challenge delivery is proven.
 
     This never generates a model response and never treats authored fixtures
@@ -138,19 +143,19 @@ def capture_session(
     if case_id not in CASES:
         raise ValueError("Unknown challenge")
     if not isinstance(session, dict) or not isinstance(session.get("id"), str):
-        raise ValueError("Missing SIGMA session ID")
+        raise TypeError("Missing SIGMA session ID")
     claim = CASES[case_id][0]
     interventions = [
-        item for item in session.get("interventions", [])
-        if isinstance(item, dict)
-        and isinstance(item.get("text"), str)
-        and claim in item["text"]
+        item
+        for item in session.get("interventions", [])
+        if isinstance(item, dict) and isinstance(item.get("text"), str) and claim in item["text"]
     ]
     if len(interventions) != 1:
         raise ValueError("Exactly one matching evaluator challenge intervention is required")
     intervention = interventions[0]
     deliveries = [
-        item for item in intervention.get("deliveries", [])
+        item
+        for item in intervention.get("deliveries", [])
         if isinstance(item, dict)
         and item.get("role") == "skeptic"
         and item.get("status") == "acknowledged"
@@ -159,16 +164,20 @@ def capture_session(
         raise ValueError("A single acknowledged Skeptic delivery is required")
     delivery = deliveries[0]
     attempts = [
-        attempt for attempt in delivery.get("attempts", [])
+        attempt
+        for attempt in delivery.get("attempts", [])
         if isinstance(attempt, dict) and attempt.get("status") == "acknowledged"
     ]
     if len(attempts) != 1 or not isinstance(attempts[0].get("step_id"), str):
         raise ValueError("Acknowledged delivery must identify exactly one saved step")
     step_id = attempts[0]["step_id"]
     steps = [
-        step for step in session.get("steps", [])
-        if isinstance(step, dict) and step.get("id") == step_id
-        and step.get("role") == "skeptic" and step.get("status") == "completed"
+        step
+        for step in session.get("steps", [])
+        if isinstance(step, dict)
+        and step.get("id") == step_id
+        and step.get("role") == "skeptic"
+        and step.get("status") == "completed"
     ]
     if len(steps) != 1 or not isinstance(steps[0].get("output"), dict):
         raise ValueError("The challenge response must be a completed saved Skeptic output")
@@ -180,7 +189,8 @@ def capture_session(
     ):
         raise ValueError("Skeptic output lacks acknowledgment of the matching challenge")
     artifacts = [
-        artifact for artifact in session.get("artifacts", [])
+        artifact
+        for artifact in session.get("artifacts", [])
         if isinstance(artifact, dict)
         and artifact.get("strategy_id") == step.get("strategy_id")
         and artifact.get("strategy_cycle") == step.get("cycle")
@@ -227,12 +237,14 @@ def captured_review(case_id: str, transcript_path: str) -> dict[str, Any]:
     ):
         raise ValueError("Unverified challenge delivery")
     result = blank_review(case_id, transcript_path)
-    result.update({
-        "transcript_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "provider": capture.get("mode"),
-        "session_id": capture["session_id"],
-        "artifact_ids": [capture["artifact_id"]],
-    })
+    result.update(
+        {
+            "transcript_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "provider": capture.get("mode"),
+            "session_id": capture["session_id"],
+            "artifact_ids": [capture["artifact_id"]],
+        }
+    )
     return result
 
 
@@ -249,7 +261,8 @@ def main() -> None:
         "--score", type=Path, help="Validate a completed review JSON and print result"
     )
     parser.add_argument(
-        "--capture", choices=CASES,
+        "--capture",
+        choices=CASES,
         help="Capture an acknowledged Skeptic challenge from saved session",
     )
     parser.add_argument("--project-path", help="Working SIGMA project path, not sample template")
@@ -258,7 +271,8 @@ def main() -> None:
         "--output", type=Path, help="Write captured transcript JSON to this new file"
     )
     parser.add_argument(
-        "--captured-review", type=Path,
+        "--captured-review",
+        type=Path,
         help="Create blank review from a captured transcript",
     )
     args = parser.parse_args()
@@ -284,8 +298,7 @@ def main() -> None:
         result = captured_review(record["case_id"], str(args.captured_review))
     else:
         parser.error(
-            "Choose --manifest, --review-template, --capture, "
-            "--captured-review or --score"
+            "Choose --manifest, --review-template, --capture, --captured-review or --score"
         )
     print(json.dumps(result, indent=2, ensure_ascii=False))
 

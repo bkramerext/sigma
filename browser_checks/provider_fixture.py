@@ -271,6 +271,7 @@ async def handler(request):
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
+                    "obligation_reviews": [],
                     "computational_citations": [],
                 }
                 if maximum_regions
@@ -295,6 +296,7 @@ async def handler(request):
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
+                    "obligation_reviews": [],
                     "computational_citations": [],
                 }
             )
