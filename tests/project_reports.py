@@ -127,6 +127,11 @@ def main() -> None:
         "Finite checks do not prove the claim.",
     ):
         assert expected in plain
+    assert "Difficulty:" not in plain
+    data["project"]["difficulty"] = "easy"
+    plain_with_difficulty, _ = render_report(data, "txt")
+    assert isinstance(plain_with_difficulty, str)
+    assert "Difficulty: Easy" in plain_with_difficulty
 
     html_report, html_type = render_report(data, "html")
     assert isinstance(html_report, str)

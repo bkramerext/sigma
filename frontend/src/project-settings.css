@@ -15,6 +15,9 @@
 .project-settings-dialog label:first-child { margin-top: 0; }
 .project-settings-dialog input, .project-settings-dialog textarea, .project-settings-dialog select { display: block; width: 100%; padding: 10px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; margin-bottom: 0; }
 .project-settings-dialog .research-type-picker { position: relative; z-index: 3; }
+.project-settings-dialog .settings-classification-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: end; }
+.project-settings-dialog .settings-classification-row > div { min-width: 0; }
+.project-settings-dialog .settings-classification-row label { margin-top: 16px; }
 .project-settings-dialog .research-type-picker [role="combobox"] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 43px; padding: 9px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; }
 .project-settings-dialog .research-type-icon { display: block; flex: 0 0 20px; width: 20px; height: 20px; color: #d6a36f; }
 .project-settings-dialog .research-type-picker [role="combobox"] > span { flex: 1 1 auto; }

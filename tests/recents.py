@@ -36,6 +36,8 @@ def check(root: Path, base: Path) -> None:
     assert sample_categories["Did Jesus Use Cannabis?"] == "religion"
     assert sample_categories["Operation Narrow Passage"] == "military"
     assert sample_categories["Warp Drive Feasibility"] == "engineering"
+    maximum_regions = next(item for item in catalog if item["id"] == "maximum-regions-by-lines")
+    assert maximum_regions["difficulty"] == "easy"
     assert {entry["investigation_type"] for entry in catalog} >= {
         "mathematical",
         "engineering",

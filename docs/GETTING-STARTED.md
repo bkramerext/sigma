@@ -73,7 +73,7 @@ The local API exposes the same services:
 | POST | `/api/projects/strategies/edit` |
 | POST | `/api/projects/strategies/remove` |
 
-Managed create accepts `{title,problem,research_mode?}`; additional fields such as `path` are rejected. Destination preview returns `{root,path,exists}` (omit title for root only). Unknown modes return 400. Init accepts `{path,title,problem,research_mode?}`; open accepts `{path}`; create-strategy accepts `{path,title,approach}`. Strategy titles are 1–200 characters; approaches are 1–10,000 after trimming. Project errors return HTTP 400; invalid bodies 422; creation 201.
+Managed create accepts `{title,problem,research_mode?,difficulty?}`; difficulty is `easy`, `medium` (default), or `hard`, and additional fields such as `path` are rejected. Destination preview returns `{root,path,exists}` (omit title for root only). Unknown modes or difficulties return 400. Init accepts `{path,title,problem,research_mode?,difficulty?}`; open accepts `{path}`; create-strategy accepts `{path,title,approach}`. Strategy titles are 1–200 characters; approaches are 1–10,000 after trimming. Project errors return HTTP 400; invalid bodies 422; creation 201.
 
 Edit accepts `{path,strategy_id,title,approach}`; remove accepts `{path,strategy_id}`.
 Both return the updated project (HTTP 200). Unknown or already-removed strategies
@@ -279,15 +279,16 @@ Unsupported structured-output/model/effort capabilities fail explicitly without
 fallback. No per-strategy configuration or agent loop is added.
 
 ```sh
-./sigma init /tmp/settings.sigma --title 'Question' --problem 'Investigate it' --model gpt-6.1-sol --thinking high
-./sigma create --title 'Question' --problem 'Investigate it' --model gpt-6-luna --thinking high
+./sigma init /tmp/settings.sigma --title 'Question' --problem 'Investigate it' --model gpt-6.1-sol --thinking high --difficulty medium
+./sigma create --title 'Question' --problem 'Investigate it' --model gpt-6-luna --thinking high --difficulty hard
 ```
 
 `./sigma edit-project PATH --title ... --problem ... --research-mode mathematical
---model gpt-6-astra --thinking high --expected 'JSON'` takes the five previous
-settings as JSON (`title`, `problem`, `research_mode`, `ai_model`,
-`reasoning_effort`) for conflict detection. The equivalent API is
-`POST /api/projects/update` with `{path,title,problem,research_mode,ai_model,reasoning_effort,expected:{...}}`.
+--model gpt-6-astra --thinking high --difficulty hard --expected 'JSON'` takes
+the previous settings as JSON (`title`, `problem`, `research_mode`, `ai_model`,
+`reasoning_effort`, `difficulty`) for conflict detection. Difficulty is optional
+on the CLI edit and retains the value in `--expected` when omitted. The equivalent
+API is `POST /api/projects/update` with `{path,title,problem,research_mode,ai_model,reasoning_effort,difficulty,expected:{...}}`.
 It returns the complete updated ProjectView. No UUID/path mutation fields exist.
 Init/create bodies now accept `ai_model` and `reasoning_effort`. The shared service
 uses the existing lock, full-document validation, exact backup and atomic replace.

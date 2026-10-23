@@ -39,6 +39,21 @@ class ResearchMode(str, Enum):
     RELIGION = "religion"
 
 
+class Difficulty(str, Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
+def _difficulty(value: str | None) -> Difficulty | None:
+    if value is None:
+        return None
+    try:
+        return Difficulty(value)
+    except (ValueError, TypeError) as exc:
+        raise ProjectError("Difficulty must be Easy, Medium, or Hard") from exc
+
+
 def _research_mode(value: str) -> ResearchMode:
     try:
         return ResearchMode(value)
@@ -89,6 +104,7 @@ class ProjectSettings:
     investigation_type: ResearchMode
     ai_model: str
     reasoning_effort: str
+    difficulty: Difficulty | None = None
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -106,13 +122,18 @@ def _settings(raw: Any) -> ProjectSettings:
     if isinstance(raw, dict) and "research_mode" in raw and "investigation_type" not in raw:
         raw = {**raw, "investigation_type": raw["research_mode"]}
         del raw["research_mode"]
-    if not isinstance(raw, dict) or set(raw) != {
+    required = {
         "title",
         "problem",
         "investigation_type",
         "ai_model",
         "reasoning_effort",
-    }:
+    }
+    if (
+        not isinstance(raw, dict)
+        or not required <= set(raw)
+        or set(raw) - required - {"difficulty"}
+    ):
         raise ProjectError("Invalid project settings fields")
     try:
         validate_stored(raw["ai_model"], raw["reasoning_effort"])
@@ -124,6 +145,7 @@ def _settings(raw: Any) -> ProjectSettings:
         _research_mode(raw["investigation_type"]),
         raw["ai_model"],
         raw["reasoning_effort"],
+        _difficulty(raw.get("difficulty")),
     )
 
 
@@ -166,6 +188,7 @@ class Project:
     active_order: tuple[str, ...] = ()
     ai_model: str = "gpt-6.1-sol"
     reasoning_effort: str = "high"
+    difficulty: Difficulty | None = None
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -216,9 +239,9 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 7)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 8)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -229,8 +252,12 @@ def _decode(raw: Any) -> Project:
         fields.add("active_order")
     if version >= 6:
         fields.update({"ai_model", "reasoning_effort"})
+    if version >= 8:
+        fields.add("difficulty")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
+    if version >= 8 and raw["difficulty"] is None:
+        raise ProjectError("Schema v8 projects must have an Easy, Medium, or Hard difficulty")
     for key in ("id", "title", "problem"):
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise ProjectError(f"Project {key} must be a nonempty string")
@@ -244,10 +271,11 @@ def _decode(raw: Any) -> Project:
                 "investigation_type": mode,
                 "ai_model": raw.get("ai_model", legacy_model()),
                 "reasoning_effort": raw.get("reasoning_effort", "high"),
+                "difficulty": raw.get("difficulty"),
             }
         )
         if version >= 6
-        else ProjectSettings(raw["title"], raw["problem"], mode, legacy_model(), "high")
+        else ProjectSettings(raw["title"], raw["problem"], mode, legacy_model(), "high", None)
     )
     if version >= 6 and (raw["title"] != settings.title or raw["problem"] != settings.problem):
         raise ProjectError("Project settings text must be canonical")
@@ -451,13 +479,14 @@ def _decode(raw: Any) -> Project:
                 raise ProjectError("Invalid project edit event")
             next_change = ProjectChange(_settings(change["previous"]), _settings(change["current"]))
             # Normalize legacy event keys before checking their canonical contents.
-            normalized_change = {
-                key: {
+            normalized_change = {}
+            for key, value in change.items():
+                normalized = {
                     ("investigation_type" if field == "research_mode" else field): val
                     for field, val in value.items()
                 }
-                for key, value in change.items()
-            }
+                normalized.setdefault("difficulty", None)
+                normalized_change[key] = normalized
             if asdict(next_change) != normalized_change:
                 raise ProjectError("Project change text must be canonical")
             if next_change.previous == next_change.current or (
@@ -512,11 +541,14 @@ def _decode(raw: Any) -> Project:
         tuple(active_order),
         settings.ai_model,
         settings.reasoning_effort,
+        settings.difficulty,
     )
 
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if project.schema_version < 8:
+        del raw["difficulty"]
     if project.schema_version < 7:
         for strategy in raw["strategies"]:
             del strategy["enabled"]
@@ -537,6 +569,9 @@ def _document(project: Project) -> bytes:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
     for event in raw["events"]:
+        if project.schema_version < 8 and event.get("project_change") is not None:
+            for settings in event["project_change"].values():
+                settings.pop("difficulty", None)
         for key in ("stage_change", "order", "project_change", "enabled_change"):
             if event[key] is None:
                 del event[key]
@@ -580,8 +615,12 @@ def initialize_project(
     research_mode: str = "default",
     ai_model: str | None = None,
     reasoning_effort: str = "high",
+    difficulty: str = "medium",
 ) -> ProjectView:
     mode = _research_mode(research_mode)
+    selected_difficulty = _difficulty(difficulty)
+    if selected_difficulty is None:
+        raise ProjectError("New projects must have a difficulty")
     resolved_model = legacy_model() if ai_model is None else ai_model
     try:
         validate_pair(resolved_model, reasoning_effort)
@@ -601,7 +640,7 @@ def initialize_project(
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            6,
+            8,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -609,6 +648,7 @@ def initialize_project(
             investigation_type=mode,
             ai_model=resolved_model,
             reasoning_effort=reasoning_effort,
+            difficulty=selected_difficulty,
         )
         # Stage and fsync before atomic, no-replace publication. Concurrent initializers
         # cannot overwrite one another; the final link fails if project.json exists.
@@ -991,6 +1031,7 @@ def create_project(
     research_mode: str = "default",
     ai_model: str | None = None,
     reasoning_effort: str = "high",
+    difficulty: str = "medium",
 ) -> ProjectView:
     """Reserve a unique project name beneath the configured root."""
     title, name = _project_name(title)
@@ -1004,7 +1045,9 @@ def create_project(
         try:
             destination.mkdir(mode=0o700)  # Never overwrite files or existing research.
             reserved = True
-            view = initialize_project(destination, title, problem, mode, ai_model, reasoning_effort)
+            view = initialize_project(
+                destination, title, problem, mode, ai_model, reasoning_effort, difficulty
+            )
             from sigma.recents import record_access
 
             record_access(view)
@@ -1100,6 +1143,7 @@ def project_settings(project: Project) -> ProjectSettings:
         project.investigation_type,
         project.ai_model,
         project.reasoning_effort,
+        project.difficulty,
     )
 
 
@@ -1112,6 +1156,7 @@ def update_project(
     reasoning_effort: str,
     expected: dict[str, Any],
     text_format: str | None = None,
+    difficulty: str | None = None,
 ) -> ProjectView:
     wanted = _settings(
         {
@@ -1120,6 +1165,7 @@ def update_project(
             "investigation_type": research_mode,
             "ai_model": ai_model,
             "reasoning_effort": reasoning_effort,
+            "difficulty": difficulty if difficulty is not None else expected.get("difficulty"),
         }
     )
     prior = _settings(expected)
@@ -1144,12 +1190,13 @@ def update_project(
                 raise ProjectError(str(exc)) from exc
         return replace(
             project,
-            schema_version=max(6, project.schema_version),
+            schema_version=max(8 if wanted.difficulty is not None else 7, project.schema_version),
             title=wanted.title,
             problem=wanted.problem,
             investigation_type=wanted.investigation_type,
             ai_model=wanted.ai_model,
             reasoning_effort=wanted.reasoning_effort,
+            difficulty=wanted.difficulty,
             events=(
                 *project.events,
                 Event(

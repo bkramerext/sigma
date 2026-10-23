@@ -44,9 +44,11 @@ def main():
             raw = json.loads((path / "project.json").read_bytes())
             raw["schema_version"] = version
             raw.pop("active_order", None)
+            raw.pop("difficulty", None)
             for item in raw.get("strategies", []):
                 for key in ("stage", "summary", "provenance"):
                     item.pop(key, None)
+                item.pop("enabled", None)
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
             if version < 4:

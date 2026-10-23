@@ -43,7 +43,7 @@ def edit(path, values, prior):
 def main():
     with TemporaryDirectory() as directory:
         root = Path(directory)
-        for version in range(1, 6):
+        for version in range(1, 8):
             path = root / f"legacy{version}.sigma"
             initialize_project(path, "Original", "Original question")
             if version >= 2:
@@ -55,13 +55,18 @@ def main():
                     change_stage(path, first.id, "ready")
             raw = json.loads((path / "project.json").read_bytes())
             raw["schema_version"] = version
-            raw.pop("ai_model", None)
-            raw.pop("reasoning_effort", None)
+            raw.pop("difficulty", None)
+            if version < 6:
+                raw.pop("ai_model", None)
+                raw.pop("reasoning_effort", None)
             if version < 4:
                 raw.pop("research_mode", None)
                 raw.pop("investigation_type", None)
             if version == 1:
                 del raw["strategies"]
+            if version < 7:
+                for strategy in raw.get("strategies", []):
+                    strategy.pop("enabled", None)
             if version < 5:
                 raw.pop("active_order", None)
                 for strategy in raw.get("strategies", []):
@@ -76,6 +81,7 @@ def main():
             assert (
                 view.project.ai_model == "gpt-6.1-sol" and view.project.reasoning_effort == "high"
             )
+            assert view.project.difficulty is None
             assert (path / "project.json").read_bytes() == before
             prior = asdict(project_settings(view.project))
             assert edit(path, prior, prior) == view
@@ -87,10 +93,13 @@ def main():
                 "investigation_type": "mathematical",
                 "ai_model": "gpt-6-luna",
                 "reasoning_effort": "xhigh",
+                "difficulty": "hard",
             }
             result = edit(path, values, prior)
             assert result.path == view.path and result.project.id == view.project.id
-            assert result.project.schema_version == 6
+            assert result.project.schema_version == 8
+            assert result.project.difficulty is not None
+            assert result.project.difficulty.value == "hard"
             assert result.project.strategies == view.project.strategies
             assert result.project.active_order == view.project.active_order
             assert result.project.events[:-1] == view.project.events
@@ -105,8 +114,28 @@ def main():
             # Reverse mode as an actual single transaction.
             back = edit(path, {**values, "investigation_type": "default"}, values)
             assert back.project.id == view.project.id
+        legacy = root / "unknown-preserved.sigma"
+        initialize_project(legacy, "Legacy unknown", "Retain unknown difficulty")
+        legacy_raw = json.loads((legacy / "project.json").read_bytes())
+        legacy_raw["schema_version"] = 7
+        legacy_raw.pop("difficulty")
+        (legacy / "project.json").write_text(json.dumps(legacy_raw))
+        legacy_view = inspect_project(legacy)
+        legacy_settings = asdict(project_settings(legacy_view.project))
+        renamed = edit(legacy, {**legacy_settings, "title": "Still unknown"}, legacy_settings)
+        assert renamed.project.schema_version == 7 and renamed.project.difficulty is None
+        assert "difficulty" not in json.loads((legacy / "project.json").read_bytes())
+        assert inspect_project(legacy).project.difficulty is None
+        with TestClient(app) as client:
+            exported_legacy = client.get("/api/projects/export", params={"path": str(legacy)})
+            assert exported_legacy.status_code == 200
+            assert "difficulty" not in exported_legacy.json()["project"]
+            report_legacy = client.get(
+                "/api/projects/export/report", params={"path": str(legacy), "format": "txt"}
+            )
+            assert report_legacy.status_code == 200 and "Difficulty:" not in report_legacy.text
         print(
-            "PASS v1-v5 no-write/default/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen"
+            "PASS v1-v7 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen"
         )
         path = root / "new.sigma"
         initial = initialize_project(
@@ -116,7 +145,9 @@ def main():
             lambda: initialize_project(root / "invalid-model.sigma", "Bad", "Question", ai_model="")
         )
         assert not (root / "invalid-model.sigma").exists()
-        assert initial.project.schema_version == 6
+        assert initial.project.schema_version == 8
+        assert initial.project.difficulty is not None
+        assert initial.project.difficulty.value == "medium"
         prior = asdict(project_settings(initial.project))
         for key, bad in (
             ("title", " "),
@@ -126,6 +157,7 @@ def main():
             ("investigation_type", "alien"),
             ("ai_model", "text-embedding-3-small"),
             ("reasoning_effort", "none"),
+            ("difficulty", "impossible"),
         ):
             rejects(lambda key=key, bad=bad: edit(path, {**prior, key: bad}, prior))
         assert inspect_project(path) == initial
@@ -153,7 +185,7 @@ def main():
         change_stage(path, item.id, "exploring")
         edit_strategy(path, item.id, "Edited strategy", "New approach")
         remove_strategy(path, item.id)
-        assert inspect_project(path).project.schema_version == 6
+        assert inspect_project(path).project.schema_version == 8
         print(
             "PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes"
         )
@@ -167,6 +199,9 @@ def main():
             ]["previous"].update(title="Broken chain"),
             lambda d: d["events"][1]["project_change"]["current"].update(title="Incorrect final"),
             lambda d: d.update(reasoning_effort="invented"),
+            lambda d: d.update(difficulty="impossible"),
+            lambda d: d.update(difficulty=None),
+            lambda d: d.pop("difficulty"),
             lambda d: d.update(extra="unexpected"),
         ):
             raw = json.loads(json.dumps(valid))
@@ -176,9 +211,23 @@ def main():
         with TestClient(app) as client:
             expected = asdict(project_settings(inspect_project(path).project))
             body = {"path": str(path), **expected, "title": "API name", "expected": expected}
+            assert (
+                client.post(
+                    "/api/projects/update", json={**body, "difficulty": "trivial"}
+                ).status_code
+                == 400
+            )
             response = client.post("/api/projects/update", json=body)
             assert response.status_code == 200, response.text
+            assert response.json()["project"]["difficulty"] == "medium"
             assert client.post("/api/projects/update", json=body).status_code == 400
+            exported = client.get("/api/projects/export", params={"path": str(path)})
+            assert exported.status_code == 200
+            assert exported.json()["project"]["difficulty"] == "medium"
+            report = client.get(
+                "/api/projects/export/report", params={"path": str(path), "format": "txt"}
+            )
+            assert report.status_code == 200 and "Difficulty: Medium" in report.text
             assert (
                 client.post("/api/projects/update", json={**body, "id": "new-guid"}).status_code
                 == 422

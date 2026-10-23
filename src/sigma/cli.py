@@ -38,12 +38,14 @@ def main() -> None:
     init.add_argument("--research-mode", default="default")
     init.add_argument("--model", default="gpt-6.1-sol")
     init.add_argument("--thinking", default="high")
+    init.add_argument("--difficulty", choices=["easy", "medium", "hard"], default="medium")
     create = commands.add_parser("create", help="Create a project in the configured projects root")
     create.add_argument("--title", required=True)
     create.add_argument("--problem", required=True)
     create.add_argument("--research-mode", default="default")
     create.add_argument("--model", default="gpt-6.1-sol")
     create.add_argument("--thinking", default="high")
+    create.add_argument("--difficulty", choices=["easy", "medium", "hard"], default="medium")
     for name in ("open", "inspect", "events"):
         commands.add_parser(name).add_argument("path")
     strategies = commands.add_parser("strategies", help="List persistent strategies")
@@ -81,6 +83,7 @@ def main() -> None:
     edit_project.add_argument("path")
     for field in ("title", "problem", "research-mode", "model", "thinking", "expected"):
         edit_project.add_argument("--" + field, required=True)
+    edit_project.add_argument("--difficulty", choices=["easy", "medium", "hard"])
     text = commands.add_parser("text", help="Inspect current and cached Plain/Markdown text")
     text.add_argument("path")
     text.add_argument("--scope", choices=["project", "strategy"], required=True)
@@ -125,12 +128,18 @@ def main() -> None:
                     args.research_mode,
                     args.model,
                     args.thinking,
+                    args.difficulty,
                 )
             )
         elif args.command == "create":
             result = asdict(
                 create_project(
-                    args.title, args.problem, args.research_mode, args.model, args.thinking
+                    args.title,
+                    args.problem,
+                    args.research_mode,
+                    args.model,
+                    args.thinking,
+                    args.difficulty,
                 )
             )
         elif args.command == "edit-project":
@@ -147,6 +156,7 @@ def main() -> None:
                     args.model,
                     args.thinking,
                     expected,
+                    difficulty=args.difficulty,
                 )
             )
         elif args.command == "open":
