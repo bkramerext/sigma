@@ -999,6 +999,14 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             "Stopped by user. A dispatched provider request may still consume allowance."
         )
         record["current_action"] = "Stopped"
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"queued", "running"}:
+                branch["status"] = "stopped"
+                branch["current_action"] = "Stopped"
+        if record.get("strategy_runs"):
+            record["outcome"] = _outcome(record)
+            record["strategy_assessments"] = _strategy_assessments(record)
+            record["portfolio_decision"] = _portfolio_decision(record)
         _event(record, "stopped", record["message"])
         record["updated_at"] = _now()
         _save(record["project_path"], record)
@@ -1009,7 +1017,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         if task and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        return _public(record)
+        return _public(_read(record["project_path"], session_id))
     if action == "pause":
         if record["status"] in {"paused", "stopped", "completed", "ended", "failed"}:
             return _public(record)
@@ -1018,6 +1026,14 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             "Paused by user. A dispatched provider request may still consume allowance."
         )
         record["current_action"] = "Paused"
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"queued", "running"}:
+                branch["status"] = "paused"
+                branch["current_action"] = "Paused"
+        if record.get("strategy_runs"):
+            record["outcome"] = _outcome(record)
+            record["strategy_assessments"] = _strategy_assessments(record)
+            record["portfolio_decision"] = _portfolio_decision(record)
         _event(record, "paused", record["message"])
         record["updated_at"] = _now()
         _save(record["project_path"], record)
@@ -1028,7 +1044,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         if task and not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        return _public(record)
+        return _public(_read(record["project_path"], session_id))
     if record["status"] not in {"paused", "stopped"}:
         return _public(record)
     if action == "resume":
@@ -1059,7 +1075,17 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["message"] = (
             "Configured session duration reached. Existing notes are preserved and remain unverified."
         )
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"queued", "running", "paused", "stopped"}:
+                branch["status"] = "ended"
+                branch["current_action"] = "Duration limit"
+                branch["reason"] = record["message"]
+        if record.get("strategy_runs"):
+            record["outcome"] = _outcome(record)
+            record["strategy_assessments"] = _strategy_assessments(record)
+            record["portfolio_decision"] = _portfolio_decision(record)
         record["updated_at"] = _now()
+        _event(record, "portfolio.completed", record["message"])
         _save(record["project_path"], record)
         return _public(record)
     view, guard = _snapshot(record["project_path"])
@@ -1091,6 +1117,17 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         record["message"] = (
             "Call limit reached; no further provider calls were made. Results remain unverified research notes."
         )
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") in {"queued", "running", "paused", "stopped"}:
+                branch["status"] = "ended"
+                branch["current_action"] = "Budget exhausted"
+                branch["reason"] = record["message"]
+        if record.get("strategy_runs"):
+            record["outcome"] = _outcome(record)
+            record["strategy_assessments"] = _strategy_assessments(record)
+            record["portfolio_decision"] = _portfolio_decision(record)
+        record["updated_at"] = _now()
+        _event(record, "portfolio.completed", record["message"])
         _save(record["project_path"], record)
         return _public(record)
     async with _manager_lock:
@@ -2008,16 +2045,20 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
         gates = await _acquire_gates()
         try:
             results = await asyncio.gather(*calls, return_exceptions=True)
-            guard_error = next(
-                (
-                    result
-                    for result in results
-                    if isinstance(result, ProjectError) and _is_guard_failure(str(result))
-                ),
-                None,
+            failure = next(
+                (result for result in results if isinstance(result, BaseException)), None
             )
-            if guard_error is not None:
-                raise guard_error
+            if isinstance(failure, asyncio.CancelledError):
+                raise failure
+            if isinstance(failure, ProjectError):
+                raise failure
+            if failure is not None:
+                # A coordination/preflight exception is session-wide. Returning it as
+                # an ordinary branch result leaves that branch queued forever.
+                raise ProjectError(
+                    "Portfolio coordination failed before completing a strategy wave: "
+                    f"{str(failure).strip()[:700]}"
+                ) from failure
             return results
         finally:
             for gate in reversed(gates):
@@ -2683,9 +2724,13 @@ async def _worker(session_id: str, path: str) -> None:
             record["current_step"] = None
             record["current_steps"] = []
             for branch in record.get("strategy_runs", []):
-                if branch.get("status") == "running":
+                if branch.get("status") in {"queued", "running"}:
                     branch["status"] = "stopped" if record["status"] == "stopped" else "paused"
                     branch["current_action"] = branch["status"].title()
+            if record.get("strategy_runs"):
+                record["outcome"] = _outcome(record)
+                record["strategy_assessments"] = _strategy_assessments(record)
+                record["portfolio_decision"] = _portfolio_decision(record)
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):
