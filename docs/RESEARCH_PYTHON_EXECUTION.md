@@ -72,8 +72,8 @@ Execution status is `running`, `interrupted`, `completed`, `failed`, `timeout`,
 `output_limit`, `unavailable`, or `busy`. Only one container is admitted per local backend
 process. Research branches take turns through a cancellable gate before
 dispatch, so concurrent proposals do not waste a cycle on busy admission.
-Waiting proposals emit `python.queued`; cancellation or an expired session
-deadline prevents their dispatch. Direct API attempts during an admitted run
+Waiting proposals emit `python.queued`; cancellation, an expired session
+deadline, or a changed project/strategy snapshot prevents their dispatch. Direct API attempts during an admitted run
 are captured as busy without starting a container.
 A nonzero process exit is never a successful execution. Failed,
 timed-out, output-limited, or unavailable attempts are retained as such.

@@ -2411,6 +2411,12 @@ async def _execute_pending_python(
             record["deadline_at"]
         ) <= datetime.now(UTC):
             return
+        if record.get("guard_hash"):
+            view, guard = _snapshot(path)
+            if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+                raise ProjectError(
+                    "Project or strategy changed; session paused before Python dispatch."
+                )
         branch["current_action"] = "Python execution"
         record["current_action"] = f"Python execution · {branch['strategy_title']}"
         record["message"] = (

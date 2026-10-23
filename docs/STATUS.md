@@ -2897,3 +2897,10 @@ Artifact tampering and parent-directory symlinks are rejected by deterministic
 regressions. Artifact collection now shares the remaining execution deadline
 instead of extending a near-limit run by another five seconds. The final
 runtime and Investigator→Docker→Skeptic smoke checks passed after that change.
+
+The final queue review also added a snapshot check immediately before Python
+dispatch: disabling or editing a strategy while its proposal waits now pauses
+the session, matching A18's provider preflight guard. A three-branch regression
+changes the project while the first computation is active and verifies that
+its result is saved while the two waiting programs never start. Existing
+historical executions remain inspectable under their original provenance.
