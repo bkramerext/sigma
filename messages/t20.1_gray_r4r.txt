@@ -2,7 +2,7 @@ T20.1 handoff — Gray
 
 Status: ready for review (R4R); not merged.
 Branch: feature/t20-1-ui-acceptance
-Pull request: to be added after opening the implementation PR.
+Pull request: https://github.com/bkramerext/sigma/pull/34
 
 Implemented the five originally assigned T20.1 UI fixes, the current ticket’s Session panel cleanup, and the requested Lean action update:
 - Replaced the LaTeX wordmark with a copper typographic TeX mark and added the official Lean Prover SVG as a muted, disabled action. Final order is TeX → Lean → Download (Export Project) → Settings, with equal six-pixel gaps and 34px controls. The Lean logo asset is from https://github.com/leanprover/theorem_proving_in_lean4/blob/master/book/static/lean_logo.svg (Apache-2.0).
