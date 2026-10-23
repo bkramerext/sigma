@@ -970,12 +970,10 @@ async def start_session(
                 return _public(_recover(existing))
             if any(not task.done() for task in _tasks.values()):
                 raise ProjectError("Another research worker is active. No provider call was made.")
-            active = next(
-                (r for r in records if r["status"] in {"queued", "running", "paused"}), None
-            )
+            active = next((r for r in records if r["status"] in {"queued", "running"}), None)
             if active:
                 raise ProjectError(
-                    "A research session already needs attention. Reopen its status before starting another."
+                    "A research session is already queued or running in this project."
                 )
             credential = await auth_context()
             if credential["identity"] != expected_binding:

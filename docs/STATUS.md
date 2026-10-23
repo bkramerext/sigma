@@ -4,10 +4,11 @@
 
 Session elapsed time now freezes at Stop and excludes stopped intervals if the
 session is resumed. Interrupted calls can be resumed immediately; the extra
-resume warning dialog is removed. The Strategies toolbar control beside Play is
-Stop, with matching accessible and hover text and a stop-square icon. Paused
-sessions no longer block resuming another session; queued and running sessions
-still enforce single-session execution.
+resume warning dialog is removed. The Strategies toolbar's Play action always
+starts a new session and says so explicitly; resuming is a per-session action.
+Paused sessions may coexist with a new session, while queued and running
+sessions still enforce single-session execution. The adjacent toolbar control
+is Stop, with matching accessible and hover text and a stop-square icon.
 
 Research Report HTML now has a structured, responsive layout with a compact
 strategy/assessment table and more room for rationale and evidence. Project and

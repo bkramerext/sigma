@@ -263,7 +263,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const lastAnnouncement = useRef('');
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
-  const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running' || item.status === 'paused');
+  const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running');
   const nextStrategyId = eligible[0]?.id ?? '';
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
@@ -399,11 +399,10 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     finally { setBusy(false); }
   }
 
-  const playLabel = activeSession?.status === 'paused' ? 'Resume research session' : 'Start research session';
+  const playLabel = 'Start a new research session';
   const play = useCallback(() => {
     if (busy || readError) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    if (activeSession?.status === 'paused') { requestResume(activeSession); return; }
     if (activeSession || !eligible.length) return;
     setPendingStrategyId(nextStrategyId);
     setConfirmStart(false);
@@ -416,7 +415,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
       playDisabled: busy || !!readError || confirmStart || (activeSession
-        ? activeSession.status !== 'paused' || !eligible.some(strategy => strategy.id === activeSession.strategy_id)
+        ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
@@ -444,7 +443,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => requestResume(item)}>Resume</button>}
+                  {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError || (!!activeSession && activeSession.id !== item.id)} onClick={() => requestResume(item)}>Resume</button>}
                   {['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
@@ -1465,7 +1464,7 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        <button type="button" className="text-view-link session-start-link" title={`Confirm start Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
@@ -1684,7 +1683,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const requestTextEdit = (key: string) => setTextEditSignals(current => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
-  const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, stop: () => {}, playDisabled: true, stopDisabled: true, playLabel: 'Start research session' });
+  const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, stop: () => {}, playDisabled: true, stopDisabled: true, playLabel: 'Start a new research session' });
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const introPane = useRef<HTMLDivElement>(null);

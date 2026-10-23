@@ -616,10 +616,10 @@ with sync_playwright() as playwright:
         == "uppercase"
     )
     assert research.get_by_role("button", name=re.compile("start", re.IGNORECASE)).count() == 0
-    play = page.get_by_role("button", name="Start research session", exact=True)
+    play = page.get_by_role("button", name="Start a new research session", exact=True)
     expect(play).to_be_enabled()
     play.click()
-    start_first = page.get_by_role("button", name="Start session #1", exact=True)
+    start_first = page.get_by_role("button", name="Start new session #1", exact=True)
     expect(start_first).to_be_visible()
     expect(page.get_by_role("button", name="Cancel", exact=True)).to_have_attribute(
         "title", "Cancel starting a research session"
@@ -704,8 +704,8 @@ with sync_playwright() as playwright:
     ).click()
     page.reload()
     research = page.locator(".sessions-pane")
-    page.get_by_role("button", name="Start research session", exact=True).click()
-    page.get_by_role("button", name="Start session #2", exact=True).click()
+    page.get_by_role("button", name="Start a new research session", exact=True).click()
+    page.get_by_role("button", name="Start new session #2", exact=True).click()
     pause_row = research.locator("li[data-session-id]").filter(has_text="Session #2")
     expect(pause_row.locator(".session-status")).to_contain_text("running", timeout=10000)
     expect(pause_row.locator(".session-row-content")).to_be_visible()
@@ -769,8 +769,8 @@ with sync_playwright() as playwright:
     expect(research).to_contain_text("Session #2")
     expect(research).to_contain_text("Pause and stop fixture strategy")
     expect(research.locator(".section-count")).to_have_text("2 sessions, 0 running")
-    page.get_by_role("button", name="Start research session", exact=True).click()
-    page.get_by_role("button", name="Start session #3", exact=True).click()
+    page.get_by_role("button", name="Start a new research session", exact=True).click()
+    page.get_by_role("button", name="Start new session #3", exact=True).click()
     failure_row = research.locator("li[data-session-id]").filter(has_text="Session #3")
     expect(failure_row.locator(".session-status")).to_contain_text("failed", timeout=10000)
     expect(page.locator(".request-toast")).to_have_count(1)
@@ -1050,8 +1050,8 @@ with sync_playwright() as playwright:
     max_regions_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     max_regions_strategy = page.locator("li[data-strategy-id]").first
     max_regions_strategy.locator(".strategy-row-disclosure").click()
-    page.get_by_role("button", name="Start research session", exact=True).click()
-    page.get_by_role("button", name="Start session #1", exact=True).click()
+    page.get_by_role("button", name="Start a new research session", exact=True).click()
+    page.get_by_role("button", name="Start new session #1", exact=True).click()
     max_session = page.locator("li[data-session-id]").first
     expect(max_session.locator(".session-status")).to_have_text("ended", timeout=15000)
     expect(max_session.locator(".session-outcome-inline")).to_contain_text(
@@ -1098,14 +1098,14 @@ with sync_playwright() as playwright:
     maximum_strategy = page.locator("li[data-strategy-id]").first
     maximum_strategy.get_by_role("button", name="Disable", exact=True).click()
     expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_text("Disabled")
-    expect(page.get_by_role("button", name="Start research session")).to_be_disabled()
+    expect(page.get_by_role("button", name="Start a new research session")).to_be_disabled()
     expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
     page.reload()
     maximum_strategy = page.locator("li[data-strategy-id]").first
     expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_text("Disabled")
     maximum_strategy.get_by_role("button", name="Enable", exact=True).click()
     expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_count(0)
-    expect(page.get_by_role("button", name="Start research session")).to_be_enabled()
+    expect(page.get_by_role("button", name="Start a new research session")).to_be_enabled()
     expect(
         page.locator("li[data-session-id]").first.locator(".strategy-assessments")
     ).to_contain_text("Contributed to solution")

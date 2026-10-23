@@ -1049,11 +1049,17 @@ async def test_single_project_admission(path: Path):
                 str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
             )
         except ProjectError as exc:
-            assert "research worker is active" in str(exc) or "already needs attention" in str(exc)
+            assert "research worker is active" in str(exc) or "queued or running" in str(exc)
         else:
             raise AssertionError("a second session was admitted for one project")
-        release.set()
-        await wait_for(path, started["id"])
+        paused = await research_sessions.control_session(str(path), started["id"], "pause")
+        assert paused["status"] == "paused"
+        next_session = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        assert next_session["status"] == "queued"
+        await research_sessions.control_session(str(path), next_session["id"], "stop")
+        assert research_sessions.get_session(str(path), started["id"])["status"] == "paused"
 
 
 async def test_response_transport_and_parsed_bounds(path: Path):
