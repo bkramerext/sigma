@@ -166,4 +166,82 @@ See `WOLF.md` for the narrative, `WOLF_IDEAS.md` for writing ideas, `WOLF_TODO.m
 
 **Unbounded scope:** Do not let new ideas, documentation, or cloud unknowns obscure the local alpha's critical path. Track follow-ups separately.
 
+## 10. Cold-start recovery: resume the factory without conversation history
+
+A new human, ChatGPT coordinator, or replacement Codex session must be able to resume from GitHub alone. **Do not rely on memory of a previous chat or on an old worker terminal.** The first action is to reconstruct the actual state, not issue new assignments.
+
+1. Read this protocol, `docs/HUMAN-AI-INTERACTION.md`, `README.md`, `docs/STATUS.md`, and `TICKET_TRACKING.md`. Read relevant `tickets/t*.md` in full.
+2. Inspect **current GitHub state**, not just tracker prose: default branch HEAD, open PRs and their bases/heads, mergeability, latest commits, review comments, and `messages/` handoffs. Tracking files are snapshots and can lag reality.
+3. Reconstruct a worker ledger: color, coordinator domain, assigned ticket, branch/PR, status, last confirmed human dispatch, blocker, next action, and whether tests were reported or independently reproduced.
+4. Reconcile discrepancies with the human. Ask which worker windows are still active, which instructions were actually forwarded, and whether a worker has unpushed changes. Never infer live activity from an open PR.
+5. Confirm **current authorization**: who may merge, whether provider calls are permitted, spending limits, release target, UX constraints, and any paused work. Prior approvals do not imply approval for a new paid action.
+6. Check integration order and outstanding release gates; identify one critical path and independent secondary work. Only then dispatch or review.
+7. Record the reconciled snapshot in the appropriate tracker/handoff so the next coordinator can repeat this procedure.
+
+A useful restart summary is:
+
+```text
+Repository/main HEAD:
+Coordinator domains and responsible human:
+Release goal / target / blockers:
+Color | ticket | branch/PR | last confirmed dispatch | state | next owner/action
+Open PR review queue and merge order:
+Outstanding integration/acceptance criteria:
+Paid-provider authorization:
+Known local-only/unpushed work (human-confirmed):
+Last reconciled date and evidence links:
+```
+
+**Source-of-truth precedence:** actual GitHub commit/PR state for repository facts; canonical ticket for scope; most recent explicitly confirmed human decision for authority and product intent; worker message files for *reported* execution; independent reproduction for *verified* runtime behavior. If these conflict, surface the conflict rather than silently selecting the most convenient account.
+
+## 11. Replacing or recovering a worker
+
+A color identifies a logical work slot, not a guaranteed persistent model identity. If a Codex window crashes, loses context, or must be replaced:
+
+1. Freeze new assignments to that color and ask the human whether there are uncommitted or unpushed changes in its checkout.
+2. Preserve the branch, PR, ticket, handoff, and any reproducible logs; do not discard local-only work without human approval.
+3. Start the replacement in an isolated checkout on the **existing branch** where appropriate. Read this protocol, ticket, PR discussion, message file, current main, and changed files before coding.
+4. Have the replacement state its understanding of scope, branch, blockers, and tests to rerun. Do not treat a previous worker's test claims as newly executed.
+5. Continue the existing PR when possible, rather than creating duplicate tickets or competing PRs. Mark the handoff explicitly.
+
+For a ChatGPT coordinator replacement, use Section 10. A coordinator conversation is not a running daemon; no work should be assumed to have progressed during the gap.
+
+## 12. Operational conventions and tooling
+
+**Repository:** `bkramerext/sigma`, default integration branch `main`. Tickets: `tickets/t<id>.md`; tracker: `TICKET_TRACKING.md`; worker-to-coordinator handoffs: `messages/`; implementation/test observations: `docs/STATUS.md`. The exact current filenames and commands should be verified in the checkout before execution.
+
+**Local setup and checks:** The documented starting point is `./sigma setup`, `./sigma start`, and `./sigma test`. Run focused tests for the affected subsystem, plus browser checks under `browser_checks/` where relevant. Python/Sage sandbox tests may require Docker and prepared images. Distinguish a test that was *reported* from one the reviewer actually ran. Never claim that GitHub PR review itself ran local Chrome, Docker, or provider calls.
+
+**Branch hygiene:** Base new work on current `main`; keep one primary ticket per branch/PR; avoid force pushes over other people's work; do not commit secrets, personal datasets, generated credentials, or bulky transient artifacts. If a branch has changed after review, review its new head. Use an expected head SHA at merge to prevent merging an unseen revision.
+
+**Evidence retention:** A message file must contain enough to reproduce meaningful tests: commands, relevant environment prerequisites, base/head revisions, outcomes, and artifact locations. Temporary `/tmp` screenshots are not durable evidence. When a screenshot or log is essential to acceptance, attach it to an accessible PR artifact or commit a small appropriate test fixture, subject to repository policy. Redact tokens, email addresses, private paths, and user data.
+
+**Change control:** Human discussion does not automatically authorize repository edits. Obtain explicit authorization for changes when required by `docs/HUMAN-AI-INTERACTION.md`; standing permission to review and merge assigned PRs is not blanket permission for unrelated direct edits. For consequential architecture, security, billing, UX redesign, or release-scope changes, return to the human for a decision.
+
+## 13. Exceptions, escalation, and rollback
+
+**Stop and escalate** when a worker encounters an undocumented paid call, credential exposure, destructive migration, unexpected data loss, scope collision, unresolved security boundary, or a change that materially alters approved UX. Do not work around the constraint by switching accounts, providers, or billing modes. Report what happened, affected state, and the safest next action.
+
+**Urgent defect discovered after merge:** record the symptom and reproducer, identify the introducing commit/PR, decide with the human whether to revert or issue a narrow fix, and assign an owner. A revert is not automatically safe if later PRs depend on the change; inspect dependencies and retest. Keep the original ticket/PR history intact and document the corrective commit.
+
+**Blocked worker:** report the precise dependency and whether independent work can continue. The coordinator can park the ticket, move the worker to another bounded task, or request a small interface agreement through the human. Do not let blocked workers silently idle or invent interfaces.
+
+**Unavailable reviewer/coordinator:** leave the PR unmerged. R4R is not self-approval. The human can explicitly reassign independent review to another coordinator.
+
+**Unclear human dispatch:** treat the message as *not yet sent* until confirmed or evidenced. Avoid issuing conflicting follow-ups to an unconfirmed worker.
+
+## 14. Decision and status hygiene
+
+For every significant decision, record **what changed, why, who authorized it, which ticket/PR it affects, and what remains to verify**. Prefer updating the canonical ticket or a short linked handoff over scattering decisions across chat. Do not rewrite history to imply that a changed plan was always intended.
+
+Keep these statuses distinct: `PROPOSED`, `ASSIGNED (dispatch unconfirmed)`, `DISPATCHED`, `IN PROGRESS (worker reported)`, `BLOCKED`, `R4R`, `CHANGES REQUESTED`, `APPROVED`, `MERGED`, `INTEGRATION VERIFIED`, and `ACCEPTED`. A ticket may be merged but have an explicitly **UNVERIFIED** quality criterion.
+
+At the end of an integration cycle, the coordinator should provide a concise ledger of completed merges, PRs still in review, worker availability, blockers, critical path, and what the human must do next. **Never promise work is happening in the background unless a real persistent executor has been dispatched.**
+
+## 15. Maintenance of this protocol
+
+This file is the stable operating contract; `TICKET_TRACKING.md` and current PRs hold volatile assignment state. Avoid turning this protocol into a daily status log. When practice changes, update the affected rule here, explain the rationale in the commit, and ensure worker assignments refer to the current protocol. Periodically check for contradictions with `docs/HUMAN-AI-INTERACTION.md`, ticket instructions, and actual observed behavior.
+
+A future team should be able to answer without the original chat: **Who decides? Who sends? Who codes? Who reviews? Who merges? Who tests the integrated result? What is actually running? What is still unverified? What happens if a participant disappears?**
+
 This protocol should evolve when the team changes its actual practices. Amend it based on observed behavior, not an idealized account of autonomous development.
