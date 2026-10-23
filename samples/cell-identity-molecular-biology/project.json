@@ -1,0 +1,111 @@
+{
+  "schema_version": 5,
+  "id": "b1010a64-6d18-48e3-97e3-832fa85a8d42",
+  "title": "How Do Cells Maintain Their Identity?",
+  "problem": "Investigate the unresolved molecular biology problem of how differentiated cells robustly establish, preserve, and sometimes change their identity across cell divisions despite noisy gene expression, replication, environmental signals, and perturbations. Focus on the mechanistic and predictive sufficiency of gene-regulatory feedback, chromatin state, mitotic bookmarking, DNA methylation, and cell-cell signaling. Do not presume a single universal mechanism or that any epigenetic mark is causal merely because it correlates with cell identity. Choose tractable, explicitly specified model systems; contrast alternative explanations; derive quantitative predictions and experiments that can falsify them. Distinguish published observations, proposed experiments, simulated results, and unsupported claims. Identify missing datasets and avoid claiming the overarching problem is solved. The deliverable is a prioritized research program with narrow mechanistic hypotheses, decisive experiments, quantitative evaluation criteria, and limitations.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T19:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T19:00:00+00:00",
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000001"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T19:00:00+00:00",
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000002"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T19:00:00+00:00",
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000003"
+    },
+    {
+      "sequence": 5,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T19:00:00+00:00",
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000004"
+    },
+    {
+      "sequence": 6,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T19:00:00+00:00",
+      "strategy_id": "b1010c01-7a62-4b61-912a-4560b0000005"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "b1010c01-7a62-4b61-912a-4560b0000001",
+      "title": "Gene-regulatory network sufficiency",
+      "approach": "Select a well-characterized mammalian cell-fate transition and compare minimal dynamical gene-regulatory network models. Specify perturbations and single-cell trajectories that distinguish attractor-like stabilization from externally maintained identity. Identify parameters not identifiable from expression snapshots.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A falsifiable minimal model and discriminating perturbation set.",
+      "provenance": null
+    },
+    {
+      "id": "b1010c01-7a62-4b61-912a-4560b0000002",
+      "title": "Chromatin inheritance across mitosis",
+      "approach": "Investigate how histone modifications, transcription factors, chromatin accessibility, and DNA methylation might preserve or reestablish identity through replication and mitosis. Separate mechanistic evidence from correlational chromatin marks; design targeted interventions and recovery measurements.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A causal test distinguishing inherited memory from postmitotic reconstruction.",
+      "provenance": null
+    },
+    {
+      "id": "b1010c01-7a62-4b61-912a-4560b0000003",
+      "title": "Noise robustness and rare transitions",
+      "approach": "Model stochastic transcription and protein fluctuations in a stable cell type. Determine whether measured switching rates can be predicted from network dynamics, feedback, and external signals. Avoid equating a simulated distribution with observed data.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A quantitative switching-rate prediction with uncertainty and a rejection criterion.",
+      "provenance": null
+    },
+    {
+      "id": "b1010c01-7a62-4b61-912a-4560b0000004",
+      "title": "Cell-cell signaling versus intrinsic memory",
+      "approach": "Design experiments separating cell-autonomous persistence from niche-dependent identity. Compare isolated cells, controlled cocultures, and signal withdrawal, while accounting for survival and selection effects.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "An experimental decision table distinguishing intrinsic and extrinsic mechanisms.",
+      "provenance": null
+    },
+    {
+      "id": "b1010c01-7a62-4b61-912a-4560b0000005",
+      "title": "Cross-system predictive generalization",
+      "approach": "Evaluate whether a model fitted to one lineage, perturbation, or organism can predict unseen cell-state transitions. Define held-out perturbations, temporal validation, calibration, and failure analysis; distinguish benchmark performance from a universal explanation.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T19:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A preregisterable out-of-distribution validation plan and limitations.",
+      "provenance": null
+    }
+  ],
+  "research_mode": "biology",
+  "active_order": [
+    "b1010c01-7a62-4b61-912a-4560b0000001",
+    "b1010c01-7a62-4b61-912a-4560b0000002",
+    "b1010c01-7a62-4b61-912a-4560b0000003",
+    "b1010c01-7a62-4b61-912a-4560b0000004",
+    "b1010c01-7a62-4b61-912a-4560b0000005"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}
