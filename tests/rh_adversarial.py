@@ -52,7 +52,7 @@ def finite_eta_identity(s: int, m: int) -> bool:
     or analytic-continuation inference is made from this finite calculation.
     """
     assert m >= 1
-    term = lambda n: Fraction(1, n**s)
+    term = lambda n: Fraction(n) ** (-s)
     alternating = sum(((-1) ** (n - 1) * term(n) for n in range(1, 2 * m + 1)), Fraction())
     ordinary = sum((term(n) for n in range(1, 2 * m + 1)), Fraction())
     even = Fraction(2) ** (1 - s) * sum(
