@@ -3011,3 +3011,39 @@ captures (`/tmp/sigma-t24-review-report-mobile.png` and
 `/tmp/sigma-a18-coordinator-review-mobile.png`). Owned fixture/dev servers were
 stopped. No paid or live-provider calls were made. PR #13 remains open for
 review; T25 presentation and the pending PR #11 migration are separate work.
+
+
+### T24 post-migration validation (2026-10-23)
+
+PR #11 merged as `ccb6157`. Its current main was merged into the T24 branch
+without conflicts; no old assignment files or legacy tracker were restored.
+All 44 migrated historical documents were checked byte-for-byte against main.
+Canonical `tickets/t24.md` and `TICKET_TRACKING.md` now point to PR #13's
+reviewed implementation and pending final merge approval. The supporting
+[T24 data contract](T24-DATA-CONTRACT.md) links to the canonical tickets;
+T25 continues to own the Outcome UI.
+
+Post-merge `./sigma test` passed: all executable/backend scenarios, Ruff checks,
+57 formatted files, Pyright with zero errors/warnings, frontend typecheck and
+production build. The 10-strategy regression completed 20/20 calls and ten
+artifacts at concurrency three. The suite includes unequal/empty report groups
+and escaped row content. No live or paid provider calls were made.
+
+The real Chrome `browser_checks/a17_research.py` scenario passed again using
+fresh isolated fixtures on 8016/5187. Strengthened assertions compare all metrics
+and source IDs from the downloaded JSON audit to the session API, verify all
+16 metric rows in the actual downloaded HTML and text reports, and retain the
+existing desktop/mobile, Markdown, concurrent strategy, stop/resume and export
+failure checks. A backend regression independently compares the persisted
+session's metrics/source inventory to its JSON audit and every text/HTML row.
+Thus operational/research-quality metrics and the documented provenance remain
+available for T25 without adding Outcome markup.
+
+A separate Chrome report experiment passed with either group longer, correct
+session-header ordering, every metric row retained, and desktop/320px layouts
+without page overflow. I inspected the new mobile report and desktop workspace
+captures (`/tmp/sigma-t24-migration-report-research_quality-mobile.png` and
+`/tmp/sigma-a18-coordinator-review-desktop.png`). Owned test servers were stopped.
+PR #13 is ready for final merge approval; it has not been self-merged. Existing
+provenance limitations in the data contract remain explicit, including absent
+artifact-to-step foreign keys and unknown provider receipt/plan consumption.

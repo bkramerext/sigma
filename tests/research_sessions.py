@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from datetime import UTC, datetime, timedelta
+from html import escape
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -203,6 +204,20 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert exported["export_version"] == 2
     assert exported_session["strategy_text"] == strategy.approach
     assert exported_session["problem"] == view.project.problem
+    metrics = exported_session["outcome"]["metrics"]
+    assert metrics == finished["outcome"]["metrics"]
+    assert metrics["sources"]["session_id"] == finished["id"]
+    assert metrics["sources"]["step_ids"] == sorted(step["id"] for step in finished["steps"])
+    from sigma.project_reports import render_report
+
+    plain_report, _ = render_report(exported, "txt")
+    html_report, _ = render_report(exported, "html")
+    assert isinstance(plain_report, str) and isinstance(html_report, str)
+    for group in ("operational", "research_quality"):
+        for item in metrics[group]:
+            assert f"{item['label']}: {item['value']}" in plain_report
+            assert f"<dt>{escape(item['label'])}</dt>" in html_report
+            assert f"<dd>{escape(item['value'])}</dd>" in html_report
     assert exported_session["steps"][0]["output"] == investigation(1)
     assert (
         exported_session["artifacts"][0]["id"] in exported_session["outcome"]["basis_artifact_ids"]

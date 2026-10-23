@@ -1005,6 +1005,7 @@ with sync_playwright() as playwright:
     assert [session["session_number"] for session in export_data["research_sessions"]] == [1, 3]
     assert export_data["research_sessions"][0]["artifacts"]
     assert export_data["research_sessions"][0]["outcome"]["assessment"] == "mixed"
+    assert export_data["research_sessions"][0]["outcome"]["metrics"] == saved_metrics
     assert "fixture-token" not in json.dumps(export_data)
     for toast in page.locator(".request-toast").all():
         dismiss = toast.get_by_role("button", name="Dismiss request error")
@@ -1052,6 +1053,19 @@ with sync_playwright() as playwright:
     assert "<!doctype html>" in html_report.lower() and "Research Report" in html_report
     expect(popup.locator("h1")).to_be_visible()
     expect(popup.locator("h2", has_text="Research sessions")).to_be_visible()
+    # Every projected metric must survive the actual downloaded HTML report.
+    report_groups = popup.locator("article.report-session").first.locator(
+        "dl.report-outcome-metrics"
+    )
+    expect(report_groups).to_have_count(2)
+    for index, group in enumerate(("operational", "research_quality")):
+        for item in saved_metrics[group]:
+            row = (
+                report_groups.nth(index)
+                .locator("div")
+                .filter(has=popup.get_by_text(item["label"], exact=True))
+            )
+            expect(row.locator("dd")).to_have_text(item["value"])
     assert popup.locator("pre").count() == 0
     popup.emulate_media(media="print")
     assert popup.locator("body").evaluate("e => getComputedStyle(e).maxWidth") == "none"
@@ -1074,6 +1088,10 @@ with sync_playwright() as playwright:
         export_dialog.get_by_role("button", name="Download", exact=True).click()
     page.evaluate("() => { window.open = window.__originalOpen; delete window.__originalOpen; }")
     assert blocked_download.value.suggested_filename == "a17-blocked-tab.txt"
+    text_report = Path(blocked_download.value.path()).read_text(encoding="utf-8")
+    for group in ("operational", "research_quality"):
+        for item in saved_metrics[group]:
+            assert f"{item['label']}: {item['value']}" in text_report
     expect(export_dialog).to_be_visible()
     expect(export_dialog.get_by_role("alert")).to_have_text(
         "The browser blocked or closed the new tab. The file was still downloaded."

@@ -3,8 +3,9 @@
 T24 supplies outcome measurements and references to saved evidence. T25 owns
 the **Sessions → Outcome** presentation and its collapsible Status, Strategy
 Assessments, Metrics and Provenance subsections. T24 adds no Outcome table or
-replacement hierarchy. The canonical ticket is `tickets/t24.md` in the pending
-PR #11 ticket migration; this document describes the implementation contract,
+replacement hierarchy. The [canonical T24 ticket](../tickets/t24.md) and
+[T25 presentation ticket](../tickets/t25.md) are under `tickets/` following
+PR #11's merged migration. This document describes the implementation contract,
 not a second ticket.
 
 ## Metrics
