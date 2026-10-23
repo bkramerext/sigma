@@ -2478,8 +2478,20 @@ research scenarios plus deterministic Investigator→Python→Skeptic and
 stop-during-execution provenance tests. Final `./sigma test` passed every
 scenario, Ruff check/format, Pyright (0 errors), frontend typecheck, and
 production build. Existing Starlette/httpx deprecation warnings were
-non-failing. No browser files changed; there is no A19 UI to verify in Chrome.
-The actual image run used Docker/Colima rather than a live provider; the
-provider/agent integration used deterministic fixtures. No live provider calls
-were made. A17.8 remains an independent acceptance gate. Python results do not
-constitute formal verification or Lean evidence.
+non-failing. The A18 research browser fixture now supplies the strict
+`python_code: null` field for no-code proposals; the real Chrome A18 workflow
+passed against the existing isolated fixture after this contract update. A19
+has no separate UI to verify. The actual image run used Docker/Colima rather
+than a live provider; the provider/agent integration used deterministic
+fixtures. No live provider calls were made. A17.8 remains an independent
+acceptance gate. Python results do not constitute formal verification or Lean
+evidence.
+
+Audit follow-up: `python.started` and `python.completed` session events record
+execution ID and terminal status. Tests now verify the exact Python source and
+full execution record survive the project JSON audit export and A20 paper
+evidence snapshot; captured binary files remain separately retrievable by
+execution ID. Corrected Getting Started documentation that still described the
+sandbox as awaiting A18 integration. Re-ran `tests/research_sessions.py`,
+`tests/papers.py`, lint/format for changed code, `./sigma test`, and the real
+Chrome A18 workflow; all passed.

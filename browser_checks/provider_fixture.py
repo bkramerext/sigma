@@ -215,6 +215,7 @@ async def handler(request):
                     "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
                     "evidence_status": "Complete unverified mathematical argument; no proof checker was run.",
                     "open_obligations": [],
+                    "python_code": None,
                 }
                 if maximum_regions
                 else {
@@ -223,6 +224,7 @@ async def handler(request):
                     "assumptions": [f"Fixture assumption {cycle}"],
                     "evidence_status": "Unverified model derivation; no tool was run.",
                     "open_obligations": [f"Check obligation {cycle}"],
+                    "python_code": None,
                 }
             )
         else:

@@ -284,7 +284,27 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
     )
     assert any(event["kind"] == "python.started" for event in finished["events"])
-    assert any(event["kind"] == "python.completed" for event in finished["events"])
+    completed_event = next(
+        event for event in finished["events"] if event["kind"] == "python.completed"
+    )
+    assert execution["id"] in completed_event["message"]
+    assert execution["status"] in completed_event["message"]
+    from sigma.api import export_project_view
+
+    exported = export_project_view(str(path))
+    exported_artifact = exported["research_sessions"][0]["artifacts"][0]
+    assert exported_artifact["investigator_output"]["python_code"] == code
+    assert exported_artifact["investigator_output"]["python_execution"] == execution
+    from sigma import papers
+
+    with patch("sigma.api.export_project_view", return_value=exported):
+        paper_evidence, _ = papers._snapshot(str(path))
+    paper_sources = {item["id"]: item["data"] for item in paper_evidence["sources"]}
+    paper_artifact = next(
+        value for key, value in paper_sources.items() if key.startswith("artifact:")
+    )
+    assert paper_artifact["investigator_output"]["python_code"] == code
+    assert paper_artifact["investigator_output"]["python_execution"]["source"] == code
 
 
 async def test_stop_during_python_execution_preserves_provenance(path: Path):

@@ -20,6 +20,12 @@ and busy admission remain explicit statuses. Serialized provider input is
 bounded at 256,000 characters so the Skeptic can inspect complete bounded code
 and output without an unbounded request.
 
+The session event stream records execution start and terminal status with the
+execution ID. Project JSON audit exports and A20 paper evidence snapshots retain
+the exact proposed source and full execution record. Captured binary files stay
+in the private project sidecar and can be retrieved through the execution
+artifact endpoint.
+
 The local API mirrors this contract:
 
 - `POST /api/projects/research-executions` with `{path, source, session_id?,

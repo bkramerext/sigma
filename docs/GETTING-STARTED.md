@@ -1,6 +1,6 @@
 # Getting Started
 
-SIGMA runs locally. The current application supports project lifecycle and manually authored strategies; agents and automated research are not yet available.
+SIGMA runs locally. The application supports project lifecycle, manually authored strategies, and bounded research sessions with Investigator/Skeptic review.
 
 ## Install and launch
 
@@ -25,7 +25,9 @@ To stop the UI from another terminal, run `./sigma shutdown`. It stops only a ve
 
 The launcher starts FastAPI on 127.0.0.1:8000 and Vite on 127.0.0.1:5173. Running `./sigma start` again automatically restarts a verified instance from the same checkout, reloads local configuration, and lets its old terminal exit cleanly. Ctrl+C or SIGTERM stops both servers; pipe guardians also clean them up if the supervisor crashes. Unrelated listeners, other checkouts and older unverifiable launchers are never killed: SIGMA names the blocking port and asks you to close that service using its own controls. Ports stay fixed; there is no alternate-port fallback. There is no authentication or remote hosting. Project URLs contain local filesystem paths, not shareable links.
 
-Scheduling, reports and forks are unavailable; the UI explains their status. Optional AI proposal generation is described below.
+Automated scheduling is unavailable. Research sessions, evidence reports,
+paper authoring, and strategy forks are available through the existing project
+surfaces. Optional AI proposal generation is described below.
 
 ## CLI
 
@@ -82,8 +84,9 @@ dialog map to the existing title/approach fields and share their length limits.
 
 ## Research Python execution service
 
-The bounded execution API is available for future research-agent integration.
-Build its local image once from the repository root with Docker:
+Research Investigators can propose a bounded Python program. SIGMA executes it
+before the Skeptic review in a locally built Docker image. Build the image once
+from the repository root:
 
 ```sh
 docker build -t sigma-research-python:0.1 sandbox-poc
@@ -91,10 +94,12 @@ docker build -t sigma-research-python:0.1 sandbox-poc
 
 Execution never pulls or builds an image. Until this image exists locally, the
 service records an `unavailable` result. Calls run without network access in a
-non-root container with resource and output limits. Each result is stored under
-the selected project's `research-executions/` directory. The current UI does
-not launch research agents; A18 must connect this service to the Investigator →
-Skeptic loop before agents can use it. See
+non-root container with resource and output limits. Exact source, output,
+execution status, provenance, and captured-file metadata are retained in the
+research session evidence and in the selected project's `research-executions/`
+directory. The project JSON audit export and A20 paper evidence snapshot include
+the session source and execution record; captured binary files remain separately
+retrievable from the execution API. See
 [the execution contract](RESEARCH_PYTHON_EXECUTION.md).
 
 ## Test
