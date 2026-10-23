@@ -33,6 +33,7 @@ def provider_response(value):
         value.setdefault("human_guidance_reviews", [])
     if "assessment" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("obligation_reviews", [])
     return {
         "status": "completed",
         "usage": {
@@ -83,6 +84,7 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "retracted_cross_strategy_source_artifact_ids": [],
         "peer_handoff_reviews": [],
         "human_guidance_reviews": [],
+        "obligation_reviews": [],
         "computational_citations": [],
     }
 
@@ -1046,6 +1048,309 @@ def test_continuation_context_is_bounded(path: Path):
     assert source["artifacts"][0]["claim_or_question"].endswith("x" * 3000)
 
 
+def test_t37_context_selection_is_stable_and_loss_visible(path: Path):
+    view = initialize_project(path, "Evidence selection", "Keep the active question bounded.")
+    strategy_id = str(uuid4())
+    session_id = str(uuid4())
+    counterexample_id = str(uuid4())
+    old_obligation_id = str(uuid4())
+    latest_id = str(uuid4())
+    artifacts = [
+        {
+            "id": counterexample_id,
+            "sequence": 1,
+            "session_id": session_id,
+            "strategy_id": strategy_id,
+            "claim_or_question": "A plausible claim is refuted by x=7.",
+            "method": "Substitute x=7 into the claimed identity; the two sides differ.",
+            "evidence_status": "Concrete counterexample; claim is false under stated assumptions.",
+            "objections": ["The proposed universal claim fails at x=7."],
+            "open_obligations": [],
+        },
+        {
+            "id": old_obligation_id,
+            "sequence": 2,
+            "session_id": session_id,
+            "strategy_id": strategy_id,
+            "claim_or_question": "An older obligation not mentioned later.",
+            "method": "Old method.",
+            "evidence_status": "Unverified.",
+            "open_obligations": ["Check the old boundary case."],
+        },
+    ]
+    artifacts.extend(
+        {
+            "id": str(uuid4()),
+            "sequence": index,
+            "session_id": session_id,
+            "strategy_id": strategy_id,
+            "claim_or_question": f"Optional historical note {index} " + "q" * 2200,
+            "method": "Routine intermediate prose " + "m" * 2500,
+            "evidence_status": "Unverified intermediate note.",
+            "open_obligations": [],
+            "objections": [],
+        }
+        for index in range(3, 131)
+    )
+    artifacts.append(
+        {
+            "id": latest_id,
+            "sequence": 131,
+            "session_id": session_id,
+            "strategy_id": strategy_id,
+            "claim_or_question": "Test the current narrow claim.",
+            "method": "Compare both sides under the stated domain assumptions.",
+            "evidence_status": "Unverified.",
+            "open_obligations": ["Show the claim holds for every allowed input."],
+            "objections": [],
+        }
+    )
+    original_json = json.dumps(artifacts, ensure_ascii=False)
+    context_record = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "problem": view.project.problem,
+        "strategy_id": strategy_id,
+        "strategy_title": "Test a claim",
+        "strategy_text": "Use direct substitution and a proof attempt.",
+        "current_question": "Find a discriminating test for the current claim.",
+        "strategy_snapshot": [],
+        "artifacts": artifacts,
+    }
+    first = research_sessions._agent_context(context_record, "investigator", 132)
+    second = research_sessions._agent_context(context_record, "investigator", 132)
+    selected_ids = [item["id"] for item in first["prior_artifacts"]]
+    assert selected_ids == [item["id"] for item in second["prior_artifacts"]]
+    assert {counterexample_id, old_obligation_id, latest_id} <= set(selected_ids)
+    assert len(selected_ids) <= research_sessions.MAX_CONTEXT_ARTIFACTS
+    assert first["context_manifest"]["omitted_count"] > 100
+    assert any(
+        counterexample_id in item["source_ids"] and item["status"] == "selected"
+        for item in first["context_manifest"]["sources"]
+    )
+    assert any(
+        any(source_id not in selected_ids for source_id in item["source_ids"])
+        and item["status"] == "omitted"
+        for item in first["context_manifest"]["sources"]
+    )
+    obligations = {item["text"]: item for item in first["obligation_ledger"]}
+    assert obligations["Show the claim holds for every allowed input."]["status"] == "unresolved"
+    assert obligations["Check the old boundary case."]["status"] == "unresolved"
+    assert first["question"] == "Find a discriminating test for the current claim."
+    assert json.dumps(artifacts, ensure_ascii=False) == original_json
+    assert (
+        first["context_manifest"]["assembled_context_bytes"]
+        <= research_sessions.MAX_AGENT_CONTEXT_BYTES
+    )
+
+    live_step_id = str(uuid4())
+    current_review_context = research_sessions._agent_context(
+        {
+            **context_record,
+            "pending_investigation": {
+                "claim": "Current investigator claim",
+                "open_obligations": ["Check the investigator's claimed boundary."],
+            },
+            "steps": [
+                {
+                    "id": live_step_id,
+                    "role": "investigator",
+                    "cycle": 132,
+                    "strategy_id": strategy_id,
+                }
+            ],
+        },
+        "skeptic",
+        132,
+    )
+    live_obligation = next(
+        item
+        for item in current_review_context["obligation_ledger"]
+        if item["text"] == "Check the investigator's claimed boundary."
+    )
+    assert live_obligation["status"] == "unresolved"
+    assert live_obligation["source_step_ids"] == [live_step_id]
+    assert current_review_context["investigator_step_id"] == live_step_id
+
+    old_disproof_id = str(uuid4())
+    previous_session_id = str(uuid4())
+    research_sessions._save(
+        view.path,
+        {
+            "id": previous_session_id,
+            "project_path": view.path,
+            "project_id": view.project.id,
+            "session_number": 1,
+            "strategy_id": strategy_id,
+            "strategy_title": "Earlier approach",
+            "status": "ended",
+            "created_at": research_sessions._now(),
+            "updated_at": research_sessions._now(),
+            "artifacts": [
+                {
+                    "id": old_disproof_id if index == 1 else str(uuid4()),
+                    "sequence": index,
+                    "strategy_id": strategy_id,
+                    "claim_or_question": f"Prior claim {index}",
+                    "method": "Substitute the alleged boundary value.",
+                    "evidence_status": "Concrete counterexample at x=7"
+                    if index == 1
+                    else "Unverified note",
+                    "objections": [],
+                    "open_obligations": [],
+                }
+                for index in range(1, 14)
+            ],
+        },
+    )
+    prior, prior_omitted, prior_omitted_ids = research_sessions._prior_session_findings_index(
+        view.path, str(uuid4())
+    )
+    assert prior[0]["id"] == old_disproof_id
+    assert prior_omitted == 1 and len(prior_omitted_ids) == 1
+
+    explicit_statuses = ("unresolved", "addressed", "superseded", "retracted", "unknown")
+    status_artifacts = []
+    status_ids = {}
+    for status in explicit_statuses:
+        text = f"Disposition evidence for {status}."
+        obligation_id = research_sessions.hashlib.sha256(text.casefold().encode()).hexdigest()
+        artifact_id = str(uuid4())
+        status_ids[status] = obligation_id
+        status_artifacts.append(
+            {
+                "id": artifact_id,
+                "open_obligations": [text],
+                "skeptic_output": {
+                    "obligation_reviews": [
+                        {
+                            "obligation_id": obligation_id,
+                            "status": status,
+                            "basis_artifact_ids": [artifact_id]
+                            if status in {"addressed", "superseded", "retracted"}
+                            else [],
+                            "basis_step_ids": [],
+                            "rationale": "Explicit fixture disposition for deterministic ledger coverage.",
+                        }
+                    ]
+                },
+            }
+        )
+    disposition_ledger, disposition_omitted, _ = research_sessions._obligation_ledger(
+        status_artifacts
+    )
+    assert disposition_omitted == 0
+    assert {item["status"] for item in disposition_ledger} == set(explicit_statuses)
+    assert all(
+        item.get("epistemic_status") == "model_reported_unverified"
+        for item in disposition_ledger
+        if item["status"] in {"addressed", "superseded", "retracted"}
+    )
+    many_unknown = [
+        {
+            "id": str(index),
+            "open_obligations": [f"Historical obligation {index}"],
+            "obligation_dispositions": [
+                {"text": f"Historical obligation {index}", "status": "unknown"}
+            ],
+        }
+        for index in range(100)
+    ]
+    bounded_ledger, omitted_obligations, omitted_obligation_ids = (
+        research_sessions._obligation_ledger(many_unknown)
+    )
+    assert len(bounded_ledger) == research_sessions.MAX_CONTEXT_OBLIGATIONS
+    assert omitted_obligations == 36 and len(omitted_obligation_ids) == 32
+    assert all(item["status"] == "unknown" for item in bounded_ledger)
+
+    over_budget = {
+        **context_record,
+        "id": str(uuid4()),
+        "problem": "😀" * 70_000,
+        "artifacts": [],
+    }
+    try:
+        research_sessions._agent_context(over_budget, "investigator", 1)
+    except research_sessions.ResearchContextLimitError as exc:
+        assert "No provider call was made" in str(exc)
+    else:
+        raise AssertionError("UTF-8 over-budget mandatory question was accepted")
+
+
+async def test_t37_mandatory_context_blocks_before_provider(path: Path):
+    view, strategy, _, _ = await setup(path)
+    session_id = str(uuid4())
+    artifacts = [
+        {
+            "id": str(uuid4()),
+            "sequence": index,
+            "session_id": session_id,
+            "project_id": view.project.id,
+            "strategy_id": strategy.id,
+            "claim_or_question": f"Counterexample candidate {index}",
+            "method": f"Explicit counterexample investigation {index}.",
+            "evidence_status": "Concrete counterexample candidate; preserve for Skeptic review.",
+            "assumptions": ["The domain is fixed."],
+            "objections": [],
+            "open_obligations": [],
+        }
+        for index in range(research_sessions.MAX_CONTEXT_ARTIFACTS + 1)
+    ]
+    branch = {
+        "strategy_id": strategy.id,
+        "strategy_title": strategy.title,
+        "strategy_text": strategy.approach,
+        "current_question": "Test one precise consequence.",
+        "status": "queued",
+        "cycle": 0,
+        "calls_used": 0,
+        "artifacts": [],
+    }
+    record = {
+        "id": session_id,
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "strategy_id": strategy.id,
+        "strategy_title": strategy.title,
+        "strategy_text": strategy.approach,
+        "problem": view.project.problem,
+        "current_question": branch["current_question"],
+        "strategy_snapshot": [],
+        "artifacts": artifacts,
+        "strategy_runs": [branch],
+        "steps": [],
+        "events": [],
+        "status": "running",
+        "calls_used": 0,
+        "call_limit": 6,
+    }
+    research_sessions._save(view.path, record)
+    credential_mock = AsyncMock(side_effect=AssertionError("provider preflight must not run"))
+    with (
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch.object(research_sessions, "auth_context", new=credential_mock),
+    ):
+        success = await research_sessions._portfolio_role_call(
+            session_id,
+            view.path,
+            strategy.id,
+            "investigator",
+            1,
+            asyncio.Semaphore(1),
+            asyncio.Lock(),
+        )
+    saved = research_sessions._read(view.path, session_id)
+    assert success is False
+    assert credential_mock.await_count == 0
+    assert saved["calls_used"] == 0 and saved["steps"] == []
+    assert saved["strategy_runs"][0]["status"] == "paused"
+    assert (
+        "mandatory current-session evidence sources exceed" in saved["strategy_runs"][0]["reason"]
+    )
+    assert any(event["kind"] == "research.context_blocked" for event in saved["events"])
+
+
 async def test_pause_counts_interrupted_call(path: Path):
     view, strategy, credential, config = await setup(path)
     started_call = asyncio.Event()
@@ -1732,12 +2037,14 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "artifact-4",
     ]
     oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 300000}]}
-    try:
-        research_sessions._agent_context(oversized_context, "skeptic", 2)
-    except ProjectError as exc:
-        assert "safe input limit" in str(exc)
-    else:
-        raise AssertionError("oversized complete history was silently truncated")
+    compacted = research_sessions._agent_context(oversized_context, "skeptic", 2)
+    assert compacted["prior_artifacts"][0]["method"].startswith("x" * 100)
+    assert (
+        "truncated; inspect the original saved artifact"
+        in compacted["prior_artifacts"][0]["method"]
+    )
+    assert "old" in compacted["context_manifest"]["sources"][0]["source_ids"]
+    assert oversized_context["artifacts"][0]["method"] == "x" * 300000
 
     provider_requests = []
 
@@ -1759,10 +2066,20 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         finished = await wait_for(path, started["id"])
-        assert (
-            "entire ordered set of current-session saved artifacts"
-            in provider_requests[1]["instructions"]
+        assert "context manifest explains selection" in provider_requests[1]["instructions"]
+        skeptic_context = json.loads(provider_requests[1]["input"])
+        assert skeptic_context["context_manifest"]["policy_version"] == "t37-v1"
+        assert "prior_artifacts" in skeptic_context
+        assert skeptic_context["investigator_output"]["claim"] == proof["claim"]
+        assert all(isinstance(step.get("context_manifest"), dict) for step in finished["steps"])
+        from sigma.api import export_project_view
+
+        exported_session = next(
+            item
+            for item in export_project_view(str(path))["research_sessions"]
+            if item["id"] == finished["id"]
         )
+        assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "t37-v1"
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
@@ -4266,6 +4583,21 @@ async def test_intervention_delivery_pause_resume_keeps_attempt_provenance(path:
         context["human_guidance"][0]["intervention_id"] == intervention_id
         for context in guided_contexts
     )
+    assert all(
+        any(
+            intervention_id in source.get("source_ids", [])
+            and source.get("category") == "human_guidance"
+            for source in context["context_manifest"]["sources"]
+        )
+        for context in guided_contexts
+    )
+    guided_steps = [
+        step
+        for step in finished["steps"]
+        if intervention_id in step.get("human_intervention_ids", [])
+    ]
+    assert len(guided_steps) == 2
+    assert all("context_manifest" in step for step in guided_steps)
     assert len(finished["artifacts"]) == 2
     assert finished["artifacts"][0]["investigator_output"]["claim"] == investigation(1)["claim"]
 
@@ -4435,6 +4767,8 @@ def main():
             root / "failure-recency.sigma"
         )
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
+        test_t37_context_selection_is_stable_and_loss_visible(root / "t37-context.sigma")
+        asyncio.run(test_t37_mandatory_context_blocks_before_provider(root / "t37-blocked.sigma"))
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))

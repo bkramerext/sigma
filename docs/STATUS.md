@@ -3716,3 +3716,97 @@ tree at desktop and 390px mobile. It verified guidance submitted during an
 in-flight request causes no extra call, the targeted agent-step acknowledgment
 and provenance persist, and the mobile UI has no horizontal overflow. No live
 provider calls were made.
+
+## T37 initial investigation: evidence-selection baseline (2026-10-23)
+
+### Verified risk inventory before refactoring
+
+The existing safety ceiling and frozen prior-session snapshot are valuable and
+remain requirements. The weakness is that current history is passed nearly
+verbatim until it hits the ceiling, while the prior-session finder silently
+returns only a prefix of its deterministic recency order.
+
+| Risk | Reproduction on the unmodified T37 baseline | Observed behavior | Trust / user impact |
+| --- | --- | --- | --- |
+| In-session history pressure | Call `_agent_context` with 110 saved artifacts, each carrying a 2,600-character method, and a recent decisive disproof. | The 308,902-byte context raises `ProjectError: Research context exceeds the safe input limit`; no role step/provider call can proceed. Existing `tests/research_sessions.py::test_continuation_context_is_bounded` independently confirms a 300,000-character artifact is rejected. | Correctly avoids silent truncation, but optional old prose can block later research. There is no per-step record identifying which sources caused the rejection or which evidence was intended to be kept. |
+| Prior-session omission | Give `_prior_session_findings` one completed session with 13 artifacts, put a concrete disproof in artifact 1, and leave 12 later findings. | It returns 12 newest artifacts; the disproof is absent and there is no omitted-count/source record. | A new session can repeat a refuted avenue without being told that decisive evidence was withheld. |
+| Byte ceiling counts characters | Pass a 70,000-emoji problem through `_agent_context`. | It accepts 70,394 serialized characters even though the UTF-8 representation is 280,394 bytes, above `MAX_AGENT_CONTEXT_BYTES == 256,000`. `_call` repeats the character-count check. | The documented input ceiling is not an actual byte bound for non-ASCII research text. |
+| Human inspectability | Inspect a saved role step and the existing “Model call attempts” disclosure. | Steps retain selected artifact ID lists and intervention/computation IDs, but no canonical manifest with selection reasons, representation type, byte decisions or omission reasons. The UI can show IDs, not the actual context-selection decision. | A reviewer cannot reconstruct why an agent saw one evidence item and not another from the session view. |
+
+These reproductions distinguish product gaps from intentional safeguards: the
+provider is not called when assembly fails, the original artifacts remain
+unchanged, and prior-session reads are frozen into the new session at creation.
+No current implementation evidence supports claiming that a live agent would
+reason correctly after any proposed selection change. T37 will change the
+bounded context/evidence contract and its inspectability, not the T17.8
+scientific-quality acceptance criteria. No live or paid provider calls are
+authorized or used.
+
+### T37 implementation and evidence after change
+
+The context assembler now applies the same deterministic policy to legacy
+single-strategy records and current strategy branches. Before dispatch it keeps
+the current question, Investigator output for Skeptic review, all obligations
+that remain unresolved, the newest artifact, and marked counterexamples or
+retractions ahead of optional history. Each original artifact remains unchanged;
+the agent receives a bounded deterministic extract. A historical obligation
+does not disappear because a newer artifact omits it. The Skeptic can explicitly
+classify a supplied obligation as unresolved, addressed, superseded, retracted,
+or unknown, with exact selected artifact/step basis references. These are
+model-reported judgments and remain explicitly unverified.
+
+Current-session artifacts, project strategy snapshots, peer evidence, prior
+session findings, operational failures, peer handoffs, and active human
+guidance now have stable bounded ordering and omission counts/pointers. Peer
+extracts retain strategy, session, assumptions, computation, and retraction
+metadata so vocabulary overlap or peer agreement cannot silently establish a
+transfer. Prior-session failures stay metadata-only and newest-first; they do
+not label a strategy as failed research. Optional history may be compacted or
+omitted with a reason. If mandatory evidence, the UTF-8 input, or the stored
+manifest exceeds its bound, the worker records a recoverable context-blocked
+event before provider preflight/dispatch; branch and session evidence are
+preserved. The existing call/cost limits and billing mode are untouched.
+
+Every dispatched step now stores its context manifest before the provider
+request. The existing Provenance disclosure shows selected and omitted sources,
+reasons, extract/original representation, byte ceiling, and bounded omission
+pointers. Text, HTML, and LaTeX research reports include the same selection and
+obligation disposition information. Historical sessions without manifests
+remain readable, with the UI explaining that no source-level manifest exists.
+No storage migration or rewriting of existing projects/artifacts is required.
+
+Deterministic evidence added or extended:
+
+- `tests/research_sessions.py::test_t37_context_selection_is_stable_and_loss_visible`
+  constructs 131 artifacts, including an early concrete disproof, an older
+  obligation omitted by later notes, a current unresolved obligation, and 128
+  large optional notes. It proves stable selection keeps both disproof and
+  unresolved sources plus the latest artifact, marks optional omissions, does
+  not mutate originals, and stays within the UTF-8 byte ceiling. It also checks
+  all five explicit obligation states, the current Investigator step reference,
+  and that an oversized Unicode question is rejected before a provider call.
+- `tests/research_sessions.py::test_t37_mandatory_context_blocks_before_provider`
+  forces 25 material evidence items against a 24-source bound. The branch is
+  paused with an audit event; auth preflight is not awaited, no call or step is
+  recorded, and saved artifacts remain present.
+- Existing prior-session tests verify a decisive disproof survives the
+  12-entry bound and reports omitted source IDs; failure-history regressions
+  verify newest-first selection and retain attempt provenance. Existing
+  cross-strategy tests exercise assumption/domain mismatch and retracted
+  handoffs without promoting peer findings, while computation and intervention
+  tests retain execution and guidance source IDs through Skeptic review.
+- `tests/project_reports.py::test_context_manifest_is_reported` verifies source
+  selection and unverified obligation dispositions appear in export output.
+- Fixture-backed real Chrome exercises the existing workspace/session UI,
+  opens the Context used disclosure, checks the selection explanation and byte
+  count, and checks the disclosure fits at desktop and 390px mobile widths.
+
+Final verification: `./sigma test` passed on the tested implementation,
+including all research-session, computational evidence, project report, Ruff,
+format, Pyright, frontend typecheck, and production build checks. The real
+Chrome fixture check `browser_checks/a17_research.py` passed at desktop and
+390px mobile. No live model/provider call was made. Baseline risks above are
+reproducible, and deterministic contract behavior is now covered; this does
+not demonstrate empirical model reasoning quality or establish any research
+claim as mathematically verified. T17.8 remains its separate research-quality
+gate. T37 introduces no T17.8 scope changes or migration requirement.

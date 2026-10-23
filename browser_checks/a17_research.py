@@ -1053,6 +1053,12 @@ with sync_playwright() as playwright:
     provenance_detail = open_outcome_section(first_session, "Provenance")
     expect(provenance_detail).to_contain_text("Session ID")
     provenance_detail.get_by_text("Model call attempts", exact=True).wait_for()
+    context_used = provenance_detail.locator(".context-used-disclosure").first
+    expect(context_used).to_be_visible()
+    expect(context_used.locator("summary")).to_contain_text("Context used")
+    context_used.locator("summary").click()
+    expect(context_used).to_contain_text("Deterministic extracts are untrusted")
+    expect(context_used).to_contain_text("UTF-8 input")
     page.screenshot(path="/tmp/sigma-t25-outcome-desktop.png", full_page=True)
     # T24 supplies data; T25 owns the Outcome presentation.
     expect(first_session.get_by_role("region", name="Research outcome metrics")).to_have_count(0)
@@ -1078,6 +1084,9 @@ with sync_playwright() as playwright:
             and outcome_box["x"] + outcome_box["width"] <= width + 1
         )
         if width == 390:
+            context_box = context_used.bounding_box()
+            assert context_box and context_box["x"] >= 0
+            assert context_box["x"] + context_box["width"] <= width + 1
             page.screenshot(path="/tmp/sigma-t25-outcome-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
     conversion_count = len(provider_calls)
