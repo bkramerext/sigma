@@ -39,6 +39,14 @@ def fixture() -> dict:
                 "outcome": {
                     "assessment": "mixed",
                     "provisional": False,
+                    "metrics": {
+                        "operational": [
+                            {"label": "Model calls", "value": "2 dispatched · 2 completed"}
+                        ],
+                        "research_quality": [
+                            {"label": "Verification", "value": "Convincing, unverified"}
+                        ],
+                    },
                     "solution_review": {
                         "claim": "Candidate formula",
                         "argument_summary": "Upper bound and attaining construction.",
@@ -114,6 +122,8 @@ def main() -> None:
         "Session #3",
         "Execution status: ended",
         "Outcome:",
+        "Outcome metrics",
+        "Model calls: 2 dispatched · 2 completed || Verification: Convincing, unverified",
         "Solution claim: Candidate formula",
         "Verification status: convincing_unverified",
         "Strategy Assessments",
@@ -144,6 +154,8 @@ def main() -> None:
     assert "<script>alert" not in html_report
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in html_report
     assert "&lt;pre&gt;" not in html_report
+    assert "report-outcome-metrics-table" in html_report
+    assert "2 dispatched · 2 completed" in html_report
     assert (
         "<h1>Riemann &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt; &amp; proof</h1>"
         in html_report

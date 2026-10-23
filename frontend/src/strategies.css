@@ -534,6 +534,15 @@
 .workspace-page .session-row-content { grid-column: 2; grid-row: 1; }
 .workspace-page .session-row-content[hidden] { display: none !important; }
 .workspace-page .session-outcome { margin: 0 0 14px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #d7e0e8; }
+.workspace-page .research-outcome-metrics { margin: 12px 0 16px; min-width: 0; }
+.workspace-page .research-outcome-metrics h3 { margin: 0 0 6px; color: #ead0ae; font-size: 14px; }
+.workspace-page .research-outcome-metrics-scroll { overflow-x: auto; }
+.workspace-page .research-outcome-metrics table { width: 100%; min-width: 660px; border-collapse: collapse; font-size: 11px; }
+.workspace-page .research-outcome-metrics th, .workspace-page .research-outcome-metrics td { padding: 6px 7px; border-top: 1px solid #303b45; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.workspace-page .research-outcome-metrics thead th { color: #d8bd98; font-weight: 600; }
+.workspace-page .research-outcome-metrics tbody th { width: 19%; color: #aebbc6; font-weight: 500; }
+.workspace-page .research-outcome-metrics tbody td { width: 31%; color: #e0e6eb; }
+.workspace-page .research-outcome-metrics small { display: block; margin-top: 5px; color: #9eacb7; font-size: 10px; }
 .workspace-page .session-outcome .outcome-view-header { display: flex; align-items: center; gap: 8px; }
 .workspace-page .session-outcome .outcome-format-control { display: flex; align-items: center; justify-content: flex-start; margin-top: 5px; }
 .workspace-page .session-outcome .outcome-format-control > .sigma-render-toggle { display: inline-flex; flex: 0 0 32px; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #aab4ba; cursor: pointer; }

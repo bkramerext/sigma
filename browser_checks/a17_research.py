@@ -903,6 +903,14 @@ with sync_playwright() as playwright:
     first_session.get_by_role("button", name=re.compile("Session #1")).press("Space")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     expect(first_session.locator(".session-outcome")).to_contain_text("Outcome:")
+    metrics = first_session.get_by_role("region", name="Research outcome metrics")
+    expect(metrics.get_by_role("heading", name="Outcome metrics")).to_be_visible()
+    expect(metrics).to_contain_text("Operational")
+    expect(metrics).to_contain_text("Research quality")
+    expect(metrics).to_contain_text("Model calls by status")
+    expect(metrics).to_contain_text("Strategies investigated")
+    expect(metrics).to_contain_text("Verification status")
+    expect(metrics).to_contain_text("not mathematical verification")
     outcome_toggle = first_session.get_by_role("button", name="Render outcome as Markdown")
     conversion_count = len(provider_calls)
     outcome_toggle.click()
@@ -910,6 +918,7 @@ with sync_playwright() as playwright:
         "aria-pressed", "true"
     )
     assert len(provider_calls) == conversion_count
+    expect(metrics).to_be_visible()  # outcome metrics remain available in either text mode
     first_session.get_by_role("button", name="Show plain outcome text").click()
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
@@ -1420,6 +1429,15 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(portfolio.locator(".coordinator-portfolio-review")).to_be_visible()
+    portfolio_metrics = portfolio.get_by_role("region", name="Research outcome metrics")
+    expect(portfolio_metrics.get_by_role("heading", name="Outcome metrics")).to_be_visible()
+    metrics_box = portfolio_metrics.bounding_box()
+    assert metrics_box and metrics_box["x"] >= 0 and metrics_box["x"] + metrics_box["width"] <= 390
+    metrics_scroller = portfolio_metrics.locator(".research-outcome-metrics-scroll")
+    assert metrics_scroller.evaluate("e => e.scrollWidth > e.clientWidth")
+    metrics_scroller.evaluate("e => { e.scrollLeft = e.scrollWidth; }")
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    metrics_scroller.evaluate("e => { e.scrollLeft = 0; }")
     page.screenshot(path="/tmp/sigma-a18-coordinator-review-mobile.png", full_page=True)
     assert not errors, errors
     assert len(starts) == 5, starts

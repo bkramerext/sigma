@@ -853,6 +853,11 @@ async def test_pause_counts_interrupted_call(path: Path):
         paused = research_sessions.get_session(str(path), started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 1
     assert paused["steps"][-1]["status"] == "interrupted"
+    paused_metrics = {
+        item["label"]: item["value"] for item in paused["outcome"]["metrics"]["operational"]
+    }
+    assert "1 interrupted / cancelled" in paused_metrics["Model calls by status"]
+    assert "1 later attempt(s)" not in paused_metrics["Provider failures / retries"]
     from sigma import agentic, proposals, text_views
 
     for gate in (agentic._gate, proposals._gate, text_views._gate, research_sessions._gate):
@@ -877,6 +882,11 @@ async def test_pause_counts_interrupted_call(path: Path):
         await asyncio.sleep(0.02)
         stopped = research_sessions.get_session(str(path), started["id"])
         assert stopped["calls_used"] == 2 and stopped["steps"][-1]["status"] == "interrupted"
+        stopped_metrics = {
+            item["label"]: item["value"] for item in stopped["outcome"]["metrics"]["operational"]
+        }
+        assert "2 interrupted / cancelled" in stopped_metrics["Model calls by status"]
+        assert "1 later attempt(s)" in stopped_metrics["Provider failures / retries"]
         stopped_elapsed = stopped["elapsed_seconds"]
         await asyncio.sleep(0.02)
         assert (
@@ -1144,6 +1154,13 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
     assert finished["maximum_estimated_cost_usd"] == 0.1
     assert finished["cost_status"] == "available" and finished["estimated_cost_usd"] > 0
     assert all(step["token_usage"]["input_tokens"] == 120 for step in finished["steps"])
+    operational_metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert operational_metrics["Tokens · input / output / cached / total"] == "240 / 160 / 40 / 400"
+    assert operational_metrics["Estimated monetary cost"] == (
+        "$0.002004 estimated (rates checked 2026-10-23)"
+    )
     assert research_sessions.get_limits(str(path)) == future
 
 
@@ -2629,7 +2646,7 @@ async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
         context = json.loads(payload["input"])
         roles.append((context["strategy"]["id"], payload["text"]["format"]["name"]))
         if context["strategy"]["id"] == first.id:
-            return httpx.Response(500, json={"error": {"message": "fixture branch failure"}})
+            return httpx.Response(400, json={"error": {"message": "fixture request rejected"}})
         role = payload["text"]["format"]["name"]
         cycle = context["cycle"]
         output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
@@ -2659,6 +2676,14 @@ async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
     branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
     assert branches[first.id]["status"] == "failed"
     assert branches[first.id]["reason"]
+    rejected = next(step for step in finished["steps"] if step["strategy_id"] == first.id)
+    assert rejected["failure_kind"] == "provider_rejected"
+    assert rejected["provider_http_status"] == 400
+    metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert "1 rejected" in metrics["Model calls by status"]
+    assert "1 provider failure(s) (1 rejected" in metrics["Provider failures / retries"]
     assert branches[second.id]["status"] == "ended"
     assert finished["artifacts"]
     assert {item["strategy_id"] for item in finished["artifacts"]} == {second.id}
@@ -2723,6 +2748,11 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
     assert "not evidence" in actions[first.id]["rationale"]
     assert actions[second.id]["action"] not in {"continue", "revise"}, actions[second.id]
     assert finished["status"] == "ended"
+    timeout_metrics = {
+        item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
+    }
+    assert "1 timed out" in timeout_metrics["Model calls by status"]
+    assert "1 timed out" in timeout_metrics["Provider failures / retries"]
 
 
 async def test_portfolio_rejects_fabricated_cross_strategy_references(path: Path):
@@ -3380,6 +3410,221 @@ async def test_storage_limit_pauses_without_artifact(path: Path):
     assert "storage limit reached" in paused["message"].lower()
 
 
+def test_outcome_metrics_from_persisted_evidence(path: Path):
+    view = initialize_project(path, "Metrics fixture", "A persisted evidence accounting test")
+    session_id = str(uuid4())
+    execution_id = str(uuid4())
+    shared_python = {
+        "id": execution_id,
+        "status": "completed",
+        "artifacts": [{"filename": "result.csv", "size_bytes": 128, "sha256": "same-file-hash"}],
+    }
+    artifacts = [
+        {
+            "id": "finding-a",
+            "strategy_id": "strategy-a",
+            "strategy_cycle": 1,
+            "claim_or_question": "Alpha finding",
+            "coordinator_decision": "continue",
+            "open_obligations": ["Check a boundary", "Check a boundary"],
+            "investigator_output": {"python_execution": shared_python},
+            "objective_review": {
+                "status": "partial",
+                "claim": "Conclusion Alpha",
+                "proof_obligations": ["Check a boundary"],
+                "unresolved_objections": ["Independence is unclear"],
+                "basis_artifact_ids": ["finding-a"],
+            },
+        },
+        {
+            "id": "finding-b",
+            "strategy_id": "strategy-b",
+            "strategy_cycle": 1,
+            "claim_or_question": "Beta finding",
+            "coordinator_decision": "continue",
+            "open_obligations": ["Check a tail case"],
+            "investigator_output": {"python_execution": shared_python},
+            "objective_review": {
+                "status": "partial",
+                "claim": "Conclusion Beta",
+                "proof_obligations": ["Check a tail case"],
+                "unresolved_objections": [],
+                "basis_artifact_ids": ["finding-b"],
+            },
+        },
+    ]
+    duplicate_id = "call-completed"
+    started = "2026-10-23T10:00:00+00:00"
+    record = {
+        "id": session_id,
+        "project_path": str(project_path(path)),
+        "project_id": view.project.id,
+        "session_number": 1,
+        "strategy_id": "strategy-a",
+        "strategy_title": "Alpha",
+        "strategy_snapshot": [],
+        "strategy_runs": [
+            {"strategy_id": "strategy-a", "strategy_title": "Alpha", "calls_used": 3},
+            {"strategy_id": "strategy-b", "strategy_title": "Beta", "calls_used": 1},
+            {"strategy_id": "never-ran", "strategy_title": "Not run", "calls_used": 0},
+        ],
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "medium",
+        "status": "ended",
+        "created_at": started,
+        "started_at": started,
+        "updated_at": "2026-10-23T10:02:00+00:00",
+        "calls_used": 5,
+        "call_limit": 8,
+        "cycle": 1,
+        "artifacts": artifacts,
+        "strategy_assessments": [
+            {"assessment": "productive"},
+            {"assessment": "not_used"},
+        ],
+        "steps": [
+            {
+                "id": duplicate_id,
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": "strategy-a",
+                "strategy_title": "Alpha",
+                "status": "completed",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:10+00:00",
+                "token_usage": {
+                    "input_tokens": 10,
+                    "cached_input_tokens": 3,
+                    "output_tokens": 4,
+                },
+                "output": {"python_execution": shared_python},
+            },
+            {"id": duplicate_id, "role": "investigator", "status": "completed"},
+            {
+                "id": "call-rejected",
+                "role": "skeptic",
+                "cycle": 1,
+                "strategy_id": "strategy-a",
+                "strategy_title": "Alpha",
+                "status": "failed",
+                "failure_kind": "provider_rejected",
+                "provider_http_status": 400,
+                "failure_message": "ChatGPT rejected the request (HTTP 400).",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:12+00:00",
+            },
+            {
+                "id": "call-interrupted",
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": "strategy-b",
+                "strategy_title": "Beta",
+                "status": "interrupted",
+                "failure_kind": "interrupted",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:15+00:00",
+            },
+            {
+                "id": "call-cancelled-retry",
+                "role": "investigator",
+                "cycle": 1,
+                "strategy_id": "strategy-a",
+                "strategy_title": "Alpha",
+                "status": "interrupted",
+                "failure_kind": "cancelled",
+                "started_at": started,
+                "finished_at": "2026-10-23T10:00:20+00:00",
+            },
+        ],
+    }
+    research_sessions._save(str(path), record)
+    loaded = research_sessions.get_session(str(path), session_id)
+    metrics = loaded["outcome"]["metrics"]
+    operational = {item["label"]: item["value"] for item in metrics["operational"]}
+    quality = {item["label"]: item["value"] for item in metrics["research_quality"]}
+
+    calls = operational["Model calls by status"]
+    assert calls.startswith("5 budget-counted calls (1 step status unavailable")
+    assert "1 completed" in calls and "1 rejected" in calls
+    assert "2 interrupted / cancelled" in calls and "1 status unavailable" in calls
+    provider_failures = operational["Provider failures / retries"]
+    assert "1 provider failure(s)" in provider_failures
+    assert "2 interrupted / cancelled" in provider_failures
+    assert "1 later attempt(s)" in provider_failures
+    assert "no automatic retries" in provider_failures
+    assert (
+        "— (1/5 calls report token usage" in operational["Tokens · input / output / cached / total"]
+    )
+    assert "plan allowance consumption unknown" in operational["Estimated monetary cost"]
+    assert operational["Python runs by status"] == "1 completed"
+    assert "1 Python file(s) (128 B)" in operational["Artifacts and storage"]
+    assert (
+        "Alpha" in quality["Strategies investigated"]
+        and "Beta" in quality["Strategies investigated"]
+    )
+    assert "Not run" not in quality["Strategies investigated"]
+    assert quality["Research cycles"] == "2 completed / 2 started"
+    assert quality["Evidence-backed conclusions"] == "2 conclusion(s) · 2 cited finding(s)"
+    assert "Check a boundary" in quality["Open proof obligations"]
+    assert "Independence is unclear" in quality["Unresolved objections"]
+
+    missing_cached = research_sessions._usage({"usage": {"input_tokens": 7, "output_tokens": 2}})
+    assert missing_cached is not None
+    assert missing_cached == {
+        "input_tokens": 7,
+        "cached_input_tokens": None,
+        "output_tokens": 2,
+    }
+    assert research_sessions._estimate_cost(MODEL, missing_cached) is None
+
+    uncached_metadata = research_sessions._outcome_metrics(
+        {
+            "mode": "api_key",
+            "model": MODEL,
+            "status": "ended",
+            "calls_used": 1,
+            "started_at": started,
+            "updated_at": "2026-10-23T10:00:02+00:00",
+            "steps": [
+                {
+                    "id": "one-api-call",
+                    "role": "investigator",
+                    "cycle": 1,
+                    "status": "completed",
+                    "started_at": started,
+                    "finished_at": "2026-10-23T10:00:01+00:00",
+                    "token_usage": missing_cached,
+                }
+            ],
+            "artifacts": [],
+        },
+        {"label": "Pending", "assessment": "pending", "solution_review": None},
+    )
+    uncached_ops = {item["label"]: item["value"] for item in uncached_metadata["operational"]}
+    assert uncached_ops["Tokens · input / output / cached / total"] == (
+        "7 / 2 / — (0/1 calls include cached-token metadata) / 9"
+    )
+    assert "unavailable" in uncached_ops["Estimated monetary cost"]
+
+    unlinked_execution = research_sessions._outcome_metrics(
+        {
+            "mode": "chatgpt",
+            "model": MODEL,
+            "status": "ended",
+            "calls_used": 0,
+            "steps": [
+                {"id": "broken-step", "output": {"python_execution": {"status": "completed"}}}
+            ],
+            "artifacts": [],
+        },
+        {"label": "Pending", "assessment": "pending", "solution_review": None},
+    )
+    assert {item["label"]: item["value"] for item in unlinked_execution["operational"]}[
+        "Python runs by status"
+    ] == "— (execution record without ID)"
+
+
 def main():
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -3490,6 +3735,7 @@ def main():
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()
+        test_outcome_metrics_from_persisted_evidence(root / "outcome-metrics.sigma")
         assert research_sessions.coordinate_decision(
             "stop", "recoverable_objection", "Test the omitted boundary case", [], 1, 3, 2, 6
         ) == ("revise", "Test the omitted boundary case")

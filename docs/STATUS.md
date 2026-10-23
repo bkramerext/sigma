@@ -2910,3 +2910,61 @@ the session, matching A18's provider preflight guard. A three-branch regression
 changes the project while the first computation is active and verifies that
 its result is saved while the two waiting programs never start. Existing
 historical executions remain inspectable under their original provenance.
+
+## A24: research outcome metrics (2026-10-23)
+
+Outcome metrics are now derived when persisted research sessions are read. The
+single compact table keeps operational evidence (provider steps, token usage,
+durations, Python execution IDs, saved file sizes, failures, retries and cost)
+beside research-quality evidence (investigated strategies, per-strategy cycles,
+outcome, verification, current obligations, cited conclusions, attribution and
+unresolved objections). The existing outcome narrative and Strategy
+Assessments table remain intact. JSON audit exports and text/HTML reports carry
+the same read-time projection.
+
+Call status accounting uses distinct persisted step IDs; interrupted requests,
+timeouts, HTTP rejections and other failures stay separate. Repeated
+strategy/role/cycle steps are shown as later attempts, with no automatic retry
+assumed. A mismatch between the saved call counter and unique step records is
+visible and leaves unrecorded statuses unavailable. Python totals use unique
+execution IDs, so restart recovery and cross-cycle reuse do not add a second
+run or duplicate captured file bytes. Concurrent strategy cycles are keyed by
+strategy and cycle; session wall time is kept separate from summed call
+durations, which can overlap.
+
+Token aggregates are computed only from persisted validated provider usage.
+Missing input/output metadata yields unavailable totals; a missing cached-token
+field is unavailable rather than zero. Cached input remains a subset of input
+when total tokens are calculated. ChatGPT-plan spend is reported as unknown,
+including the historical A18/A19 plan trials whose allowance consumption could
+not be quantified. Timeouts, interruptions, and provider rejections with no
+usage evidence also keep API dollar cost unavailable. API-key estimates require
+complete input/output/cached usage and a known model rate. The existing
+standard, short-context model rates were checked against the [official API
+pricing page](https://developers.openai.com/api/docs/pricing) on 2026-10-23;
+values are labeled estimates and are not invoices. No provider calls were made
+for A24.
+
+Deterministic regressions now cover incomplete/mismatched records, absent token
+and cache metadata, an actual mocked HTTP 400 response recorded as rejected,
+timeout classification, cancellation and resumed retries, two concurrently
+investigated strategies, duplicate step IDs, reused Python execution IDs,
+artifact deduplication, cost availability, evidence-linked conclusions and
+historical unknowns. Project report tests assert the metrics survive text and
+HTML output. Real Chrome `browser_checks/a17_research.py` passed against the
+isolated provider fixture on 2026-10-23. It checks both operational/research
+column groups, visibility in plain and Markdown outcome modes, and mobile
+horizontal scrolling at 390px without document overflow. I inspected the
+resulting mobile capture at `/tmp/sigma-a18-coordinator-review-mobile.png`.
+
+Early suite runs caught two Ruff formatting issues and one stale assertion after
+the unavailable-token wording was clarified; the formatting and assertion were
+corrected. After the last call-accounting and cost-date changes, final
+`./sigma test` passed: all executable scenarios, 57 formatted Python files,
+Pyright with 0 errors/warnings/information, frontend typecheck, and production
+Vite build. The 10-strategy load completed 20/20 calls and 10 artifacts at max
+concurrency 3. The real Chrome run passed after the mobile table assertions
+were added. No live provider calls were made. Metrics improve attribution and
+make gaps visible; they do not measure agent competence, establish research
+effectiveness, or convert numerical/model evidence into mathematical
+verification.

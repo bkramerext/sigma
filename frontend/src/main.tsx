@@ -80,7 +80,9 @@ type PortfolioStrategyAction = { strategy_id: string; strategy_title: string; ac
 type PortfolioCombination = { strategy_ids: string[]; basis_artifact_ids: string[]; rationales: string[]; status: string };
 type PortfolioRelation = { source_strategy_id: string; source_artifact_id: string; target_strategy_id: string; target_artifact_id: string; relation: string; rationale: string };
 type PortfolioDecision = { status?: string; strategy_actions?: PortfolioStrategyAction[]; combination_candidates?: PortfolioCombination[]; conflict_candidates?: PortfolioRelation[]; overlap_warnings?: PortfolioRelation[]; limitations?: string[] };
-type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
+type OutcomeMetric = { label: string; value: string; detail?: string };
+type ResearchOutcomeMetrics = { operational: OutcomeMetric[]; research_quality: OutcomeMetric[] };
+type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
@@ -102,6 +104,26 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
   }
   if (outcome.caveats.length) lines.push('', '### Caveats', '', ...outcome.caveats.map(caveat => `- ${caveat}`));
   return lines.join('\n');
+}
+
+function ResearchOutcomeMetricsTable({ metrics }: { metrics?: ResearchOutcomeMetrics }) {
+  if (!metrics) return null;
+  const rowCount = Math.max(metrics.operational.length, metrics.research_quality.length);
+  return <section className="research-outcome-metrics" aria-label="Research outcome metrics">
+    <h3>Outcome metrics</h3>
+    <div className="research-outcome-metrics-scroll"><table>
+      <thead><tr><th colSpan={2} scope="colgroup">Operational</th><th colSpan={2} scope="colgroup">Research quality</th></tr><tr><th scope="col">Measurement</th><th scope="col">Value</th><th scope="col">Measurement</th><th scope="col">Value</th></tr></thead>
+      <tbody>{Array.from({ length: rowCount }, (_, index) => {
+        const operational = metrics.operational[index];
+        const quality = metrics.research_quality[index];
+        return <tr key={index}>
+          <th scope="row" title={operational?.detail}>{operational?.label ?? '—'}</th><td title={operational?.detail}>{operational?.value ?? '—'}</td>
+          <th scope="row" title={quality?.detail}>{quality?.label ?? '—'}</th><td title={quality?.detail}>{quality?.value ?? '—'}</td>
+        </tr>;
+      })}</tbody>
+    </table></div>
+    <small>Cached tokens are included in input totals. Concurrent agent durations may overlap. Computation and agent agreement are not mathematical verification.</small>
+  </section>;
 }
 
 function researchArtifactMarkdown(artifact: ResearchArtifact): string {
@@ -219,6 +241,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
       {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-content"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>
       {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(session.outcome.solution_review.basis_artifact_ids, session)}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}{!!session.outcome.solution_review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {session.outcome.solution_review.unresolved_objections.join(' · ')}</p>}{session.outcome.solution_review.verification_status && session.outcome.solution_review.verification_status !== 'unknown' && <p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p>}</div>}
       {!!session.outcome.caveats.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
+      <ResearchOutcomeMetricsTable metrics={session.outcome.metrics}/>
     </section>
     {!!session.strategy_runs && session.strategy_runs.length > 1 && <section className="research-strategy-activity" aria-label="Live strategy activity"><h3>Strategy activity</h3><ul>{session.strategy_runs.map(branch => <li key={branch.strategy_id} className={`strategy-run-${branch.status}`}><p><strong>{branch.strategy_title}</strong> · {branch.status} · {branch.current_action}</p><p>Cycle {branch.cycle} · {branch.calls_used} calls · {branch.artifacts.length} saved findings</p>{!!branch.current_question && <p><strong>Current question:</strong> {branch.current_question}</p>}{!!branch.reason && <p><strong>Coordinator rationale:</strong> {branch.reason}</p>}</li>)}</ul></section>}
       {!!session.portfolio_decision?.strategy_actions?.length && <section className="coordinator-portfolio-review" aria-label="Coordinator portfolio recommendations">
