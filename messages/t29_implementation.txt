@@ -2,11 +2,12 @@ T29 implementation handoff for ChatGPT
 Date: 2026-10-23
 Branch: blue/t29-human-intervention
 PR: https://github.com/bkramerext/sigma/pull/39
-Latest main base: `e58eccd525e475a53319364b1eb8175d711f66f2`.
-Tested integration head before this report update:
-`301ca1762983cdcb3aad4ed1c1548c4e9b0dd03f`.
-This includes the latest software-factory documentation changes; the T29 code
-and behavior were unchanged by those documentation-only commits.
+Latest main base: `7f84d40d7e2cee8ed14423384362319ba6485580`.
+Tested integration head: `46e5ce5928481a2ea4dac766ecb7f960592ce728`.
+This integrates PR #40's exported-sample work and subsequent software-factory
+and T22 acceptance documentation. T29's intervention behavior remains intact.
+The only manual conflicts were `TICKET_TRACKING.md` and `docs/STATUS.md`; both
+T29 documentation and T30's rows/sections were preserved.
 
 Implemented a bounded session intervention API and minimal session UI. A user can
 send an objection, evidence note, or priority to selected strategies and agent
@@ -33,9 +34,10 @@ restart recovery, supersession, terminal rejection, bounded repeated guidance,
 and history preservation.
 
 Verification completed:
-- On the latest merged tree, `./sigma test` passed: CLI smoke, concurrency and
-  recovery scenarios, SageMath/computational evidence regressions, Ruff, format
-  check, Pyright (0 errors), frontend typecheck and production build.
+- `./sigma test` passed on the latest merged tree: T29 concurrency/recovery,
+  T30 exported-sample import, CLI smoke, SageMath/computational evidence
+  regressions, Ruff, format check, Pyright (0 errors), frontend typecheck and
+  production build.
 - Real Chrome fixture check passed on the combined T28/T29 tree at desktop and
   390px mobile after merging the latest main. It verifies guidance submission
   makes no provider call, selected role deliveries are acknowledged with

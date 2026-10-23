@@ -3696,3 +3696,23 @@ calls were used. Final verification on the T30 branch passed:
 
 The suite emitted existing Starlette/httpx deprecation warnings; they did not
 fail tests. No live or paid provider calls were made.
+
+### T29 refresh against PR #40 / current main (2026-10-23)
+
+Merged latest main `7f84d40d7e2cee8ed14423384362319ba6485580` at tested
+integration head `46e5ce5928481a2ea4dac766ecb7f960592ce728`. This brings in PR #40's
+sample-from-export work plus the intervening software-factory and T22 acceptance
+documents. Conflicts were limited to `TICKET_TRACKING.md` and `docs/STATUS.md`;
+both T29's open-review entry and its full evidence section were kept alongside
+T30's tracking and evaluation. The automatically merged code retains the T29
+intervention endpoint, agent prompt delivery/acknowledgment validation, UI, and
+regression tests. `./sigma test` passed on the integrated tree, including T29
+concurrency/recovery, T30 exported-sample import, computational evidence, CLI
+smoke, Ruff, format check, Pyright (0 errors), frontend typecheck, and production
+build.
+
+The real Chrome `browser_checks/t29_intervention.py` check also passed on that
+tree at desktop and 390px mobile. It verified guidance submitted during an
+in-flight request causes no extra call, the targeted agent-step acknowledgment
+and provenance persist, and the mobile UI has no horizontal overflow. No live
+provider calls were made.
