@@ -80,6 +80,23 @@ Both return the updated project (HTTP 200). Unknown or already-removed strategie
 produce HTTP 400; removed strategies cannot be edited. Name/description in the
 dialog map to the existing title/approach fields and share their length limits.
 
+## Research Python execution service
+
+The bounded execution API is available for future research-agent integration.
+Build its local image once from the repository root with Docker:
+
+```sh
+docker build -t sigma-research-python:0.1 sandbox-poc
+```
+
+Execution never pulls or builds an image. Until this image exists locally, the
+service records an `unavailable` result. Calls run without network access in a
+non-root container with resource and output limits. Each result is stored under
+the selected project's `research-executions/` directory. The current UI does
+not launch research agents; A18 must connect this service to the Investigator →
+Skeptic loop before agents can use it. See
+[the execution contract](RESEARCH_PYTHON_EXECUTION.md).
+
 ## Test
 
 ```sh
