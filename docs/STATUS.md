@@ -3503,3 +3503,21 @@ needed because no UI files changed. No live model calls were made, so live agent
 interpretation quality remains unverified. Blue's T27 PR #18 was reviewed for
 its evidence contract; commit 102ca15 is an ancestor of current `main`, and the
 full suite was rerun with the merged T27 changes present.
+
+### T28 rebase against Gray PR #35 (2026-10-23)
+
+Rebased T28 onto current `main` at 9cb487e. The only conflict was the final
+return in `_call`: Gray's commit requires usage to be read through `_usage(raw)`
+for its provider response/token guard, while T28 needs citation validation
+before returning. The resolved path performs `_validate_computation_citations`
+and then returns `validated, _usage(raw)`. Gray's `MAX_SESSION_DURATION_MINUTES`,
+1 MB response bound, per-call output-token check, current session defaults, and
+T28's 32 KB prior-session evidence context are all retained. No Gray UI or
+recents changes were edited.
+
+After resolution, `tests/computational_evidence.py` passed, including separate
+Python/SageMath run-status counts, and `tests/research_sessions.py` passed,
+including its 10-strategy concurrent workload and Gray's provider/limit paths.
+The full `./sigma test` then passed on the rebased tree, including backend
+regressions, Ruff, Pyright (0 errors/warnings/informations), frontend typecheck
+and the Vite production build. No live provider calls were made.

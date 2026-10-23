@@ -22,3 +22,9 @@ Limitations
 - Pillow 13.0.0 is a pinned dependency for safe common-raster decoding.
 
 Coordinator action: review and merge this single PR when ready. Do not self-merge.
+
+Rebase update (2026-10-23)
+- Rebased onto current main at Gray PR #35 commit 9cb487e.
+- Resolved the `_call` return conflict by preserving both strict T28 citation validation and Gray's `_usage(raw)` provider-usage handling. Gray's seven-day session duration cap, 1 MB response bound, token-limit guard and updated session limits remain present.
+- Post-rebase verification passed: focused `tests/computational_evidence.py`, full `tests/research_sessions.py` (including the 10-strategy load case), and `./sigma test` with Ruff, Pyright, frontend typecheck and production build.
+- The PR branch is updated and remains R4R. Not self-merged.
