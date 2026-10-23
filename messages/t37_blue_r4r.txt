@@ -1,0 +1,65 @@
+T37: Trustworthy Research Memory, Evidence Selection, and Continuity
+Blue handoff for coordinator review
+
+Branch: blue/t37-trustworthy-research-memory
+Base integrated: origin/main 113436118514ff7cca2c806c8924f958ff16392f
+Tested implementation head: f9f617deb7ee0f9f3cd3fed7b34fe6f13530e0e4
+
+Reproduced baseline weaknesses before refactoring:
+- 110 long artifacts assembled to 308,902 bytes and blocked dispatch even
+  though optional history crowded out a recent disproof.
+- The 12-entry prior-session limit silently omitted an early concrete disproof
+  from 13 findings and provided no omission count or source pointers.
+- A 70,000-emoji question passed a character-count check at 70,394 characters
+  despite occupying 280,394 UTF-8 bytes, above the 256,000-byte limit.
+- Saved steps had no canonical selection manifest or human-readable reason for
+  selected/omitted sources.
+These are deterministic observations, not claims about how a live model reasons.
+
+Implemented:
+- Deterministic, bounded contexts for legacy and multi-strategy agents: all
+  unresolved obligation sources, current Investigator output for Skeptic review,
+  newest artifact and marked counterexamples/retractions precede optional
+  history. Deterministic extracts retain links to originals; source history is
+  not rewritten. Historical obligations are not resolved by omission.
+- Skeptic obligation dispositions are restricted to supplied evidence and exact
+  basis artifact/step IDs, and remain labeled model-reported/unverified.
+- Prior-session disproof selection, newest-first metadata-only failures, peer
+  source/domain/assumption/computation/retraction context, and active guidance
+  have bounded omission counts and source pointers.
+- UTF-8 input and manifest storage bounds fail closed before provider preflight
+  when mandatory content cannot fit. The branch pauses with an audit event and
+  preserves all saved artifacts; no provider request or hidden charge occurs.
+- Each dispatched step persists its context manifest before provider dispatch.
+  The existing Provenance disclosure and text/HTML/LaTeX reports expose source
+  categories, reasons, representation, byte budget, and omission details.
+- Current main integration exposed a 320px overflow in project-header controls.
+  A narrow-screen grid track fix preserves the controls and prevents horizontal
+  overflow.
+
+Verification on the integrated tree:
+- `./sigma test` — passed, including backend scenarios, research-session and
+  concurrency regressions, T22 current-main tests, Ruff, format check, Pyright
+  (0 errors), frontend typecheck, and production build.
+- `uv run --with playwright --locked python browser_checks/a17_research.py`
+  with isolated Vite `127.0.0.1:5174` and fixture `127.0.0.1:8003` — passed in
+  real Google Chrome at 1440, 1280, 390, and 320 CSS pixels; checks Context used
+  and no page-level horizontal overflow.
+- `uv run --locked --no-sync ruff check browser_checks/a17_research.py browser_checks/provider_fixture.py`
+  — passed.
+- Desktop and 390px screenshots: `/tmp/sigma-t25-outcome-desktop.png` and
+  `/tmp/sigma-t25-outcome-mobile.png` (ephemeral local files, not tracked).
+- No live model/provider calls were made.
+
+Known limitations:
+- Deterministic tests show what evidence is selected and preserved; they do not
+  establish that a model notices or reasons correctly about it. No live model
+  quality evaluation was authorized.
+- Model-reported addressed/superseded/retracted obligation dispositions are
+  epistemically unverified and should not be treated as proof.
+- Context selection is deliberately bounded (24 current artifacts, 12 peer
+  artifacts, 64 obligations, 256 KB UTF-8); mandatory overflow pauses for human
+  narrowing rather than attempting AI summarization.
+- T17.8's independent research-quality gate remains separate and unchanged.
+
+T37 is ready for coordinator review. Do not merge without review.
