@@ -631,7 +631,7 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel, returnToExport = true }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void; returnToExport?: boolean }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -696,7 +696,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Back to Export Project</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>{returnToExport ? 'Back to Export Project' : 'Close'}</button></div></header>
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
@@ -1012,8 +1012,8 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   </div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectArtwork = false, connectionDisabled = false, onAuthorPaper, paperDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectArtwork?: boolean; connectionDisabled?: boolean; onAuthorPaper?: () => void; paperDisabled?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
@@ -1022,6 +1022,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
+    {close && onAuthorPaper && <button type="button" className="project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" disabled={paperDisabled} onClick={onAuthorPaper}><span className="latex-wordmark" aria-hidden="true">L<span className="latex-raised-a">A</span>T<span className="latex-lowered-e">E</span>X</span></button>}
     <ConnectionStatus disabled={connectionDisabled}/>
     </div>
   </header>;
@@ -1045,9 +1046,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectDifficulty, connectionDisabled = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectDifficulty, connectionDisabled = false, onAuthorPaper, paperDisabled = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; connectionDisabled?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; connectionDisabled?: boolean; onAuthorPaper?: () => void; paperDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -1060,7 +1061,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectDifficulty={projectDifficulty} projectArtwork connectionDisabled={connectionDisabled}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectDifficulty={projectDifficulty} projectArtwork connectionDisabled={connectionDisabled} onAuthorPaper={onAuthorPaper} paperDisabled={paperDisabled}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -1784,6 +1785,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
+  const [paperReturnToExport, setPaperReturnToExport] = useState(false);
   const [paperExportOptions, setPaperExportOptions] = useState({ filename: 'sigma-paper.pdf', openInTab: false });
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
@@ -1940,7 +1942,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
-  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectDifficulty={project.difficulty}>
+  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectDifficulty={project.difficulty} paperDisabled={closing || ordering || !!dragId || activeMode !== null} onAuthorPaper={() => { setPaperReturnToExport(false); setPaperExportOptions({ filename: 'sigma-paper.pdf', openInTab: false }); setPaperOpen(true); }}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
@@ -2028,11 +2030,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={options => { setPaperExportOptions({ ...options, filename: options.filename.endsWith('.pdf') ? options.filename : `${options.filename}.pdf` }); setExportOpen(false); setPaperOpen(true); }}/>
+    <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={options => { setPaperReturnToExport(true); setPaperExportOptions({ ...options, filename: options.filename.endsWith('.pdf') ? options.filename : `${options.filename}.pdf` }); setExportOpen(false); setPaperOpen(true); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename={paperExportOptions.filename} openInTab={paperExportOptions.openInTab} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename={paperExportOptions.filename} openInTab={paperExportOptions.openInTab} returnToExport={paperReturnToExport} onCancel={() => {
         setPaperOpen(false);
-        setExportOpen(true);
+        if (paperReturnToExport) setExportOpen(true);
+        else requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />
     )}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
