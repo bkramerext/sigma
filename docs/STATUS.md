@@ -4,7 +4,7 @@
 
 ### Baseline and research-quality boundary
 
-The branch is `a18-blue`, based on `origin/main` at `6adbeed`; checkpoint
+The branch is `a18-blue`, originally based on `origin/main` at `6adbeed`; checkpoint
 `0377231` contains the bounded-continuity and answer-leakage work. Baseline
 inspection found one strategy per session, sequential Investigator/Skeptic
 calls, provider gates held per call, and no persisted branch-level execution
@@ -143,6 +143,28 @@ Final verification:
   a completed role output retained and the in-flight call marked interrupted,
   and existing continuation/fork-draft, Maximum Regions, outcome, and export
   checks. This does not execute a real research model.
+
+### Post-merge verification (2026-10-22)
+
+Merged the then-current `origin/main` (`6a64976`, including A20 paper authoring)
+into `a18-blue` with merge commit `4addffa`. The full `./sigma test` passed
+after that merge: all source-controlled scenarios, Ruff check/format, Pyright
+(0 errors), frontend typecheck, and production build. The ten-strategy stress
+fixture completed 20 calls and saved 10 artifacts at a maximum concurrency of
+3, with out-of-order completions in 0.226 seconds. These remain deterministic
+and mocked engineering checks, not model-quality evidence.
+
+The merge changed the LaTeX export choice from direct PDF download to the A20
+paper-authoring handoff. Updated the older A17 browser scenario to check the
+authoring handoff and return path without making a provider request, and to
+check preserved/nonempty mobile filenames rather than relying on stale
+defaults. Real Chrome then passed both the A18/A17 workspace scenario against
+the isolated fixture (`SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5175`, fixture
+8014) and `browser_checks/a20_paper.py` against the isolated paper fixture
+(UI 5175, fixture 8012). A20 browser coverage generated and retrieved its
+fixture-authored compiled PDF. No live provider call was made. The A18 research
+gate remains untested, with the limitations and no-independent-solve claims
+above unchanged.
 
 ## A23: project difficulty setting (2026-10-22)
 

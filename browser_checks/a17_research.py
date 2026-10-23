@@ -1076,16 +1076,14 @@ with sync_playwright() as playwright:
     export_dialog.get_by_label("Filename").fill("a17-latex")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".pdf")
     export_dialog.get_by_label("Open in browser tab").check()
-    with page.expect_popup() as pdf_tab, page.expect_download() as pdf_download:
-        export_dialog.get_by_role("button", name="Download", exact=True).click()
-    pdf_popup = pdf_tab.value
-    pdf_popup.wait_for_url(re.compile(r"^(blob:|chrome-extension:|file:)"), timeout=10000)
-    pdf_bytes = Path(pdf_download.value.path()).read_bytes()
-    assert pdf_download.value.suggested_filename == "a17-latex.pdf"
-    assert pdf_bytes.startswith(b"%PDF-") and len(pdf_bytes) > 1000
-    assert pdf_popup.url.startswith("blob:") or "pdf" in pdf_popup.url.lower(), pdf_popup.url
-    pdf_popup.screenshot(path="/tmp/sigma-a1771-after-pdf-preview.png")
-    pdf_popup.close()
+    export_dialog.get_by_role("button", name="Continue", exact=True).click()
+    paper_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(paper_dialog).to_be_visible()
+    expect(paper_dialog).to_contain_text("One provider call")
+    paper_dialog.get_by_role("button", name="Back to Export Project").click()
+    expect(export_dialog).to_be_visible()
+    expect(export_dialog.get_by_label("Filename")).to_have_value("a17-latex")
+    export_dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(export_dialog).to_be_hidden()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -1104,7 +1102,7 @@ with sync_playwright() as playwright:
     assert mobile_box["y"] + mobile_box["height"] <= 844
     mobile_input = mobile_export.get_by_label("Filename")
     mobile_value = mobile_input.input_value()
-    assert mobile_value.startswith("sigma-") and len(mobile_value) > 20
+    assert mobile_value.strip()
     mobile_input.press("End")
     mobile_input.press("Home")
     assert mobile_input.evaluate("e => e.scrollLeft === 0")
@@ -1272,22 +1270,20 @@ with sync_playwright() as playwright:
     max_filename = max_export.get_by_label("Filename")
     expect(max_filename).to_have_value(max_filename_stem)
     expect(max_export.locator(".export-filename-field span")).to_have_text(".pdf")
-    max_export.get_by_label("Open in browser tab").check()
-    with page.expect_popup() as max_pdf_tab, page.expect_download() as max_pdf_download:
-        max_export.get_by_role("button", name="Download", exact=True).click()
-    max_pdf_popup = max_pdf_tab.value
-    max_pdf_popup.wait_for_url(re.compile(r"^(blob:|chrome-extension:|file:)"), timeout=10000)
-    maximum_pdf = Path(max_pdf_download.value.path()).read_bytes()
-    assert max_pdf_download.value.suggested_filename == f"{max_filename_stem}.pdf"
-    assert maximum_pdf.startswith(b"%PDF-") and 1000 < len(maximum_pdf) < 20_000_000
-    assert max_pdf_popup.url.startswith("blob:")
-    max_pdf_popup.screenshot(path="/tmp/sigma-a1771-after-maximum-regions-pdf.png")
-    max_pdf_popup.close()
+    max_export.get_by_role("button", name="Continue", exact=True).click()
+    max_paper_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(max_paper_dialog).to_be_visible()
+    expect(max_paper_dialog).to_contain_text("complete evidence snapshot")
+    max_paper_dialog.get_by_role("button", name="Back to Export Project").click()
+    expect(max_export).to_be_visible()
+    expect(max_export.get_by_label("Filename")).to_have_value(max_filename_stem)
+    max_export.get_by_role("button", name="Cancel", exact=True).click()
     expect(max_export).to_be_hidden()
 
     page.set_viewport_size({"width": 390, "height": 420})
     page.get_by_role("button", name="Export project", exact=True).click()
     narrow_export = page.get_by_role("dialog", name="Export Project")
+    narrow_export.get_by_role("radio", name="Project Audit").check()
     narrow_title = narrow_export.locator("#export-project-heading").bounding_box()
     narrow_cancel = narrow_export.get_by_role("button", name="Cancel", exact=True).bounding_box()
     narrow_download = narrow_export.get_by_role(
