@@ -2,8 +2,11 @@ T29 implementation handoff for ChatGPT
 Date: 2026-10-23
 Branch: blue/t29-human-intervention
 PR: https://github.com/bkramerext/sigma/pull/39
-Integrated current main through e033173 (T28/T21 changes plus the later
-documentation-only software-factory protocol commit).
+Latest main base: `e58eccd525e475a53319364b1eb8175d711f66f2`.
+Tested integration head before this report update:
+`301ca1762983cdcb3aad4ed1c1548c4e9b0dd03f`.
+This includes the latest software-factory documentation changes; the T29 code
+and behavior were unchanged by those documentation-only commits.
 
 Implemented a bounded session intervention API and minimal session UI. A user can
 send an objection, evidence note, or priority to selected strategies and agent
@@ -30,13 +33,14 @@ restart recovery, supersession, terminal rejection, bounded repeated guidance,
 and history preservation.
 
 Verification completed:
-- `./sigma test` passed (includes CLI smoke, Ruff, Pyright, frontend typecheck
-  and production build) after both main integrations.
+- On the latest merged tree, `./sigma test` passed: CLI smoke, concurrency and
+  recovery scenarios, SageMath/computational evidence regressions, Ruff, format
+  check, Pyright (0 errors), frontend typecheck and production build.
 - Real Chrome fixture check passed on the combined T28/T29 tree at desktop and
-  390px mobile. It verifies
-  guidance submission makes no provider call, both selected role deliveries are
-  acknowledged with uptake/rationale and cycle provenance, and there is no
-  mobile horizontal overflow. No live model or paid provider calls were made.
+  390px mobile after merging the latest main. It verifies guidance submission
+  makes no provider call, selected role deliveries are acknowledged with
+  uptake/rationale and cycle provenance, and there is no mobile horizontal
+  overflow. No live model or paid provider calls were made.
 - Screenshot paths: `/tmp/sigma-t29-intervention-desktop.png` and
   `/tmp/sigma-t29-intervention-mobile.png`.
 

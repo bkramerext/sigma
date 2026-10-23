@@ -3621,11 +3621,13 @@ service-level rejected requests are audited within the configured cap.
 
 Integrated current main at `317c5c46` after T28 merged, then incorporated the
 newer `ef3aadcc` T21 alpha acceptance update and the documentation-only
-`e033173` software-factory protocol commit. Conflict resolution preserves
+`e033173` and `e58eccd` software-factory protocol commits. Latest base
+`e58eccd525e475a53319364b1eb8175d711f66f2` was merged at tested head
+`301ca1762983cdcb3aad4ed1c1548c4e9b0dd03f`. Conflict resolution preserves
 T28's SageMath execution records, bounded artifact inspections, and required
 computation citations alongside T29's intervention reviews and per-step
 provenance. The provider fixture now returns both required citation and
-intervention-review fields. `./sigma test` passed on this final combined tree,
+intervention-review fields. On the latest merged tree, `./sigma test` passed,
 including research-session concurrency/recovery, T28 citation and artifact
 regressions, CLI smoke, Ruff, format check, Pyright (0
 errors/warnings/informations), frontend typecheck, and production build.
@@ -3636,5 +3638,5 @@ used. The fixture now emits it, and project names are unique across reruns. The
 real Chrome T29 check then passed at desktop and 390px mobile: guidance submitted
 during an in-flight call made no extra call, subsequent target-role acknowledgments
 and audit provenance persisted, and the mobile layout had no horizontal overflow.
-The Chrome check was rerun after the T21 merge and passed again. No live provider
-calls were made.
+The real Chrome check passed again after the latest main merge, at desktop and
+390px mobile. No live provider calls were made.
