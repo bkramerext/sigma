@@ -29,6 +29,103 @@ inspected at `/tmp/sigma-t20-project-download-desktop.png`,
 `/tmp/sigma-t25-outcome-mobile.png`. Paper generation used only the isolated
 provider fixture; no paid provider call was made.
 
+## T20.1 follow-up UI polish (2026-10-23)
+
+Updated research-session limits end to end: defaults are 30 agent calls, 1 hour,
+12,000 output tokens per call, and 3 Skeptic iterations (1–5). The duration
+setting accepts minutes, hours, or days and is converted to backend minutes;
+validation and enforcement are shared with API, CLI, and session execution.
+Existing saved limits remain readable without being reset. The optional dollar
+budget remains unimplemented pending reliable cost accounting.
+
+Recent and Sample projects are grouped by type in an internally scrolling
+home list. Recent shows at most four projects per type, marks the newest in
+bold, and returns with only the active project type expanded. Repeated clicks
+on the selected Samples or Recent tab expand/collapse all groups. Project
+titles use matching Inter 13px styling in both lists, with only the newest
+Recent title bold. Recent and Sample descriptions omit repeated type icons and
+labels and align strategy count and difficulty under the title. Open Project
+Cancel now follows its heading. Tooltip timing and click-to-hide behavior are
+shared across the app.
+
+The T20.1 follow-up branch includes the current main additions for Arrival,
+Xenopus tail regeneration, and quantum chemistry samples.
+
+The Lean proof control is shown only for mathematical projects. A focused real
+Chrome check confirmed it is absent from Engineering and remains copper and
+disabled (coming soon) for Mathematics.
+
+Request-failure toasts now match the dark workspace: compact navy surfaces,
+copper error accents, muted light text, and an understated underlined Dismiss
+action. Real Chrome confirmed the styling and keyboard activation of Dismiss.
+
+Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
+320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
+`browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The first A17
+attempt stopped at 0/30 calls because clearing the cost field retained a $0.01
+limit. PR #35 fixed the input behavior; the complete A17 flow passed against a
+fresh fixture afterward. No paid provider call was made.
+
+## T21 local alpha UI/browser acceptance (2026-10-23)
+
+Initial acceptance ran against `main` at `9cb487e`; after T28 merged, the
+current integration run used `main` at `317c5c4`. No live provider calls or
+worker coordination were used. Real Chrome passed project creation/open/recent
+navigation and persistence, settings and limit validation/save/reload, strategy
+editing, three-round multi-strategy progress, pause/resume/stop during provider
+work, historical/interrupted session inspection, Outcome/metrics/provenance,
+and audit/text/HTML report downloads with failure recovery. The T20.1 header,
+cost clearing, and responsive checks passed at desktop and phone sizes.
+
+The first post-T28 A17 run exposed a stale shared provider fixture: strict
+research schemas now require `computational_citations`, but the fixture omitted
+it for non-computational responses. The fixture now supplies an empty list and
+the full A17 Chrome flow passes. This was a test-fixture mismatch, not a
+production session regression.
+
+Real Chrome also ran a bounded Python computation and verified the completed
+execution, exact source/stdout, execution ID, and T28's `computed.json` text
+representation in the saved execution record at 1440px and 390px. A real Sage
+10.8 Docker run passed in Chrome: the Skeptic saw the completed execution and
+the captured `witnesses.json` metadata/hash; the Outcome/report and 320px layout
+were inspected. T28 artifact inspections are available inside the expanded
+execution JSON record; the UI does not render a separate preview panel. No
+release-blocking UI defect was found and no product UI changes were needed.
+
+Screenshots are under `/tmp`, including `sigma-a177-after-session-card.png`,
+`sigma-a177-after-export-mobile.png`, `sigma-a23-model-controls-390.png`,
+`sigma-t21-python-evidence-desktop.png`, `sigma-t21-python-evidence-mobile.png`,
+`sigma-t26-sage-desktop.png`, and `sigma-t26-sage-mobile.png`.
+
+Validation: `browser_checks/recents.py`, `browser_checks/settings.py`,
+`browser_checks/a17_research.py`, `browser_checks/header.py`,
+`browser_checks/sage_execution.py`, the real Chrome Python-evidence scenario,
+`tests/computational_evidence.py`, `tests/python_sandbox.py`,
+`tests/research_sessions.py`, `tests/sage_execution.py`,
+`tests/project_reports.py`, and `./sigma test` passed on the integrated main
+state. No paid provider calls were made.
+
+## PR #35 review follow-up (2026-10-23)
+
+The A17 0/30 stop came from the cost-limit input, not a provider or
+session-engine regression. With a native number field, entering invalid `0`
+and clearing it in the same draft left `$0.01` in the submitted settings and
+correctly blocked the first provider call. The field now uses decimal text
+input with the existing explicit validation, so clearing an invalid value
+persists as unlimited. A17 confirms the saved value is null. The expected
+session usage is 6/30 calls across three rounds.
+
+The response guard now trusts reported output-token usage when it is within the
+configured limit, regardless of UTF-8 byte length. A separate 1 MB transport
+ceiling still rejects malformed or unexpectedly large responses before
+parsing. A regression scenario confirms a response larger than four times the
+token allowance is accepted when reported usage is in bounds, while the
+existing transport-ceiling scenario still rejects oversized bodies.
+
+Validation: `uv run --locked --no-sync python tests/research_sessions.py`,
+real Chrome `browser_checks/a17_research.py` against a fresh isolated fixture,
+and `./sigma test` all passed. No paid provider calls were made.
+
 ## T20 project-header LaTeX shortcut reconciliation
 
 Reconciled the existing direct paper action with the project header. The initial
@@ -3465,3 +3562,109 @@ case, Ruff, Pyright with zero errors/warnings, frontend typecheck and production
 build); `uv run --with playwright python browser_checks/t22_access_denied.py`
 passed in real Chrome with cloud-denied and local-mode coverage at desktop and
 mobile widths. No live Google or model-provider calls were made.
+
+## T28: Computational evidence and artifact comprehension (2026-10-23)
+
+T28 extends the existing Python and SageMath execution evidence. Agents now
+receive bounded content inspections beside the persisted execution record:
+PNG/JPEG artifacts receive a low-resolution grayscale rendering and recognized
+text/CSV artifacts receive an escaped, bounded text preview. Each representation
+states what it cannot show; oversized, corrupt, unsupported, missing or
+integrity-mismatched files produce explicit notices. Inspection uses the
+existing hash-checked artifact store and never changes the saved execution
+status. At most two artifacts and 4 MB per file are inspected; image decoding
+is limited to 2 million pixels, text to 1,400 characters, and raster previews
+to 64 by 20 cells. Pillow is pinned at 13.0.0. This does not transcribe plot
+labels or exact pixels, inspect arbitrary binary formats, or constitute visual
+or mathematical verification.
+
+Investigator and Skeptic contexts receive source, captured output/error,
+runtime, status, originating step/session, limitations and bounded artifact
+inspections from earlier Python and SageMath executions. Structured citations
+must refer to supplied execution evidence. Failed computations cannot be cited
+as results; artifact claims require an available inspection. Reuse keeps the
+original execution ID and provenance, and the prior session's bytes remain
+unchanged. Inspected previews are separately stored in the role step for audit.
+Python and SageMath status metrics are separately aggregated from persisted
+execution records (deduplicated by runtime and execution ID), including all
+recorded statuses; artifact storage totals remain independently deduplicated.
+A proposal without a recorded run is not counted as an execution.
+
+Deterministic regressions cover a plotted image, CSV/text, corrupt and
+oversized images/files, unsupported PDF, sidecar integrity failure, separate
+Python/SageMath completed/failed/timeout/cancelled/other status counts, duplicate
+references, artifact storage, proposal-only evidence, and cross-session
+successful and failed Python/SageMath citations. The multi-session tests verify
+that the later Investigator and Skeptic receive the earlier source, result,
+inspection, status and provenance, and that no new execution is claimed.
+
+Actual Docker workflow checks on 2026-10-23 used the locally available pinned
+Python 3.12.8 and SageMath 10.8 images. Each wrote a Matplotlib/Sage PNG to the
+existing `/artifacts` mount; execution completed and the persisted, integrity-
+checked file was inspected successfully. A first Python container attempt
+wrote to the read-only working directory and failed as expected; using the
+supported `/artifacts` path succeeded. A first Sage plot omitted `var('x')` and
+failed with `NameError`; explicitly declaring the variable succeeded. These
+failures confirmed ordinary execution errors remain visible and do not produce
+fabricated preview evidence.
+
+`./sigma test` passed on 2026-10-23: backend regressions, the 10-strategy
+20/20-call concurrency fixture, Python and Sage service tests, T28 regressions,
+Ruff, Pyright (0 errors/warnings/informations), frontend typecheck, and Vite
+production build. Direct `ruff check src tests sigma`, format check, and
+Pyright also passed. An exploratory whole-repository Ruff command found three
+pre-existing findings under `browser_checks/` and `sandbox-poc/`; the supported
+suite scopes lint to `src`, `tests`, and `sigma` and passed. No browser run was
+needed because no UI files changed. No live model calls were made, so live agent
+interpretation quality remains unverified. Blue's T27 PR #18 was reviewed for
+its evidence contract; commit 102ca15 is an ancestor of current `main`, and the
+full suite was rerun with the merged T27 changes present.
+
+### T28 rebase against Gray PR #35 (2026-10-23)
+
+Rebased T28 onto current `main` at 9cb487e. The only conflict was the final
+return in `_call`: Gray's commit requires usage to be read through `_usage(raw)`
+for its provider response/token guard, while T28 needs citation validation
+before returning. The resolved path performs `_validate_computation_citations`
+and then returns `validated, _usage(raw)`. Gray's `MAX_SESSION_DURATION_MINUTES`,
+1 MB response bound, per-call output-token check, current session defaults, and
+T28's 32 KB prior-session evidence context are all retained. No Gray UI or
+recents changes were edited.
+
+After resolution, `tests/computational_evidence.py` passed, including separate
+Python/SageMath run-status counts, and `tests/research_sessions.py` passed,
+including its 10-strategy concurrent workload and Gray's provider/limit paths.
+The full `./sigma test` then passed on the rebased tree, including backend
+regressions, Ruff, Pyright (0 errors/warnings/informations), frontend typecheck
+and the Vite production build. No live provider calls were made.
+
+## T22.2 PR #37 review corrections on current main (2026-10-23)
+
+Starting `/api/cloud-auth/login` now deletes the presented prior session digest
+from the private auth database and expires the host-only session cookie before
+beginning account selection. The denied callback also defensively deletes any
+presented session and expires its cookie, so a valid but unauthorized Google
+identity cannot leave an earlier account active. Authorized account switching
+uses the same fresh-login boundary. Local mode continues to bypass cloud auth.
+
+The administrator Access Management dialog now shows the configured bootstrap
+administrator and currently authorized sessions with role and expiry. Its
+backend summary removes expired or revoked sessions before returning them.
+Current-main project difficulty/catalog/header changes are retained, while the
+legacy Google placeholder is removed from project headers in favor of the cloud
+identity control when cloud auth is enabled.
+
+Deterministic `tests/cloud_auth.py` coverage now exercises authorized A to
+unauthorized B, authorized A to authorized B, and unauthorized B to Use Another
+Account against the real FastAPI middleware, SQLite session database, cookie
+responses, and protected API routes. It checks prior-session deletion and the
+appropriate private API access at each transition. The domain/revocation test
+uses separate browser clients for administrator and member identities.
+
+Validation on this integrated head passed: `./sigma test` (backend scenarios,
+all 10 cloud-auth tests, concurrency workloads, Ruff, format, Pyright with zero
+errors/warnings, frontend typecheck, and production build) and
+`uv run --with playwright python browser_checks/t22_access_denied.py` in real
+Chrome. The browser check covers the denied screen and request, account switch,
+Demo handoff, unrestricted local Home, and administrator session summary. No
+live Google or model-provider calls were made.

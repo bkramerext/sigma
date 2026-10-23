@@ -26,9 +26,9 @@
 .workspace-page .brand { width: 194px; flex-shrink: 0; }
 .workspace-page .brand img { width: 100%; height: auto; }
 .workspace-page .project-art-header { align-items: flex-start; padding-bottom: 0; }
-.workspace-page .project-art-header .brand-block { flex: 1 1 auto; align-items: flex-start; gap: 16px; }
+.workspace-page .project-art-header .brand-block { position: relative; flex: 1 1 auto; align-items: flex-start; gap: 16px; }
 /* Show the logo and wire field, leaving the source image untouched. */
-.workspace-page .project-header-art { position: relative; z-index: 0; align-items: flex-start; width: min(34vw, 390px); aspect-ratio: 25 / 8; overflow: hidden; margin: -20px 0 0 -32px; }
+.workspace-page .project-header-art { position: relative; z-index: 0; align-items: flex-start; width: min(34vw, 390px); aspect-ratio: 25 / 8; overflow: hidden; margin: -15px 0 0 -32px; }
 .workspace-page .project-header-art img { display: block; width: 100%; height: auto; }
 .workspace-page .expansion {
   margin: 0;
@@ -41,9 +41,10 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content; grid-template-areas: "model identity" "thinking chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model identity" ". thinking chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
-.workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; padding-top: 12px; }
+.workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; max-width: min(54vw, 760px); padding-top: 12px; }
+.workspace-page .project-art-back-row { position: absolute; z-index: 2; top: -6px; left: clamp(140px, calc(min(34vw, 390px) - 172px), 218px); }
 .workspace-page .current-project { min-width: 0; margin: 0; color: var(--workspace-copper); font: 400 clamp(17px, 1.5vw, 22px)/1.35 Georgia, serif; overflow-wrap: anywhere; }
 .workspace-page .project-title-edit { display: inline; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .workspace-page .project-title-edit:hover { color: #f3d0a4; text-decoration: underline; text-decoration-color: #a77543; text-underline-offset: 4px; }
@@ -161,7 +162,8 @@
   .workspace-page .project-art-header { padding-bottom: 0; }
   .workspace-page .brand-block { gap: 20px; }
   .workspace-page .brand { width: 160px; }
-  .workspace-page .project-header-art { width: 300px; margin-top: -18px; margin-left: -24px; }
+  .workspace-page .project-header-art { width: 300px; margin-top: -13px; margin-left: -24px; }
+  .workspace-page .project-art-back-row { left: 145px; }
   .workspace-page .expansion { max-width: 310px; font-size: 9px; }
   .workspace-page .api-connection { min-width: 160px; max-width: 190px; }
   .workspace-page .workspace-layout { grid-template-columns: 190px minmax(0, 1fr); }
@@ -182,6 +184,8 @@
   .workspace-page .project-art-header { flex-direction: column; align-items: stretch; padding-bottom: 0; }
   .workspace-page .project-art-header .brand-block { width: 100%; flex: none; gap: 12px; }
   .workspace-page .project-header-art { width: min(100%, 330px); margin-left: -20px; }
+  .workspace-page .project-art-back-row { left: auto; right: 40px; }
+  .workspace-page .project-back-label { display: none; }
   .workspace-page .current-project { padding-top: 0; }
   .workspace-page .project-art-header .header-controls { width: 100%; align-self: stretch; justify-content: flex-start; flex-wrap: wrap; margin-left: 0; gap: 10px; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
@@ -240,7 +244,7 @@
 .workspace-page .project-header-title-row { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
 .workspace-page .project-header-title-row .research-type-icon { display: block; flex: 0 0 26px; width: 26px; height: 26px; color: var(--workspace-copper); }
 .workspace-page .project-header-title-row .project-header-title { width: auto; flex: 1 1 auto; }
-.workspace-page .project-difficulty-badge { display: inline-flex; flex: 0 0 auto; align-items: center; max-width: 100%; padding: 3px 8px; border: 1px solid #8b6745; border-radius: 999px; background: #091824e8; color: #e0c4a0; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .025em; white-space: nowrap; }
+.workspace-page .project-difficulty-badge { grid-area: difficulty; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; max-width: 100%; padding: 4px 9px; border-color: #8b6745; background: #091824e8; color: #e0c4a0; letter-spacing: .025em; white-space: nowrap; }
 .workspace-page .project-header-controls { display: contents; }
 .workspace-page .project-control-pill { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-height: 27px; padding: 4px 9px; border: 1px solid #73583e; border-radius: 999px; background: #091824ed; color: #e1c39e; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
 .workspace-page .project-model-pill { grid-area: model; justify-content: center; align-items: center; text-align: center; }
@@ -253,6 +257,13 @@ button.project-control-pill { cursor: pointer; transition: background-color .15s
 button.project-control-pill:hover:not(:disabled), button.project-control-pill:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
 button.project-control-pill:focus-visible { outline: 2px solid #e9bc82; outline-offset: 2px; }
 button.project-control-pill:disabled { cursor: default; opacity: .62; }
+.project-model-confirm-popover { position: fixed; z-index: 1300; width: min(320px, calc(100vw - 16px)); padding: 12px 14px; border: 1px solid #66533d; border-radius: 6px; background: #101820f5; color: #d5dfe7; line-height: 1.55; box-shadow: 0 14px 35px #0009; }
+.project-model-confirm-popover p { margin: 0 0 10px; color: #d5dfe7; font: 400 12px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+.project-model-confirm-popover strong { color: #e1c39e; font-weight: 600; }
+.project-model-confirm-actions { display: flex; align-items: center; gap: 18px; }
+.project-model-confirm-actions button { display: inline-flex; width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d7e0e8; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.project-model-confirm-actions button:hover:not(:disabled) { background: transparent; box-shadow: none; color: #f1c58d; }
+.project-model-confirm-actions button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 .workspace-page .project-controls-message { grid-column: 1 / -1; color: #9fb0bd; font-size: 10px; line-height: 1.35; }
 .workspace-page .project-header-controls .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 700px) {
@@ -261,8 +272,6 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-header-title-row { gap: 5px; }
   .workspace-page .project-header-title-row .research-type-icon { flex-basis: 22px; width: 22px; height: 22px; }
   .workspace-page .project-control-pill { min-height: 26px; padding-inline: 8px; font-size: 9px; }
-  .workspace-page .project-art-header .header-controls { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); justify-content: stretch; gap: 6px; }
-  .workspace-page .project-art-header .header-controls > :is(.project-model-pill, .project-thinking-pill, .cloud-home-controls, .project-chatgpt-signin) { justify-self: stretch; }
   .workspace-page .project-art-header .api-connection.project-chatgpt-signin { width: 100%; max-width: none; }
   .workspace-page .project-chatgpt-signin > summary { width: 100%; min-width: 0; justify-content: center; padding-inline: 4px; font-size: 9px; white-space: normal; }
   .workspace-page .project-chatgpt-signin > summary [role="status"] { min-width: 0; white-space: normal; text-align: center; }
@@ -272,6 +281,9 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .project-pane-actions .text-view-icon.project-latex-button:not(:disabled) { color: #e4b57c; }
 .workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
 .workspace-page .project-pane-actions .project-lean-button:disabled { color: #a0aab2; cursor: not-allowed; opacity: 1; }
-.workspace-page .project-pane-actions .project-lean-button img { display: block; width: 29px; height: 15px; object-fit: contain; filter: brightness(0) invert(.9); }
+.workspace-page .project-pane-actions .text-view-icon.project-lean-button { width: 50px; min-width: 50px; margin-left: 0; }
+.workspace-page .project-pane-actions .text-view-icon.project-latex-button { margin-right: 10px; }
+.workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
+.workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; filter: brightness(0) saturate(100%) invert(68%) sepia(21%) saturate(797%) hue-rotate(337deg) brightness(110%) contrast(115%); }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }

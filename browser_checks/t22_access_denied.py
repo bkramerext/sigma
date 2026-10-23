@@ -104,6 +104,56 @@ with sync_playwright() as playwright:
     expect(local_page.get_by_text("Google Sign-in", exact=True)).to_have_count(0)
     expect(local_page.get_by_role("link", name="Continue with Google")).to_have_count(0)
 
+    admin_page = browser.new_page(viewport={"width": 1280, "height": 850})
+    admin_page.route(
+        "**/api/**",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"projects":[],"models":[],"samples":[]}',
+        ),
+    )
+    admin_page.route(
+        "**/api/cloud-auth/status",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "enabled": True,
+                    "ready": True,
+                    "authenticated": True,
+                    "user": {"email": "admin@example.org", "role": "admin"},
+                    "admin_contact_email": "access@example.org",
+                }
+            ),
+        ),
+    )
+    admin_page.route(
+        "**/api/cloud-auth/admin/grants",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "grants": [],
+                    "sessions": [
+                        {"email": "admin@example.org", "role": "admin", "expires_at": 1_800_000_000}
+                    ],
+                    "bootstrap_admin": "admin@example.org",
+                }
+            ),
+        ),
+    )
+    admin_page.goto(BASE_URL, wait_until="networkidle")
+    expect(admin_page.locator(".home-topline .cloud-home-user")).to_be_visible()
+    expect(admin_page.get_by_text("admin@example.org", exact=True).first).to_be_visible()
+    expect(admin_page.locator(".project-google-placeholder")).to_have_count(0)
+    admin_page.get_by_role("button", name="Access Management").click()
+    expect(admin_page.get_by_role("heading", name="Accounts and sessions")).to_be_visible()
+    expect(admin_page.get_by_text("admin@example.org", exact=True).last).to_be_visible()
+    expect(admin_page.get_by_text("admin · session expires")).to_be_visible()
+
     browser.close()
 
-print("PASS real Chrome denied account Home, verified-email invitation draft, account switch, Demo handoff, and unrestricted local Home")
+print("PASS real Chrome denied account Home, verified-email invitation draft, account switch, Demo handoff, unrestricted local Home, and administrator session summary")

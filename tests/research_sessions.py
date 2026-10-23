@@ -51,6 +51,7 @@ def investigation(n):
         "python_code": None,
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
+        "computational_citations": [],
     }
 
 
@@ -75,7 +76,12 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "cross_strategy_relations": [],
         "retracted_cross_strategy_source_artifact_ids": [],
         "peer_handoff_reviews": [],
+        "computational_citations": [],
     }
+
+
+def bare_execution(execution):
+    return {key: value for key, value in execution.items() if key != "artifact_inspections"}
 
 
 def execution_tool_fixture(python_available: bool):
@@ -153,7 +159,7 @@ async def test_three_cycles_and_idempotency(path: Path):
     async def handler(request):
         payload = json.loads(request.content)
         assert payload["model"] == MODEL and payload["store"] is False
-        assert payload["max_output_tokens"] == 4000
+        assert payload["max_output_tokens"] == 12000
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}
         if payload["text"]["format"]["name"] == "research_skeptic":
@@ -187,6 +193,10 @@ async def test_three_cycles_and_idempotency(path: Path):
         )
         assert concurrent_duplicate["id"] == started["id"]
         assert started["session_number"] == concurrent_duplicate["session_number"] == 1
+        assert started["call_limit"] == 30
+        assert started["cycle_limit"] == 3
+        assert started["duration_limit_minutes"] == 60
+        assert started["output_token_limit"] == 12000
         finished = await wait_for(path, started["id"])
         duplicate = await research_sessions.start_session(
             str(path), strategy.id, key, view.project.id, credential["identity"]
@@ -333,9 +343,14 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     )
     skeptic_context = contexts[1][1]["investigator_output"]
     assert skeptic_context["python_code"] == code
-    assert skeptic_context["python_execution"] == execution
+    assert {
+        key: value
+        for key, value in skeptic_context["python_execution"].items()
+        if key != "artifact_inspections"
+    } == execution
+    assert skeptic_context["python_execution"]["artifact_inspections"] == []
     assert skeptic_context["python_execution"]["status"] == "timeout"
-    assert finished["steps"][0]["output"] == skeptic_context
+    assert finished["steps"][0]["output"] == finished["artifacts"][0]["investigator_output"]
     sources = finished["outcome"]["metrics"]["sources"]
     assert sources["session_id"] == started["id"]
     assert sources["execution_ids"] == [execution["id"]]
@@ -344,8 +359,11 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     artifact = finished["artifacts"][0]
     assert artifact["session_id"] == started["id"] and artifact["strategy_id"] == strategy.id
     assert artifact["strategy_cycle"] == 1
-    assert artifact["investigator_output"]["python_execution"] == execution
-    assert finished["artifacts"][0]["investigator_output"] == skeptic_context
+    assert {
+        key: value
+        for key, value in artifact["investigator_output"]["python_execution"].items()
+        if key != "artifact_inspections"
+    } == execution
     assert (
         finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
     )
@@ -360,7 +378,11 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     exported = export_project_view(str(path))
     exported_artifact = exported["research_sessions"][0]["artifacts"][0]
     assert exported_artifact["investigator_output"]["python_code"] == code
-    assert exported_artifact["investigator_output"]["python_execution"] == execution
+    assert {
+        key: value
+        for key, value in exported_artifact["investigator_output"]["python_execution"].items()
+        if key != "artifact_inspections"
+    } == execution
     with patch("sigma.api.export_project_view", return_value=exported):
         paper_evidence, _ = papers._snapshot(str(path))
     paper_sources = {item["id"]: item["data"] for item in paper_evidence["sources"]}
@@ -383,7 +405,13 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         preview = peer_context["other_strategy_evidence"][0]["python_execution"]
         assert preview["id"] == execution["id"] and preview["status"] == "timeout"
         assert preview["source"] == code and preview["stderr"] == execution["stderr"]
-    assert finished["artifacts"][0]["investigator_output"]["python_execution"] == execution
+    assert {
+        key: value
+        for key, value in finished["artifacts"][0]["investigator_output"][
+            "python_execution"
+        ].items()
+        if key != "artifact_inspections"
+    } == execution
     large_preview_record = json.loads(json.dumps(finished))
     large_execution = large_preview_record["artifacts"][0]["investigator_output"][
         "python_execution"
@@ -454,8 +482,8 @@ async def test_recovery_reuses_saved_python_execution(path: Path):
     execute.assert_not_awaited()
     recovered = research_sessions._read(str(path), session_id)
     branch = recovered["strategy_runs"][0]
-    assert branch["pending_investigation"]["python_execution"] == saved_execution
-    assert recovered["steps"][0]["output"]["python_execution"] == saved_execution
+    assert bare_execution(branch["pending_investigation"]["python_execution"]) == saved_execution
+    assert bare_execution(recovered["steps"][0]["output"]["python_execution"]) == saved_execution
     assert any(event["kind"] == "python.recovered" for event in recovered["events"])
 
 
@@ -523,7 +551,9 @@ async def test_stop_during_python_execution_preserves_provenance(path: Path):
     assert len(provider_calls) == 1  # the Skeptic is not called after a user stop
     saved = research_sessions.get_session(str(path), started["id"])
     pending = saved["strategy_runs"][0]["pending_investigation"]
-    assert pending["python_code"] == code and pending["python_execution"] == execution
+    assert pending["python_code"] == code
+    assert bare_execution(pending["python_execution"]) == execution
+    assert pending["python_execution"]["artifact_inspections"] == []
     assert saved["steps"][0]["status"] == "completed"
     assert saved["steps"][0]["output"] == pending
     assert any(event["kind"] == "python.completed" for event in saved["events"])
@@ -1042,7 +1072,7 @@ async def test_pause_counts_interrupted_call(path: Path):
         )
         await asyncio.wait_for(started_call.wait(), 2)
         progress = research_sessions.get_session(str(path), started["id"])
-        assert "Investigator provider call 1/6 in progress" in progress["message"]
+        assert "Investigator provider call 1/30 in progress" in progress["message"]
         paused = await research_sessions.control_session(str(path), started["id"], "pause")
         await asyncio.sleep(0.02)
         paused = research_sessions.get_session(str(path), started["id"])
@@ -1267,6 +1297,16 @@ async def test_chatgpt_stream(path: Path):
         result = await research_sessions._call(
             record, "investigator", {"problem": view.project.problem, "strategy": strategy.approach}
         )
+        try:
+            await research_sessions._call(
+                {**record, "output_token_limit": 11},
+                "investigator",
+                {"problem": view.project.problem, "strategy": strategy.approach},
+            )
+        except ProjectError as exc:
+            assert "exceeded the configured per-call token limit" in str(exc)
+        else:
+            raise AssertionError("ChatGPT response exceeded the configured output token limit")
     assert result == (output, {"input_tokens": 25, "cached_input_tokens": 5, "output_tokens": 12})
 
 
@@ -1363,10 +1403,10 @@ def test_limits_validation(path: Path):
     initialize_project(path, "Limits project", "A question")
     before = research_sessions.get_limits(str(path))
     invalid = [
-        {**before, "model_calls": 21},
-        {**before, "research_rounds": 4, "model_calls": 6},
+        {**before, "model_calls": 31},
+        {**before, "research_rounds": 6, "model_calls": 30},
         {**before, "research_rounds": 3, "model_calls": 5},
-        {**before, "session_duration_minutes": 121},
+        {**before, "session_duration_minutes": 7 * 24 * 60 + 1},
         {**before, "output_tokens_per_call": 16385},
         {**before, "maximum_estimated_cost_usd": 0.001},
         {**before, "maximum_estimated_cost_usd": 100.01},
@@ -1382,22 +1422,34 @@ def test_limits_validation(path: Path):
             raise AssertionError(f"invalid research limits were accepted: {candidate}")
     valid_upper = {
         **before,
-        "research_rounds": 10,
-        "model_calls": 20,
-        "session_duration_minutes": 120,
+        "research_rounds": 5,
+        "model_calls": 30,
+        "session_duration_minutes": 7 * 24 * 60,
         "output_tokens_per_call": 16384,
         "maximum_estimated_cost_usd": 100,
     }
     assert research_sessions.save_limits(str(path), valid_upper) == valid_upper
     research_sessions.save_limits(str(path), before)
     assert research_sessions.get_limits(str(path)) == before
+    older_saved = {**before, "research_rounds": 6, "model_calls": 20}
+    limits_file = path / "research-sessions" / "limits.json"
+    limits_file.write_text(json.dumps(older_saved), encoding="utf-8")
+    assert research_sessions.get_limits(str(path)) == older_saved
+    try:
+        research_sessions.save_limits(str(path), older_saved)
+    except ProjectError:
+        pass
+    else:
+        raise AssertionError("new settings validation accepted a saved value above its bound")
 
 
 async def test_legacy_limits_are_preserved(path: Path):
     view, strategy, credential, _ = await setup(path)
     legacy = {
-        **research_sessions.DEFAULT_LIMITS,
+        "research_rounds": 3,
+        "model_calls": 6,
         "session_duration_minutes": 180,
+        "output_tokens_per_call": 4000,
         "maximum_estimated_cost_usd": 500.0,
     }
     (path / "research-sessions").mkdir(mode=0o700)
@@ -1626,6 +1678,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "python_code": None,
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
+        "computational_citations": [],
     }
     review = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -2576,6 +2629,9 @@ async def test_forked_strategy_followup_preserves_parent_comparison(path: Path):
 
 async def test_stop_concurrent_portfolio_preserves_completed_boundary(path: Path):
     view, first, credential, config = await setup(path)
+    test_limits = research_sessions.get_limits(str(path))
+    test_limits["model_calls"] = 6
+    research_sessions.save_limits(str(path), test_limits)
     second = create_strategy(path, "Second line", "Try a distinct derivation.").project.strategies[
         -1
     ]
@@ -3437,6 +3493,7 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "python_code": None,
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
+        "computational_citations": [],
     }
     accepted = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -3629,14 +3686,24 @@ async def test_response_transport_and_parsed_bounds(path: Path):
     assert failed["status"] == "failed" and "1 MB safety bound" in failed["message"]
     assert failed["artifacts"] == []
 
+    token_limit = 12_000
+
     async def oversized_parsed(request):
         response = provider_response(investigation(1))
         response["output"][0]["content"][0]["text"] += " " * 70_000
         return httpx.Response(200, json=response)
 
+    oversized_text = json.dumps(investigation(1)) + " " * 70_000
+    assert len(oversized_text.encode("utf-8")) > token_limit * 4
+    record = {
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "mode": credential["mode"],
+        "identity_hash": research_sessions._digest(credential["identity"]),
+        "output_token_limit": token_limit,
+    }
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
-        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -3644,12 +3711,15 @@ async def test_response_transport_and_parsed_bounds(path: Path):
             ),
         ),
     ):
-        started = await research_sessions.start_session(
-            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        accepted = await research_sessions._call(
+            record,
+            "investigator",
+            {"problem": view.project.problem, "strategy": strategy.approach},
         )
-        failed = await wait_for(path, started["id"])
-    assert failed["status"] == "failed" and "Parsed research output exceeded" in failed["message"]
-    assert failed["artifacts"] == []
+    assert accepted == (
+        investigation(1),
+        {"input_tokens": 120, "cached_input_tokens": 20, "output_tokens": 80},
+    )
 
 
 async def test_changed_bindings_pause_before_provider(path: Path):

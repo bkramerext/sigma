@@ -107,15 +107,20 @@ with sync_playwright() as playwright:
     controls = header.locator(".header-controls")
     model_control = controls.get_by_role("button", name=re.compile("^Model"))
     thinking_control = controls.get_by_role("button", name=re.compile("^Thinking level"))
+    difficulty_control = controls.get_by_role("button", name=re.compile("^Project difficulty"))
     google_signin = controls.locator(".project-google-signin")
     expect(model_control).to_have_text("Model · Sol $$")
     expect(thinking_control).to_have_text("Thinking · High")
+    expect(difficulty_control).to_have_text("Difficulty · Medium")
     expect(google_signin).to_have_text("Google Sign-in")
     expect(google_signin).to_have_attribute("role", "status")
     assert google_signin.locator(".connection-dot").count() == 1
-    assert google_signin.locator(".connection-dot").evaluate(
-        "e => getComputedStyle(e).backgroundColor"
-    ) == "rgb(127, 140, 150)"
+    assert (
+        google_signin.locator(".connection-dot").evaluate(
+            "e => getComputedStyle(e).backgroundColor"
+        )
+        == "rgb(127, 140, 150)"
+    )
     assert not google_signin.evaluate("e => e.matches('button, a, input')")
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
@@ -129,7 +134,7 @@ with sync_playwright() as playwright:
     assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
     assert grid["x"] + grid["width"] <= 1280
     assert grid["x"] >= 1280 * 0.55
-    expect(header.locator(".project-controls-message")).to_have_text("Next model uses Medium.")
+    expect(header.locator(".project-controls-message")).to_have_count(0)
     update_requests: list[dict] = []
     observed_urls: list[str] = []
     page.on("request", lambda request: observed_urls.append(request.url))
@@ -141,8 +146,55 @@ with sync_playwright() as playwright:
             else None
         ),
     )
-    model_control.focus()
-    page.keyboard.press("Enter")
+    # Navigation kept the previous physical pointer coordinates, which can land
+    # over a different pill in the newly rendered project header. Leave that
+    # target first so the delayed tooltip check observes a fresh hover.
+    page.mouse.move(0, 0)
+    expect(page.get_by_role("tooltip")).to_have_count(0)
+    model_control.hover()
+    page.wait_for_timeout(450)
+    expect(page.get_by_role("tooltip")).to_contain_text("The selected model is Sol $$.")
+    model_control.click()
+    expect(model_control).to_have_text("Model · Luna $")
+    expect(page.get_by_role("tooltip")).to_have_count(0)
+    model_control.click()
+    upgrade_prompt = page.get_by_role("group", name="Confirm switch to Astra")
+    expect(upgrade_prompt).to_be_visible()
+    expect(upgrade_prompt).to_contain_text(
+        "Astra has a higher relative published API token cost tier ($$$ versus $)."
+    )
+    expect(page.get_by_role("tooltip")).to_have_count(0)
+    difficulty_control.hover()
+    expect(page.get_by_role("tooltip")).to_have_count(0)
+    expect(upgrade_prompt.get_by_role("button", name="Confirm", exact=True)).to_be_focused()
+    assert (
+        upgrade_prompt.get_by_role("button", name="Confirm", exact=True).evaluate(
+            "e => getComputedStyle(e).textDecorationLine"
+        )
+        == "underline"
+    )
+    assert (
+        upgrade_prompt.get_by_role("button", name="Cancel", exact=True).evaluate(
+            "e => getComputedStyle(e).textDecorationLine"
+        )
+        == "underline"
+    )
+    prompt_box = upgrade_prompt.bounding_box()
+    model_before_prompt = model_control.bounding_box()
+    assert prompt_box and model_before_prompt
+    assert prompt_box["y"] >= model_before_prompt["y"] + model_before_prompt["height"]
+    assert abs(prompt_box["x"] - model_before_prompt["x"]) < 250
+    upgrade_prompt.get_by_role("button", name="Cancel", exact=True).click()
+    expect(upgrade_prompt).to_be_hidden()
+    expect(model_control).to_have_text("Model · Luna $")
+    assert len(update_requests) == 1 and update_requests[0]["ai_model"] == "gpt-6-luna"
+    page.mouse.move(0, 0)
+    model_control.hover()
+    expect(page.get_by_role("tooltip")).to_contain_text("The selected model is Luna $")
+    model_control.click()
+    upgrade_prompt = page.get_by_role("group", name="Confirm switch to Astra")
+    expect(upgrade_prompt).to_be_visible()
+    upgrade_prompt.get_by_role("button", name="Confirm", exact=True).click()
     expect(model_control).to_have_text("Model · Astra $$$")
     expect(thinking_control).to_have_text("Thinking · Medium")
     thinking_control.focus()
@@ -150,26 +202,42 @@ with sync_playwright() as playwright:
     expect(thinking_control).to_have_text("Thinking · Low")
     model_control.focus()
     page.keyboard.press("Enter")
-    expect(model_control).to_have_text("Model · Luna $")
+    expect(model_control).to_have_text("Model · Sol $$")
+    expect(page.locator(".project-model-confirm-popover")).to_have_count(0)
+    difficulty_control.click()
+    expect(difficulty_control).to_have_text("Difficulty · Hard")
+    difficulty_control.click()
+    expect(difficulty_control).to_have_text("Difficulty · Easy")
+    difficulty_control.click()
+    expect(difficulty_control).to_have_text("Difficulty · Medium")
     persisted = page.request.get(
         API_ORIGIN + "/api/projects/inspect", params={"path": path}
     ).json()["project"]
-    assert persisted["ai_model"] == "gpt-6-luna" and persisted["reasoning_effort"] == "low"
-    assert len(update_requests) == 3
+    assert persisted["ai_model"] == "gpt-6.1-sol" and persisted["reasoning_effort"] == "low"
+    assert persisted["difficulty"] == "medium"
+    assert len(update_requests) == 7
     assert (
-        update_requests[0]["ai_model"] == "gpt-6-astra"
-        and update_requests[0]["reasoning_effort"] == "medium"
+        update_requests[0]["ai_model"] == "gpt-6-luna"
+        and update_requests[0]["reasoning_effort"] == "high"
     )
     assert (
         update_requests[1]["ai_model"] == "gpt-6-astra"
-        and update_requests[1]["reasoning_effort"] == "low"
+        and update_requests[1]["reasoning_effort"] == "medium"
     )
-    assert update_requests[2]["ai_model"] == "gpt-6-luna" and update_requests[2]["reasoning_effort"] == "low"
+    assert (
+        update_requests[2]["ai_model"] == "gpt-6-astra"
+        and update_requests[2]["reasoning_effort"] == "low"
+    )
+    assert (
+        update_requests[3]["ai_model"] == "gpt-6.1-sol"
+        and update_requests[3]["reasoning_effort"] == "low"
+    )
+    assert [request["difficulty"] for request in update_requests[4:]] == ["hard", "easy", "medium"]
     assert not any("/api/ai/mode" in url for url in observed_urls)
     page.reload()
     model_control = page.locator(".project-art-header .project-model-pill")
     thinking_control = page.locator(".project-art-header .project-thinking-pill")
-    expect(model_control).to_have_text("Model · Luna $")
+    expect(model_control).to_have_text("Model · Sol $$")
     expect(thinking_control).to_have_text("Thinking · Low")
     assert close.locator("svg").count() == 1
     assert header.get_by_text("Close project", exact=True).count() == 0
@@ -191,7 +259,9 @@ with sync_playwright() as playwright:
     assert model_control.evaluate("e => getComputedStyle(e).textAlign") == "center"
     assert model_control.evaluate("e => getComputedStyle(e).alignItems") == "center"
     assert model_control.evaluate("e => getComputedStyle(e).justifyContent") == "center"
-    assert model_control.evaluate("e => [...e.children].every(child => getComputedStyle(child).marginLeft === '0px')")
+    assert model_control.evaluate(
+        "e => [...e.children].every(child => getComputedStyle(child).marginLeft === '0px')"
+    )
     close.hover()
     assert close.evaluate("e => getComputedStyle(e).cursor") == "pointer"
     page.mouse.move(0, 0)
@@ -202,9 +272,7 @@ with sync_playwright() as playwright:
     page.keyboard.press("Enter")
     connection_dialog = page.get_by_role("dialog", name="AI connection settings")
     expect(connection_dialog).to_be_visible()
-    expect(
-        connection_dialog.get_by_role("button", name="Retry connection")
-    ).to_be_visible()
+    expect(connection_dialog.get_by_role("button", name="Retry connection")).to_be_visible()
     assert connection_dialog.get_by_role("button").count() > 1
     assert connection_dialog.locator("button").evaluate_all(
         "items => items.some(e => /Continue with ChatGPT|Disconnect|Use ChatGPT plan|Connect another account/.test(e.innerText))"
@@ -221,7 +289,9 @@ with sync_playwright() as playwright:
         assert title.evaluate("e => getComputedStyle(e).overflow") == "visible"
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), (
             width,
-            page.evaluate("[document.documentElement.scrollWidth, innerWidth, ...[...document.querySelectorAll('.project-art-header *')].filter(e => e.getBoundingClientRect().right > innerWidth).map(e => [e.className || e.tagName, e.getBoundingClientRect().x, e.getBoundingClientRect().width, e.getBoundingClientRect().right])]"),
+            page.evaluate(
+                "[document.documentElement.scrollWidth, innerWidth, ...[...document.querySelectorAll('.project-art-header *')].filter(e => e.getBoundingClientRect().right > innerWidth).map(e => [e.className || e.tagName, e.getBoundingClientRect().x, e.getBoundingClientRect().width, e.getBoundingClientRect().right])]"
+            ),
         )
         art_box = art.bounding_box()
         art_frame = header.locator(".project-header-art").bounding_box()
@@ -239,13 +309,17 @@ with sync_playwright() as playwright:
             and pill_box
             and controls_box
         )
-        assert abs(art_box["x"]) < 1 and abs(art_box["y"]) < 1
+        assert abs(art_box["x"]) < 1 and abs(art_box["y"] - 5) < 1
         assert abs(art_box["width"] / art_box["height"] - 2) < 0.01
         assert abs(art_frame["height"] / art_box["height"] - 0.64) < 0.02
         assert art_frame["y"] + art_frame["height"] <= workspace_box["y"] + 1
         assert title_box["x"] + title_box["width"] <= width + 1
         assert controls_box["x"] >= 0 and controls_box["x"] + controls_box["width"] <= width + 1
-        assert model_control.bounding_box() and thinking_control.bounding_box() and google_signin.bounding_box()
+        assert (
+            model_control.bounding_box()
+            and thinking_control.bounding_box()
+            and google_signin.bounding_box()
+        )
         model_box = model_control.bounding_box()
         thinking_box = thinking_control.bounding_box()
         google_box = google_signin.bounding_box()
@@ -255,7 +329,12 @@ with sync_playwright() as playwright:
         assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
         page.screenshot(path=f"/tmp/sigma-a23-model-controls-{width}.png", full_page=True)
         if width >= 1100:
-            assert workspace_box["y"] <= 140, (width, workspace_box, header.bounding_box(), controls_box)
+            assert workspace_box["y"] <= 140, (
+                width,
+                workspace_box,
+                header.bounding_box(),
+                controls_box,
+            )
             assert title_box["x"] >= art_box["x"] + art_box["width"] - 1
             assert controls_box["x"] >= title_box["x"] + title_box["width"] - 1
         else:

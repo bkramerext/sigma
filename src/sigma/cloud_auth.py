@@ -231,27 +231,33 @@ def _db(cfg: Config) -> sqlite3.Connection:
 
 def _authorization(cfg: Config, subject: str, email: str) -> str | None:
     with _db(cfg) as db:
-        bound = db.execute(
-            "SELECT subject FROM bootstrap_subject WHERE email=?", (cfg.bootstrap_email,)
-        ).fetchone()
-        if bound:
-            if bound["subject"] == subject and email == cfg.bootstrap_email:
-                return "admin"
-            if email == cfg.bootstrap_email:
-                return None
-        elif email == cfg.bootstrap_email:
-            db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
+        return _authorization_in_db(db, cfg, subject, email)
+
+
+def _authorization_in_db(
+    db: sqlite3.Connection, cfg: Config, subject: str, email: str
+) -> str | None:
+    bound = db.execute(
+        "SELECT subject FROM bootstrap_subject WHERE email=?", (cfg.bootstrap_email,)
+    ).fetchone()
+    if bound:
+        if bound["subject"] == subject and email == cfg.bootstrap_email:
             return "admin"
-        explicit = db.execute(
-            "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
-        ).fetchone()
-        if explicit:
-            return explicit["role"] if explicit["active"] else None
-        domain = email.rsplit("@", 1)[1]
-        allowed = db.execute(
-            "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
-        ).fetchone()
-        return allowed["role"] if allowed and allowed["active"] else None
+        if email == cfg.bootstrap_email:
+            return None
+    elif email == cfg.bootstrap_email:
+        db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
+        return "admin"
+    explicit = db.execute(
+        "SELECT role,active FROM grants WHERE kind='email' AND value=?", (email,)
+    ).fetchone()
+    if explicit:
+        return explicit["role"] if explicit["active"] else None
+    domain = email.rsplit("@", 1)[1]
+    allowed = db.execute(
+        "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
+    ).fetchone()
+    return allowed["role"] if allowed and allowed["active"] else None
 
 
 def resolve_session(raw: str | None) -> Principal | None:
@@ -337,7 +343,10 @@ def status(request: Request):
 
 
 @router.get("/login")
-def login(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE)):
+def login(
+    denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
+    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+):
     cfg = config()
     if not cfg.enabled:
         return RedirectResponse("/")
@@ -354,6 +363,8 @@ def login(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
+        if session_cookie:
+            db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
             "INSERT INTO flows(state_hash,nonce,verifier,expires_at) VALUES(?,?,?,?)",
@@ -384,6 +395,7 @@ def login(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE))
         path="/",
     )
     response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -397,6 +409,7 @@ async def callback(
     error: str = "",
     flow_cookie: str | None = Cookie(default=None, alias=FLOW_COOKIE),
     denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
+    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
 ):
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
@@ -488,6 +501,8 @@ async def callback(
     if not role:
         denied_token = secrets.token_urlsafe(32)
         with _db(cfg) as db:
+            if session_cookie:
+                db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(session_cookie),))
             db.execute("DELETE FROM denied_access WHERE expires_at<=?", (_now(),))
             if denied_cookie:
                 db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
@@ -497,6 +512,7 @@ async def callback(
             )
         response = RedirectResponse("/?access=denied", status_code=303)
         response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
         response.set_cookie(
             DENIED_COOKIE,
             denied_token,
@@ -580,12 +596,23 @@ def list_grants():
                 "SELECT kind,value,role,active,updated_at FROM grants ORDER BY kind,value"
             )
         ]
-        users = [
-            dict(row)
-            for row in db.execute(
-                "SELECT email,expires_at FROM sessions GROUP BY email ORDER BY email"
-            )
-        ]
+        sessions = db.execute(
+            "SELECT token_hash,subject,email,expires_at FROM sessions ORDER BY email,expires_at DESC"
+        ).fetchall()
+        active: dict[str, dict[str, object]] = {}
+        for session in sessions:
+            role = _authorization_in_db(db, cfg, session["subject"], session["email"])
+            if session["expires_at"] <= _now() or not role:
+                db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
+                continue
+            current = active.get(session["email"])
+            if current is None:
+                active[session["email"]] = {
+                    "email": session["email"],
+                    "role": role,
+                    "expires_at": session["expires_at"],
+                }
+    users = list(active.values())
     return {"grants": grants, "sessions": users, "bootstrap_admin": cfg.bootstrap_email}
 
 

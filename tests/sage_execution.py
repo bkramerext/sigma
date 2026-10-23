@@ -164,7 +164,14 @@ async def test_integrated(path, status, available=True):
     execute.assert_awaited_once_with(SAGE_CODE, "sagemath")
     assert finished["calls_used"] == 2 and len(contexts) == 2
     evidence = finished["artifacts"][0]["investigator_output"]["sage_execution"]
-    assert evidence == python_sandbox.get_execution(path, evidence["id"])
+    saved_execution = python_sandbox.get_execution(path, evidence["id"])
+    assert {
+        key: value for key, value in evidence.items() if key != "artifact_inspections"
+    } == saved_execution
+    if status == "completed":
+        assert evidence["artifact_inspections"][0]["inspection"]["status"] == "available"
+    else:
+        assert evidence["artifact_inspections"] == []
     assert evidence["source_sha256"] == hashlib.sha256(SAGE_CODE.encode()).hexdigest()
     assert evidence["session_id"] == started["id"] and evidence["strategy_id"] == strategy.id
     assert evidence["agent"]["step_id"] == finished["steps"][0]["id"]
@@ -212,7 +219,7 @@ async def test_integrated(path, status, available=True):
         read = client.get(
             f"/api/projects/research-executions/{evidence['id']}", params={"path": str(path)}
         )
-        assert read.status_code == 200 and read.json() == evidence
+        assert read.status_code == 200 and read.json() == saved_execution
         bad = client.post(
             "/api/projects/research-executions",
             json={"path": str(path), "source": "print(1)", "runtime": "shell"},
@@ -461,7 +468,11 @@ async def test_mixed_queue_stop_and_resume(root):
     sage_artifact = next(
         item for item in finished["artifacts"] if item["strategy_id"] == strategy_a.id
     )
-    assert sage_artifact["investigator_output"]["sage_execution"] == saved
+    assert {
+        key: value
+        for key, value in sage_artifact["investigator_output"]["sage_execution"].items()
+        if key != "artifact_inspections"
+    } == {key: value for key, value in saved.items() if key != "artifact_inspections"}
     values = {
         item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
     }

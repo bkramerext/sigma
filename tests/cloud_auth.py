@@ -114,8 +114,9 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
-    def start_flow(self):
-        response = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+    def start_flow(self, client=None):
+        client = client or self.client
+        response = client.get("/api/cloud-auth/login", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertIn("Secure", response.headers["set-cookie"])
         self.assertIn("HttpOnly", response.headers["set-cookie"])
@@ -125,16 +126,17 @@ class CloudAuthTests(TestCase):
         self.assertEqual(query["prompt"], ["select_account"])
         return query["state"][0], response.cookies[cloud_auth.FLOW_COOKIE]
 
-    def finish(self, email="admin@example.org", subject="google-sub-1", changes=None):
-        state, flow_cookie = self.start_flow()
+    def finish(self, email="admin@example.org", subject="google-sub-1", changes=None, client=None):
+        client = client or self.client
+        state, flow_cookie = self.start_flow(client)
         with cloud_auth._db(cloud_auth.config()) as db:
             nonce = db.execute(
                 "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
             ).fetchone()["nonce"]
         GoogleClient.token = token(nonce=nonce, email=email, subject=subject, **(changes or {}))
-        self.client.cookies.set(cloud_auth.FLOW_COOKIE, flow_cookie)
+        client.cookies.set(cloud_auth.FLOW_COOKIE, flow_cookie)
         with patch.object(cloud_auth.httpx, "AsyncClient", GoogleClient):
-            return self.client.get(
+            return client.get(
                 "/api/cloud-auth/callback",
                 params={"state": state, "code": "fixture"},
                 follow_redirects=False,
@@ -211,6 +213,65 @@ class CloudAuthTests(TestCase):
         )
         self.assertIn('__Host-sigma_denied="";', restart.headers["set-cookie"])
         self.assertEqual(self.client.get("/api/cloud-auth/denied").status_code, 404)
+        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, restart.cookies)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 0)
+
+    def test_account_switch_authorized_to_unauthorized_invalidates_session(self):
+        first = self.finish()
+        first_raw = first.cookies[cloud_auth.SESSION_COOKIE]
+        self.client.cookies.set(cloud_auth.SESSION_COOKIE, first_raw)
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 200)
+
+        begin = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+        self.assertIn('__Host-sigma_session="";', begin.headers["set-cookie"])
+        self.assertIn("Max-Age=0", begin.headers["set-cookie"])
+        self.assertIsNone(cloud_auth.resolve_session(first_raw))
+        with cloud_auth._db(cloud_auth.config()) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0], 0)
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 401)
+        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+
+        denied = self.finish("visitor@example.org", "visitor-sub")
+        self.assertEqual(denied.status_code, 303)
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        self.assertIn('__Host-sigma_session="";', denied.headers["set-cookie"])
+        self.assertIsNone(cloud_auth.resolve_session(first_raw))
+        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+        self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 401)
+
+    def test_account_switch_authorized_to_authorized_replaces_session(self):
+        first = self.finish()
+        first_raw = first.cookies[cloud_auth.SESSION_COOKIE]
+        self.client.cookies.set(cloud_auth.SESSION_COOKIE, first_raw)
+        self.assertEqual(
+            self.client.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": "email", "value": "member@example.org", "role": "member"},
+                headers={"Origin": ORIGIN},
+            ).status_code,
+            200,
+        )
+        begin = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+        self.assertIn('__Host-sigma_session="";', begin.headers["set-cookie"])
+        self.assertIsNone(cloud_auth.resolve_session(first_raw))
+        self.assertEqual(self.client.get("/api/projects/recent").status_code, 401)
+
+        second = self.finish("member@example.org", "member-sub")
+        second_raw = second.cookies[cloud_auth.SESSION_COOKIE]
+        principal = cloud_auth.resolve_session(second_raw)
+        assert principal is not None
+        self.assertEqual(principal.email, "member@example.org")
+        self.assertIsNone(cloud_auth.resolve_session(first_raw))
+        self.client.cookies.set(cloud_auth.SESSION_COOKIE, second_raw)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/status").json()["user"]["email"], "member@example.org"
+        )
+        self.assertNotEqual(self.client.get("/api/projects/recent").status_code, 401)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            rows = db.execute("SELECT email FROM sessions").fetchall()
+            self.assertEqual([row["email"] for row in rows], ["member@example.org"])
 
     def test_local_mode_keeps_project_and_provider_apis_unauthenticated(self):
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
@@ -224,9 +285,14 @@ class CloudAuthTests(TestCase):
             self.assertNotEqual(self.client.get("/api/ai/connection").status_code, 401)
 
     def test_exact_domain_and_revocation_of_existing_session(self):
-        admin = self.finish()
-        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
-        invited = self.client.post(
+        admin_context = TestClient(app)
+        admin_client = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        admin = self.finish(client=admin_client)
+        admin_client.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        invited = admin_client.post(
             "/api/cloud-auth/admin/grants",
             json={"kind": "email", "value": "person@outside.org", "role": "member"},
             headers={"Origin": ORIGIN},
@@ -238,9 +304,8 @@ class CloudAuthTests(TestCase):
         person_principal = cloud_auth.resolve_session(person_cookie)
         assert person_principal is not None
         self.assertEqual(person_principal.email, "person@outside.org")
-        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
         self.assertEqual(
-            self.client.delete(
+            admin_client.delete(
                 "/api/cloud-auth/admin/grants/email/person%40outside.org",
                 headers={"Origin": ORIGIN},
             ).status_code,
@@ -253,8 +318,7 @@ class CloudAuthTests(TestCase):
         self.assertIn("access=denied", denied.headers["location"])
         self.assertIn(cloud_auth.FLOW_COOKIE, denied.headers["set-cookie"])
         self.assertIn("Max-Age=0", denied.headers["set-cookie"])
-        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
-        rule = self.client.post(
+        rule = admin_client.post(
             "/api/cloud-auth/admin/grants",
             json={"kind": "domain", "value": "Example.org"},
             headers={"Origin": ORIGIN},
@@ -267,9 +331,8 @@ class CloudAuthTests(TestCase):
         self.assertEqual(member_principal.email, "member@example.org")
         self.client.cookies.set(cloud_auth.SESSION_COOKIE, member_cookie)
         self.assertEqual(self.client.get("/api/cloud-auth/admin/grants").status_code, 403)
-        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
         self.assertEqual(
-            self.client.delete(
+            admin_client.delete(
                 "/api/cloud-auth/admin/grants/email/member%40example.org",
                 headers={"Origin": ORIGIN},
             ).status_code,
@@ -278,11 +341,9 @@ class CloudAuthTests(TestCase):
         self.assertIsNone(
             cloud_auth.resolve_session(member_cookie)
         )  # Explicit deny beats allowed domain.
-        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
         lookalike = self.finish("member@notexample.org", "lookalike-sub")
         self.assertNotIn(cloud_auth.SESSION_COOKIE, lookalike.cookies)
-        self.client.cookies.set(cloud_auth.SESSION_COOKIE, admin.cookies[cloud_auth.SESSION_COOKIE])
-        removed = self.client.delete(
+        removed = admin_client.delete(
             "/api/cloud-auth/admin/grants/domain/example.org", headers={"Origin": ORIGIN}
         )
         self.assertEqual(removed.status_code, 200)

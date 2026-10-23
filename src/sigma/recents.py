@@ -16,10 +16,14 @@ from sigma.projects import (
     ROOT,
     ProjectError,
     ProjectView,
+    ResearchMode,
     _stage,
     inspect_project,
 )
 from sigma.ui_instance import private_directory
+
+MAX_PER_CATEGORY = 4
+MAX_ENTRIES = MAX_PER_CATEGORY * (len(ResearchMode) + 1)
 
 
 def state_directory() -> Path:
@@ -68,7 +72,7 @@ def _validate(value: Any) -> dict:
         raise ValueError()
     if (
         not isinstance(value["entries"], list)
-        or len(value["entries"]) > 6
+        or len(value["entries"]) > MAX_ENTRIES
         or not isinstance(value["bootstrapped_roots"], dict)
     ):
         raise ValueError()
@@ -190,7 +194,7 @@ def record_access(view: ProjectView) -> None:
         pass
     try:
         with _index() as index:
-            index["entries"] = [
+            entries = [
                 {
                     "id": str(UUID(view.project.id)),
                     "path": view.path,
@@ -198,7 +202,28 @@ def record_access(view: ProjectView) -> None:
                     "included_example": False,
                 },
                 *(entry for entry in index["entries"] if entry["id"] != str(UUID(view.project.id))),
-            ][:6]
+            ]
+            category_counts: dict[str | None, int] = {}
+            retained = []
+            for entry in entries:
+                category: str | None
+                if entry["id"] == str(UUID(view.project.id)):
+                    category = view.project.investigation_type.value
+                else:
+                    try:
+                        existing = inspect_project(entry["path"])
+                        if str(UUID(existing.project.id)) != entry["id"]:
+                            category = None
+                        else:
+                            category = existing.project.investigation_type.value
+                    except (ProjectError, OSError, ValueError):
+                        category = None
+                count = category_counts.get(category, 0)
+                if count >= MAX_PER_CATEGORY:
+                    continue
+                category_counts[category] = count + 1
+                retained.append(entry)
+            index["entries"] = retained
     except ProjectError:
         print(
             "Recent Projects could not be updated. The project operation succeeded; check application state permissions.",
@@ -218,6 +243,7 @@ class RecentProject:
     title: str
     investigation_type: str | None
     strategy_count: int | None
+    difficulty: str | None
     accessed_at: str | None
     included_example: bool
     available: bool
@@ -228,11 +254,16 @@ def recent_projects() -> dict:
     with _index() as index:
         entries = [dict(entry) for entry in index["entries"]]
     recent = []
+    category_counts: dict[str | None, int] = {}
     for entry in entries:
         try:
             view = inspect_project(entry["path"])
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
+            category = view.project.investigation_type.value
+            if category_counts.get(category, 0) >= MAX_PER_CATEGORY:
+                continue
+            category_counts[category] = category_counts.get(category, 0) + 1
             recent.append(
                 asdict(
                     RecentProject(
@@ -240,11 +271,15 @@ def recent_projects() -> dict:
                         title=view.project.title,
                         investigation_type=view.project.investigation_type,
                         strategy_count=len(view.project.active_order),
+                        difficulty=view.project.difficulty,
                         available=True,
                     )
                 )
             )
         except (ProjectError, OSError):
+            if category_counts.get(None, 0) >= MAX_PER_CATEGORY:
+                continue
+            category_counts[None] = category_counts.get(None, 0) + 1
             recent.append(
                 asdict(
                     RecentProject(
@@ -252,6 +287,7 @@ def recent_projects() -> dict:
                         title=Path(entry["path"]).name,
                         investigation_type=None,
                         strategy_count=None,
+                        difficulty=None,
                         available=False,
                         error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",
                     )

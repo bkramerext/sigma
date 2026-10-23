@@ -43,17 +43,17 @@
 | T18 | Concurrent multi-strategy research and peer handoffs | Merged, engineering done | Blue · [PR #8](https://github.com/bkramerext/sigma/pull/8) |
 | T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green · [PR #9](https://github.com/bkramerext/sigma/pull/9) |
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
-| T21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
+| T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
 | T22 | Cloud deployment | In progress; staged tickets | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
-| T22.2 | Google authentication and invited access | Ready for review | Red · [PR #37](https://github.com/bkramerext/sigma/pull/37) |
+| T22.2 | Google authentication and invited access | Corrections in progress; [PR #37](https://github.com/bkramerext/sigma/pull/37) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
 | T25 | Outcome hierarchy and collapsible subsections | Implemented; open for review | Gray · ChatGPT authored ticket · [PR #19](https://github.com/bkramerext/sigma/pull/19) |
 | T26 | SageMath agent-aware sandboxed execution, Python parity | Implemented and validated; review pending | Green · ChatGPT authored ticket · [PR #24](https://github.com/bkramerext/sigma/pull/24) |
-| T27 | Research intelligence, cross-strategy learning and agent guidance | Implementation PR #18 open for review | Blue · ChatGPT authored ticket |
-| T28 | Rich computational artifact inspection and cross-session evidence | Pending; Green unavailable | Green · ChatGPT authored ticket |
+| T27 | Research intelligence, cross-strategy learning and agent guidance | Merged, engineering done | Blue · [PR #18](https://github.com/bkramerext/sigma/pull/18) |
+| T28 | Rich computational artifact inspection and cross-session evidence | Implemented; PR open for review | Green · ChatGPT authored ticket |
 | T29 | Human intervention during active concurrent research | Pending after T27 | Blue · ChatGPT authored ticket |
 
 ### T23.1 scope
