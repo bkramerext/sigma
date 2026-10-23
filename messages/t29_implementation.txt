@@ -1,0 +1,59 @@
+T29 implementation handoff for ChatGPT
+Date: 2026-10-23
+Branch: blue/t29-human-intervention
+PR: https://github.com/bkramerext/sigma/pull/39
+Latest main base: `7f84d40d7e2cee8ed14423384362319ba6485580`.
+Tested integration head: `46e5ce5928481a2ea4dac766ecb7f960592ce728`.
+This integrates PR #40's exported-sample work and subsequent software-factory
+and T22 acceptance documentation. T29's intervention behavior remains intact.
+The only manual conflicts were `TICKET_TRACKING.md` and `docs/STATUS.md`; both
+T29 documentation and T30's rows/sections were preserved.
+
+Implemented a bounded session intervention API and minimal session UI. A user can
+send an objection, evidence note, or priority to selected strategies and agent
+roles. Accepted guidance is added to a later agent prompt only at a persisted
+step boundary. The existing provider call keeps its original prompt. Guidance
+cannot change model, billing mode, tools, duration, call/token budget, or prior
+artifacts. Up to 24 entries are accepted per session; up to eight rejected
+service requests are retained in the capped audit.
+
+Each record includes submission timing, strategy/role target, actual delivery
+cycle and step, attempt timing, acknowledgment, uptake, and rationale. Delivery
+IDs are part of saved step provenance and emitted as session audit events.
+Structured agent output must acknowledge every delivered ID exactly once.
+Pause/restart interruptions are recorded and made eligible only after explicit
+resume; provider failures stay unacknowledged and are never silently retried.
+Users can supersede guidance only before any delivery attempt and with identical
+targets.
+
+Deterministic tests hold parallel strategy calls, route an objection to one
+Skeptic, and verify the next question changes only for that strategy. The saved
+artifact, guided output, step, strategy and cycle all carry matching provenance.
+Other regressions cover pause/resume after a delivered call is interrupted,
+restart recovery, supersession, terminal rejection, bounded repeated guidance,
+and history preservation.
+
+Verification completed:
+- `./sigma test` passed on the latest merged tree: T29 concurrency/recovery,
+  T30 exported-sample import, CLI smoke, SageMath/computational evidence
+  regressions, Ruff, format check, Pyright (0 errors), frontend typecheck and
+  production build.
+- Real Chrome fixture check passed on the combined T28/T29 tree at desktop and
+  390px mobile after merging the latest main. It verifies guidance submission
+  makes no provider call, selected role deliveries are acknowledged with
+  uptake/rationale and cycle provenance, and there is no mobile horizontal
+  overflow. No live model or paid provider calls were made.
+- Screenshot paths: `/tmp/sigma-t29-intervention-desktop.png` and
+  `/tmp/sigma-t29-intervention-mobile.png`.
+
+The first combined-tree Chrome attempt exposed a stale fixture response missing
+T28's required empty computation-citation list; the fixture now emits it. The
+project title also includes a timestamp so rerunning the browser check does not
+collide with a prior isolated project.
+
+Limitations: uptake is the agent's structured self-report, not proof that the
+instruction was followed correctly or that supplied evidence is true. A call
+already dispatched cannot be changed. Legacy sessions without strategy-bound
+steps reject interventions. HTTP schema-invalid submissions do not create an
+audit event; valid service-level rejections are recorded up to the configured
+audit bound.
