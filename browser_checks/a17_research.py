@@ -933,6 +933,27 @@ with sync_playwright() as playwright:
     expect(first_session.locator(".session-row-content")).to_be_visible()
     expect(first_session.locator(".session-outcome")).to_contain_text("Outcome")
     expect(first_session.locator(".session-outcome h3")).to_have_text("Outcome")
+    outcome_title = first_session.locator(".outcome-heading-title > h3")
+    outcome_toggle = first_session.get_by_role("button", name="Render outcome as Markdown")
+    outcome_label = first_session.locator(".outcome-heading-title > .outcome-label")
+
+    def assert_outcome_markdown_control_flow():
+        expect(outcome_toggle).to_be_visible()
+        title_box = outcome_title.bounding_box()
+        toggle_box = outcome_toggle.bounding_box()
+        label_box = outcome_label.bounding_box()
+        assert title_box and toggle_box and label_box
+        assert title_box["x"] + title_box["width"] <= toggle_box["x"]
+        assert (
+            toggle_box["x"] + toggle_box["width"] <= label_box["x"]
+            or label_box["y"] >= toggle_box["y"] + toggle_box["height"] - 1
+        ), (title_box, toggle_box, label_box)
+        toggle_style = outcome_toggle.evaluate(
+            "e => [getComputedStyle(e).display, getComputedStyle(e).width, e.getBoundingClientRect().width]"
+        )
+        assert toggle_style == ["flex", "28px", 28], toggle_style
+
+    assert_outcome_markdown_control_flow()
     assert first_session.locator(".session-outcome table").count() == 0
     assert (
         first_session.evaluate("e => getComputedStyle(e).gridTemplateColumns.split(' ').length")
@@ -987,6 +1008,7 @@ with sync_playwright() as playwright:
     for width, height in ((1440, 900), (1280, 800), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), width
+        assert_outcome_markdown_control_flow()
         outcome_box = first_session.locator(".session-outcome").bounding_box()
         assert (
             outcome_box
@@ -996,14 +1018,22 @@ with sync_playwright() as playwright:
         if width == 390:
             page.screenshot(path="/tmp/sigma-t25-outcome-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
-    outcome_toggle = first_session.get_by_role("button", name="Render outcome as Markdown")
     conversion_count = len(provider_calls)
-    outcome_toggle.click()
+    outcome_toggle.focus()
+    page.keyboard.press("Tab")
+    page.keyboard.press("Shift+Tab")
+    expect(outcome_toggle).to_be_focused()
+    assert outcome_toggle.evaluate("e => getComputedStyle(e).outlineStyle") == "solid"
+    page.keyboard.press("Enter")
     expect(first_session.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
         "aria-pressed", "true"
     )
     assert len(provider_calls) == conversion_count
-    first_session.get_by_role("button", name="Show plain outcome text").click()
+    first_session.get_by_role("button", name="Show plain outcome text").focus()
+    page.keyboard.press("Space")
+    expect(first_session.get_by_role("button", name="Render outcome as Markdown")).to_have_attribute(
+        "aria-pressed", "false"
+    )
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
