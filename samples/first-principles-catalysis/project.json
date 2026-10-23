@@ -1,8 +1,8 @@
 {
-  "schema_version": 5,
+  "schema_version": 8,
   "id": "c4a1c064-6d18-48e3-97e3-832fa85a8d42",
   "title": "Can We Predict Chemical Reactions from Quantum Mechanics?",
-  "problem": "Investigate a fundamental open problem in theoretical and computational chemistry: given molecular composition, initial structure, and physical environment, can we predict which chemical reactions occur, their pathways, rate constants, selectivities, and product distributions from quantum mechanics with independently validated accuracy? Even though molecular dynamics is governed by quantum mechanics, general predictive solutions remain out of reach for complex, reactive, many-body systems. Examine the limits of electronic-structure approximations, nuclear quantum effects, transition-state and rare-event sampling, solvent and temperature coupling, and combinatorial reaction-network exploration. Choose tractable benchmark reactions and formulate falsifiable prospective predictions; distinguish exact principles from computational approximations and observed outcomes. Do not imply that solving a benchmark reaction solves the general problem. Deliver prioritized research hypotheses, uncertainty budgets, discriminating calculations or experiments, and explicit limitations.",
+  "problem": "FUNDAMENTAL OPEN QUESTION. Can molecular quantum mechanics be turned into a reliable, predictive theory of chemical reactivity: given reactants, conditions and no fitted outcome for the target reaction, predict the kinetically accessible pathways, activation free energies, relative rates and product distribution with calibrated uncertainty? Focus on a tractable but genuinely hard subproblem: predicting when approximate electronic-structure calculations mis-rank competing reaction pathways in an unseen class of elementary organic reactions, and devising a physically justified, testable diagnostic that anticipates the failure. The scientific challenge is not computing a known transition state or training another random-split reaction classifier; it is out-of-domain, rate-relevant generalization.\n\nEXISTING WORK, NOT NOVEL. Quantum mechanics governs molecules, and quantum chemical transition-state calculations and machine-learned barrier corrections are well-established. The public RDB7 dataset (about 12,000 H/C/N/O elementary reactions with up to seven heavy atoms) includes reaction/transition state geometries and high-level quantum reference energies; recent benchmark work re-evaluates its DFT errors. Regenerating a published error table, applying a standard model on a random train/test split, or reporting one unvalidated transition state is not a novel result.\n\nBOUNDED QUESTION. Can a diagnostic based on physically interpretable electronic and geometric descriptors predict *before a high-level calculation* which low-cost approximate barrier computations will fail, or which of two closely competing reaction channels will reverse ordering? Compare distinct electronic-structure error regimes, including reactions with multiple channels, and attempt a correction or adaptive escalation rule. Select one public curated reaction family or cluster for discovery, then reserve a chemically disjoint family or independently published dataset for a blinded test. Verify dataset coverage and method/fidelity comparability; perform grouping by parent reactant, reaction family and near-duplicate transition-state structures to prevent leakage. Do not confuse calculated energies with experimental rates.\n\nCANDIDATE MECHANISMS. Hypotheses include multireference character, charge transfer, bond rearrangement complexity, strain, competing conformations and limitations of DFT error cancellation. Screen each against prior work. Seek a previously unreported *conditional pattern* or error predictor that changes a concrete chemical prediction, not a generic accuracy improvement without explanatory value.\n\nMETHOD. Start with a cited prior-art review and metadata audit; recompute a small reproducing baseline. State quantum methods, reference levels, conformer and stereochemical assumptions, gas-phase or solvent context, standard states, temperature and uncertainty. Provide a preregistered train/validation split and metrics: barrier MAE, pairwise pathway-order error, ranking calibration and computational cost. Compare to baseline low-cost DFT alone, a naive error threshold and at least one documented published correction if reproducible. Track resources and failures, avoid claiming use of unavailable proprietary solvers or inventing computed values.\n\nEXIT CRITERIA. A NOVEL COMPUTATIONAL RESULT requires (1) a literature-screened, specific and chemically interpretable new relationship or decision rule, (2) a prospective prediction on a chemically held-out test set or new high-fidelity quantum calculations not used in design, (3) a reported effect with bootstrap uncertainty and a meaningful, prespecified improvement over known baselines, (4) reproducible input structures, code/parameters, energy units, reference levels and error analysis, and (5) at least one mechanistically informative counterexample. A VERIFIED CHEMICAL PREDICTION requires additional independent high-quality computation or experimental kinetics/product data appropriately matched to conditions; the RDB7 reference itself is theoretical, not independent experimental truth. If tests fail, report NEGATIVE/UNRESOLVED with the failed hypothesis, exact counterexample and limits. A neat derivation or literature summary alone is NOT success. Solving this narrow benchmark is not solving the general quantum prediction problem.\n\nSTARTING SOURCES. Grambow, Pattanaik and Green, Scientific Data 7, 137 (2020), DOI 10.1038/s41597-020-0460-4; reanalysis in PCCP 2025, DOI 10.1039/D5CP01181G. Search for newer overlapping error-calibration and barrier-prediction methods before selecting a candidate.",
   "events": [
     {
       "sequence": 1,
@@ -43,57 +43,57 @@
   "strategies": [
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000001",
-      "title": "Electronic-structure accuracy and uncertainty",
-      "approach": "Compare methods for potential-energy surfaces and reaction barriers on a small benchmark reaction with high-quality reference data. Quantify correlation, basis-set, multireference, and model errors and how these propagate into predicted rates.",
+      "title": "Prior-art and reproducible quantum baseline",
+      "approach": "Confirm the RDB7 data, licensing, energies, geometry quality, units, fidelity, duplicates and train/test groups. Search for previously demonstrated DFT error predictors and out-of-domain evaluations through current literature. Reproduce a small, scientifically meaningful DFT-versus-reference error and channel-rank baseline before claiming improvement. Stop if no tractable novel gap exists.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A reproducible error budget and method-selection rule.",
+      "summary": "A sourced novelty gap, grouping protocol, baseline error distribution and limitations.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000002",
-      "title": "Reaction pathway discovery",
-      "approach": "Evaluate whether unbiased or enhanced-search methods recover all kinetically relevant pathways for a defined reactive system. Use independently known pathways where possible; state coverage and stopping criteria.",
+      "title": "Find a conditional barrier-error mechanism",
+      "approach": "Derive physics-motivated features for one likely failure mode, such as charge transfer, bond breaking multiplicity, conformational competition or static correlation, and test its association with barrier error while controlling for reaction family and reference method. Prefer an interpretable conditional relation over a black-box fit. Predefine the falsification threshold and measure uncertainty.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A pathway-coverage benchmark and clear missed-pathway failure modes.",
+      "summary": "A new conditional diagnostic, effect size, counterexamples or a clear failed hypothesis.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000003",
-      "title": "Dynamics and rare events",
-      "approach": "Test transition-state theory and rare-event sampling against dynamical recrossing, nonstatistical behavior, and nuclear quantum effects on a selected reaction.",
+      "title": "Predict pathway-order inversions",
+      "approach": "Find groups of two or more reaction channels sharing reactants; assess when low-cost DFT predicts the wrong preferred channel compared with high-level reference barriers. Derive a predictor that ranks channels or flags dangerous near-ties without seeing reference values for held-out families. Do not interpret activation enthalpy as an actual product yield without kinetics.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A quantitative prediction with uncertainty and a falsifying observable.",
+      "summary": "A quantitatively testable prediction of channel ordering on new reactions.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000004",
-      "title": "Solvent and environmental coupling",
-      "approach": "Compare gas-phase, implicit-solvent, and explicit-environment predictions for a benchmark reaction; assess temperature, pressure, and ionic effects where relevant.",
+      "title": "Rule out methodological artifacts",
+      "approach": "Stress-test any improvement against duplicate leakage, family imbalance, conformer choice, spin state, transition-state verification, energy-unit mistakes, basis-set and solvation assumptions, and random-split inflation. Identify a case where the proposed mechanism must fail and compare against a simple uncertainty or threshold baseline.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A discriminating experiment or computation that isolates environment-induced changes.",
+      "summary": "A negative-control battery with at least one decisive counterexample.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000005",
-      "title": "From mechanisms to product distributions",
-      "approach": "Construct a bounded reaction network and propagate elementary-step uncertainties into measurable yields, rates, and selectivity under unseen conditions. Evaluate prospective out-of-sample prediction.",
+      "title": "Independent generalization and calibrated exit",
+      "approach": "Freeze the proposed rule and evaluate on a held-out chemical family or independently obtained high-level set. Report barrier MAE, ordering mistakes, uncertainty calibration and additional compute cost versus prespecified baselines, with bootstrap intervals respecting chemical families. If there is no independent reference, produce a prospective quantum-calculation plan and label the result an unverified hypothesis.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A preregisterable prediction and validation plan for products and rates.",
+      "summary": "A reproducible independent-test result, or an explicit unresolved verdict with a decisive next test.",
       "provenance": null
     }
   ],
