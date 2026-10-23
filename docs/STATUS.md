@@ -4171,3 +4171,54 @@ answer-free run remain **UNVERIFIED**. Criterion 6 is deterministic-only.
 No new provider calls or model fees were incurred. The coordinator has GitHub
 repository access but not access to the running local SIGMA session/provider.
 Do not treat protocol creation or T39 tooling closure as live-agent acceptance.
+
+## Nonconsecutive Subset Sums sample review (2026-10-23)
+
+Enriched the existing `samples/nonconsecutive-subset-sums` template through the
+project export and sample-import path. The source `project.json` and all three
+strategies remain unchanged; a sanitized `sample-evidence.json` sidecar carries
+five historical research sessions. Three original deterministic fixture
+sessions record a disproved short recurrence, an unresolved roots-of-unity
+candidate, and a productive gap-removal/q-binomial identity. A fourth bounded
+transfer-matrix follow-up explicitly consults those prior findings, checks an
+order-12 candidate with exact Python DP through n=60, and leaves the general
+matrix proof and asymptotic limit open. A fifth follow-up corrects
+an off-by-one explanation of the standard Gaussian-binomial normalization:
+the q-binomial contributes k(k+1)/2 in the one-based subset convention, which
+combines with the gap shift k(k-1)/2 to give k^2. Exact polynomial checks
+through n=18 support the formula while its all-n proof remains an obligation.
+Every record and report labels the fixture outputs as not live-model research.
+The Python code ran in the local isolated research sandbox. The
+Investigator/Skeptic responses were local deterministic fixtures, and no paid
+or live provider calls were made.
+
+`./sigma test` passed after integrating current main at `c4b18d3`, including
+Gate C tests and the regression that canonical exports of legacy projects can
+be imported as samples without rewriting the source.
+The sample was round-tripped through `samples.make_sample` and the normal sample
+loader: five sessions, five linked artifacts, five completed Python evidence
+records, strategy attribution, and a 35.3K-character report were preserved.
+Real Chrome `browser_checks/nonconsecutive_sample.py` passed on the integrated
+head at desktop and 390px and 320px mobile widths, including all five outcome
+disclosures, saved metrics, report content, and no horizontal overflow.
+Screenshots are in `/tmp/` as documented in `browser_checks/README.md`. A first mock follow-up was correctly
+rejected because it supplied a formal peer citation absent from the single-
+strategy session's peer bundle; the deterministic fixture was corrected to
+discuss prior-session findings without claiming peer-evidence attribution.
+
+Main advanced to `6b0d0c9` with the T22.3 ticket specification. The sample
+branch integrated that commit without conflicts. On the updated head,
+`./sigma test` passed all backend scenarios, Ruff/format, Pyright (zero
+diagnostics), frontend typecheck, and production build. The real Chrome sample
+check passed again at 1440px, 390px, and 320px, verifying all five outcomes,
+report content, and no page errors or horizontal overflow.
+
+Review correction: Session #1's coordinator decision is now
+`stop_budget_exhausted` for its one-cycle limit rather than treating the
+disproved candidate recurrence as a decisive counterexample to the project.
+Its derived outcome is `Mixed · partial progress, unresolved`; its objective
+review remains partial, with the general recurrence and asymptotic limit open.
+Investigator/Skeptic findings and the exact n=2 counterexample are preserved.
+A regression in `tests/make_sample.py` and the real Chrome check cover this
+distinction. `./sigma test` and the focused browser check passed after the
+correction.

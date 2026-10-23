@@ -29,6 +29,7 @@ from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
     WorkspaceAccessError,
+    _document,
     change_stage,
     close_project,
     create_project,
@@ -421,9 +422,7 @@ def inspect_view(path: str):
 @app.get("/api/projects/export")
 def export_project_view(path: str):
     """Export project, agentic evidence, and reconstructable research sessions."""
-    project = asdict(inspect_project(path).project)
-    if project["difficulty"] is None:
-        project.pop("difficulty")
+    project = json.loads(_document(inspect_project(path).project))
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
     sessions = list(reversed(research_sessions.list_sessions(path)))
     return {
