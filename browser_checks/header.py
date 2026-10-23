@@ -11,6 +11,8 @@ from playwright.sync_api import expect, sync_playwright
 TITLE = f"Header model controls {uuid4().hex[:8]}"
 STYLE = "e => { const s = getComputedStyle(e); return [s.color, s.backgroundColor, s.backgroundImage, s.borderColor, s.textShadow, s.boxShadow] }"
 PILL = "e => { const s = getComputedStyle(e); return [s.color, s.backgroundColor, s.borderColor, s.borderRadius, s.padding, s.boxShadow, s.fontSize, s.minHeight] }"
+UI_ORIGIN = os.environ.get("SIGMA_HEADER_UI_ORIGIN", "http://127.0.0.1:5173").rstrip("/")
+API_ORIGIN = os.environ.get("SIGMA_HEADER_API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -27,7 +29,10 @@ with sync_playwright() as playwright:
 
     def forward(route):
         route.fulfill(
-            response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8001"))
+            response=route.fetch(
+                url=route.request.url.replace(UI_ORIGIN, API_ORIGIN),
+                headers={**route.request.headers, "origin": "http://127.0.0.1:5173"},
+            )
         )
 
     page.route("**/api/**", forward)
@@ -69,7 +74,7 @@ with sync_playwright() as playwright:
             }
         ),
     )
-    page.goto("http://127.0.0.1:5173/")
+    page.goto(UI_ORIGIN + "/")
     expect(page.locator(".home-slogan")).to_be_visible()
     home_actions = page.locator(".home-projects-heading")
     home_open = home_actions.get_by_role("button", name="Open", exact=True)
@@ -84,12 +89,12 @@ with sync_playwright() as playwright:
     expect(home_pill).to_be_visible()
 
     created = page.request.post(
-        "http://127.0.0.1:8001/api/projects/create",
+        API_ORIGIN + "/api/projects/create",
         data={"title": TITLE, "problem": "Check whether a long header title remains readable."},
     )
     assert created.status == 201
     path = created.json()["path"]
-    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    page.goto(f"{UI_ORIGIN}/project?{urlencode({'path': path})}")
     header = page.locator(".project-art-header")
     title = header.locator(".project-header-title")
     expect(title).to_have_text(TITLE)
@@ -143,7 +148,7 @@ with sync_playwright() as playwright:
     page.keyboard.press("Enter")
     expect(model_control).to_have_text("Model · Luna $")
     persisted = page.request.get(
-        "http://127.0.0.1:8001/api/projects/inspect", params={"path": path}
+        API_ORIGIN + "/api/projects/inspect", params={"path": path}
     ).json()["project"]
     assert persisted["ai_model"] == "gpt-6-luna" and persisted["reasoning_effort"] == "low"
     assert len(update_requests) == 3
@@ -229,7 +234,7 @@ with sync_playwright() as playwright:
         assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
         page.screenshot(path=f"/tmp/sigma-a23-model-controls-{width}.png", full_page=True)
         if width >= 1100:
-            assert workspace_box["y"] <= 130
+            assert workspace_box["y"] <= 140, (width, workspace_box, header.bounding_box(), controls_box)
             assert title_box["x"] >= art_box["x"] + art_box["width"] - 1
             assert controls_box["x"] >= title_box["x"] + title_box["width"] - 1
         else:

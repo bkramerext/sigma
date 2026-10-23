@@ -1,5 +1,24 @@
 # SIGMA status
 
+## T20 project-header LaTeX shortcut reconciliation
+
+Reconciled the existing direct LaTeX paper action with the current project
+header. Its TeX wordmark follows Project Download in the Project pane action row
+and precedes Project Settings, using the existing compact copper icon-control
+style. The four Model, Google, Thinking, and ChatGPT pills retain their existing
+2×2 grid and compact header geometry. Closing direct paper authoring restores
+focus to the shortcut; the Export Project authoring route still returns to its
+export options.
+
+Validation: `./sigma test` passed (lifecycle/API/workflow checks, Ruff, Pyright,
+frontend typecheck and production build). Real Chrome A20 paper workflow passed
+using the isolated provider fixture, including Project Download/TeX/Settings
+order at 1440 and 390 pixels, keyboard activation and focus return, and the
+existing Export Project path. The project-header check passed at 1280, 1100,
+700, 390, and 320 pixels with no horizontal overflow. Screenshots were inspected
+at desktop and mobile widths. No paid provider call was made. PR #10 remains
+open for review.
+
 ## T25: Outcome visual hierarchy
 
 Replaced the two-column session presentation with one vertical reading flow.

@@ -83,7 +83,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | Live cross-strategy research validation | Open (T17.8) |
 | Formal Lean proof verification | Future, not implemented |
 | LaTeX paper export workflow | **Done** (T20; [PR #5](https://github.com/bkramerext/sigma/pull/5)) |
-| Separate project-header LaTeX shortcut | **Open PR** ([PR #10](https://github.com/bkramerext/sigma/pull/10)); not yet merged |
+| Separate project-header LaTeX shortcut | **Reconciled; ready for review** ([PR #10](https://github.com/bkramerext/sigma/pull/10)); not yet merged |
 
 ## Reported gaps and follow-up ownership
 

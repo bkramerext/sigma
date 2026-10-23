@@ -53,6 +53,49 @@ with sync_playwright() as playwright:
     assert record["research_sessions"][0]["artifacts"]
     assert "R(n)" in json.dumps(record["research_sessions"][0]["artifacts"], ensure_ascii=False)
 
+    # The copper TeX wordmark follows Project Download and opens paper authoring directly.
+    latex_button = page.get_by_role("button", name="LaTeX research paper", exact=True)
+    expect(latex_button).to_be_visible()
+    assert latex_button.evaluate("element => getComputedStyle(element).color") == "rgb(228, 181, 124)"
+
+    def assert_project_actions():
+        page.evaluate("() => document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))")
+        actions = page.locator(".project-pane-actions")
+        expect(actions.locator(".project-latex-button")).to_have_count(1)
+        action_buttons = actions.get_by_role("button")
+        expect(action_buttons.nth(0)).to_have_attribute("aria-label", "Export project")
+        expect(action_buttons.nth(1)).to_have_attribute("aria-label", "LaTeX research paper")
+        expect(action_buttons.nth(2)).to_have_attribute("aria-label", "Project settings")
+        action_boxes = actions.evaluate("e => [...e.children].map(b => { const r = b.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })")
+        export_box, latex_box, settings_box = action_boxes
+        assert abs(latex_box["y"] + latex_box["height"] / 2 - export_box["y"] - export_box["height"] / 2) <= 3, (export_box, latex_box, settings_box)
+        assert export_box["x"] + export_box["width"] <= latex_box["x"], (export_box, latex_box)
+        assert latex_box["x"] + latex_box["width"] <= settings_box["x"], (latex_box, settings_box)
+
+    assert_project_actions()
+    page.screenshot(path="/tmp/sigma-t20-project-download-desktop.png", full_page=True)
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.evaluate("window.scrollTo(0, 0)")
+    assert_project_actions()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.screenshot(path="/tmp/sigma-t20-project-download-mobile.png", full_page=True)
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    latex_button.click()
+    direct_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(direct_dialog).to_be_visible()
+    expect(page.get_by_role("dialog", name="Export Project")).to_be_hidden()
+    direct_dialog.get_by_role("button", name="Close", exact=True).click()
+    expect(direct_dialog).to_be_hidden()
+    expect(latex_button).to_be_focused()
+
+    latex_button.focus()
+    page.keyboard.press("Enter")
+    expect(direct_dialog).to_be_visible()
+    direct_dialog.get_by_role("button", name="Close", exact=True).click()
+    expect(direct_dialog).to_be_hidden()
+    expect(latex_button).to_be_focused()
+
+    # Existing export authoring route remains compatible with saved filename choices.
     expect(page.get_by_role("button", name="Author AI paper", exact=True)).to_have_count(0)
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
@@ -141,6 +184,8 @@ with sync_playwright() as playwright:
     expect(page.locator("body")).not_to_contain_text("internal server error")
 
     page.set_viewport_size({"width": 390, "height": 844})
+    assert_project_actions()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     box = dialog.bounding_box()
     assert box and box["x"] >= 0 and box["y"] >= 0
     assert box["x"] + box["width"] <= 390 and box["y"] + box["height"] <= 844
@@ -167,5 +212,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS real Chrome A20: saved evidence, Export Project authoring entry, remembered export choices, traceable claims, durable version and compiled PDF."
+    "PASS real Chrome A20: copper TeX Project Download action, keyboard activation, Export Project compatibility, saved evidence, traceable claims, durable version and compiled PDF."
 )

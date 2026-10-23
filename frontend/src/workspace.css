@@ -268,3 +268,11 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-chatgpt-signin > summary [role="status"] { min-width: 0; white-space: normal; text-align: center; }
   .workspace-page .project-google-placeholder { min-width: 0; padding-inline: 4px; font-size: 9px; }
 }
+
+/* Compact TeX wordmark alongside the Project pane's existing export actions. */
+.workspace-page .project-pane-actions .text-view-icon.project-latex-button:not(:disabled) { color: #e4b57c; }
+.workspace-page .project-pane-actions .text-view-icon.project-latex-button { width: 42px; min-width: 42px; }
+.workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
+.workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 20px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
+.workspace-page .latex-raised-a { display: inline-block; font-size: .71em; transform: translateY(-.35em); margin-left: -.11em; margin-right: -.08em; }
+.workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
