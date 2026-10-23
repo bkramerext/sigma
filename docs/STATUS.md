@@ -33,6 +33,22 @@ evaluation. I did not run any API-key-billed call.
   recomputes the coordinator summary after final branch statuses and budget
   reasons are applied; the regression requires a terminal branch never to
   advertise `continue` or `revise`.
+- A separate adversarial review found three lifecycle gaps beyond provider
+  timeouts: a wave-level preflight exception could be returned as a branch
+  result and leave the portfolio spinning; stop/pause could leave queued
+  branches and a stale coordinator snapshot; and resume after duration/call
+  exhaustion could end only the parent session. Wave failures now terminate
+  through the session failure path. Stop/pause reconcile every queued/running
+  branch and return the persisted post-cancellation state. Resume-limit exits
+  terminalize eligible branches and refresh outcome, attribution, and
+  coordinator summaries. Deterministic regressions exercise all three cases,
+  including three in-flight workers plus a fourth queued strategy.
+- Model/account preflight exceptions and hangs now pause the session before
+  dispatching a provider call. A bounded 30-second preflight timeout is
+  separate from the 60-second model-call timeout. A deterministic recovery test
+  forces a preflight timeout, verifies zero calls were charged, then resumes and
+  completes one full Investigator/Skeptic cycle.
+- Corrected the ladder documentation count: it has five runnable samples.
 - Added the run protocol and scoring rubric in
   [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact
   finite checks in `tests/research_ladder.py` validate example arithmetic only;
@@ -104,6 +120,10 @@ mathematical truth.
   production build. The ladder check confirmed five independent sample copies,
   answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
   checks; its printed note explicitly limits those checks to finite examples.
+- An additional adversarial lifecycle pass added preflight-failure, preflight
+  timeout and recovery, queued branch stop, and duration/call-limit resume regressions. The final full-suite
+  `./sigma test` passed on 2026-10-22, including Ruff check/format, Pyright
+  (zero errors), frontend typecheck, and the production Vite build.
 - Real Chrome `browser_checks/a17_research.py` passed against a local provider
   fixture at desktop (1440px) and mobile (390px), including multi-strategy
   selection, stop during provider work, resume, and the coordinator panel. I

@@ -1,7 +1,7 @@
 # Riemann Hypothesis research ladder
 
 This is a staged capability exercise, not evidence that a model can solve the
-Riemann Hypothesis. Its four runnable entries appear in SIGMA's Samples list:
+Riemann Hypothesis. Its five runnable entries appear in SIGMA's Samples list:
 
 | Stage | Sample | Difficulty | Research skill under examination |
 |---|---|---:|---|
