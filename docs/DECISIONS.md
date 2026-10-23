@@ -22,7 +22,7 @@
 
 ## Navigation and interaction
 
-Home `/` launches projects; `/project?path=...` is the research workspace. Strategy creation persists through shared services. Future commands use native nested disclosures with disabled controls, not fake operations. See [design note](asn3-design.md).
+Home `/` launches projects; `/project?path=...` is the research workspace. Strategy creation persists through shared services. Future commands use native nested disclosures with disabled controls, not fake operations. See [design note](../tickets/t3-design.md).
 
 
 ## Manual strategy changes
@@ -256,7 +256,7 @@ fields; key mode retains bounded non-streaming Responses. Both use reviewed
 models/efforts, immutable request snapshots and common structured validation.
 Limits/outages/unsupported capability errors never retry or change billing.
 The exact docs, storage/security limits and fixture-only verification boundary
-are recorded in [A8.2 security notes](asn8.2-security.md). Existing art stays fixed;
+are recorded in [A8.2 security notes](../tickets/t8.2-security.md). Existing art stays fixed;
 only the unmodified official ChatGPT sign-in mark is added. A9 remains separate.
 
 ## A9: application recents, exact example import and bounded dialogs
