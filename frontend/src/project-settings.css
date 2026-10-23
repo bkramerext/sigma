@@ -183,6 +183,20 @@
 .project-settings-dialog.export-project-dialog .export-footer { display: flex; flex: 0 0 auto; justify-content: flex-start; padding: 12px 24px 18px; border-top: 1px solid #35404a; }
 .project-settings-dialog.export-project-dialog .export-footer .settings-submit { min-width: 110px; padding: 11px 18px; border: 1px solid #dfb476; border-radius: 5px; color: #1e1409; background: linear-gradient(112deg, #b98149, #edc48b 52%, #bd874e); box-shadow: inset 0 1px 0 #ffe0ab80, 0 0 16px #aa74351a; font-weight: 600; }
 .project-settings-dialog.export-project-dialog .export-footer .settings-submit:hover:not(:disabled) { background: linear-gradient(112deg, #d09a61, #f5d4a0 52%, #ce9a60); }
+
+.project-settings-dialog.ai-paper-dialog { width: min(880px, calc(100vw - 28px)); max-height: min(90dvh, 900px); }
+.project-settings-dialog.ai-paper-dialog > .settings-body { overflow-y: auto; }
+.ai-paper-body { display: grid; gap: 12px; }
+.ai-paper-body > p { margin: 0; }
+.ai-paper-body .ai-paper-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ai-paper-body select { width: 100%; }
+.ai-paper-preview { border-top: 1px solid #35404a; padding-top: 16px; color: #e6e0d7; line-height: 1.6; }
+.ai-paper-preview h3 { margin: 0 0 12px; color: #f0cfaa; font: 600 23px/1.25 Georgia, serif; }
+.ai-paper-preview h4 { margin: 20px 0 8px; color: #e4bd8b; font: 600 17px/1.35 Georgia, serif; }
+.ai-paper-preview p { margin: 8px 0; }
+.ai-paper-preview ul { padding-left: 22px; }
+.ai-paper-preview .settings-hint { overflow-wrap: anywhere; }
+.ai-paper-warning { border-left: 3px solid #d4a16a; padding: 7px 10px; background: #d4a16a12; }
 @media (max-width: 560px) {
   .project-settings-dialog.export-project-dialog .settings-header { gap: 10px; padding: 16px 18px 12px; }
   .project-settings-dialog.export-project-dialog .settings-header h2 { width: auto; font-size: 22px; }

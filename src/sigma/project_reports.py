@@ -121,12 +121,13 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
                 f"Argument: {_value(review.get('argument_summary'))}",
                 f"Assumptions reviewed: {'; '.join(_items(review.get('assumptions'))) or 'Not recorded'}",
                 f"Proof obligations: {'; '.join(_items(review.get('proof_obligations'))) or 'Not recorded'}",
-                f"Verification status: {_value(review.get('verification_status'))}",
                 f"Solution evidence references: {'; '.join(_items(review.get('basis_artifact_ids'))) or 'Not recorded'}",
                 f"Unresolved objections: {'; '.join(_items(review.get('unresolved_objections'))) or 'None recorded'}",
                 f"Resolved review notes: {'; '.join(_items(review.get('resolved_objections'))) or 'None recorded'}",
                 "",
             ]
+            if review.get("verification_status", "unknown") != "unknown":
+                lines.insert(-1, f"Verification status: {_value(review['verification_status'])}")
         assessments = _rows(session.get("strategy_assessments"))
         if assessments:
             lines += ["Strategy Assessments", "--------------------"]

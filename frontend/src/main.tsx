@@ -94,7 +94,7 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
     lines.push('', '### Solution review', '', `**Solution claim:** ${review.claim || 'No solution claim recorded.'}`, '', `**Argument:** ${review.argument_summary || 'No argument summary recorded.'}`, '', `**Assumptions:** ${review.assumptions?.join(' · ') || 'None recorded'}`, '', `**Proof obligations:** ${review.proof_obligations?.join(' · ') || 'None recorded'}`, '', `**Evidence:** ${outcomeArtifactReferences(review.basis_artifact_ids, session)}`);
     if (review.resolved_objections?.length) lines.push('', `**Resolved review notes:** ${review.resolved_objections.join(' · ')}`);
     if (review.unresolved_objections?.length) lines.push('', `**Unresolved objections:** ${review.unresolved_objections.join(' · ')}`);
-    lines.push('', `**Verification:** ${review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}`);
+    if (review.verification_status && review.verification_status !== 'unknown') lines.push('', `**Verification:** ${review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}`);
   }
   if (outcome.caveats.length) lines.push('', '### Caveats', '', ...outcome.caveats.map(caveat => `- ${caveat}`));
   return lines.join('\n');
@@ -213,7 +213,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-view-header"><p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p>{outcomeFormatToggle}</div>
       {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-content"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>
-      {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(session.outcome.solution_review.basis_artifact_ids, session)}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}{!!session.outcome.solution_review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {session.outcome.solution_review.unresolved_objections.join(' · ')}</p>}<p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p></div>}
+      {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(session.outcome.solution_review.basis_artifact_ids, session)}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}{!!session.outcome.solution_review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {session.outcome.solution_review.unresolved_objections.join(' · ')}</p>}{session.outcome.solution_review.verification_status && session.outcome.solution_review.verification_status !== 'unknown' && <p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p>}</div>}
       {!!session.outcome.caveats.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
     </section>
     {!!session.strategy_runs && session.strategy_runs.length > 1 && <section className="research-strategy-activity" aria-label="Live strategy activity"><h3>Strategy activity</h3><ul>{session.strategy_runs.map(branch => <li key={branch.strategy_id} className={`strategy-run-${branch.status}`}><p><strong>{branch.strategy_title}</strong> · {branch.status} · {branch.current_action}</p><p>Cycle {branch.cycle} · {branch.calls_used} calls · {branch.artifacts.length} saved findings</p>{!!branch.current_question && <p><strong>Current question:</strong> {branch.current_question}</p>}{!!branch.reason && <p><strong>Coordinator rationale:</strong> {branch.reason}</p>}</li>)}</ul></section>}
@@ -509,8 +509,9 @@ function formatDuration(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function useDocumentScrollLock() {
+function useDocumentScrollLock(enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     const root = document.documentElement;
     const body = document.body;
     const previous = {
@@ -529,11 +530,11 @@ function useDocumentScrollLock() {
       body.style.overflow = previous.bodyOverflow;
       body.style.overscrollBehavior = previous.bodyOverscroll;
     };
-  }, []);
+  }, [enabled]);
 }
 
-function ProjectExportDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
-  useDocumentScrollLock();
+function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true }: { path: string; title: string; onCancel: () => void; onAuthorPaper?: (options: { filename: string; openInTab: boolean }) => void; open?: boolean }) {
+  useDocumentScrollLock(open);
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -545,7 +546,14 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { dialog.current?.showModal(); input.current?.focus(); input.current?.select(); }, []);
+  useEffect(() => {
+    if (!dialog.current) return;
+    if (open && !dialog.current.open) {
+      dialog.current.showModal();
+      input.current?.focus();
+      input.current?.select();
+    } else if (!open && dialog.current.open) dialog.current.close();
+  }, [open]);
   function cancel() { if (!submitting.current) onCancel(); }
   async function exportFile(event: FormEvent) {
     event.preventDefault();
@@ -556,6 +564,7 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
     }
+    if (exportType === 'latex' && onAuthorPaper) { onAuthorPaper({ filename: stem, openInTab }); return; }
     const extension = exportType === 'audit' ? 'json' : reportFormat;
     const downloadName = `${stem}.${extension}`;
     const opened = openInTab ? window.open('about:blank', '_blank') : null;
@@ -631,9 +640,116 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
         {error && <p className="error" role="alert">{error}</p>}
       </div>
       <footer className="export-footer">
-        <button type="submit" className="settings-submit" title="Download the selected project export" disabled={busy}>{busy ? 'Downloading…' : 'Download'}</button>
+        <button type="submit" className="settings-submit" title={exportType === 'latex' && onAuthorPaper ? 'Continue to author the LaTeX paper' : 'Download the selected project export'} disabled={busy}>{busy ? 'Downloading…' : exportType === 'latex' && onAuthorPaper ? 'Continue' : 'Download'}</button>
       </footer>
     </form>
+  </dialog>;
+}
+
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
+type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
+
+function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
+  const ai = useAI();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const [papers, setPapers] = useState<PaperSummary[]>([]);
+  const [selected, setSelected] = useState<PaperRecord | null>(null);
+  const [binding, setBinding] = useState('');
+  const [model, setModel] = useState('');
+  const [mode, setMode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { dialog.current?.showModal(); void refresh(); return () => request.current?.abort(); }, []);
+  async function refresh(keepId?: string) {
+    setLoading(true);
+    try {
+      const query = new URLSearchParams({ path });
+      const [listResponse, configResponse] = await Promise.all([
+        fetch(`/api/projects/papers?${query}`, { cache: 'no-store' }),
+        fetch(`/api/projects/proposals/config?${query}`, { cache: 'no-store' }),
+      ]);
+      const list = await listResponse.json(); const config = await configResponse.json();
+      if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
+      setPapers(list.papers as PaperSummary[]);
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); }
+      else { setBinding(config.binding); setModel(config.model); setMode(config.mode); }
+      const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
+      if (nextId) {
+        const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store' });
+        const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
+        setSelected(record as PaperRecord);
+      } else setSelected(null);
+      setError(!configResponse.ok || !config.available ? (config.message ?? 'Connect an eligible AI provider to author a paper.') : '');
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setLoading(false); }
+  }
+  async function openPaper(id: string) {
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
+      setSelected(record as PaperRecord); setError('');
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function generatePaper() {
+    if (busy || !binding) return;
+    const controller = new AbortController(); request.current = controller;
+    setBusy(true); setPhase('Freezing the complete evidence snapshot…'); setError('');
+    const finishProvider = beginProviderRequest('ai-paper');
+    const timer = window.setTimeout(() => setPhase('Authoring, validating evidence references, and compiling PDF…'), 350);
+    try {
+      const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }) });
+      const result = await response.json().catch(() => null);
+      if (!result) throw new Error(`Paper generation failed with an invalid server response (${response.status}). No version was published.`);
+      if (!response.ok) throw new Error(result.error ?? 'Paper generation failed; no version was published.');
+      setPhase('Saved a new immutable paper version.');
+      await refresh(result.paper_id);
+    } catch (cause) {
+      if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+      else setPhase('Generation cancelled. No new version was published.');
+    } finally { window.clearTimeout(timer); finishProvider(); if (request.current === controller) request.current = null; setBusy(false); }
+  }
+  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
+  return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Back to Export Project</button></div></header>
+    <div className="settings-body ai-paper-body">
+      <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
+      <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
+      <p className="settings-hint"><strong>Limits:</strong> complete evidence snapshot up to 100,000 bytes; larger snapshots are rejected without omitting evidence. One provider call, up to 12,000 output tokens and a 1 MB response cap in API-key mode, a 4 MB streamed-response cap in ChatGPT-plan mode, and a 120-second timeout. Up to 50 saved versions, each capped at 12 MB including its PDF.</p>
+      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
+      {(busy || phase.startsWith('Generation cancelled.')) && <p role="status" aria-live="polite">{phase}</p>}
+      {error && <p role="alert" className="error">{error}</p>}
+      {loading && <p>Loading saved versions…</p>}
+      {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}
+      {!loading && papers.length > 0 && <select id="ai-paper-version" value={selected?.paper_id ?? ''} disabled={busy} onChange={event => void openPaper(event.target.value)}>{papers.map(item => <option key={item.paper_id} value={item.paper_id}>{item.title} · {dateLabel(item.created_at)}</option>)}</select>}
+      {selected && <article className="ai-paper-preview">
+        <h3>{selected.draft.title}</h3>
+        <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
+        <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
+        <h4>Problem framing</h4>{selected.draft.problem_framing.map((text, index) => <p key={`framing-${index}`}>{text}</p>)}
+        <p className="settings-hint">Claim links: {selected.draft.problem_framing_claim_ids.join(', ') || 'None'}</p>
+        <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
+        <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
+        <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
+        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}</p>
+        {selected.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
+        {(selected.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
+        {selected.draft.sections.map(section => <section key={section.heading}><h4>{section.heading}</h4>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}
+        <h4>Claim register</h4>{selected.draft.claims.map(claim => <section key={claim.id}><p><strong>{claim.id} · {claim.status}:</strong> {claim.statement}</p><p>{claim.reasoning}</p><p className="settings-hint">Evidence: {claim.evidence_refs.join(', ') || 'No source reference'}</p></section>)}
+        <h4>Limitations</h4><ul>{selected.draft.limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        {selected.draft.open_obligations.length > 0 && <><h4>Open obligations</h4><ul>{selected.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
+        {!!selected.obligation_reconciliation?.length && <><h4>Frozen obligation reconciliation</h4><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the saved evidence source and field.</p><ul>{selected.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
+        <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
+        <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
+        {selected.pdf_available && (openInTab
+          ? <a className="text-view-link" href={pdfUrl} target="_blank" rel="noopener noreferrer">Open compiled PDF in new tab</a>
+          : <a className="text-view-link" href={pdfUrl} download={downloadFilename}>Download compiled PDF</a>)}
+        {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
+      </article>}
+    </div>
   </dialog>;
 }
 
@@ -1690,6 +1806,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [manualDraft, setManualDraft] = useState<{ title: string; approach: string; summary?: string }>();
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [paperOpen, setPaperOpen] = useState(false);
+  const [paperExportOptions, setPaperExportOptions] = useState({ filename: 'sigma-paper.pdf', openInTab: false });
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -1961,7 +2079,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>}
+    <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={options => { setPaperExportOptions({ ...options, filename: options.filename.endsWith('.pdf') ? options.filename : `${options.filename}.pdf` }); setExportOpen(false); setPaperOpen(true); }}/>
+    {paperOpen && (
+      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename={paperExportOptions.filename} openInTab={paperExportOptions.openInTab} onCancel={() => {
+        setPaperOpen(false);
+        setExportOpen(true);
+      }} />
+    )}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd>{project.difficulty && <><dt>Difficulty</dt><dd>{difficultyLabels[project.difficulty]}</dd></>}<dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>

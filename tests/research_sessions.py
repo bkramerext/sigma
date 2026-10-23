@@ -731,6 +731,18 @@ def test_outcome_classification():
         }
     )
     assert partial["assessment"] == "mixed" and "unsupported" in " ".join(partial["caveats"])
+    legacy_review = {
+        "status": "partial",
+        "claim": "Historical review without a verification status.",
+    }
+    legacy_outcome = research_sessions._outcome(
+        {
+            "status": "ended",
+            "artifacts": [{**artifact, "objective_review": legacy_review}],
+        }
+    )
+    assert legacy_outcome["solution_review"]["verification_status"] == "unknown"
+    assert "verification_status" not in legacy_review  # derived default does not mutate evidence
     # A reported assertion without a completed evidence review cannot become success.
     unsupported = research_sessions._outcome(
         {

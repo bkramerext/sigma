@@ -2226,3 +2226,153 @@ The Project details & history section is controlled by
 `SHOW_PROJECT_DETAILS_AND_HISTORY` in the frontend runtime and is currently
 hidden (`false`). Frontend typecheck and production build passed after this
 flag was added.
+
+## A20 — AI-authored research paper (2026-10-22)
+
+Implemented on `feature/a20-ai-authored-paper` for review; no merge performed.
+The existing Project export action and **Academic paper using LaTeX** option open
+the versioned AI-authored paper workflow; no additional project action or icon
+was added. Project Audit and deterministic Research Report renderers and routes
+retain their existing output semantics. The pipeline is in
+`src/sigma/papers.py`; API routes list, generate, read, and download paper
+versions. The visible workflow states the selected project model and provider
+mode, one-call limit, API-key billing disclosure, progress, cancellation, saved
+version history, complete structured preview, evidence references, and PDF
+download. Returning to Export Project preserves its selected report type,
+filename, and tab preference; the filename and tab preference also control the
+compiled paper PDF.
+
+Each request takes the full current project/strategy/session/artifact/agentic-run
+snapshot and stable source IDs, computes a SHA-256 fingerprint, and sends the
+complete package or refuses it above 100,000 bytes; repeated nested strategy,
+artifact, and step arrays are represented by their own source records rather
+than duplicated in parent records. Evidence is never silently truncated. The
+provider returns a strict structured draft with claims, evidence
+references, claim status, claim-to-narrative links for the abstract/framing/
+methods/sections/conclusions, unresolved obligations, and author self-review
+warnings. The validator rejects unknown source/claim IDs and flags missing
+references, missing narrative links, explicit counterexample/contradiction
+language, cited unverified/incomplete evidence labeled established, omitted
+saved obligations, and citation-like external references. Nuanced contradiction
+review remains model self-review, is labeled as such, and is not independent
+mathematical verification. No external bibliography is generated.
+
+API-key mode uses one Responses call with `store:false`, a 12,000-token output
+ceiling, a 120-second request timeout, and a 1 MB response cap. ChatGPT-plan
+mode uses the completed-stream validator with a separate 4 MB cap; no output
+token ceiling is claimed for that transport. Disconnect cancels the request;
+PDF compilation runs off the event loop through the existing bounded Tectonic
+path, and a cancelled or failed compile publishes no version. The controlled
+renderer escapes prose and permits only a small math-command allowlist; it never
+executes model-supplied document LaTeX. Per-project sidecars under private
+`papers/` storage retain up to 50 immutable versions with the exact source
+snapshot, structured draft, provider/model/effort, timestamp, validation notes,
+PDF hash/size, and compiled PDF. Regeneration adds a new record; project edits
+do not rewrite old snapshots. The project audit/history and research-session
+records are not mutated. Removing a project directory also removes its nested
+paper versions.
+
+Verification performed:
+
+- `./sigma test` passed the full suite, including the new `tests/papers.py`,
+  Ruff check/format, Pyright, frontend typecheck, and production build. The
+  existing non-failing Starlette/httpx deprecation warning remains.
+- `uv run --with playwright python browser_checks/a20_paper.py` passed in real
+  Chrome against the isolated provider fixture. It opened the Maximum Regions
+  Sample copy, generated and inspected a saved research session, authored from
+  that snapshot, checked claim/source linkage and immutability metadata, and
+  retrieved the compiled PDF through the browser. No live provider call was
+  made.
+- The actual fixture PDF was rendered with macOS Quick Look and visually
+  inspected. Its title, abstract, section hierarchy, formula and evidence-link
+  markers were legible; the result was labeled unverified. Captures:
+  `/tmp/sigma-a20-paper-preview.png`, `/tmp/sigma-a20-paper-mobile.png`, and
+  `/tmp/sigma-a20-paper.pdf.png`.
+- The isolated unresolved-project fixture produced an exploratory note with no
+  theorem-proof claim. Adversarial unit fixtures cover invented source IDs,
+  unverified/incomplete cited evidence labeled established, contradiction
+  language, citation-like external text, and missing saved obligations.
+- The normal SIGMA ports were occupied by an unrelated/unverifiable service;
+  `./sigma start` correctly refused to replace it. Browser checks used the
+  current Vite app on port 5174 and fixture API on 8012, leaving the existing
+  service untouched. The known stale A17 browser assertions were not rerun; the
+  source-controlled A17/API/export regressions passed in `./sigma test`.
+
+### ChatGPT-plan stream-limit follow-up
+
+After the user reported a Maximum Regions generation failure, traced the exact
+message to the shared ChatGPT SSE parser, which had applied its 1 MB research
+proposal cap and emitted “no strategy was saved” for paper generation. The
+paper route now supplies its own bounded 4 MB streamed-response allowance and
+a paper-specific overflow message; API-key JSON remains capped at 1 MB. The
+paper dialog shows both mode-specific response limits. A synthetic 1.1 MB SSE
+regression confirms the paper stream completes under its configured cap and
+that overflow at the smaller cap reports a paper error without strategy
+wording.
+
+After this follow-up, `./sigma test` passed the full suite, Ruff, Pyright,
+frontend typecheck, and production build. Real Chrome A20 browser check passed
+on Vite 5174 with isolated provider fixture 8012, including the visible limits,
+Maximum Regions Sample workflow, remembered export options, and PDF download.
+The configured local `projects/` contains no Maximum Regions user project, so
+the user's exact saved project and a live ChatGPT-plan provider run were not
+available to verify. The fixture proves the UI and bounded parser behavior,
+not real-provider compatibility; that remains unverified.
+
+No bounded real-provider trial was run. The user's saved Maximum Regions
+project is absent from the configured local project root, and no paid API call
+was made without explicit billing approval. Author prose quality,
+provider-specific output compatibility, and real-provider timeout/rate-limit
+behavior therefore remain unverified. The A17.8 core-system acceptance gate
+remains open. Recommendation: review A20 as a
+separate capability, then verify compatibility against the accepted integrated
+A17 work on the latest `main` before any merge. Do not mark A20 complete until
+human review and an authorized quality trial or an explicit decision to leave
+that criterion open.
+
+### PR #5 review follow-up
+
+Integrated the current `main` into `feature/a20-ai-authored-paper`, retaining
+the A20 legacy-report verification-status behavior and the A23 optional
+difficulty display. No merge into `main` was performed. Corrected PDF prose math
+handling for Unicode superscripts and common mathematical commands, including
+claim statements and reasoning. Frozen open obligations are now deduplicated
+with their source/field references and reconciled against the author's list;
+unlisted items are explicitly not presumed resolved. The complete reconciliation
+is persisted in each new paper record and shown in both the PDF and saved-paper
+preview. Older records remain readable without this field.
+
+Added recovery coverage for provider rejection and malformed JSON in the real
+Chrome workflow; a partial ChatGPT stream is rejected by the paper adapter, and
+an ASGI disconnect cancels in-flight authoring without publishing a version or
+holding the generation gate. The Maximum Regions browser fixture deliberately
+contains twelve frozen proof obligations while the paper lists none, and checks
+that all twelve remain visible and source-linked in the reconciliation.
+
+After integrating latest `main` and the review fixes, `./sigma test` passed the
+full suite, including Ruff, Pyright, frontend typecheck, and production build.
+Real Chrome A20 workflow passed against the isolated provider fixture, including
+rejection, malformed-response recovery, all twelve obligation records, and PDF
+retrieval. No live provider request was made. A17.8 remains an acceptance gate;
+A20 is not merged pending compatibility review against accepted A17 work.
+
+### Mathematics paper structure and exposition follow-up
+
+The paper prompt now detects `investigation_type=mathematical` and requires a
+mathematics-paper organization: notation and definitions, a precise result
+statement, separate upper-bound and attainment arguments for extremal results,
+all nontrivial proof steps, edge cases, and explicit verification status. The
+PDF renderer uses math-appropriate Introduction, Evidence and scope,
+Verification status and limitations, and Conclusion headings, with the
+claim/evidence register after the conclusion. The safe math allowlist now
+renders `\mathcal` notation. The Maximum Regions browser fixture demonstrates
+a detailed convex-cell lemma, incremental bound, explicit attaining family,
+recurrence, and base case; browser assertions check these explanations, and
+the isolated fixture checks that the math-specific instructions reach the
+provider.
+
+`./sigma test` and the real Chrome A20 workflow passed after these changes.
+The fixture PDF was opened and visually inspected; its notation and section
+layout render cleanly. `/tmp/sigma-a20-mathematics-paper.pdf` is the improved
+fixture artifact. This is not a live-model paper, so actual provider prose
+quality remains unverified.
