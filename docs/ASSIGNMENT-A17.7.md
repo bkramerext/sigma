@@ -81,14 +81,13 @@ The observed dialog has **Create** and **Cancel** in the header, a wide Format d
 4. Add focused regression tests for every issue above. Visual/interaction defects require **real Chrome Playwright checks with geometry, scroll, hover, focus and/or screenshots**, not only mocked component assertions. Include a viewport comparable to the user's narrow research pane, plus desktop and mobile.
 5. Save before/after screenshots for project header, tooltip/icon row, Settings Limits at bottom, session card, and Export Project dialog. Review screenshots, not merely their successful capture. Report any remaining mismatches honestly.
 
-## Completion gate and A17.6 verification
+## Completion gate (UI and isolation only)
 
-**Do not treat A17.7 as a substitute for the final A17.6 verification.** A17.6 implementation and its recorded 2026-10-22 tests/live evaluation are in `docs/STATUS.md`, but the human has explicitly reserved a final verification pass before declaring the A17 sequence complete and before parallelizing A18/A19/A22.
+A17.7 closes the ten UI/test-isolation defects. **A17.8 owns the deferred agentic-quality and integrated A17.6 acceptance work**; do not conflate them with A17.7's UI completion.
 
 After implementing A17.7:
 
-1. Run `./sigma test` (including Ruff, Pyright, frontend typecheck/build), relevant API/unit tests, and actual Chrome browser checks with a mock provider.
-2. Perform the **remaining A17.6 end-to-end verification** against the integrated A17.6 + A17.7 build: Maximum Regions completed-proof outcome; unverified-candidate caveat; lifecycle status distinct from outcome; Strategy Assessments and evidence references; disabled/unused eligibility; reload/history/export consistency; no-next-path success; stop/resume, budget and recoverable errors. Compare to `docs/ASSIGNMENT-A17.6.md` and record any gaps.
-3. Inspect the final browser UI against all ten A17.7 issues, at representative pane/viewport sizes, with screenshots and interaction tests.
-4. Update `docs/STATUS.md` with exact commands, test outcomes, screenshot paths, unverified items and remaining defects. **Do not mark A17.7 or the final A17.6 verification complete until these checks actually run and pass.**
-5. Report completion to the human for review. **Only after A17 is accepted** should the three independent Codex branches for A18 (Agentic Quality), A19 (Python Sandbox) and A22 (Cloud Deployment) begin.
+1. Run `./sigma test` (including Ruff, Pyright, frontend typecheck/build), relevant API/unit tests, and real Chrome UI checks with a mock provider.
+2. Inspect the final browser UI against all ten A17.7 issues, at representative pane/viewport sizes, with screenshots and interaction tests. Ensure changes do not regress the already implemented A17.6 contracts, but **do not conduct the deferred real-agent quality evaluation here**.
+3. Update `docs/STATUS.md` with exact commands, outcomes, screenshot paths, unverified items and remaining defects. Do not mark A17.7 complete until its checks actually run and pass.
+4. Report A17.7 for human review, then execute A17.8 before declaring the A17 sequence complete and starting A18/A19/A22.
