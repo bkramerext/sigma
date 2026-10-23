@@ -7,7 +7,7 @@ Integrated base: origin/main cd85552a3a0ec9f947f95254c70c7267044d4d2f
 Integrated merge commit: 7be80e5 (clean merge of seven newer main commits)
 Tested code head: 0fccdad57ef2167b3637268360300ec91a644a5b
 Three lint/format-only corrections to newly merged T39 files are included; no T39 behavior changed.
-PR head at metadata check: b01f1efbba4aba3a6849e97c7b4e50157df7e47a
+PR head at latest metadata check: e6589acdb328149f5c36c36be80e1011729415e0
 PR: https://github.com/bkramerext/sigma/pull/45
 
 Review findings reproduced and corrected
@@ -78,6 +78,6 @@ handling and fixture plumbing are verified; empirical live-model research
 quality is UNVERIFIED. Model-reported dispositions remain unverified. T17.8
 remains separate. PR #45 is open and pushed; do not self-merge. Final GitHub
 REST metadata at the head above reports `mergeable=true` and
-`mergeable_state=unstable`; the connector returned stale `mergeable=false`.
-GitHub compare reports 16 commits ahead, 0 behind, with current main as merge
+`mergeable_state=clean`; the connector returned stale `mergeable=false`.
+GitHub compare reports 17 commits ahead, 0 behind, with current main as merge
 base. The branch is conflict-free against the integrated base and R4R.

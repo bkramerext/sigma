@@ -4261,9 +4261,9 @@ at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
 The branch is integrated with the latest `main`. PR #42's
 `frontend/public/lean-logo.svg` and its CSS change are inherited from main; T37
 made no additional Lean-logo edits. GitHub REST confirmed PR #45
-`mergeable=true` (`mergeable_state=unstable`) at handoff head
-`b01f1efbba4aba3a6849e97c7b4e50157df7e47a`; the connector reported stale
-`mergeable=false`. The compare endpoint reports 16 commits ahead, 0 behind,
+`mergeable=true` (`mergeable_state=clean`) at handoff head
+`e6589acdb328149f5c36c36be80e1011729415e0`; the connector reported stale
+`mergeable=false`. The compare endpoint reports 17 commits ahead, 0 behind,
 with current main as the merge base. Metadata is recorded in the handoff file.
 
 Remaining limits: model-reported addressed/superseded/retracted statuses are
