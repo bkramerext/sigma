@@ -51,6 +51,10 @@ shared across the app.
 The T20.1 follow-up branch includes the current main additions for Arrival,
 Xenopus tail regeneration, and quantum chemistry samples.
 
+The Lean proof control is shown only for mathematical projects. A focused real
+Chrome check confirmed it is absent from Engineering and remains copper and
+disabled (coming soon) for Mathematics.
+
 Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
 320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
 `browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The A17

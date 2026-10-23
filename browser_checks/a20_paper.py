@@ -167,6 +167,15 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-t20-lean-copper-desktop.png", full_page=True)
     page.set_viewport_size({"width": 390, "height": 844})
     page.screenshot(path="/tmp/sigma-t20-lean-copper-mobile.png", full_page=True)
+    # The Lean action is only relevant to mathematical projects.
+    page.goto(UI_ORIGIN + "/")
+    samples_tab = page.get_by_role("tab", name="Samples", exact=True)
+    if samples_tab.get_attribute("aria-selected") != "true":
+        samples_tab.click()
+    page.locator(".sample-type-group").filter(has_text="Engineering").evaluate("element => { element.open = true; }")
+    page.locator(".sample-open").filter(has_text="Warp Drive Feasibility").click()
+    page.wait_for_url("**/project?*")
+    expect(page.locator(".project-lean-button")).to_have_count(0)
     page.goto(project_url)
     page.set_viewport_size({"width": 1440, "height": 1000})
     latex_button.click()

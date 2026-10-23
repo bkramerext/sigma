@@ -17,6 +17,9 @@ omit duplicate category details and use matching Inter 13px title styling;
 ordinary rows are regular weight and only the most recent Recent title is
 bold. The Open Project Cancel button follows the dialog title. Tooltip delay
 and hide-until-rehover behavior were also refined.
+The Lean proof control is shown only for mathematical projects; it remains a
+copper disabled (coming soon) action there and is hidden for other project
+types.
 
 Validation:
 - `./sigma test` passed, including Python checks, Ruff, Pyright, frontend
@@ -28,6 +31,8 @@ Validation:
   `browser_checks/a20_paper.py` passed.
 - A read-only Chrome style check confirmed Recent and Sample titles both use
   Inter 13px; standard rows are weight 400 and newest Recent is weight 700.
+- A focused real Chrome check confirmed Lean is hidden for Engineering and
+  remains copper and disabled for Mathematics.
 - `browser_checks/a17_research.py` was attempted but its isolated session ended
   at 0/30 provider calls, so its research-result assertions could not run.
 - No paid provider calls were made.
