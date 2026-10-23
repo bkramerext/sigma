@@ -1,0 +1,18 @@
+T22.2 handoff — Red
+
+Status: ready for review (R4R); not merged.
+Branch: cloud/t22-2-google-access-control
+Pull request: https://github.com/bkramerext/sigma/pull/37
+
+Implemented opt-in Google OIDC authentication and invitation-based access control for cloud-hosted SIGMA. Google ID tokens are signature- and claims-validated; access requires an exact email invitation, exact verified email domain, or configured bootstrap administrator. Sessions are opaque, server-side, expiring, and revalidated against current grants on protected API requests. Administrators can add and revoke access entries through the copper/dark Access Management UI. Google identity remains separate from local ChatGPT authorization and AI-provider billing. Cloud auth is disabled by default.
+
+The unauthorized-account flow displays “Access not yet granted” after valid Google authentication without authorization. It offers Explore Demo, a prefilled mailto invitation request to the configured administrator contact, and Use Another Account. It does not reveal access rules. `/demo` is only the no-workspace handoff; the curated read-only Demo remains parent T22 work. Private APIs remain protected for unauthorized identities.
+
+Validation completed:
+- `./sigma test` — passed, including deterministic no-network OIDC, grant/revocation, session, protected API, unauthorized-account, and invitation-request coverage; Ruff, Pyright (0 errors/warnings), frontend typecheck, and production build also passed.
+- `browser_checks/t22_access_denied.py` — passed in real Chrome at desktop and mobile sizes, covering denied-account copy, prefilled invitation mailto, account switching, and the `/demo` handoff without project or AI API calls.
+- No live Google or model-provider calls were made.
+
+T22.2 acceptance criteria were updated in place. No follow-up ticket was created. Explicit scope limits: no workspace migration or per-user storage isolation, complete guest Demo, durable job scheduling, or cloud deployment. Existing project files remain shared across authorized cloud users, so this auth change alone is not a multi-tenant deployment.
+
+The PR is open for coordinator review. Do not self-merge.
