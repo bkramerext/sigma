@@ -56,8 +56,9 @@ evaluation. I did not run any API-key-billed call.
   asks it to test that relation against both cited artifacts, and pending
   handoff targets take selection priority when the shared call budget cannot
   fund every branch. The Investigator instructions require an explicit
-  adopt/reject/unresolved judgment. Call steps record both artifact IDs, and
-  the resulting research artifact records the handoff it was prompted with.
+  adopt/reject/unresolved judgment. Each handoff has a stable ID; call steps
+  record the handoff ID and both artifact IDs, and the resulting research
+  artifact records the handoff it was prompted with.
 - A deterministic end-to-end regression produces a source finding in strategy
   A that cites strategy B's saved artifact, stops the session while B's next
   handoff preflight is blocked, then resumes. With only one complete cycle
@@ -66,6 +67,13 @@ evaluation. I did not run any API-key-billed call.
   resulting artifact retains the evidence link. This proves the orchestration
   changes B's prompt and survives stop/recovery; it does not prove a real model
   will make a sound or useful change in response.
+- Added a no-op control: an `unrelated` report creates no handoff and leaves the
+  target question unchanged. A reported contradiction with a stated integer vs
+  real-domain mismatch creates only a scoped challenge; it does not set the
+  target branch to refuted. The Investigator prompt explicitly requires a
+  domain/assumption check. This is a prompt-level guard, not a deterministic
+  semantic validator; real model rejection of a false transfer remains
+  unverified.
 - Corrected the ladder documentation count: it has five runnable samples.
 - Added the run protocol and scoring rubric in
   [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact

@@ -5,6 +5,7 @@ import json
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -1434,6 +1435,10 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
                     "directly examine its cited source and target artifacts"
                     in payload["instructions"]
                 )
+                assert (
+                    "compare the source and target assumptions and domains"
+                    in payload["instructions"]
+                )
                 assert strategy_id == target.id
                 assert len(context["peer_handoffs"]) == 1
                 handoff = context["peer_handoffs"][0]
@@ -1544,6 +1549,8 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
         source_artifact["id"],
         target_first_artifact["id"],
     ]
+    assert target_third_step["peer_handoff_ids"] == [pending[0]["handoff_id"]]
+    assert target_third["peer_handoffs_prompted"][0]["handoff_id"] == pending[0]["handoff_id"]
 
 
 async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_pool(path: Path):
@@ -2292,6 +2299,57 @@ def test_portfolio_requires_reciprocal_complement_and_surfaces_conflicts():
     assert decision["strategy_actions"][1]["action"] == "resolve_cross_strategy_conflict"
 
 
+def test_peer_handoff_noop_and_domain_mismatch_controls():
+    source_id, target_id = "source-strategy", "target-strategy"
+    source_artifact_id, target_artifact_id = "source-evidence", "target-evidence"
+    source_branch = {
+        "strategy_id": source_id,
+        "strategy_title": "Integer route",
+        "status": "queued",
+    }
+    target_branch: dict[str, Any] = {
+        "strategy_id": target_id,
+        "strategy_title": "Real-analysis route",
+        "status": "queued",
+        "current_question": "Continue the real-domain argument.",
+    }
+    source_artifact = {
+        "id": source_artifact_id,
+        "skeptic_output": {
+            "cross_strategy_relations": [
+                {
+                    "strategy_id": target_id,
+                    "artifact_id": target_artifact_id,
+                    "relation": "unrelated",
+                    "rationale": "The vocabulary overlaps but no shared claim is identified.",
+                }
+            ]
+        },
+    }
+    record = {"strategy_runs": [source_branch, target_branch], "artifacts": [source_artifact]}
+
+    research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
+    assert "pending_peer_handoffs" not in target_branch
+    assert target_branch["current_question"] == "Continue the real-domain argument."
+
+    source_artifact["skeptic_output"]["cross_strategy_relations"] = [
+        {
+            "strategy_id": target_id,
+            "artifact_id": target_artifact_id,
+            "relation": "contradicts",
+            "rationale": "This integer-only example may conflict, but the target states x is real and positive.",
+        }
+    ]
+    research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
+    handoff = target_branch["pending_peer_handoffs"][0]
+    assert handoff["source_artifact_id"] == source_artifact_id
+    assert handoff["target_artifact_id"] == target_artifact_id
+    assert "assumptions and domains match" in target_branch["current_question"]
+    # A reported contradiction queues a scoped challenge; it never declares the
+    # target branch refuted or changes its saved strategy state automatically.
+    assert target_branch["status"] == "queued"
+
+
 async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(path, "Second strategy", "Try another mechanism.").project.strategies[
@@ -2793,6 +2851,7 @@ def main():
             )
         )
         test_portfolio_requires_reciprocal_complement_and_surfaces_conflicts()
+        test_peer_handoff_noop_and_domain_mismatch_controls()
         asyncio.run(
             test_portfolio_budget_too_small_for_next_pair_is_finalized(
                 root / "portfolio-tight-budget.sigma"

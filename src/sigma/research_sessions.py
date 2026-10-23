@@ -452,7 +452,9 @@ INVESTIGATOR_GUIDANCE = (
     "supplied, directly examine its cited source and target artifacts, test whether the finding "
     "changes this approach, and make the next step reflect that examination. Explicitly say what "
     "you adopt, reject, or leave unresolved; cite the supplied artifact IDs and do not treat the "
-    "peer claim as verified."
+    "peer claim as verified. Before transferring a contradiction or bound, compare the source and "
+    "target assumptions and domains; a mismatch is a reason to reject or narrow the transfer, "
+    "not to mark this strategy disproven."
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
@@ -1450,8 +1452,10 @@ def _peer_handoff_question(handoffs: list[dict[str, Any]]) -> str:
         "Evaluate the reported "
         f"{item['relation']} finding in Strategy {item['source_strategy_title']} artifact "
         f"{item['source_artifact_id']}, which cites your artifact {item['target_artifact_id']}. "
+        "Before transfer, check whether source and target assumptions and domains match. "
         f"Test this rationale in your own approach: {item['rationale']} State whether it changes "
-        "your next step and why. Treat the peer finding as unverified."
+        "your next step and why; a mismatch narrows the transfer and does not disprove your "
+        "approach. Treat the peer finding as unverified."
         for item in handoffs
     ]
     return " Address each evidence-linked peer handoff: " + " ".join(prompts)
@@ -1479,6 +1483,7 @@ def _queue_peer_handoffs(
         if target is None:
             continue
         handoff = {
+            "handoff_id": str(uuid4()),
             "source_strategy_id": source_branch["strategy_id"],
             "source_strategy_title": source_branch["strategy_title"],
             "source_artifact_id": source_artifact["id"],
@@ -1494,7 +1499,10 @@ def _queue_peer_handoffs(
             for item in pending
         ):
             if not pending:
-                target["peer_handoff_base_question"] = target["current_question"]
+                target["peer_handoff_base_question"] = (
+                    target.get("pending_skeptic", {}).get("next_question")
+                    or target["current_question"]
+                )
             pending.append(handoff)
             del pending[:-4]
             target["current_question"] = target[
@@ -2026,6 +2034,9 @@ async def _portfolio_role_call(
                     identifier
                     for item in context.get("peer_handoffs", [])
                     for identifier in (item["source_artifact_id"], item["target_artifact_id"])
+                ],
+                "peer_handoff_ids": [
+                    item["handoff_id"] for item in context.get("peer_handoffs", [])
                 ],
                 "context_obligation_count": len(context["outstanding_obligations"]),
                 "cost_reserve": reserve,
