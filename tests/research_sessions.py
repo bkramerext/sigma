@@ -1818,10 +1818,63 @@ async def test_portfolio_preflight_failure_terminates_instead_of_spinning(path: 
         )
         finished = await wait_for(path, started["id"])
 
-    assert finished["status"] == "failed"
+    assert finished["status"] == "paused"
     assert finished["calls_used"] == 0
-    assert all(branch["status"] == "failed" for branch in finished["strategy_runs"])
+    assert all(branch["status"] == "paused" for branch in finished["strategy_runs"])
     assert "configuration service failure" in finished["message"].lower()
+
+
+async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
+    path: Path,
+):
+    view, strategy, credential, config = await setup(path)
+    config_calls = 0
+
+    async def configuration_with_one_timeout(*_args, **_kwargs):
+        nonlocal config_calls
+        config_calls += 1
+        if config_calls == 2:
+            await asyncio.Event().wait()
+        return config
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"], "stop", "productive_conclusion")
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=configuration_with_one_timeout),
+        patch.object(research_sessions, "PREFLIGHT_TIMEOUT", 0.01),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        paused = await wait_for(path, started["id"])
+        assert paused["status"] == "paused"
+        assert paused["calls_used"] == 0
+        assert "timed out" in paused["message"].lower()
+        assert all(branch["status"] == "paused" for branch in paused["strategy_runs"])
+
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 2
+    assert len(finished["artifacts"]) == 1
+    assert finished["strategy_runs"][0]["status"] == "ended"
 
 
 async def test_resume_limits_reconcile_portfolio_terminal_state(path: Path):
@@ -2556,6 +2609,11 @@ def main():
         asyncio.run(
             test_portfolio_preflight_failure_terminates_instead_of_spinning(
                 root / "portfolio-preflight-failure.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
+                root / "portfolio-preflight-timeout.sigma"
             )
         )
         asyncio.run(

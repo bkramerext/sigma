@@ -28,6 +28,7 @@ MAX_RECORD = 512_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 16_000
 CALL_TIMEOUT = 60
+PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
     "research_rounds": 3,
     "model_calls": 6,
@@ -1831,7 +1832,14 @@ async def _portfolio_role_call(
             view, guard = _snapshot(path)
             if guard != record["guard_hash"] or view.project.id != record["project_id"]:
                 raise ProjectError("Project or strategy changed; session paused before a new call.")
-            credential = await auth_context()
+            try:
+                credential = await asyncio.wait_for(auth_context(), timeout=PREFLIGHT_TIMEOUT)
+            except Exception as exc:
+                raise ProjectError(
+                    "AI account or billing connection could not be verified; "
+                    "session paused before a new call: "
+                    f"{str(exc).strip() or 'preflight timed out'}"[:500]
+                ) from exc
             if (
                 credential["mode"] != record["mode"]
                 or _digest(credential["identity"]) != record["identity_hash"]
@@ -1839,17 +1847,23 @@ async def _portfolio_role_call(
                 raise ProjectError(
                     "AI account or billing identity changed; session paused before another call."
                 )
-            config = await configuration(view=view, context=credential)
+            try:
+                config = await asyncio.wait_for(
+                    configuration(view=view, context=credential), timeout=PREFLIGHT_TIMEOUT
+                )
+            except Exception as exc:
+                raise ProjectError(
+                    "Selected model is no longer available; session paused before a new call: "
+                    f"{str(exc).strip() or 'preflight timed out'}"[:500]
+                ) from exc
             if (
                 not config["available"]
                 or config["model"] != record["model"]
                 or config["reasoning_effort"] != record["reasoning_effort"]
             ):
                 raise ProjectError(
-                    config.get(
-                        "message",
-                        "Selected model is no longer available; session paused before a new call.",
-                    )
+                    "Selected model is no longer available; session paused before a new call: "
+                    + config.get("message", "the saved model configuration is unavailable")
                 )
             if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
                 branch["status"] = "ended"

@@ -43,6 +43,11 @@ evaluation. I did not run any API-key-billed call.
   terminalize eligible branches and refresh outcome, attribution, and
   coordinator summaries. Deterministic regressions exercise all three cases,
   including three in-flight workers plus a fourth queued strategy.
+- Model/account preflight exceptions and hangs now pause the session before
+  dispatching a provider call. A bounded 30-second preflight timeout is
+  separate from the 60-second model-call timeout. A deterministic recovery test
+  forces a preflight timeout, verifies zero calls were charged, then resumes and
+  completes one full Investigator/Skeptic cycle.
 - Corrected the ladder documentation count: it has five runnable samples.
 - Added the run protocol and scoring rubric in
   [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact
@@ -115,8 +120,8 @@ mathematical truth.
   production build. The ladder check confirmed five independent sample copies,
   answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
   checks; its printed note explicitly limits those checks to finite examples.
-- An additional adversarial lifecycle pass added preflight-failure, queued
-  branch stop, and duration/call-limit resume regressions. The final full-suite
+- An additional adversarial lifecycle pass added preflight-failure, preflight
+  timeout and recovery, queued branch stop, and duration/call-limit resume regressions. The final full-suite
   `./sigma test` passed on 2026-10-22, including Ruff check/format, Pyright
   (zero errors), frontend typecheck, and the production Vite build.
 - Real Chrome `browser_checks/a17_research.py` passed against a local provider
