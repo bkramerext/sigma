@@ -2402,3 +2402,62 @@ The fixture PDF was opened and visually inspected; its notation and section
 layout render cleanly. `/tmp/sigma-a20-mathematics-paper.pdf` is the improved
 fixture artifact. This is not a live-model paper, so actual provider prose
 quality remains unverified.
+
+## A19 — isolated Python execution service (2026-10-22)
+
+The former A19 coordination item was consolidated into A18. Per the new A19
+assignment, a dedicated Python execution specification and interface are now
+being added without changing A18's research orchestration. A20 was subsequently
+merged by PR #5; historical notes above that said it was not merged describe the
+state at the time they were written. A17.8's independent-research acceptance
+gate remains open, and A18 remains concurrently in progress; neither blocks the
+independently testable execution boundary.
+
+The standalone proof of concept is in `sandbox-poc/`. A pinned Python 3.12.8
+base image and fully pinned scientific-Python requirements provide NumPy,
+SciPy, pandas, SymPy, and Matplotlib. The SIGMA service exposes a typed Python
+entry point and POST/list/get project API. It executes one source submission in
+a fresh local image, resolved to its immutable image ID, with Docker
+`--pull=never`, `--network=none`, UID 65532, read-only root, a 64 MiB
+non-executable temporary filesystem, no capabilities, no-new-privileges,
+512 MiB memory/swap, one CPU, 64 processes, a 15-second wall deadline, 16,000
+source bytes, and 32,000 combined captured output bytes. One execution is
+admitted per backend process. Each completed or rejected attempt is stored with
+source, bounded stdout/stderr, status/exit code, timing, image ID, resource
+policy, and optional session/strategy/cycle references in a private project
+sidecar. The project document and research history are not changed. Output,
+timeout, nonzero exit, unavailable image, and concurrent busy states are not
+reported as successful computation.
+
+Actual container verification used Colima/Docker and the built ARM64 image:
+
+- `docker build --pull=false -t sigma-research-python:0.1 sandbox-poc` passed.
+- `uv run --locked --no-sync python sandbox-poc/runtime-check.py` passed against
+  the actual image: UID 65532, zero effective capabilities, no-new-privileges,
+  read-only `/work`, 512 MiB memory, one-CPU cgroup, and 64-process cgroup were
+  checked from inside the container. All five scientific libraries imported; SciPy integration,
+  SymPy integration and a pandas reduction produced expected values; Matplotlib
+  wrote its runtime state and plotted using bounded `/tmp`; a direct socket
+  attempt was denied; a 768 MiB allocation failed under the 512 MiB ceiling;
+  1 MB output was stopped and capped at 32,000 bytes; an infinite loop was
+  killed by the 15-second timeout; and a real execution record was persisted
+  and retrieved from a temporary project.
+- `printf ... | python sandbox-poc/run.py` passed as a standalone proof-of-
+  concept import smoke for the five libraries.
+- The first actual attempt exposed Docker's requirement that a `--cidfile` path
+  not already exist. The adapter now reserves a random private path, removes the
+  placeholder before `docker run`, and uses the resulting container ID to stop
+  timed-out or output-flooding containers. The second run exposed diagnostic
+  text exceeding the output cap by its own length; capture now reserves space
+  for the diagnostic. The final runtime check passed after both fixes and
+  `docker ps` showed no remaining research container.
+
+`uv run --locked --no-sync python tests/python_sandbox.py` passed deterministic
+command-policy, size/metadata validation, busy admission, private storage,
+project binding, and HTTP API tests. Full `./sigma test` passed all scenarios,
+Ruff check/format, Pyright (0 errors), frontend typecheck, and production build.
+The existing Starlette/httpx deprecation warning appeared and was non-failing.
+No real browser UI was changed; API-level coverage is the relevant adapter check. A18 role-loop
+invocation and Investigator→Skeptic result/artifact propagation remain explicit
+integration work for Blue; this PR does not alter A18 orchestration. Python
+results do not constitute formal verification or Lean evidence.
