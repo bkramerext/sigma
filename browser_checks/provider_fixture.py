@@ -37,6 +37,168 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
+    if body["text"]["format"]["name"] == "sigma_research_paper":
+        sources = context["sources"]
+        project_source = next(item for item in sources if item["kind"] == "project")
+        project_data = project_source["data"]
+        title = project_data["title"]
+        problem = project_data["problem"]
+        if project_data.get("investigation_type") == "mathematical":
+            assert "organization and precision of a" in body["instructions"]
+            assert "separately prove the upper bound" in body["instructions"]
+        max_regions = (
+            "maximum regions" in title.casefold()
+            or "maximum number of regions" in problem.casefold()
+        )
+        artifact_refs = [item["id"] for item in sources if item["kind"] == "artifact"]
+        if max_regions:
+            evidence = artifact_refs[:4] or [project_source["id"]]
+            paper = {
+                "title": "The Maximum Number of Regions Formed by Lines",
+                "abstract": r"We study the maximum number $R(n)$ of regions cut out in the plane by $n$ distinct lines. Inserting lines one at a time gives an upper bound of $k$ new regions at step $k$. The family $L_j:y=jx+j^2$ attains this bound at every step, since the intersections on each new line are distinct. Together with the empty arrangement, this yields the candidate formula $R(n)=1+n(n+1)/2$. The complete argument is present in the saved research record, but has not been independently verified.",
+                "abstract_claim_ids": ["C1", "C2", "C3"],
+                "problem_framing": [
+                    "An arrangement partitions the plane into connected components of its complement; these components are the regions being counted. We seek the largest possible count among arrangements of n distinct lines.",
+                    "There are two tasks: prove that no insertion can add more than k regions at step k, and construct arrangements in which every insertion adds exactly k.",
+                ],
+                "problem_framing_claim_ids": ["C1", "C2"],
+                "methods": [
+                    "We organize the saved argument as induction on the number of inserted lines. The research artifacts supply the upper-bound argument, an explicit attaining family, and the caveat that no independent proof checker was run."
+                ],
+                "methods_claim_ids": ["C1", "C2", "C3"],
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "Adding a kth line to an arrangement of k−1 lines creates at most k new regions.",
+                        "status": "conjecture",
+                        "evidence_refs": evidence,
+                        "reasoning": "The cited argument bounds the intersection points on the new line and uses convexity of old regions to show its pieces enter distinct regions.",
+                    },
+                    {
+                        "id": "C2",
+                        "statement": "The family L_j:y=jx+j² attains k new regions at every insertion step k.",
+                        "status": "conjecture",
+                        "evidence_refs": evidence,
+                        "reasoning": "For fixed k, intersections with earlier lines have distinct x-coordinates −(k+j), giving k pieces; the saved cell argument shows they split k distinct old regions.",
+                    },
+                    {
+                        "id": "C3",
+                        "statement": "The saved argument derives R(n)=1+n(n+1)/2 for every integer n≥0.",
+                        "status": "conjecture",
+                        "evidence_refs": evidence,
+                        "reasoning": "The recurrence starts at one region for n=0 and adds exactly k at step k, while the source record labels the argument unverified.",
+                    },
+                ],
+                "sections": [
+                    {
+                        "heading": "Notation and a cell lemma",
+                        "paragraphs": [
+                            r"Let $R(\mathcal{A})$ be the number of regions determined by a finite line arrangement $\mathcal{A}$. Choose one of the two open sides of each line and intersect the chosen half-planes. Every nonempty intersection is convex, hence connected, and is one region.",
+                            r"If a new line meets an old region, it splits that region into two nonempty pieces: a point on the line lies inside the open region, so a small disk around it contains points on both sides. Further, two separated pieces of the new line cannot lie in the same old region. Convexity would force the segment between them to stay in that region, including an intervening point on an earlier line, which no old region contains.",
+                        ],
+                        "claim_ids": ["C1", "C2"],
+                    },
+                    {
+                        "heading": "Main result (unverified proof candidate)",
+                        "paragraphs": [
+                            r"For every integer $n\geq0$, the maximum number of regions determined by $n$ lines is $R(n)=1+n(n+1)/2$. We give the saved argument for this statement below; the project record classifies it as an unverified candidate."
+                        ],
+                        "claim_ids": ["C3"],
+                    },
+                    {
+                        "heading": "The upper bound",
+                        "paragraphs": [
+                            r"Insert the lines in order. At step $k$, the new line intersects each of the $k−1$ earlier lines in at most one point. These points divide it into at most $k$ connected pieces, including the two unbounded pieces. Each piece lies in an old region, and the cell lemma puts different pieces in different old regions. Each crossed region is split into two, so at most $k$ new regions are created.",
+                            r"Writing $R_k$ for the largest count after $k$ insertions gives $R_k\leq R_{k−1}+k$. Since the empty arrangement has one region, induction yields $R_n\leq 1+\sum_{k=1}^{n}k$.",
+                        ],
+                        "claim_ids": ["C1"],
+                    },
+                    {
+                        "heading": "Proof of attainability",
+                        "paragraphs": [
+                            r"For each positive integer $j$, take $L_j:y=jx+j^2$. The slopes are distinct. Fix $k$ and intersect $L_k$ with an earlier line $L_j$, where $1\le j<k$. Solving $kx+k^2=jx+j^2$ gives $x=−(k+j)$. These coordinates are distinct as $j$ varies, so the $k−1$ crossings on $L_k$ are distinct and divide it into exactly $k$ pieces.",
+                            r"By the cell lemma, these pieces lie in distinct old regions, and each crossed region is split into two. Thus $L_k$ adds exactly $k$ regions. The construction attains every insertion bound, not just the final sum.",
+                        ],
+                        "claim_ids": ["C2"],
+                    },
+                    {
+                        "heading": "The formula and its status",
+                        "paragraphs": [
+                            r"The upper bound and construction match, so $R_k=R_{k−1}+k$ with $R_0=1$. Summing gives $R_n=1+\sum_{k=1}^{n}k=1+n(n+1)/2$. The boundary case $n=0$ is included: with no lines, the plane has one region.",
+                            "The saved artifacts contain this full candidate argument, including the convexity step and explicit construction. They label it unverified, and no independent proof checker was run; we therefore present a saved proof candidate, not a formally certified theorem.",
+                        ],
+                        "claim_ids": ["C1", "C2", "C3"],
+                    },
+                ],
+                "limitations": [
+                    "The argument is recorded as an unverified model-generated candidate; no independent proof checker was run."
+                ],
+                "open_obligations": [],
+                "conclusions": [
+                    r"The saved proof candidate explains both why no arrangement can exceed $1+n(n+1)/2$ and how the displayed family attains that count. It remains unverified by an independent checker."
+                ],
+                "conclusion_claim_ids": ["C1", "C2", "C3"],
+                "validation_warnings": ["The proof has not been independently verified."],
+            }
+        else:
+            paper = {
+                "title": "An Exploratory Record with Open Questions",
+                "abstract": "This paper reports an exploratory research state. The saved project provides an objective but no completed research session, so the available evidence does not support a theorem-proof conclusion. The discussion is limited to the recorded scope and makes its missing evidence explicit.",
+                "abstract_claim_ids": ["C1"],
+                "problem_framing": [f"The saved objective is: {problem}"],
+                "problem_framing_claim_ids": ["C1"],
+                "methods": [
+                    "We inspected the current saved project snapshot; no research session or experiment was recorded."
+                ],
+                "methods_claim_ids": ["C1"],
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "The project snapshot records the stated research objective.",
+                        "status": "established",
+                        "evidence_refs": [project_source["id"]],
+                        "reasoning": "This is directly present in the saved project record.",
+                    }
+                ],
+                "sections": [
+                    {
+                        "heading": "Available evidence",
+                        "paragraphs": [
+                            "The snapshot contains the project objective but no durable research findings."
+                        ],
+                        "claim_ids": ["C1"],
+                    },
+                    {
+                        "heading": "Exploratory status",
+                        "paragraphs": [
+                            "No substantive conclusion is justified by this record; the project remains open for investigation."
+                        ],
+                        "claim_ids": [],
+                    },
+                ],
+                "limitations": [
+                    "There are no saved research sessions or findings in this snapshot."
+                ],
+                "open_obligations": [
+                    "Conduct and preserve research before drawing a substantive conclusion."
+                ],
+                "conclusions": ["This is an exploratory account, not a theorem-proof paper."],
+                "conclusion_claim_ids": ["C1"],
+                "validation_warnings": [],
+            }
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(paper)}],
+                    }
+                ],
+            },
+        )
     if body["text"]["format"]["name"] in {"research_investigator", "research_skeptic"}:
         strategy_title = context.get("strategy", {}).get("title")
         if strategy_title == "Failure fixture strategy":
@@ -80,6 +242,15 @@ async def handler(request):
                         "Prove the per-line upper bound.",
                         "Show one arrangement attains every increment.",
                         "Handle n=0.",
+                        "Define regions as connected components of the complement.",
+                        "Prove every cell is convex.",
+                        "Prove each crossed cell splits into two cells.",
+                        "Prove separated line pieces cannot lie in one old cell.",
+                        "Bound the number of distinct intersections on the inserted line.",
+                        "Count the unbounded pieces at each insertion step.",
+                        "Verify the attaining lines have distinct slopes.",
+                        "Compute the intersection coordinates explicitly.",
+                        "Derive the recurrence from the insertion bound.",
                     ],
                     "unresolved_objections": [],
                     "supporting_cycles": [1],

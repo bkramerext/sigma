@@ -329,6 +329,11 @@ def _outcome(record: dict[str, Any]) -> dict[str, Any]:
         caveats.append(
             "Open obligations remain; inspect the saved artifacts before relying on this result."
         )
+    solution_review = dict(objective_review) if objective_review else None
+    if solution_review is not None:
+        # Older session records predate this field. Default only in the public
+        # derived outcome so reading legacy data never rewrites the record.
+        solution_review.setdefault("verification_status", "unknown")
     return {
         "assessment": assessment,
         "label": label,
@@ -336,7 +341,7 @@ def _outcome(record: dict[str, Any]) -> dict[str, Any]:
         "caveats": caveats,
         "basis_artifact_ids": [a["id"] for a in artifacts],
         "provisional": status in {"queued", "running", "paused"},
-        "solution_review": objective_review,
+        "solution_review": solution_review,
     }
 
 

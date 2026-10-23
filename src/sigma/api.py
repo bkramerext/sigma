@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response, Streamin
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chatgpt_auth, research_sessions
+from sigma import chatgpt_auth, papers, research_sessions
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
@@ -111,6 +111,57 @@ class ResearchLimitsRequest(OpenRequest):
     session_duration_minutes: int = Field(ge=1, le=120)
     output_tokens_per_call: int = Field(ge=256, le=16384)
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
+
+
+class PaperGenerateRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+
+
+@app.get("/api/projects/papers")
+def papers_view(path: str):
+    return {"papers": papers.list_papers(path)}
+
+
+@app.get("/api/projects/papers/{paper_id}")
+def paper_view(paper_id: str, path: str):
+    return papers.get_paper(path, paper_id)
+
+
+@app.get("/api/projects/papers/{paper_id}/pdf")
+def paper_pdf_view(paper_id: str, path: str):
+    return Response(
+        papers.get_pdf(path, paper_id),
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.pdf"',
+        },
+    )
+
+
+@app.post("/api/projects/papers")
+async def paper_generate_view(body: PaperGenerateRequest, request: Request):
+    async def disconnected():
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+
+    task = asyncio.create_task(
+        papers.generate(body.path, body.expected_binding, body.expected_project_id)
+    )
+    connection = asyncio.create_task(disconnected())
+    try:
+        done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
+        if connection in done:
+            return JSONResponse(
+                {"error": "Paper generation cancelled; no version was published"}, status_code=499
+            )
+        return await task
+    finally:
+        for pending in (task, connection):
+            if not pending.done():
+                pending.cancel()
+        await asyncio.gather(task, connection, return_exceptions=True)
 
 
 @app.get("/api/projects/research-limits")

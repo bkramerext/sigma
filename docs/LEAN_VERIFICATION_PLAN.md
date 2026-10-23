@@ -1,6 +1,6 @@
 # SIGMA: Lean Verification Plan
 
-**Status:** Future feature proposal, outside A18  
+**Status:** Future feature proposal, outside A18
 **Purpose:** Integrate formal mathematical verification into SIGMA's existing research workflow without turning SIGMA into a theorem-proving IDE.
 
 ## Why this matters
@@ -44,7 +44,7 @@ Show a compact status adjacent to each mathematical claim:
 
 Keep **informal assessment** and **formal verification** visually distinct. For example:
 
-> Mathematical assessment: Convincing, unverified  
+> Mathematical assessment: Convincing, unverified
 > Formal verification: In progress
 
 Avoid displaying an unconditional green checkmark for a natural-language claim merely because some Lean theorem was accepted. Where practical, expose a separate **formalization correspondence reviewed** indicator.

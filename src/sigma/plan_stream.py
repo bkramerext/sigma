@@ -168,7 +168,13 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
     )
 
 
-async def completed(response: httpx.Response, guard: str | None = None) -> dict:
+async def completed(
+    response: httpx.Response,
+    guard: str | None = None,
+    *,
+    max_stream_bytes: int = MAX_STREAM_BYTES,
+    overflow_message: str = "Provider stream exceeded the byte limit; no strategy was saved.",
+) -> dict:
     content_type = response.headers.get("content-type", "")
     ct_main = content_type.split(";")[0].strip().lower()
     if ct_main not in {"", "text/event-stream"}:
@@ -183,8 +189,8 @@ async def completed(response: httpx.Response, guard: str | None = None) -> dict:
     refused = False
     async for chunk in response.aiter_bytes():
         byte_count += len(chunk)
-        if byte_count > MAX_STREAM_BYTES:
-            raise ProjectError("Provider stream exceeded the byte limit; no strategy was saved.")
+        if byte_count > max_stream_bytes:
+            raise ProjectError(overflow_message)
         buffer += decoder.decode(chunk)
         buffer = buffer.replace("\r\n", "\n")
         while "\n\n" in buffer:
