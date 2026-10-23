@@ -4228,7 +4228,7 @@ case runs through `_agent_context`, not only the selection helper. The existing
 continuation integration test starts real local fixture sessions and checks
 that an earlier unresolved obligation reaches the subsequent Investigator.
 
-Verification on tested code head: **final integrated merge SHA recorded after commit**.
+Verification on tested code head: `f0c742fab487f80ce2db693d70025d3e9f793fdc`.
 Base integrated: `c4b18d36349170b07e48c4cdf0c38aeb532fc958` (includes requested #46 at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
 
 - `./sigma test` on merged `origin/main` `c4b18d36349170b07e48c4cdf0c38aeb532fc958` — **passed** all steps, including T37 research session/concurrency scenarios, T22 Gate C tests, computational evidence, project reports, Ruff, format check (69 files), Pyright (0 diagnostics), frontend typecheck, and production build.
@@ -4247,9 +4247,10 @@ Base integrated: `c4b18d36349170b07e48c4cdf0c38aeb532fc958` (includes requested 
 - No live model/provider calls were made. Fixture tests verify deterministic
   context plumbing and billing/call boundaries, not empirical research quality.
 
-The branch is integrated locally with the latest `main`. The final merge head,
-PR metadata, and push result will be recorded here and in the handoff after the
-integration commit is created.
+The branch is integrated locally with the latest `main` at the tested head
+above. PR #42's `frontend/public/lean-logo.svg` and its CSS change are inherited
+from main; T37 made no additional Lean-logo edits. The updated PR push and
+GitHub mergeability response are pending final handoff verification.
 
 Remaining limits: model-reported addressed/superseded/retracted statuses are
 still unverified judgments; bounded extracts cannot replace original source
