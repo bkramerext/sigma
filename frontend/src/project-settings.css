@@ -82,6 +82,15 @@
   background: transparent; color: #f3cd9e; border: 0; box-shadow: none;
 }
 .project-settings-dialog .settings-header .settings-actions button:disabled { opacity: .5; cursor: default; }
+.project-settings-dialog.edit-project-dialog .settings-header { align-items: baseline; justify-content: flex-start; gap: 18px; }
+.project-settings-dialog.edit-project-dialog .settings-header h2 { flex: 0 0 auto; }
+.project-settings-dialog.edit-project-dialog .settings-header .settings-actions { align-items: baseline; gap: 14px; }
+.project-settings-dialog.edit-project-dialog .settings-footer { display: none; }
+@media (max-width: 560px) {
+  .project-settings-dialog.edit-project-dialog .settings-header { flex-wrap: wrap; gap: 8px 16px; }
+  .project-settings-dialog.edit-project-dialog .settings-header h2 { width: auto; }
+  .project-settings-dialog.edit-project-dialog .settings-header .settings-actions { width: auto; flex: 0 1 auto; justify-content: flex-start; flex-wrap: nowrap; }
+}
 
 /* New Project Create is a plain underlined action, never a copper-filled button. */
 .home-page .new-project-dialog .settings-header .settings-actions button[type="submit"],
@@ -118,8 +127,8 @@
 .project-settings-dialog.export-project-dialog .export-open-tab { display: flex; align-items: center; gap: 8px; margin: 0; color: #dce7f0; font-size: 13px; }
 .project-settings-dialog.export-project-dialog .export-type-options input,
 .project-settings-dialog.export-project-dialog .export-open-tab input { display: inline-block; width: auto; margin: 0; accent-color: #d9a66c; }
-.project-settings-dialog.export-project-dialog .export-filename-field { display: flex; align-items: center; gap: 8px; }
-.project-settings-dialog.export-project-dialog .export-filename-field input { min-width: 0; }
+.project-settings-dialog.export-project-dialog .export-filename-field { display: flex; width: 100%; min-width: 0; align-items: center; gap: 8px; }
+.project-settings-dialog.export-project-dialog .export-filename-field input { box-sizing: border-box; flex: 1 1 0; width: 100%; min-width: 0; }
 .project-settings-dialog.export-project-dialog .export-filename-field span { flex: 0 0 auto; color: #adbac7; font: 13px ui-monospace, monospace; }
 .project-settings-dialog.export-project-dialog .export-open-tab { margin-top: 18px; }
 .project-settings-dialog.export-project-dialog .settings-header .settings-actions .settings-submit { color: #d9b17e; }
@@ -147,13 +156,13 @@
 /* A17.7: compact export dialog with a same-row header on narrow screens. */
 .project-settings-dialog.export-project-dialog { width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100dvh - 24px); }
 .project-settings-dialog.export-project-dialog > form { height: auto; max-height: calc(100dvh - 24px); }
-.project-settings-dialog.export-project-dialog .settings-header { flex-wrap: nowrap; align-items: baseline; justify-content: space-between; padding: 18px 24px 12px; }
+.project-settings-dialog.export-project-dialog .settings-header { flex-wrap: nowrap; align-items: baseline; justify-content: flex-start; gap: 14px; padding: 18px 24px 12px; }
 .project-settings-dialog.export-project-dialog .settings-header h2 { width: auto; flex: 0 1 auto; font-size: 25px; }
 .project-settings-dialog.export-project-dialog .settings-header .settings-actions { flex: 0 0 auto; width: auto; margin: 0; }
 .project-settings-dialog.export-project-dialog .settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 24px; }
 .project-settings-dialog.export-project-dialog .export-format-select { width: max-content; min-width: 170px; max-width: 100%; }
 .project-settings-dialog.export-project-dialog .export-filename-field input { flex: 1 1 auto; width: 100%; min-width: 0; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.project-settings-dialog.export-project-dialog .export-footer { display: flex; flex: 0 0 auto; justify-content: flex-end; padding: 12px 24px 18px; border-top: 1px solid #35404a; }
+.project-settings-dialog.export-project-dialog .export-footer { display: flex; flex: 0 0 auto; justify-content: flex-start; padding: 12px 24px 18px; border-top: 1px solid #35404a; }
 .project-settings-dialog.export-project-dialog .export-footer .settings-submit { min-width: 110px; padding: 11px 18px; border: 1px solid #dfb476; border-radius: 5px; color: #1e1409; background: linear-gradient(112deg, #b98149, #edc48b 52%, #bd874e); box-shadow: inset 0 1px 0 #ffe0ab80, 0 0 16px #aa74351a; font-weight: 600; }
 .project-settings-dialog.export-project-dialog .export-footer .settings-submit:hover:not(:disabled) { background: linear-gradient(112deg, #d09a61, #f5d4a0 52%, #ce9a60); }
 @media (max-width: 560px) {

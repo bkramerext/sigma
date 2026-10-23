@@ -352,6 +352,7 @@
 .workspace-page .project-title-pencil svg, .workspace-page .strategy-title-pencil svg { width: 17px; height: 17px; }
 .workspace-page :is(.project-title-pencil, .strategy-title-pencil):hover:not(:disabled) { background: var(--copper-gradient); color: #fff2e9; border-color: #ac7054; }
 .workspace-page .project-title-edit-form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; width: 100%; }
+.workspace-page .project-title-edit-form { align-items: baseline; }
 .workspace-page .project-title-edit-form input { width: min(500px, 65vw); max-width: 100%; min-width: 160px; padding: 4px 8px; border: 1px solid #c38a50; border-radius: 4px; background: #091824; color: #f1c996; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
 .workspace-page .project-title-edit-form .text-view-link { width: auto; min-width: 0; min-height: 0; margin: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 .workspace-page .project-title-error { flex-basis: 100%; margin: 0; color: #ffbdad; font-size: 11px; }
@@ -434,6 +435,7 @@
 .workspace-page .sessions-pane .research-activity li { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 8px 14px; padding: 5px 0; color: #c4d0da; font-size: 12px; }
 .workspace-page .sessions-pane .research-artifacts > ol > li { margin: 7px 0; }
 .workspace-page .sessions-pane .research-artifacts details { border: 1px solid #344754; border-radius: 5px; background: #09141e; }
+.workspace-page .project-title-edit-form { align-items: baseline; }
 .workspace-page .sessions-pane .research-artifacts summary { padding: 11px 13px; color: #e4c39c; cursor: pointer; overflow-wrap: anywhere; }
 .workspace-page .sessions-pane .research-artifact-content { padding: 0 14px 14px; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
@@ -474,10 +476,27 @@
 .workspace-page .session-row-content { grid-column: 2; grid-row: 1; }
 .workspace-page .session-row-content[hidden] { display: none !important; }
 .workspace-page .session-outcome { margin: 0 0 14px; padding: 13px 15px; border: 1px solid #775c3f; border-left: 4px solid #c28c57; border-radius: 6px; background: linear-gradient(115deg,#17212a,#0d1720); color: #d7e0e8; }
+.workspace-page .session-outcome .outcome-view-header { display: flex; align-items: center; gap: 8px; }
+.workspace-page .session-outcome .outcome-view-header > p { flex: 1 1 auto; }
+.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle { display: inline-flex; flex: 0 0 32px; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #aab4ba; cursor: pointer; }
+.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle[aria-pressed="true"] { border-color: #8f6842; background: #1b2832; color: #f1c58d; }
+.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.workspace-page .session-outcome .outcome-view-header .markdown-logo { display: block; width: 24px; height: 20px; }
+.workspace-page .session-outcome .outcome-summary-text { min-width: 0; }
+.workspace-page .session-outcome .outcome-summary-text > p { margin: 3px 0; }
+.workspace-page .session-outcome .outcome-summary-text .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.workspace-page .session-outcome .outcome-markdown { overflow-wrap: anywhere; }
+.workspace-page .session-outcome .outcome-markdown > :first-child { margin-top: 5px; }
+.workspace-page .session-outcome .outcome-markdown > :last-child { margin-bottom: 2px; }
+.workspace-page .session-outcome .outcome-markdown h3 { margin: 12px 0 5px; color: #ead0ae; font-size: 14px; }
+.workspace-page .session-outcome .outcome-markdown p { margin: 5px 0; }
+.workspace-page .session-outcome .outcome-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .workspace-page .session-outcome p { margin: 3px 0; }
-.workspace-page .session-outcome > p:first-child { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; color: #f0d1a8; font-size: 15px; }
-.workspace-page .session-outcome > p:first-child strong { color: #e7be8d; }
+.workspace-page .session-outcome .outcome-view-header > p { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; color: #f0d1a8; font-size: 15px; }
+.workspace-page .session-outcome .outcome-view-header > p strong { color: #e7be8d; }
 .workspace-page .session-outcome ul { margin: 7px 0 0; padding-left: 20px; font-size: 12px; color: #b8c7d3; }
+.workspace-page .session-outcome .outcome-caveats ul { margin-top: 3px; }
 .workspace-page .solution-review { margin-top: 10px; padding-top: 8px; border-top: 1px solid #33404a; }
 .workspace-page .solution-review p { overflow-wrap: anywhere; }
 .workspace-page .strategy-assessments { margin: 16px 0; min-width: 0; }
@@ -505,11 +524,22 @@
 .workspace-page .sessions-pane .research-activity h3 button { display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: #c7a87d; font: 500 13px/1.4 Inter,ui-sans-serif,system-ui,sans-serif; text-align: left; }
 .workspace-page .sessions-pane .research-activity .disclosure-chevron { width: 11px; height: 11px; flex-basis: 11px; }
 .workspace-page .sessions-pane .research-activity ol[hidden] { display: none !important; }
-.workspace-page .session-remove-actions { margin-top: 14px; padding-top: 10px; border-top: 1px solid #33414a; }
+.workspace-page .session-remove-actions { position: absolute; z-index: 30; top: calc(100% + 5px); right: 0; width: min(280px, calc(100vw - 32px)); margin: 0; padding: 0; border: 0; }
+.workspace-page .session-remove-confirm-actions { display: flex; align-items: center; gap: 18px; }
+.workspace-page .session-remove-confirm-actions button { display: inline-flex; width: auto; min-width: 0; min-height: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d7e0e8; font: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.workspace-page .session-remove-confirm-actions button.destructive-action { color: #e6a092; }
+.workspace-page .session-remove-confirm-actions button:hover:not(:disabled) { background: transparent; box-shadow: none; color: #f1c58d; }
+.workspace-page .session-remove-confirm-actions button.destructive-action:hover:not(:disabled) { color: #ffd5ca; }
+.workspace-page .session-remove-confirm-actions button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 .workspace-page .destructive-action { color: #e6a092; }
 .workspace-page .destructive-action:hover:not(:disabled) { color: #ffd5ca; }
 .workspace-page .strategy-row { grid-template-columns: minmax(0, 1fr) 190px; }
 .workspace-page .strategy-title-line { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.workspace-page .strategy-title-line { align-items: baseline; row-gap: 6px; }
+.workspace-page .strategy-title-line > .strategy-row-disclosure { align-self: baseline; }
+.workspace-page .strategy-title-line > .strategy-title-pencil,
+.workspace-page .strategy-title-line > .strategy-inline-commands { align-self: baseline; }
+.workspace-page .strategy-rename-form { align-items: baseline; }
 .workspace-page .strategy-title-line .strategy-title-editor { flex: 0 1 auto; }
 .workspace-page .strategy-row-disclosure { display: inline-flex; align-items: flex-start; gap: 7px; max-width: 100%; min-width: 0; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: inherit; text-align: left; cursor: pointer; }
 .workspace-page .strategy-row-disclosure h3 { margin: 0; font: 500 16px/1.6 Inter,ui-sans-serif,system-ui,sans-serif; color: inherit; overflow-wrap: anywhere; }
@@ -579,7 +609,6 @@
 .workspace-page .session-row-heading .session-remove-link:hover:not(:disabled) {
   background: transparent; box-shadow: none; text-decoration: underline;
 }
-.workspace-page .session-row-heading .session-remove-actions { width: 100%; }
 
 /* Inline session confirmation uses the same understated title-row text actions. */
 .workspace-page .strategy-process-controls:has(.session-start-link) {
@@ -693,10 +722,9 @@
 .workspace-page .session-summary > .session-status,
 .workspace-page .session-summary > .session-outcome-inline,
 .workspace-page .session-summary > .session-progress-inline { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
-.workspace-page .session-heading-actions { display: grid; justify-items: end; align-content: start; gap: 4px; min-width: max-content; }
+.workspace-page .session-heading-actions { position: relative; display: grid; justify-items: end; align-content: start; gap: 4px; min-width: max-content; }
 .workspace-page .session-heading-actions .session-remove-link { margin: 0; padding: 1px 0; }
-.workspace-page .session-heading-actions .session-remove-actions { grid-column: 1; width: min(240px, calc(100vw - 40px)); }
-.workspace-page .session-heading-actions .research-stop-confirm { position: static; width: 100%; }
+.workspace-page .session-heading-actions .research-stop-confirm { width: 100%; margin: 0; padding: 12px 14px; box-shadow: 0 14px 35px #0009; }
 .workspace-page .session-row-content { min-width: 0; }
 
 /* Shared hover/focus state for all workspace icon buttons, including pane actions. */

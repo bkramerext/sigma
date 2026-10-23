@@ -224,6 +224,8 @@ def export_project_report_view(path: str, format: str = "txt"):
         body, media_type = render_report(data, format)
     except ValueError as exc:
         raise ProjectError(str(exc)) from exc
+    except RuntimeError as exc:
+        raise ProjectError(str(exc)) from exc
     return Response(body, media_type=media_type, headers={"Cache-Control": "no-store"})
 
 

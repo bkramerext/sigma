@@ -68,12 +68,12 @@ async def handler(request):
                 {
                     "assessment": "stop",
                     "stop_reason": "productive_conclusion",
-                    "response": "The upper bound and explicit general-position construction establish the objective for all n, including n=0. The candidate argument is complete but remains unverified.",
+                    "response": "The upper bound and explicit general-position construction establish the objective for all n, including n=0. In particular, $R(n)=1+n(n+1)/2$ and $$R(0)=1$$. The candidate argument is complete but remains unverified.",
                     "objections": [],
                     "remaining_obligations": [],
                     "next_question": "",
                     "objective_status": "achieved",
-                    "solution_claim": "R(n) = 1 + n(n+1)/2 for all n >= 0.",
+                    "solution_claim": "$R(n) = 1 + n(n+1)/2$ for all $n \\ge 0$.",
                     "argument_summary": "The kth line adds at most k regions; y=kx+k^2 attains k at every step; sum from k=1 to n and include the empty arrangement.",
                     "assumptions_reviewed": ["The lines are distinct straight Euclidean lines."],
                     "proof_obligations": [

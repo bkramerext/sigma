@@ -76,7 +76,7 @@ def sample_project_ids() -> set[str]:
 
 
 def open_sample_project(identifier: str) -> ProjectView:
-    """Create an independent working project named 'Title - Working #1', etc."""
+    """Create an independent working project named 'Title, v1', etc."""
     raw, _ = _load(identifier)
     root = projects_root()
     if root.is_relative_to(SAMPLES):
@@ -86,7 +86,7 @@ def open_sample_project(identifier: str) -> ProjectView:
         occupied = _occupied_titles(root)
         working_title = ""
         for number in range(1, 10001):
-            suffix = f" - Working #{number}"
+            suffix = f", v{number}"
             title = raw["title"][: 200 - len(suffix)].rstrip() + suffix
             if _title_key(title) not in occupied:
                 working_title = title

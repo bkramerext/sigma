@@ -57,6 +57,24 @@ type StrategyAssessment = { strategy_id: string | null; strategy_title: string; 
 type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'ended' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_minutes: string; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
+function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchSession): string {
+  return ids?.map(id => `Artifact ${session.artifacts.find(artifact => artifact.id === id)?.sequence ?? '?'}`).join(', ') || 'No artifact references';
+}
+
+function researchOutcomeMarkdown(session: ResearchSession): string {
+  const outcome = session.outcome;
+  const lines = [`**Outcome:** ${outcome.label}${outcome.provisional ? ' · provisional' : ''}`, '', outcome.summary || 'No outcome summary was recorded.'];
+  if (outcome.basis_artifact_ids.length) lines.push('', `**Outcome evidence:** ${outcomeArtifactReferences(outcome.basis_artifact_ids, session)}`);
+  const review = outcome.solution_review;
+  if (review) {
+    lines.push('', '### Solution review', '', `**Solution claim:** ${review.claim || 'No solution claim recorded.'}`, '', `**Argument:** ${review.argument_summary || 'No argument summary recorded.'}`, '', `**Assumptions:** ${review.assumptions?.join(' · ') || 'None recorded'}`, '', `**Proof obligations:** ${review.proof_obligations?.join(' · ') || 'None recorded'}`, '', `**Evidence:** ${outcomeArtifactReferences(review.basis_artifact_ids, session)}`);
+    if (review.resolved_objections?.length) lines.push('', `**Resolved review notes:** ${review.resolved_objections.join(' · ')}`);
+    if (review.unresolved_objections?.length) lines.push('', `**Unresolved objections:** ${review.unresolved_objections.join(' · ')}`);
+    lines.push('', `**Verification:** ${review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}`);
+  }
+  if (outcome.caveats.length) lines.push('', '### Caveats', '', ...outcome.caveats.map(caveat => `- ${caveat}`));
+  return lines.join('\n');
+}
 const limitBounds = {
   research_rounds: [1, 10], model_calls: [2, 20], session_duration_minutes: [1, 120], output_tokens_per_call: [256, 16384],
 } as const;
@@ -107,6 +125,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
   session: ResearchSession; expanded: boolean; busy: boolean;
   onViewStrategy: (id: string) => void;
 }) {
+  const [outcomeMarkdown, setOutcomeMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   useEffect(() => {
     setActivityExpanded(session.status === 'queued' || session.status === 'running');
@@ -115,10 +134,10 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
   const lastStep = session.steps.at(-1);
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
-      <p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p>
-      <p>{session.outcome.summary}</p>
-      {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {session.outcome.solution_review.basis_artifact_ids?.map(id => `Artifact ${session.artifacts.find(artifact => artifact.id === id)?.sequence ?? '?'}`).join(', ') || 'No artifact references'}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}<p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p></div>}
-      {!!session.outcome.caveats.length && <ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul>}
+      <div className="outcome-view-header"><p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p><button type="button" className="sigma-render-toggle workspace-icon-button" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div>
+      {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-content"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>
+      {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(session.outcome.solution_review.basis_artifact_ids, session)}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}{!!session.outcome.solution_review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {session.outcome.solution_review.unresolved_objections.join(' · ')}</p>}<p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p></div>}
+      {!!session.outcome.caveats.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
     </section>
     {!!session.strategy_assessments?.length && <section className="strategy-assessments" aria-label="Strategy Assessments"><h3>Strategy Assessments</h3><p>Each assessment is this strategy’s contribution to the project objective in this session.</p><div className="strategy-assessments-scroll"><table><thead><tr><th scope="col">Strategy</th><th scope="col">Assessment</th><th scope="col">Rationale and evidence</th></tr></thead><tbody>{session.strategy_assessments.map((item, index) => {
       const label: Record<StrategyAssessment['assessment'], string> = { contributed_to_solution: 'Contributed to solution', productive: 'Productive', unproductive: 'Unproductive', not_used: 'Not used', disabled: 'Disabled', unknown: 'Unknown' };
@@ -356,7 +375,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
                 {(item.status === 'stopped' || item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}
                 {['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
                 {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
-                {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm remove</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Keep session</button></div></div>}
+                {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
               </div>
             </div>
             <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onViewStrategy={onViewStrategy}/>
@@ -421,9 +440,9 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').slice(0, 26) || 'project'}`;
+  const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
   const [exportType, setExportType] = useState<'audit' | 'report'>('audit');
-  const [reportFormat, setReportFormat] = useState<'txt' | 'html' | 'tex'>('txt');
+  const [reportFormat, setReportFormat] = useState<'txt' | 'html' | 'pdf'>('txt');
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -434,7 +453,7 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
     event.preventDefault();
     if (submitting.current) return;
     const chosen = filename.trim();
-    const stem = chosen.replace(/\.(json|txt|html|tex)$/i, '');
+    const stem = chosen.replace(/\.(json|txt|html|tex|pdf)$/i, '');
     if (!stem || stem === '.' || stem === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(stem)) {
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
@@ -452,23 +471,33 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
       }
-      let content: string;
+      let content: string | Blob;
       if (exportType === 'audit') {
         const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[]; research_sessions: ResearchSession[] };
         if (result.export_version !== 2 || !result.project || !Array.isArray(result.agentic_runs) || !Array.isArray(result.research_sessions)) throw new Error('Invalid project export response');
         content = `${JSON.stringify(result, null, 2)}\n`;
+      } else if (reportFormat === 'pdf') {
+        const pdf = await response.blob();
+        const signature = new TextDecoder().decode(await pdf.slice(0, 5).arrayBuffer());
+        if (response.headers.get('content-type')?.includes('application/pdf') !== true || signature !== '%PDF-') throw new Error('The server did not return a valid PDF. Nothing was downloaded.');
+        content = pdf;
       } else content = await response.text();
       if (opened && !opened.closed) {
-        if (exportType === 'report' && reportFormat === 'html') opened.document.open(), opened.document.write(content), opened.document.close();
+        if (exportType === 'report' && reportFormat === 'html' && typeof content === 'string') opened.document.open(), opened.document.write(content), opened.document.close();
+        else if (exportType === 'report' && reportFormat === 'pdf' && content instanceof Blob) {
+          const pdfUrl = URL.createObjectURL(content);
+          opened.location.replace(pdfUrl);
+          window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+        }
         else {
           opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : 'Research Report'}`;
           const pre = opened.document.createElement('pre');
           pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;padding:1rem';
-          pre.textContent = content;
+          pre.textContent = typeof content === 'string' ? content : 'PDF opened in this tab.';
           opened.document.body.replaceChildren(pre);
         }
       }
-      const url = URL.createObjectURL(new Blob([content], { type: exportType === 'audit' ? 'application/json;charset=utf-8' : reportFormat === 'html' ? 'text/html;charset=utf-8' : reportFormat === 'tex' ? 'application/x-tex;charset=utf-8' : 'text/plain;charset=utf-8' }));
+      const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type: exportType === 'audit' ? 'application/json;charset=utf-8' : reportFormat === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
       document.body.appendChild(link); link.click(); link.remove();
@@ -495,12 +524,12 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
           <label><input type="radio" name="export-type" value="report" checked={exportType === 'report'} onChange={() => setExportType('report')}/> Research Report</label>
         </fieldset>
         <label htmlFor="export-project-format">Format</label>
-        <select id="export-project-format" className="export-format-select" value={exportType === 'audit' ? 'json' : reportFormat} disabled={busy || exportType === 'audit'} onChange={event => setReportFormat(event.target.value as 'txt' | 'html' | 'tex')}>
-          {exportType === 'audit' ? <option value="json">JSON (.json)</option> : <><option value="txt">Text (.txt)</option><option value="html">HTML (.html)</option><option value="tex">LaTeX (.tex)</option></>}
+        <select id="export-project-format" className="export-format-select" value={exportType === 'audit' ? 'json' : reportFormat} disabled={busy || exportType === 'audit'} onChange={event => setReportFormat(event.target.value as 'txt' | 'html' | 'pdf')}>
+          {exportType === 'audit' ? <option value="json">JSON</option> : <><option value="txt">Text</option><option value="html">HTML</option><option value="pdf">LaTeX</option></>}
         </select>
         <label htmlFor="export-project-filename">Filename</label>
-        <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={180} disabled={busy} spellCheck={false}
-          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex)$/i, '')); setError(''); }}/>
+        <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
+          onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf)$/i, '')); setError(''); }}/>
           <span aria-hidden="true">.{exportType === 'audit' ? 'json' : reportFormat}</span></div>
         <label className="export-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>
         {error && <p className="error" role="alert">{error}</p>}
@@ -595,6 +624,14 @@ function FloatingTooltip() {
     observer.observe(active.element, { attributes: true, attributeFilter: ['data-tooltip', 'aria-label'] });
     return () => observer.disconnect();
   }, [active]);
+  useEffect(() => {
+    if (!active) return;
+    const observer = new MutationObserver(() => {
+      if (!active.element.isConnected) hide(active.element);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [active, hide]);
   useLayoutEffect(() => { if (active) position(); }, [active, position]);
   if (!active) return null;
   return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, document.body);
@@ -776,7 +813,7 @@ function Header({ goHome, close, projectTitle, projectArtwork = false, connectio
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><span className="project-back-label">Back to home</span></div></div>
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption">Back to home</button></div></div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -941,7 +978,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2></header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2>{initial && <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>}</header>
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'main' : event.key === 'End' ? 'limits' : activeTab === 'main' ? 'limits' : 'main'; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Main</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => setActiveTab('limits')}>Limits</button>
@@ -979,7 +1016,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
-    <footer className="settings-footer"><div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || (initial && (!limitsLoaded || !limitValidation.value)) || (!initial && (!values.problem.trim() || previewBusy || !destination?.path || destination.exists))}>{busy ? 'Saving…' : initial ? 'Save' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div></footer>
+    {!initial && <footer className="settings-footer"><div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Saving…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div></footer>}
     </form>
   </dialog>;
 }
@@ -1129,6 +1166,7 @@ function Home({ initialPath, onOpen }: {
         <HomeCatalog onOpen={onOpen}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
+      <footer className="home-art-credit" aria-label="Artwork credit"><span>By Brian Kramer, ChatGPT &amp; Codex</span><time dateTime="2026-10">October 2026</time></footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>

@@ -35,7 +35,7 @@ with sync_playwright() as playwright:
         "button", name="Open Maximum Regions Formed by Lines"
     ).click()
     expect(
-        page.get_by_role("heading", name=re.compile(r"Maximum Regions Formed by Lines - Working"))
+        page.get_by_role("heading", name=re.compile(r"Maximum Regions Formed by Lines, v\d+"))
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(1)
     download_trigger = page.get_by_role("button", name="Download project")
@@ -79,7 +79,7 @@ with sync_playwright() as playwright:
     ).click()
     expect(
         page.get_by_role(
-            "heading", name=re.compile(r"Counting Constrained Binary Strings - Working")
+            "heading", name=re.compile(r"Counting Constrained Binary Strings, v\d+")
         )
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(0)

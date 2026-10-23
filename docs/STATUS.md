@@ -1,5 +1,71 @@
 # SIGMA status
 
+## Sample copy names and Home credit streak (2026-10-22)
+
+Opening a Sample now creates projects named `Foobar, v1`, then `Foobar, v2`,
+and so on. Version selection checks all occupied project titles and skips any
+already in use, while keeping the existing independent project-directory
+numbering. The Home credit's blue streak now brightens and sweeps on hover in
+the corrected direction; reduced-motion preferences disable the animation.
+
+Verification: `./sigma test` passed all scenarios, Ruff check/format, Pyright
+(zero errors), frontend typecheck and production build. A real Chrome check
+confirmed the Home credit is visible and the streak animation activates on
+hover.
+
+## A17.7.1 and follow-up UI refinements (2026-10-22)
+
+Completed the A17.7.1 dialog, report, and outcome corrections. Settings Save and
+Cancel sit beside the title; report Cancel is next to Export Project and
+Download stays left-aligned. Project Audit displays `JSON`, and Research Report
+offers `Text`, `HTML`, and `LaTeX` without extensions in the format picker. The
+selected suffix (`.json`, `.txt`, `.html`, or `.pdf`) appears beside the
+editable filename. LaTeX uses the bounded external Tectonic compiler to produce
+a real article-style PDF, with a browser preview and recoverable failures when
+the compiler is unavailable. The report opens with the requested note about
+the future academic-style report. Tectonic is not bundled or installed by the
+app; production PDF export requires the binary on `PATH` or `SIGMA_TECTONIC`.
+
+The Outcome Markdown switch now renders the complete outcome together:
+assessment label, summary, evidence references, solution claim, argument,
+assumptions, proof obligations, resolved and unresolved review notes,
+verification, and caveats. Switching views preserves the saved result and does
+not call a provider. Legacy outcomes without a summary retain their fallback.
+
+The project-page Back to home caption is now an underlined button with the same
+action as the arrow. Floating tooltips are dismissed when their trigger leaves
+the document during navigation. Session-removal confirmation floats over the
+row instead of changing its layout and has underlined Confirm and Cancel
+actions. The Home page now has a compact, title-case blue credit at lower right:
+“By Brian Kramer, ChatGPT & Codex” and “October 2026”, with a fine blue streak.
+
+Recent Projects contained three stale entries named `edits.sigma`. Their saved
+paths pointed into macOS temporary directories that no longer exist; these are
+orphaned recent-index rows, not project data in the repository. The test runner
+now isolates its Recent index and no longer adds scenario projects to the
+user's list. Each old row can be cleared with its Remove action.
+
+Verification:
+
+- `./sigma test` passed all scenarios, Ruff, Pyright (zero errors), frontend
+  typecheck, and Vite production build. Starlette emitted its existing,
+  non-failing TestClient/httpx deprecation warning.
+- Focused report tests passed, including structured HTML, LaTeX escaping,
+  recoverable missing-compiler behavior, and PDF generation through the
+  verified local Tectonic binary.
+- `uv run --with playwright python browser_checks/a17_research.py` passed in
+  real Chrome against the isolated mock provider. It verified desktop and
+  narrow layouts, the complete Outcome Markdown toggle and math, export format
+  labels/suffixes, structured HTML, compiled PDF preview/download, the
+  unchanged session-row geometry beneath its confirmation overlay, and
+  Back-to-home tooltip dismissal. No live provider calls were made.
+- Reviewed real-browser captures: `/tmp/sigma-a1771-home-credit.png`,
+  `/tmp/sigma-a1771-remove-session-confirm.png`,
+  `/tmp/sigma-a1771-after-report-html-mobile.png`,
+  `/tmp/sigma-a1771-after-pdf-preview.png`,
+  `/tmp/sigma-a1771-after-maximum-regions-html.png`, and
+  `/tmp/sigma-a1771-after-maximum-regions-pdf.png`.
+
 ## A17.7 UI corrections and regression hardening (2026-10-22)
 
 Corrected the project header so its full title occupies its own row and the

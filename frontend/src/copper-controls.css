@@ -53,6 +53,10 @@
 .connection-details[role="dialog"] { position: fixed; z-index: 1200; max-height: min(560px, calc(100dvh - 16px)); }
 .connection-details p { font: 400 12px/1.7 Inter, ui-sans-serif, system-ui, sans-serif; color: inherit; margin: 0 0 12px; }
 .connection-details button { background: transparent; border: 1px solid #826442; color: #e1bc8c; padding: 8px 10px; font-size: 12px; }
+.connection-details .connection-usage-actions { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0 0 12px; }
+.connection-details .connection-usage-actions button { margin: 0; }
+.connection-details .connection-usage-actions a { display: inline-block; }
+.connection-details :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 .api-connection :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 @media (max-width: 700px) {
   .api-connection > summary { min-height: 28px; padding: 4px 9px; font-size: 10px; line-height: 1.2; align-items: flex-start; }

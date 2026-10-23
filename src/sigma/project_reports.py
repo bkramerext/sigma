@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
 from typing import Any, cast
 
 
@@ -74,21 +79,25 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
         lines += ["No research sessions are recorded.", ""]
     for session in sessions:
         number = session.get("session_number", "?")
+        outcome_raw = session.get("outcome")
+        outcome = cast(dict[str, Any], outcome_raw) if isinstance(outcome_raw, dict) else {}
         lines += [
             f"Session #{number}",
             f"Execution status: {_value(session.get('status'))}",
-            f"Outcome: {_value(session.get('outcome'))}",
+            f"Outcome: {_value(outcome.get('label') or outcome.get('assessment'))}",
             f"Strategy: {_value(session.get('strategy_title'))}",
             f"Started: {_value(session.get('started_at') or session.get('created_at'))}",
             "",
         ]
-        solution_review_raw = session.get("outcome")
-        solution_review = (
-            cast(dict[str, Any], solution_review_raw)
-            if isinstance(solution_review_raw, dict)
-            else {}
-        )
-        review = solution_review.get("solution_review")
+        if outcome.get("summary"):
+            lines += [f"Outcome summary: {_value(outcome.get('summary'))}", ""]
+        if _items(outcome.get("caveats")):
+            lines += ["Outcome caveats:"]
+            lines += [f"- {item}" for item in _items(outcome.get("caveats"))]
+            lines.append("")
+        solution_review = outcome
+        solution_review = solution_review.get("solution_review")
+        review = solution_review
         if isinstance(review, dict):
             lines += [
                 f"Solution claim: {_value(review.get('claim'))}",
@@ -199,28 +208,342 @@ def _latex(text: str) -> str:
     return "".join(replacements.get(char, char) for char in text)
 
 
-def render_report(data: dict[str, Any], output_format: str) -> tuple[str, str]:
+_HEADING_MARK = re.compile(r"^(=+|-+|~+)$")
+_INLINE_MATH = re.compile(r"(\\\(.*?\\\)|\\\[.*?\\\]|\$\$.*?\$\$|(?<!\\)\$[^$\n]+\$)")
+
+
+def _html_math_text(source: str) -> str:
+    value = source
+    for latex, symbol in (
+        (r"\cdot", "·"),
+        (r"\times", "×"),
+        (r"\leq", "≤"),
+        (r"\le", "≤"),
+        (r"\geq", "≥"),
+        (r"\ge", "≥"),
+        (r"\neq", "≠"),
+        (r"\infty", "∞"),
+        (r"\pi", "π"),
+        (r"\alpha", "α"),
+        (r"\beta", "β"),
+        (r"\gamma", "γ"),
+    ):
+        value = value.replace(latex, symbol)
+    value = re.sub(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"\1⁄\2", value)
+    value = re.sub(r"\\sqrt\s*\{([^{}]+)\}", r"√(\1)", value)
+    return value
+
+
+def _html_inline(text: str) -> str:
+    """Escape report content and retain only a small safe Markdown subset."""
+    parts = re.split(
+        r"(`[^`\n]+`|\*\*[^*\n]+\*\*|\\\(.*?\\\)|\\\[.*?\\\]|\$\$.*?\$\$|(?<!\\)\$[^$\n]+\$)", text
+    )
+    result: list[str] = []
+    for part in parts:
+        if part.startswith("`") and part.endswith("`"):
+            result.append(f"<code>{html.escape(part[1:-1])}</code>")
+        elif part.startswith("**") and part.endswith("**"):
+            result.append(f"<strong>{html.escape(part[2:-2])}</strong>")
+        elif _INLINE_MATH.fullmatch(part):
+            display = part.startswith(("$$", r"\["))
+            body = part[2:-2] if part.startswith(("$$", r"\(", r"\[")) else part[1:-1]
+            display_attr = ' display="block"' if display else ""
+            result.append(
+                f'<math class="report-math"{display_attr}><mrow><mtext>{html.escape(_html_math_text(body))}</mtext></mrow></math>'
+            )
+        else:
+            result.append(html.escape(part))
+    return "".join(result)
+
+
+def _html_document(data: dict[str, Any], lines: list[str]) -> str:
+    project_raw = data.get("project")
+    project = cast(dict[str, Any], project_raw) if isinstance(project_raw, dict) else {}
+    title = str(project.get("title") or "Research report")
+    blocks: list[str] = [f"<h1>{html.escape(title)}</h1>"]
+    index = 2
+    list_items: list[str] = []
+
+    def flush_list() -> None:
+        if list_items:
+            blocks.append("<ul>" + "".join(f"<li>{item}</li>" for item in list_items) + "</ul>")
+            list_items.clear()
+
+    while index < len(lines):
+        line = lines[index].strip()
+        if not line:
+            flush_list()
+            index += 1
+            continue
+        if index + 1 < len(lines) and _HEADING_MARK.fullmatch(lines[index + 1].strip()):
+            flush_list()
+            level = {"=": 1, "-": 2, "~": 3}[lines[index + 1].strip()[0]]
+            if not (level == 1 and line == title):
+                blocks.append(f"<h{level}>{_html_inline(line)}</h{level}>")
+            index += 2
+            if line == "Strategy Assessments":
+                rows: list[tuple[str, str, str, str]] = []
+                while index < len(lines) and lines[index].strip():
+                    row = re.match(
+                        r"(.+?) · ([^:]+): (.*?) \[Evidence: (.*?)\]$", lines[index].strip()
+                    )
+                    if row:
+                        groups = row.groups()
+                        if len(groups) == 4:
+                            rows.append((groups[0], groups[1], groups[2], groups[3]))
+                    index += 1
+                if rows:
+                    cells = "".join(
+                        "<tr>"
+                        + "".join(f"<td>{_html_inline(value)}</td>" for value in row)
+                        + "</tr>"
+                        for row in rows
+                    )
+                    blocks.append(
+                        '<div class="table-scroll"><table><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody>'
+                        + cells
+                        + "</tbody></table></div>"
+                    )
+            continue
+        bullet = re.match(r"^(?:[-*]|\d+[.)])\s+(.+)$", line)
+        if bullet:
+            list_items.append(_html_inline(bullet.group(1)))
+            index += 1
+            continue
+        flush_list()
+        label, separator, value = line.partition(": ")
+        if separator and len(label) < 60 and re.fullmatch(r"[\w ·#-]+", label):
+            blocks.append(f"<p><strong>{html.escape(label)}:</strong> {_html_inline(value)}</p>")
+        else:
+            blocks.append(f"<p>{_html_inline(line)}</p>")
+        index += 1
+    flush_list()
+    body = "\n".join(blocks)
+    return (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'
+        f"{html.escape(title, quote=True)} — Research Report</title><style>"
+        "*{box-sizing:border-box}body{max-width:780px;margin:3rem auto;padding:0 1.5rem;font:16px/1.7 Georgia,'Iowan Old Style',serif;color:#202a32}"
+        "h1,h2,h3{font-family:system-ui,sans-serif;line-height:1.25;color:#18232c}h1{font-size:2rem;border-bottom:1px solid #b8c2c8;padding-bottom:.7em}h2{font-size:1.45rem;margin-top:2em;border-bottom:1px solid #d6dde1;padding-bottom:.3em}h3{font-size:1.12rem;margin-top:1.5em}p{margin:.65em 0}strong{font-family:system-ui,sans-serif;font-size:.94em}ul{padding-left:1.5em}li{margin:.35em 0}code{font-family:ui-monospace,monospace;background:#f0f2f3;padding:.08em .25em}.report-math{font-family:Georgia,serif;font-style:italic;font-size:1.04em;white-space:normal}.table-scroll{max-width:100%;overflow-x:auto}table{width:100%;border-collapse:collapse;font:13px/1.5 system-ui,sans-serif;margin:1em 0}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #d6dde1;padding:.5em .6em}th{background:#f3f5f6}"
+        "@media print{body{max-width:none;margin:0;padding:0;color:#000;font-size:11pt}h1,h2,h3{break-after:avoid}p,li{orphans:3;widows:3}a{color:inherit}}</style></head><body>"
+        f"<main>{body}</main></body></html>\n"
+    )
+
+
+def _latex_inline(text: str) -> str:
+    """Escape prose; preserve only a bounded set of commands inside math spans."""
+    commands = {
+        "frac",
+        "sqrt",
+        "mathrm",
+        "mathbf",
+        "mathbb",
+        "infty",
+        "cdot",
+        "times",
+        "le",
+        "leq",
+        "ge",
+        "geq",
+        "neq",
+        "approx",
+        "sum",
+        "prod",
+        "int",
+        "alpha",
+        "beta",
+        "gamma",
+        "Delta",
+        "theta",
+        "pi",
+        "forall",
+        "exists",
+        "in",
+        "notin",
+        "left",
+        "right",
+    }
+    out: list[str] = []
+    cursor = 0
+    for match in _INLINE_MATH.finditer(text):
+        out.append(_latex(text[cursor : match.start()]))
+        token = match.group(0)
+        display = token.startswith(("$$", r"\["))
+        body = (
+            token[2:-2]
+            if token.startswith("$$")
+            else token[2:-2]
+            if token.startswith((r"\(", r"\["))
+            else token[1:-1]
+        )
+        safe = re.sub(
+            r"\\([A-Za-z]+)",
+            lambda cmd: (
+                cmd.group(0)
+                if cmd.group(1) in commands
+                else r"\textbackslash{}" + _latex(cmd.group(1))
+            ),
+            body,
+        )
+        safe = safe.replace("%", r"\%").replace("&", r"\&").replace("#", r"\#")
+        out.append((r"\[" + safe + r"\]") if display else ("$" + safe + "$"))
+        cursor = match.end()
+    out.append(_latex(text[cursor:]))
+    return "".join(out)
+
+
+def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
+    project_raw = data.get("project")
+    project = cast(dict[str, Any], project_raw) if isinstance(project_raw, dict) else {}
+    title = str(project.get("title") or "Research report")
+    output = [
+        "% Generated by SIGMA; compile with Tectonic or another TeX engine.",
+        r"\documentclass[11pt]{article}",
+        r"\usepackage[T1]{fontenc}",
+        r"\usepackage[utf8]{inputenc}",
+        r"\usepackage[margin=1in]{geometry}",
+        r"\usepackage{amsmath,amssymb,booktabs,longtable}",
+        r"\usepackage{enumitem}",
+        r"\setlist{nosep,leftmargin=*}",
+        r"\usepackage{microtype}",
+        r"\setlength{\parskip}{0.55em}",
+        r"\setlength{\parindent}{0pt}",
+        r"\title{" + _latex(title) + r"}",
+        r"\date{\today}",
+        r"\begin{document}",
+        r"\maketitle",
+        r"\begin{quote}\small We hope to turn this into an academic-style report in the future.\end{quote}",
+    ]
+    index = 2
+    items: list[str] = []
+
+    def flush_list() -> None:
+        if items:
+            output.append(r"\begin{itemize}")
+            output.extend(r"\item " + item for item in items)
+            output.append(r"\end{itemize}")
+            items.clear()
+
+    while index < len(lines):
+        line = lines[index].strip()
+        if not line:
+            flush_list()
+            index += 1
+            continue
+        if index + 1 < len(lines) and _HEADING_MARK.fullmatch(lines[index + 1].strip()):
+            flush_list()
+            marker = lines[index + 1].strip()[0]
+            command = {"=": r"\section", "-": r"\section", "~": r"\subsection"}[marker]
+            if not (marker == "=" and line == title):
+                output.append(command + "{" + _latex_inline(line) + "}")
+            index += 2
+            if line == "Strategy Assessments":
+                rows: list[tuple[str, str, str, str]] = []
+                while index < len(lines) and lines[index].strip():
+                    row = re.match(
+                        r"(.+?) · ([^:]+): (.*?) \[Evidence: (.*?)\]$", lines[index].strip()
+                    )
+                    if row:
+                        groups = row.groups()
+                        if len(groups) == 4:
+                            rows.append((groups[0], groups[1], groups[2], groups[3]))
+                    index += 1
+                if rows:
+                    output.extend(
+                        [
+                            r"\begin{longtable}{p{.19\linewidth}p{.19\linewidth}p{.40\linewidth}p{.14\linewidth}}",
+                            r"\toprule Strategy & Assessment & Rationale & Evidence " + r"\\",
+                            r"\midrule\endhead",
+                        ]
+                    )
+                    for row in rows:
+                        output.append(" & ".join(_latex_inline(value) for value in row) + r" \\")
+                    output.extend([r"\bottomrule", r"\end{longtable}"])
+            continue
+        bullet = re.match(r"^(?:[-*]|\d+[.)])\s+(.+)$", line)
+        if bullet:
+            items.append(_latex_inline(bullet.group(1)))
+            index += 1
+            continue
+        flush_list()
+        label, separator, value = line.partition(": ")
+        if separator and len(label) < 60 and re.fullmatch(r"[\w ·#-]+", label):
+            output.append(r"\textbf{" + _latex(label + ":") + "} " + _latex_inline(value) + r"\par")
+        else:
+            output.append(_latex_inline(line) + r"\par")
+        index += 1
+    flush_list()
+    output.append(r"\end{document}")
+    return "\n".join(output) + "\n"
+
+
+def _compile_pdf(tex: str) -> bytes:
+    executable = shutil.which(os.environ.get("SIGMA_TECTONIC", "tectonic"))
+    if not executable:
+        raise RuntimeError(
+            "PDF export requires Tectonic. Install Tectonic and retry; no file was downloaded."
+        )
+    with tempfile.TemporaryDirectory(prefix="sigma-report-") as directory:
+        if len(tex.encode("utf-8")) > 2_000_000:
+            raise RuntimeError(
+                "Research report is too large to typeset (2 MB limit). No file was downloaded."
+            )
+        source = os.path.join(directory, "report.tex")
+        with open(source, "w", encoding="utf-8") as file:
+            file.write(tex)
+        state_dir = os.environ.get(
+            "SIGMA_STATE_DIR", os.path.join(os.path.expanduser("~"), ".sigma")
+        )
+        cache_dir = os.path.join(state_dir, "tectonic-cache")
+        os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+        environment = {
+            "PATH": os.path.dirname(executable),
+            "HOME": os.path.expanduser("~"),
+            "XDG_CACHE_HOME": cache_dir,
+            "TECTONIC_UNTRUSTED_MODE": "1",
+            "LANG": "C.UTF-8",
+        }
+        try:
+            result = subprocess.run(
+                [executable, "--untrusted", "--outdir", directory, source],
+                cwd=directory,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=45,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "PDF compilation exceeded 45 seconds. No file was downloaded."
+            ) from exc
+        pdf_path = os.path.join(directory, "report.pdf")
+        if result.returncode != 0 or not os.path.isfile(pdf_path):
+            detail = result.stdout.decode("utf-8", "replace")[-1200:]
+            raise RuntimeError(
+                "Tectonic could not compile this report. No PDF was downloaded. " + detail
+            )
+        with open(pdf_path, "rb") as file:
+            pdf = file.read(20_000_001)
+        if not pdf.startswith(b"%PDF-") or len(pdf) > 20_000_000:
+            raise RuntimeError(
+                "PDF compiler output was invalid or exceeded 20 MB. No file was downloaded."
+            )
+        return pdf
+
+
+def render_report(data: dict[str, Any], output_format: str) -> tuple[str | bytes, str]:
     """Return UTF-8 report text and MIME type; unknown optional fields are ignored."""
-    if output_format not in {"txt", "html", "tex"}:
-        raise ValueError("Report format must be txt, html or tex")
+    if output_format not in {"txt", "html", "tex", "pdf"}:
+        raise ValueError("Report format must be txt, html or pdf")
     lines = _report_lines(data)
     body = "\n".join(lines).rstrip() + "\n"
     if output_format == "txt":
         return body, "text/plain; charset=utf-8"
     if output_format == "html":
-        title = html.escape(
-            str((data.get("project") or {}).get("title") or "Research report"), quote=True
-        )
-        escaped = html.escape(body, quote=True)
-        return (
-            f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} — Research Report</title><style>body{{max-width:900px;margin:3rem auto;padding:0 1.25rem;font:16px/1.6 system-ui,sans-serif;color:#17212b}}pre{{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}}</style></head><body><pre>{escaped}</pre></body></html>\n',
-            "text/html; charset=utf-8",
-        )
-    escaped_lines = [_latex(line) for line in lines]
-    tex_body = "\n".join(r"\par" if not line else line + r"\par" for line in escaped_lines)
-    tex = (
-        "% !TEX program = xelatex\n\\documentclass[11pt]{article}\n\\usepackage{fontspec}\n"
-        "\\usepackage{textcomp}\n\\usepackage[margin=1in]{geometry}\n"
-        "\\setlength{\\parskip}{0.5em}\n\\begin{document}\n" + tex_body + "\n\\end{document}\n"
-    )
-    return tex, "application/x-tex; charset=utf-8"
+        return _html_document(data, lines), "text/html; charset=utf-8"
+    tex = _latex_document(data, lines)
+    if output_format == "tex":
+        return tex, "application/x-tex; charset=utf-8"
+    return _compile_pdf(tex), "application/pdf"
