@@ -50,7 +50,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A prior-art matrix, dataset audit, 2 competing mechanisms and one genuine untested discriminator.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "b1010c01-7a62-4b61-912a-4560b0000002",
@@ -61,7 +62,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A preregistered quantitative interaction hypothesis, uncertainty and baseline comparison, or a documented null.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "b1010c01-7a62-4b61-912a-4560b0000003",
@@ -72,7 +74,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "One spatially localized prediction plus an explicit compositional countermodel and limitations.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "b1010c01-7a62-4b61-912a-4560b0000004",
@@ -83,7 +86,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A falsifiable bidirectional perturbation plan with decision thresholds and failure modes.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "b1010c01-7a62-4b61-912a-4560b0000005",
@@ -94,7 +98,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "An auditable novelty verdict, supporting artifacts, independent-test plan/result and clearly graded final claim.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     }
   ],
   "research_mode": "biology",
