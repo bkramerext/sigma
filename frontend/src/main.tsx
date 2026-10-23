@@ -510,7 +510,7 @@ function useDocumentScrollLock() {
   }, []);
 }
 
-function ProjectExportDialog({ path, title, onCancel }: { path: string; title: string; onCancel: () => void }) {
+function ProjectExportDialog({ path, title, onCancel, onAuthorPaper }: { path: string; title: string; onCancel: () => void; onAuthorPaper?: () => void }) {
   useDocumentScrollLock();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -528,6 +528,7 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
   async function exportFile(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
+    if (exportType === 'latex' && onAuthorPaper) { onCancel(); onAuthorPaper(); return; }
     const chosen = filename.trim();
     const stem = chosen.replace(/\.(json|txt|html|tex|pdf)$/i, '');
     if (!stem || stem === '.' || stem === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(stem)) {
@@ -609,7 +610,7 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
         {error && <p className="error" role="alert">{error}</p>}
       </div>
       <footer className="export-footer">
-        <button type="submit" className="settings-submit" title="Download the selected project export" disabled={busy}>{busy ? 'Downloading…' : 'Download'}</button>
+        <button type="submit" className="settings-submit" title={exportType === 'latex' && onAuthorPaper ? 'Continue to author the LaTeX paper' : 'Download the selected project export'} disabled={busy}>{busy ? 'Downloading…' : exportType === 'latex' && onAuthorPaper ? 'Continue' : 'Download'}</button>
       </footer>
     </form>
   </dialog>;
@@ -683,7 +684,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">AI-authored research paper</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Back to Export Project</button></div></header>
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong> · one provider call · up to 12,000 output tokens for API-key mode. No research session will be started.</p>
@@ -1923,7 +1924,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Author AI paper" title="Author AI paper from saved research evidence" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}><span aria-hidden="true" className="ai-paper-icon">✎</span></button><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
@@ -2009,11 +2010,11 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>}
+    {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={() => setPaperOpen(true)}/>}
     {paperOpen && (
       <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
         setPaperOpen(false);
-        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Author AI paper"]')?.focus());
+        setExportOpen(true);
       }} />
     )}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">

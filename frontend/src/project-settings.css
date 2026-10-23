@@ -194,7 +194,6 @@
 .ai-paper-preview ul { padding-left: 22px; }
 .ai-paper-preview .settings-hint { overflow-wrap: anywhere; }
 .ai-paper-warning { border-left: 3px solid #d4a16a; padding: 7px 10px; background: #d4a16a12; }
-.ai-paper-icon { font-size: 18px; line-height: 1; }
 @media (max-width: 560px) {
   .project-settings-dialog.export-project-dialog .settings-header { gap: 10px; padding: 16px 18px 12px; }
   .project-settings-dialog.export-project-dialog .settings-header h2 { width: auto; font-size: 22px; }

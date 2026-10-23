@@ -172,7 +172,8 @@ uv run --with playwright python browser_checks/a20_paper.py
 ```
 
 This real-Chrome scenario copies the Maximum Regions Sample, runs its mock
-research session, generates the distinct AI-authored paper, checks saved
+research session, opens paper authoring through Export Project → Academic paper
+using LaTeX, checks saved
 snapshot and claim references, and retrieves the compiled PDF through the
 browser. It also checks the narrow-screen dialog. It makes no live provider
 calls. Review captures are `/tmp/sigma-a20-paper-preview.png` and

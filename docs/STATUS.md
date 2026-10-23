@@ -1866,9 +1866,10 @@ flag was added.
 ## A20 — AI-authored research paper (2026-10-22)
 
 Implemented on `feature/a20-ai-authored-paper` for review; no merge performed.
-The separate Project-pane **Author AI paper** action opens a versioned paper
-workflow. Project Audit and deterministic Research Report renderers and routes
-retain their existing output semantics. The new pipeline is in
+The existing Project export action and **Academic paper using LaTeX** option open
+the versioned AI-authored paper workflow; no additional project action or icon
+was added. Project Audit and deterministic Research Report renderers and routes
+retain their existing output semantics. The pipeline is in
 `src/sigma/papers.py`; API routes list, generate, read, and download paper
 versions. The visible workflow states the selected project model and provider
 mode, one-call limit, API-key billing disclosure, progress, cancellation, saved

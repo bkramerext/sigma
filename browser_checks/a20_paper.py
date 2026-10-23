@@ -53,9 +53,12 @@ with sync_playwright() as playwright:
     assert record["research_sessions"][0]["artifacts"]
     assert "R(n)" in json.dumps(record["research_sessions"][0]["artifacts"], ensure_ascii=False)
 
-    author_button = page.get_by_role("button", name="Author AI paper", exact=True)
-    author_button.click()
-    dialog = page.get_by_role("dialog", name="AI-authored research paper")
+    expect(page.get_by_role("button", name="Author AI paper", exact=True)).to_have_count(0)
+    page.get_by_role("button", name="Export project", exact=True).click()
+    export_dialog = page.get_by_role("dialog", name="Export Project")
+    export_dialog.get_by_label("Academic paper using LaTeX").check()
+    export_dialog.get_by_role("button", name="Continue", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(dialog).to_be_visible()
     expect(dialog).to_contain_text("gpt-6.1-sol")
     expect(dialog).to_contain_text("one provider call")
