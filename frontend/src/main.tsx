@@ -285,7 +285,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
         </details>
 
         {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection">
-          <summary><DisclosureChevron expanded={false}/>Evidence &amp; Obligations</summary>
+          <summary><DisclosureChevron expanded={false}/>Citations, Evidence &amp; Obligations</summary>
           <div className="outcome-subsection-content">
             {review && !outcomeMarkdown && <div className="solution-review"><h4>Solution review</h4><p><strong>Solution claim:</strong> {review.claim || 'No solution claim recorded.'}</p><p><strong>Argument:</strong> {review.argument_summary || 'No argument summary recorded.'}</p><p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(review.basis_artifact_ids, session)}</p>{!!review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {review.resolved_objections.join(' · ')}</p>}{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{review.verification_status && review.verification_status !== 'unknown' && <p><strong>Verification:</strong> {review.verification_status === 'verified' ? 'Verified (session record)' : 'Convincing but unverified'}</p>}</div>}
             {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h4>Research artifacts</h4><button type="button" className="sigma-render-toggle" aria-label={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} aria-pressed={artifactsMarkdown} data-tooltip={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} title={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} onClick={() => setArtifactsMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div><ol>{session.artifacts.map(artifact => {
@@ -588,15 +588,15 @@ function useDocumentScrollLock(enabled = true) {
   }, [enabled]);
 }
 
-function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true }: { path: string; title: string; onCancel: () => void; onAuthorPaper?: (options: { filename: string; openInTab: boolean }) => void; open?: boolean }) {
+function ProjectExportDialog({ path, title, onCancel, open = true }: { path: string; title: string; onCancel: () => void; open?: boolean }) {
   useDocumentScrollLock(open);
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'audit' | 'text' | 'html' | 'latex'>('audit');
+  const [exportType, setExportType] = useState<'audit' | 'text' | 'html'>('audit');
   const isReport = exportType !== 'audit';
-  const reportFormat = exportType === 'text' ? 'txt' : exportType === 'html' ? 'html' : 'pdf';
+  const reportFormat = exportType === 'text' ? 'txt' : 'html';
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -619,7 +619,6 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
     }
-    if (exportType === 'latex' && onAuthorPaper) { onAuthorPaper({ filename: stem, openInTab }); return; }
     const extension = exportType === 'audit' ? 'json' : reportFormat;
     const downloadName = `${stem}.${extension}`;
     const opened = openInTab ? window.open('about:blank', '_blank') : null;
@@ -633,33 +632,24 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true
         const detail = await response.json().catch(() => null);
         throw new Error(detail?.error ?? detail?.detail ?? 'Project export failed');
       }
-      let content: string | Blob;
+      let content: string;
       if (exportType === 'audit') {
         const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[]; research_sessions: ResearchSession[] };
         if (result.export_version !== 2 || !result.project || !Array.isArray(result.agentic_runs) || !Array.isArray(result.research_sessions)) throw new Error('Invalid project export response');
         content = `${JSON.stringify(result, null, 2)}\n`;
-      } else if (exportType === 'latex') {
-        const pdf = await response.blob();
-        const signature = new TextDecoder().decode(await pdf.slice(0, 5).arrayBuffer());
-        if (response.headers.get('content-type')?.includes('application/pdf') !== true || signature !== '%PDF-') throw new Error('The server did not return a valid PDF. Nothing was downloaded.');
-        content = pdf;
       } else content = await response.text();
       if (opened && !opened.closed) {
-        if (exportType === 'html' && typeof content === 'string') opened.document.open(), opened.document.write(content), opened.document.close();
-        else if (exportType === 'latex' && content instanceof Blob) {
-          const pdfUrl = URL.createObjectURL(content);
-          opened.location.replace(pdfUrl);
-          window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
-        }
+        if (exportType === 'html') opened.document.open(), opened.document.write(content), opened.document.close();
         else {
           opened.document.title = `${title} — ${exportType === 'audit' ? 'Project Audit' : 'Research Report'}`;
           const pre = opened.document.createElement('pre');
           pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 ui-monospace,monospace;padding:1rem';
-          pre.textContent = typeof content === 'string' ? content : 'PDF opened in this tab.';
+          pre.textContent = content;
           opened.document.body.replaceChildren(pre);
         }
       }
-      const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type: exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' }));
+      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+      const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
       document.body.appendChild(link); link.click(); link.remove();
@@ -685,7 +675,6 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true
           <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
-          <label><input type="radio" name="export-type" value="latex" checked={exportType === 'latex'} onChange={() => setExportType('latex')}/> Academic paper using LaTeX</label>
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
@@ -695,7 +684,7 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true
         {error && <p className="error" role="alert">{error}</p>}
       </div>
       <footer className="export-footer">
-        <button type="submit" className="settings-submit" title={exportType === 'latex' && onAuthorPaper ? 'Continue to author the LaTeX paper' : 'Download the selected project export'} disabled={busy}>{busy ? 'Downloading…' : exportType === 'latex' && onAuthorPaper ? 'Continue' : 'Download'}</button>
+        <button type="submit" className="settings-submit" title="Download the selected project export" disabled={busy}>{busy ? 'Downloading…' : 'Download'}</button>
       </footer>
     </form>
   </dialog>;
@@ -704,7 +693,7 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel, returnToExport = true }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void; returnToExport?: boolean }) {
+function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -769,7 +758,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel,
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>{returnToExport ? 'Back to Export Project' : 'Close'}</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
@@ -1097,7 +1086,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in is not implemented; planned for cloud support" aria-label="Google sign-in is not implemented; planned for cloud support">Google · Not implemented</span>
+      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in is not implemented; planned for cloud support" aria-label="Google Sign-in is not implemented; planned for cloud support"><span className="connection-dot" aria-hidden="true"/>Google Sign-in</span>
       <ConnectionStatus disabled={connectionDisabled} projectHeader/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
@@ -1950,8 +1939,6 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
-  const [paperReturnToExport, setPaperReturnToExport] = useState(false);
-  const [paperExportOptions, setPaperExportOptions] = useState({ filename: 'sigma-paper.pdf', openInTab: false });
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -2137,7 +2124,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectDifficulty={project.difficulty} projectView={view!} onProjectUpdated={setView}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { setPaperReturnToExport(false); setPaperExportOptions({ filename: 'sigma-paper.pdf', openInTab: false }); setPaperOpen(true); }}><span className="latex-wordmark" aria-hidden="true">L<span className="latex-raised-a">A</span>T<span className="latex-lowered-e">E</span>X</span></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}><span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
@@ -2223,12 +2210,11 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={options => { setPaperReturnToExport(true); setPaperExportOptions({ ...options, filename: options.filename.endsWith('.pdf') ? options.filename : `${options.filename}.pdf` }); setExportOpen(false); setPaperOpen(true); }}/>
+    <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename={paperExportOptions.filename} openInTab={paperExportOptions.openInTab} returnToExport={paperReturnToExport} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" openInTab={false} onCancel={() => {
         setPaperOpen(false);
-        if (paperReturnToExport) setExportOpen(true);
-        else requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
+        requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />
     )}
     {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">

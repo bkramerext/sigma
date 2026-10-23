@@ -1,0 +1,22 @@
+T20.1 handoff — Gray
+
+Status: ready for review (R4R); not merged.
+Branch: feature/t20-1-ui-acceptance
+Pull request: to be added after creation.
+
+Implemented the five T20.1 UI fixes:
+- Replaced the LaTeX header wordmark with a copper typographic TeX mark and checked equal 34px action controls with consistent spacing.
+- Centered Model pill content; renamed the muted Google placeholder to Google Sign-in with a gray dot; labeled connected ChatGPT accounts ChatGPT connected while keeping API-key mode labeled OpenAI API connected.
+- Removed Academic paper using LaTeX from Export Project. The TeX shortcut directly opens the existing saved-paper workflow.
+- Kept the Outcome Markdown toggle inline after Outcome and before the assessment label; added explicit 28×28px, no-border/no-shadow geometry assertions at all requested widths.
+- Renamed the subsection to Citations, Evidence & Obligations.
+
+Validation completed:
+- ./sigma test — passed.
+- Real Chrome browser_checks/a20_paper.py — passed, with isolated provider fixture; Project actions and export layout checked at 1440, 1280, 390, and 320 px; direct paper workflow, generated evidence, and PDF checked.
+- Real Chrome browser_checks/header.py — passed at desktop and responsive widths through 320 px, including pill state, keyboard, persistence, and overflow.
+- Real Chrome browser_checks/a17_research.py — passed for Outcome Markdown flow and size, keyboard operation, historical/interrupted/multi-strategy records, metrics/provenance, and responsive widths 1440, 1280, 390, and 320 px.
+- Inspected desktop/mobile screenshots at /tmp/sigma-t20-project-download-desktop.png, /tmp/sigma-t20-project-download-mobile.png, /tmp/sigma-t25-outcome-desktop.png, and /tmp/sigma-t25-outcome-mobile.png.
+- No paid provider calls were made.
+
+Relevant current-main dependency: PR #10 (T20) and PR #19 (T25) are merged. No unrelated changes were made. The PR is intentionally left unmerged for review.

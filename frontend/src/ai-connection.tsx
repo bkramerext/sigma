@@ -266,8 +266,14 @@ export function ConnectionStatus({ disabled = false, projectHeader = false }: { 
   }, [open]);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
+  const projectHeaderLabel = status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
+    ? 'ChatGPT connected'
+    : status === 'connected' && ai.info?.mode === 'api_key'
+      ? 'OpenAI API connected'
+      : `ChatGPT sign-in · ${label}`;
   const dotActive = status === 'connected' && providerActive;
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `ChatGPT sign-in · ${label}; open AI connection settings` : 'AI connection settings'} aria-haspopup="dialog" aria-expanded={open} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{projectHeader ? `ChatGPT sign-in · ${label}` : label}</span></summary>
+  const visibleLabel = projectHeader ? projectHeaderLabel : label;
+  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} aria-haspopup="dialog" aria-expanded={open} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>

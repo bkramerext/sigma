@@ -57,6 +57,7 @@ with sync_playwright() as playwright:
     latex_button = page.get_by_role("button", name="LaTeX research paper", exact=True)
     expect(latex_button).to_be_visible()
     assert latex_button.evaluate("element => getComputedStyle(element).color") == "rgb(228, 181, 124)"
+    expect(latex_button.locator(".latex-wordmark")).to_have_text("TEX")
 
     def assert_project_actions():
         page.evaluate("() => document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))")
@@ -66,18 +67,26 @@ with sync_playwright() as playwright:
         expect(action_buttons.nth(0)).to_have_attribute("aria-label", "Export project")
         expect(action_buttons.nth(1)).to_have_attribute("aria-label", "LaTeX research paper")
         expect(action_buttons.nth(2)).to_have_attribute("aria-label", "Project settings")
+        expect(actions.locator(".latex-wordmark")).to_have_text("TEX")
         action_boxes = actions.evaluate("e => [...e.children].map(b => { const r = b.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })")
         export_box, latex_box, settings_box = action_boxes
+        assert export_box["width"] == latex_box["width"] == settings_box["width"] == 34
+        assert export_box["height"] == latex_box["height"] == settings_box["height"] == 34
         assert abs(latex_box["y"] + latex_box["height"] / 2 - export_box["y"] - export_box["height"] / 2) <= 3, (export_box, latex_box, settings_box)
         assert export_box["x"] + export_box["width"] <= latex_box["x"], (export_box, latex_box)
         assert latex_box["x"] + latex_box["width"] <= settings_box["x"], (latex_box, settings_box)
+        gap_before = latex_box["x"] - (export_box["x"] + export_box["width"])
+        gap_after = settings_box["x"] - (latex_box["x"] + latex_box["width"])
+        assert abs(gap_before - gap_after) <= 1 and gap_before >= 0, (gap_before, gap_after)
 
     assert_project_actions()
     page.screenshot(path="/tmp/sigma-t20-project-download-desktop.png", full_page=True)
+    for width, height in ((1280, 800), (390, 844), (320, 700)):
+        page.set_viewport_size({"width": width, "height": height})
+        page.evaluate("window.scrollTo(0, 0)")
+        assert_project_actions()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
     page.set_viewport_size({"width": 390, "height": 844})
-    page.evaluate("window.scrollTo(0, 0)")
-    assert_project_actions()
-    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     page.screenshot(path="/tmp/sigma-t20-project-download-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 1000})
     latex_button.click()
@@ -95,16 +104,21 @@ with sync_playwright() as playwright:
     expect(direct_dialog).to_be_hidden()
     expect(latex_button).to_be_focused()
 
-    # Existing export authoring route remains compatible with saved filename choices.
+    # Project export contains only audit and deterministic report formats.
     expect(page.get_by_role("button", name="Author AI paper", exact=True)).to_have_count(0)
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    export_dialog.get_by_label("Academic paper using LaTeX").check()
-    export_dialog.get_by_label("Filename").fill("maximum-regions-paper")
-    export_dialog.get_by_label("Open in browser tab").check()
-    export_dialog.get_by_role("button", name="Continue", exact=True).click()
+    expect(export_dialog.get_by_role("radio")).to_have_count(3)
+    expect(export_dialog).not_to_contain_text("Academic paper using LaTeX")
+    expect(export_dialog.get_by_role("radio", name="Project Audit")).to_be_visible()
+    expect(export_dialog.get_by_role("radio", name="Text file")).to_be_visible()
+    expect(export_dialog.get_by_role("radio", name="HTML report")).to_be_visible()
+    export_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(export_dialog).to_be_hidden()
+    latex_button.click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("button", name="Close", exact=True)).to_be_visible()
     expect(dialog).to_contain_text("gpt-6.1-sol")
     expect(dialog).to_contain_text("complete evidence snapshot up to 100,000 bytes")
     expect(dialog).to_contain_text("One provider call")
@@ -150,12 +164,12 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("Frozen obligation reconciliation")
     expect(dialog).to_contain_text("not presumed resolved")
     expect(dialog).to_contain_text("artifact:")
-    expect(dialog.get_by_role("link", name="Open compiled PDF in new tab")).to_be_visible()
+    expect(dialog.get_by_role("link", name="Download compiled PDF")).to_be_visible()
     article = dialog.locator(".ai-paper-preview")
     article.screenshot(path="/tmp/sigma-a20-paper-preview.png")
-    pdf_link = dialog.get_by_role("link", name="Open compiled PDF in new tab")
+    pdf_link = dialog.get_by_role("link", name="Download compiled PDF")
     assert "/pdf?" in pdf_link.get_attribute("href")
-    assert pdf_link.get_attribute("target") == "_blank"
+    assert pdf_link.get_attribute("download") == "sigma-paper.pdf"
     pdf_result = page.evaluate(
         "async href => { const response = await fetch(href); const bytes = new Uint8Array(await response.arrayBuffer()); let binary=''; for (const byte of bytes) binary += String.fromCharCode(byte); return {status:response.status,type:response.headers.get('content-type'),bytes:btoa(binary)}; }",
         pdf_link.get_attribute("href"),
@@ -192,25 +206,12 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-a20-paper-mobile.png", full_page=True)
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()
-    expect(export_dialog).to_be_visible()
-    expect(export_dialog.get_by_label("Filename")).to_have_value("maximum-regions-paper")
-    expect(export_dialog.get_by_label("Open in browser tab")).to_be_checked()
-    expect(export_dialog.get_by_label("Academic paper using LaTeX")).to_be_checked()
-    export_dialog.get_by_label("Open in browser tab").uncheck()
-    export_dialog.get_by_role("button", name="Continue", exact=True).click()
-    dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
-    download_link = dialog.get_by_role("link", name="Download compiled PDF")
-    expect(download_link).to_be_visible()
-    assert download_link.get_attribute("download") == "maximum-regions-paper.pdf"
-    page.keyboard.press("Escape")
-    expect(dialog).to_be_hidden()
-    expect(export_dialog).to_be_visible()
-    page.keyboard.press("Escape")
     expect(export_dialog).to_be_hidden()
+    expect(latex_button).to_be_focused()
     assert not errors, errors
     context.close()
     browser.close()
 
 print(
-    "PASS real Chrome A20: copper TeX Project Download action, keyboard activation, Export Project compatibility, saved evidence, traceable claims, durable version and compiled PDF."
+    "PASS real Chrome A20: copper TeX Project Download action, keyboard activation, three-format Export Project, saved evidence, traceable claims, durable version and compiled PDF."
 )

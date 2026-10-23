@@ -1,5 +1,28 @@
 # SIGMA status
 
+## T20.1: Minor UI acceptance fixes (2026-10-23)
+
+Replaced the Project action's LaTeX wordmark with a compact typographic TeX
+mark and retained the standard six-pixel spacing between Export, TeX, and
+Settings. Centered the Model pill, changed the muted Google placeholder to
+Google Sign-in with a gray status dot, and made connected ChatGPT accounts read
+ChatGPT connected. API-key connections remain labeled OpenAI API connected.
+Removed the redundant AI paper choice from Export Project; the TeX shortcut
+opens the existing saved-paper authoring workflow directly. Kept the Outcome
+Markdown control inline at 28×28 px and renamed its evidence subsection to
+Citations, Evidence & Obligations.
+
+Validation: `./sigma test` passed. Real Chrome `browser_checks/a20_paper.py`,
+`browser_checks/header.py`, and `browser_checks/a17_research.py` passed; checks
+covered Project actions and Export at 1440, 1280, 390, and 320 px, header pills
+through 320 px, and Outcome disclosure/toggle behavior including historical,
+interrupted, and multi-strategy records. Desktop/mobile screenshots were
+inspected at `/tmp/sigma-t20-project-download-desktop.png`,
+`/tmp/sigma-t20-project-download-mobile.png`,
+`/tmp/sigma-t25-outcome-desktop.png`, and
+`/tmp/sigma-t25-outcome-mobile.png`. Paper generation used only the isolated
+provider fixture; no paid provider call was made.
+
 ## T20 project-header LaTeX shortcut reconciliation
 
 Reconciled the existing direct LaTeX paper action with the current project
@@ -7,8 +30,8 @@ header. Its TeX wordmark follows Project Download in the Project pane action row
 and precedes Project Settings, using the existing compact copper icon-control
 style. The four Model, Google, Thinking, and ChatGPT pills retain their existing
 2×2 grid and compact header geometry. Closing direct paper authoring restores
-focus to the shortcut; the Export Project authoring route still returns to its
-export options.
+focus to the shortcut. T20.1 removes the redundant paper option from Export
+Project and keeps the direct authoring shortcut as the sole paper entry point.
 
 Validation: `./sigma test` passed (lifecycle/API/workflow checks, Ruff, Pyright,
 frontend typecheck and production build). Real Chrome A20 paper workflow passed
@@ -16,16 +39,15 @@ using the isolated provider fixture, including Project Download/TeX/Settings
 order at 1440 and 390 pixels, keyboard activation and focus return, and the
 existing Export Project path. The project-header check passed at 1280, 1100,
 700, 390, and 320 pixels with no horizontal overflow. Screenshots were inspected
-at desktop and mobile widths. No paid provider call was made. PR #10 remains
-open for review.
+at desktop and mobile widths. No paid provider call was made. PR #10 is merged.
 
 ## T25: Outcome visual hierarchy
 
 Replaced the two-column session presentation with one vertical reading flow.
 Outcome summary, evidence references, and caveats stay immediately visible;
 Status, Strategy Assessments, Metrics, and Provenance are independently
-collapsible. Evidence & Obligations appears when a solution review or saved
-artifacts exist. Details use stacked label/value pairs rather than tables or
+collapsible. Citations, Evidence & Obligations appears when a solution review
+or saved artifacts exist. Details use stacked label/value pairs rather than tables or
 side-by-side columns, with the existing copper/dark disclosures and Markdown
 controls retained.
 

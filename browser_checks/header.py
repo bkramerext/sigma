@@ -110,8 +110,12 @@ with sync_playwright() as playwright:
     google_signin = controls.locator(".project-google-signin")
     expect(model_control).to_have_text("Model · Sol $$")
     expect(thinking_control).to_have_text("Thinking · High")
-    expect(google_signin).to_have_text("Google · Not implemented")
+    expect(google_signin).to_have_text("Google Sign-in")
     expect(google_signin).to_have_attribute("role", "status")
+    assert google_signin.locator(".connection-dot").count() == 1
+    assert google_signin.locator(".connection-dot").evaluate(
+        "e => getComputedStyle(e).backgroundColor"
+    ) == "rgb(127, 140, 150)"
     assert not google_signin.evaluate("e => e.matches('button, a, input')")
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
@@ -169,8 +173,25 @@ with sync_playwright() as playwright:
     expect(thinking_control).to_have_text("Thinking · Low")
     assert close.locator("svg").count() == 1
     assert header.get_by_text("Close project", exact=True).count() == 0
-    assert pill.locator('[role="status"]').inner_text().startswith("ChatGPT sign-in · ")
-    assert pill.locator(".connection-dot").get_attribute("class")
+    connection = page.request.get(API_ORIGIN + "/api/ai/connection").json()
+    if connection.get("status") == "connected":
+        connected_label = (
+            "ChatGPT connected"
+            if connection.get("mode") == "chatgpt" and connection.get("active_account")
+            else "OpenAI API connected"
+        )
+        expect(pill.locator('[role="status"]')).to_have_text(connected_label)
+        assert "connection-connected" in pill.locator(".connection-dot").get_attribute("class")
+    else:
+        assert pill.locator('[role="status"]').inner_text() in {
+            "ChatGPT sign-in · Checking AI…",
+            "ChatGPT sign-in · AI status unavailable",
+            f"ChatGPT sign-in · {connection.get('label', 'Connect AI')}",
+        }
+    assert model_control.evaluate("e => getComputedStyle(e).textAlign") == "center"
+    assert model_control.evaluate("e => getComputedStyle(e).alignItems") == "center"
+    assert model_control.evaluate("e => getComputedStyle(e).justifyContent") == "center"
+    assert model_control.evaluate("e => [...e.children].every(child => getComputedStyle(child).marginLeft === '0px')")
     close.hover()
     assert close.evaluate("e => getComputedStyle(e).cursor") == "pointer"
     page.mouse.move(0, 0)
