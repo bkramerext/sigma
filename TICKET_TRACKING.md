@@ -55,6 +55,7 @@
 | T27 | Research intelligence, cross-strategy learning and agent guidance | Merged, engineering done | Blue · [PR #18](https://github.com/bkramerext/sigma/pull/18) |
 | T28 | Rich computational artifact inspection and cross-session evidence | Implemented; PR open for review | Green · ChatGPT authored ticket |
 | T29 | Human intervention during active concurrent research | Pending after T27 | Blue · ChatGPT authored ticket |
+| T30 | Create Samples entries from exported projects | Implemented; PR open for review | Green · ChatGPT assignment |
 
 ### T23.1 scope
 

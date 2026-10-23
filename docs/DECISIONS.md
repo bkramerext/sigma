@@ -448,3 +448,32 @@ file, 2 million image pixels, 1,400 text characters and 64×20 image cells.
 Unsupported/corrupt/unavailable files retain an explicit notice and original
 artifact reference. Numerical computation and agreement remain evidence, not
 proof.
+
+## T30: Create Samples from project exports
+
+Use the existing export v2 payload as the input contract and the current
+Samples catalog plus independent-copy loader as the install path. A generated
+sample contains the ordinary validated `project.json` and a bounded
+`sample-evidence.json` sidecar. The sidecar holds sanitized agentic runs and
+public research-session records; opening a sample copies those records into the
+existing per-project stores and rebinds project identity and location while
+retaining session, finding, strategy, run and execution IDs. No binary execution
+files are synthesized. Exported computational code, output, status, captured
+preview and provenance remain available where present in session evidence.
+
+The converter removes private configuration/credential fields, redacts
+recognized credential formats and user home paths, and marks known path/identity
+fields for rebinding. Sample names are restricted to safe lowercase slugs and
+creation fails on an existing catalog entry. The command writes only under the
+repository's existing Samples catalog; no browser changes are needed.
+
+Tradeoffs and limits: the current export v2 includes research-session records
+and agentic run records but does not bundle raw Python/SageMath artifact bytes or
+execution-store sidecars. Those original binaries cannot be restored from JSON;
+existing metadata and T28 inspection previews are retained without pretending
+the bytes exist. API dataclass exports include null optional event fields that
+the strict on-disk project decoder does not accept, so import omits only those
+known null event properties before validation. Session export intentionally
+omits its private project path; opening a sample assigns the new canonical path.
+Import is capped at 32 MB and per-record limits from the existing session/run
+stores still apply.
