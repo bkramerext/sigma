@@ -29,7 +29,7 @@ MAX_RECORD = 512_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 16_000
 MAX_AGENT_CONTEXT_BYTES = 256_000
-CALL_TIMEOUT = 120
+CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
     "research_rounds": 3,
@@ -1256,8 +1256,19 @@ def _is_guard_failure(message: str) -> bool:
     )
 
 
+def _call_timeout_seconds(record: dict[str, Any]) -> float:
+    deadline = record.get("deadline_at")
+    if not isinstance(deadline, str):
+        return float(CALL_TIMEOUT)
+    remaining = (datetime.fromisoformat(deadline) - datetime.now(UTC)).total_seconds()
+    return min(float(CALL_TIMEOUT), max(0.0, remaining))
+
+
 async def _call(
-    record: dict[str, Any], role: str, context: dict[str, Any]
+    record: dict[str, Any],
+    role: str,
+    context: dict[str, Any],
+    timeout_seconds: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, int] | None]:
     credential = await auth_context()
     if (
@@ -1303,9 +1314,15 @@ async def _call(
         payload["stream"] = True
         payload["input"] = [{"role": "user", "content": input_text}]
         headers["Accept"] = "text/event-stream"
+    timeout_seconds = min(
+        timeout_seconds if timeout_seconds is not None else float(CALL_TIMEOUT),
+        _call_timeout_seconds(record),
+    )
     async with (
-        asyncio.timeout(CALL_TIMEOUT),
-        httpx.AsyncClient(timeout=CALL_TIMEOUT, follow_redirects=False, trust_env=False) as client,
+        asyncio.timeout(timeout_seconds),
+        httpx.AsyncClient(
+            timeout=timeout_seconds, follow_redirects=False, trust_env=False
+        ) as client,
         client.stream(
             "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
         ) as response,
@@ -2149,6 +2166,7 @@ async def _portfolio_role_call(
                 else f"{role.title()} call {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} is running for {branch['strategy_title']}."
             )
             step_id = record["current_step"]
+            timeout_seconds = _call_timeout_seconds(record)
             _event(record, "call.started", record["message"], role)
             step = {
                 "id": step_id,
@@ -2159,6 +2177,7 @@ async def _portfolio_role_call(
                 "status": "running",
                 "started_at": _now(),
                 "call_number": record["calls_used"],
+                "timeout_seconds": timeout_seconds,
                 "context_artifact_ids": context["context_artifact_ids"],
                 "prior_session_artifact_ids": context["prior_session_artifact_ids"],
                 "peer_strategy_artifact_ids": list(
@@ -2189,7 +2208,7 @@ async def _portfolio_role_call(
             _save(path, record)
             call_record = record
         try:
-            output, usage = await _call(call_record, role, context)
+            output, usage = await _call(call_record, role, context, timeout_seconds)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -2205,7 +2224,6 @@ async def _portfolio_role_call(
                 step.update({"status": "failed", "finished_at": _now()})
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
-                    step["timeout_seconds"] = CALL_TIMEOUT
                 if step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
@@ -2214,7 +2232,7 @@ async def _portfolio_role_call(
                 failure_message = str(exc).strip()[:1000]
                 if timeout_failure:
                     failure_message = (
-                        f"AI provider call timed out after {CALL_TIMEOUT:g} seconds. "
+                        f"AI provider call timed out at its {timeout_seconds:g}-second call/session limit. "
                         "Remote processing may still complete and consume plan usage; "
                         "saved research artifacts were retained."
                     )
