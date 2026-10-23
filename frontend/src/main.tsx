@@ -510,7 +510,6 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
 
     <div id="sessions-pane-content" hidden={!expanded}>
     <div className="session-table">
-      <div className="session-columns" aria-hidden="true"><span>Session</span><span>Outcome</span></div>
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
           const currentAction = readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action;

@@ -4,18 +4,19 @@ Status: ready for review (R4R); not merged.
 Branch: feature/t20-1-ui-acceptance
 Pull request: to be added after opening the implementation PR.
 
-Implemented the five originally assigned T20.1 UI fixes and the requested Lean action update:
+Implemented the five originally assigned T20.1 UI fixes, the current ticket’s Session panel cleanup, and the requested Lean action update:
 - Replaced the LaTeX wordmark with a copper typographic TeX mark and added the official Lean Prover SVG as a muted, disabled action. Final order is TeX → Lean → Download (Export Project) → Settings, with equal six-pixel gaps and 34px controls. The Lean logo asset is from https://github.com/leanprover/theorem_proving_in_lean4/blob/master/book/static/lean_logo.svg (Apache-2.0).
 - Centered Model pill content; renamed the muted Google placeholder to Google Sign-in with a gray dot; labeled connected ChatGPT accounts ChatGPT connected while keeping API-key mode labeled OpenAI API connected.
 - Removed Academic paper using LaTeX from Export Project. The TeX shortcut directly opens the existing saved-paper workflow.
 - Kept the Outcome Markdown toggle inline after Outcome and before the assessment label; added explicit 28×28px, no-border/no-shadow geometry assertions at all requested widths.
 - Renamed the subsection to Citations, Evidence & Obligations.
+- Removed the redundant Session/Outcome column-heading row and divider while retaining each Session #n heading, status, actions, summary, and outcome content.
 
 Validation completed:
 - ./sigma test — passed.
 - Real Chrome browser_checks/a20_paper.py — passed, with isolated provider fixture; Project actions and export layout checked at 1440, 1280, 390, and 320 px; both custom tooltips, disabled Lean keyboard behavior, direct paper workflow, generated evidence, and PDF checked.
 - Real Chrome browser_checks/header.py — passed at desktop and responsive widths through 320 px, including pill state, keyboard, persistence, and overflow.
-- Real Chrome browser_checks/a17_research.py — passed for Outcome Markdown flow and size, keyboard operation, historical/interrupted/multi-strategy records, metrics/provenance, and responsive widths 1440, 1280, 390, and 320 px.
+- Real Chrome browser_checks/a17_research.py — passed for Outcome Markdown flow and size, keyboard operation, historical/interrupted/multi-strategy records, metrics/provenance, Session heading removal, and responsive widths 1440, 1280, 390, and 320 px.
 - Inspected desktop/mobile screenshots at /tmp/sigma-t20-project-download-desktop.png, /tmp/sigma-t20-project-download-mobile.png, /tmp/sigma-t25-outcome-desktop.png, and /tmp/sigma-t25-outcome-mobile.png.
 - No paid provider calls were made.
 

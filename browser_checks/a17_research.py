@@ -698,12 +698,13 @@ with sync_playwright() as playwright:
     research = page.locator(".sessions-pane")
     expect(research.get_by_role("heading", name="Sessions")).to_be_visible()
     expect(research.locator(".section-count")).to_have_text("0 sessions, 0 running")
-    expect(research.locator(".session-columns")).to_contain_text("Session")
+    expect(research.locator(".session-columns")).to_have_count(0)
+    expect(research.locator(".sessions-empty")).to_be_visible()
     assert (
-        research.locator(".session-columns").evaluate(
-            "node => getComputedStyle(node).textTransform"
+        research.locator(".sessions-empty").evaluate(
+            "node => getComputedStyle(node).borderTopWidth"
         )
-        == "uppercase"
+        == "0px"
     )
     assert research.get_by_role("button", name=re.compile("start", re.IGNORECASE)).count() == 0
     play = page.get_by_role("button", name="Start a new research session", exact=True)
@@ -925,6 +926,8 @@ with sync_playwright() as playwright:
     expect(page.locator(".project-pane").locator("details")).to_have_count(0)
     expect(research).to_be_visible()
     first_session = research.locator("li[data-session-id]").first
+    expect(research.locator(".session-columns")).to_have_count(0)
+    expect(first_session.get_by_role("button", name=re.compile("Session #1"))).to_be_visible()
     expect(first_session.locator(":scope > details")).to_have_count(0)
     first_session.get_by_role("button", name=re.compile("Session #1")).click()
     expect(first_session.locator(".session-row-content")).to_be_visible()

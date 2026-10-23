@@ -5,20 +5,24 @@
 Replaced the Project action's LaTeX wordmark with a compact typographic TeX
 mark and added the official Lean Prover logo as a muted, disabled action. The
 Project actions now follow TeX → Lean → Export/Download → Settings, with equal
-six-pixel gaps and 34px controls. Centered the Model pill, changed the muted Google placeholder to
-Google Sign-in with a gray status dot, and made connected ChatGPT accounts read
-ChatGPT connected. API-key connections remain labeled OpenAI API connected.
+six-pixel gaps and 34px controls. Centered the Model pill, changed the muted
+Google placeholder to Google Sign-in with a gray status dot, and made connected
+ChatGPT accounts read ChatGPT connected. API-key connections remain labeled
+OpenAI API connected.
 Removed the redundant AI paper choice from Export Project; the TeX shortcut
 opens the existing saved-paper authoring workflow directly. Kept the Outcome
 Markdown control inline at 28×28 px and renamed its evidence subsection to
-Citations, Evidence & Obligations.
+Citations, Evidence & Obligations. Removed the redundant Session/Outcome column
+heading and divider from the Sessions panel; the individual session headings,
+statuses, actions, and Outcome contents remain directly visible.
 
 Validation: `./sigma test` passed. Real Chrome `browser_checks/a20_paper.py`,
-`browser_checks/header.py`, and `browser_checks/a17_research.py` passed; checks
-covered Project actions, both tooltips and disabled Lean keyboard behavior, and
-Export at 1440, 1280, 390, and 320 px; header pills
-through 320 px, and Outcome disclosure/toggle behavior including historical,
-interrupted, and multi-strategy records. Desktop/mobile screenshots were
+`browser_checks/header.py`, and `browser_checks/a17_research.py` passed. A20
+checked Project actions, both tooltips and disabled Lean keyboard behavior, and
+Export at 1440, 1280, 390, and 320 px. The header check covered pills through
+320 px. A17 covered the Session heading removal, Outcome disclosure/toggle
+behavior, historical/interrupted/multi-strategy records, and responsive widths
+1440, 1280, 390, and 320 px. Desktop/mobile screenshots were
 inspected at `/tmp/sigma-t20-project-download-desktop.png`,
 `/tmp/sigma-t20-project-download-mobile.png`,
 `/tmp/sigma-t25-outcome-desktop.png`, and

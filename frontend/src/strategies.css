@@ -462,7 +462,6 @@
 .workspace-page .strategy-expanded .strategy-approach { margin: 0 0 8px; }
 .workspace-page .sessions-pane { margin-top: 16px; }
 .workspace-page .sessions-pane-heading .section-count { margin-left: auto; }
-.workspace-page .session-columns { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); padding: 14px 24px; text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .session-table { border: 2px solid var(--workspace-line); border-radius: 12px; }
 .workspace-page .session-list { margin: 0; padding: 0; border: 0; background: transparent; list-style: none; }
 .workspace-page .session-row { min-width: 0; border-top: 1px solid var(--workspace-line); }
@@ -479,7 +478,7 @@
 .workspace-page .session-stopped i, .workspace-page .session-failed i { border-color: #d38578; box-shadow: 0 0 5px #d38578; }
 .workspace-page .session-row-content { min-width: 0; padding: 0 0 0 16px; border-left: 1px solid #243441; color: #c4d0da; line-height: 1.6; }
 .workspace-page .session-status-row { display: flex; min-height: 24px; align-items: center; margin: 0 0 8px; }
-.workspace-page .sessions-empty { margin: 0; padding: 16px 24px; border-top: 1px solid var(--workspace-line); color: var(--workspace-muted); }
+.workspace-page .sessions-empty { margin: 0; padding: 16px 24px; color: var(--workspace-muted); }
 .workspace-page .sessions-pane .research-session-facts { gap: 4px 24px; }
 .workspace-page .sessions-pane .research-session-facts p { margin: 3px 0; }
 .workspace-page .sessions-pane .research-session-message { color: #e7c08d; }
@@ -501,7 +500,6 @@
   .workspace-page .strategies-heading-right { flex: 1 1 100%; justify-content: flex-start; flex-wrap: wrap; gap: 8px 12px; margin-left: 0; }
   .workspace-page .strategies-heading-right .section-count,
   .workspace-page .sessions-pane-heading .section-count { flex-basis: auto; }
-  .workspace-page .session-columns { display: none; }
   .workspace-page .session-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px; }
   .workspace-page .session-row-content { padding: 12px 0 0; border-left: 0; border-top: 1px solid #243441; }
   .workspace-page .strategies-heading-right { flex: 0 1 auto; justify-content: flex-start; flex-wrap: wrap; gap: 8px 12px; margin-left: 0; }
@@ -778,15 +776,11 @@
 .workspace-page .session-outcome-inline.outcome-pending span,
 .workspace-page .session-outcome-inline.outcome-mixed span { color: #e2be91; }
 
-/* Match the session table header to its body and favor the Details column. */
+/* Favor the session details column on desktop. */
 @media (min-width: 701px) {
-  .workspace-page .session-columns,
   .workspace-page .session-row {
     grid-template-columns: 220px minmax(0, 1fr);
     column-gap: 12px;
-  }
-  .workspace-page .session-columns > span:nth-child(2) {
-    padding-left: 16px;
   }
 }
 
@@ -923,8 +917,6 @@
 }
 
 /* The Outcome hierarchy has one reading column at every viewport width. */
-.workspace-page .session-columns { grid-template-columns: minmax(0, 1fr); }
-.workspace-page .session-columns > span:nth-child(2) { display: none; }
 .workspace-page .session-row { grid-template-columns: minmax(0, 1fr); }
 .workspace-page .session-row-heading,
 .workspace-page .session-row-content { grid-column: 1; grid-row: auto; }
