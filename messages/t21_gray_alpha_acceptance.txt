@@ -1,0 +1,42 @@
+T21 UI/browser alpha acceptance — Gray
+
+Tested current main at 9cb487e in real Chrome with isolated local fixtures.
+No live model/provider calls or worker coordination were used.
+
+Covered flows:
+- Create a project, open a sample and recent project, return Home, and verify
+  recent/sample persistence and project identity.
+- Edit project settings and strategies; validate research limits, save, reload,
+  and confirm persisted values.
+- Run multi-strategy sessions; inspect live progress, outcomes, metrics,
+  provenance, historical and interrupted sessions; pause, resume, and stop while
+  provider work is active.
+- Export Project Audit, text, and HTML reports; exercise report failure and
+  retry behavior.
+- Run a bounded computation through the locally available Python sandbox, then
+  inspect the persisted execution status, exact source/stdout, execution ID,
+  and captured JSON file in the real Chrome Outcome evidence disclosure.
+- Recheck T20.1 project header and responsive controls.
+
+Validation passed: browser_checks/recents.py, browser_checks/settings.py,
+browser_checks/a17_research.py, browser_checks/header.py, a real Chrome Python
+execution-evidence scenario, tests/python_sandbox.py, tests/sage_execution.py,
+tests/project_reports.py, and ./sigma test. Desktop and narrow-screen captures
+are in /tmp/sigma-a177-after-session-card.png,
+/tmp/sigma-a177-after-export-mobile.png, /tmp/sigma-a23-model-controls-390.png,
+/tmp/sigma-t21-python-evidence-desktop.png, and
+/tmp/sigma-t21-python-evidence-mobile.png.
+
+Findings and limits:
+- No release-blocking UI defect was found; no UI code change was needed.
+- The local SageMath image sigma-research-sage:10.8 is not installed, so a real
+  Sage browser computation was not run. Sage execution contracts and
+  Python/Sage per-runtime counts passed deterministic tests.
+- T28 richer artifact previews are not present on this main snapshot. Current
+  Python execution records and captured-file metadata were inspected; rerun
+  artifact-preview acceptance after T28 is integrated.
+- No conflict occurred on this acceptance branch. Overall T21 alpha acceptance
+  still needs coordinator integration testing after outstanding PRs merge.
+
+R4R: the current-main UI/browser acceptance portion is ready for review.
+This handoff does not assert overall local alpha or research-quality acceptance.

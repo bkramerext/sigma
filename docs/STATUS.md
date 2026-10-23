@@ -61,10 +61,42 @@ action. Real Chrome confirmed the styling and keyboard activation of Dismiss.
 
 Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
 320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
-`browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The A17
-research-session browser scenario was attempted but did not reach its result
-assertions: its isolated fixture ended the session at 0/30 calls, so its
-expected research artifacts were unavailable. No paid provider call was made.
+`browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The first A17
+attempt stopped at 0/30 calls because clearing the cost field retained a $0.01
+limit. PR #35 fixed the input behavior; the complete A17 flow passed against a
+fresh fixture afterward. No paid provider call was made.
+
+## T21 local alpha UI/browser acceptance (2026-10-23)
+
+Acceptance was run from current `main` at `9cb487e` with the isolated local
+provider fixture; no provider billing or worker coordination was used. Real
+Chrome passed Home project creation/open/recent navigation and persistence,
+project settings and research-limit validation/save/reload, strategy editing,
+three-round multi-strategy progress, pause/resume/stop during provider work,
+historical/interrupted session inspection, outcome and metrics disclosures,
+and audit/text/HTML report downloads including failure recovery. T20.1 header,
+cost-limit clearing, report controls, and narrow-screen checks passed. Screens
+were inspected at desktop and phone widths; screenshots are under `/tmp`,
+including `sigma-a177-after-session-card.png`,
+`sigma-a177-after-export-mobile.png`, `sigma-a23-model-controls-390.png`,
+`sigma-t21-python-evidence-desktop.png`, and
+`sigma-t21-python-evidence-mobile.png`.
+
+A separate real Chrome run used the available local Python sandbox and verified
+completed execution status, exact source/stdout, execution ID, and captured
+`computed.json` in the saved computational evidence at 1440px and 390px, with
+no horizontal overflow. Focused Python sandbox, Sage execution-contract, and
+report tests passed. The SageMath Docker image was not installed locally, so
+real Sage execution in Chrome was not run. Rich artifact previews from T28 are
+not present on this main snapshot; current evidence records and computational
+execution details were tested instead. No release-blocking UI defect was found
+and no product UI changes were needed.
+
+Validation: `browser_checks/recents.py`, `browser_checks/settings.py`,
+`browser_checks/a17_research.py`, `browser_checks/header.py`, a real Chrome
+Python-execution evidence scenario, `tests/python_sandbox.py`,
+`tests/sage_execution.py`, `tests/project_reports.py`, and `./sigma test` all
+passed. No paid provider calls were made.
 
 ## PR #35 review follow-up (2026-10-23)
 
