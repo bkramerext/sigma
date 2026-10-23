@@ -103,7 +103,7 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 | Codex | Last assignment | Current work |
 |---|---|---|
 | Blue | A18 merged | No active task verified |
-| Green | A24 complete | PR prepared for review |
+| Green | A24 complete | [PR #13](https://github.com/bkramerext/sigma/pull/13) open for review |
 
 **Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. There is no confirmed currently-running worker from the repository evidence in this snapshot.
 
