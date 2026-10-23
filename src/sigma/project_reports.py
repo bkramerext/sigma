@@ -118,12 +118,16 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
         research_quality = _rows(metrics.get("research_quality"))
         if operational or research_quality:
             lines += ["Outcome metrics", "~~~~~~~~~~~~~~~"]
-            for operational_item, quality_item in zip(operational, research_quality, strict=False):
-                lines.append(
-                    f"{_value(operational_item.get('label'))}: {_value(operational_item.get('value'))} || "
-                    f"{_value(quality_item.get('label'))}: {_value(quality_item.get('value'))}"
-                )
-            lines.append("")
+            for heading, items in (
+                ("Operational metrics", operational),
+                ("Research-quality metrics", research_quality),
+            ):
+                if not items:
+                    continue
+                lines += [heading, "~" * len(heading)]
+                for item in items:
+                    lines.append(f"{_value(item.get('label'))}: {_value(item.get('value'))}")
+                lines.append("")
         solution_review = outcome
         solution_review = solution_review.get("solution_review")
         review = solution_review
@@ -357,9 +361,12 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
             continue
         if index + 1 < len(lines) and _HEADING_MARK.fullmatch(lines[index + 1].strip()):
             flush_list()
+            flush_session_header()
             level = {"=": 1, "-": 2, "~": 3}[lines[index + 1].strip()[0]]
             if line in {"Strategy Assessments", "Outcome metrics"}:
                 level = 4
+            elif line in {"Operational metrics", "Research-quality metrics"}:
+                level = 5
             if not (level == 1 and line == title):
                 if level == 2:
                     close_session()
@@ -370,27 +377,21 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
                 heading_class = "report-subheading" if level == 4 else "report-heading"
                 blocks.append(f'<h{level} class="{heading_class}">{_html_inline(line)}</h{level}>')
             index += 2
-            if line == "Outcome metrics":
-                rows: list[tuple[str, str, str, str]] = []
+            if line in {"Operational metrics", "Research-quality metrics"}:
+                metric_rows: list[tuple[str, str]] = []
                 while index < len(lines) and lines[index].strip():
-                    pair = lines[index].strip().split(" || ", 1)
-                    if len(pair) == 2:
-                        left_label, left_sep, left_value = pair[0].partition(": ")
-                        right_label, right_sep, right_value = pair[1].partition(": ")
-                        if left_sep and right_sep:
-                            rows.append((left_label, left_value, right_label, right_value))
+                    label, separator, value = lines[index].partition(": ")
+                    if separator:
+                        metric_rows.append((label, value))
                     index += 1
-                if rows:
-                    cells = "".join(
-                        "<tr>"
-                        + "".join(f"<td>{_html_inline(value)}</td>" for value in row)
-                        + "</tr>"
-                        for row in rows
-                    )
+                if metric_rows:
                     blocks.append(
-                        '<div class="table-scroll"><table class="report-outcome-metrics-table"><thead><tr><th>Operational measurement</th><th>Value</th><th>Research-quality measurement</th><th>Value</th></tr></thead><tbody>'
-                        + cells
-                        + "</tbody></table></div>"
+                        '<dl class="report-outcome-metrics">'
+                        + "".join(
+                            f"<div><dt>{_html_inline(label)}</dt><dd>{_html_inline(value)}</dd></div>"
+                            for label, value in metric_rows
+                        )
+                        + "</dl>"
                     )
             if line == "Strategy Assessments":
                 rows: list[tuple[str, str, str, str]] = []
@@ -487,8 +488,10 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
       .report-session-header{display:block;margin:0 -22px 20px;padding:16px 20px 17px;border-bottom:1px solid var(--line);border-left:3px solid var(--copper);border-radius:9px 9px 0 0;background:#f4f6f6}
       .report-session .report-record-heading{margin:0 0 14px;color:var(--navy);font:600 1.18rem/1.3 system-ui,sans-serif;overflow-wrap:anywhere}
       .report-session-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 24px;margin:0}
-      .report-outcome-metrics-table{width:100%;border-collapse:collapse;font-size:11px}
-      .report-outcome-metrics-table th,.report-outcome-metrics-table td{padding:6px 8px;border-top:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+      .report-outcome-metrics{margin:8px 0 18px;font:13px/1.5 system-ui,sans-serif}
+      .report-outcome-metrics div{margin:8px 0;overflow-wrap:anywhere}
+      .report-outcome-metrics dt{color:var(--muted);font-weight:600}
+      .report-outcome-metrics dd{margin:2px 0 0}
       .report-session-fact{min-width:0}
       .report-session-fact-wide{grid-column:1/-1}
       .report-session-fact dt{margin:0 0 3px;color:var(--muted);font:700 10px/1.4 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}

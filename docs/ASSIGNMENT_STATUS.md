@@ -47,7 +47,7 @@
 | A22 | Cloud deployment | Planned / unverified | Unassigned |
 | A23 | Project difficulty setting | Done | — |
 | A23+ | Clickable model and thinking-level pills under Difficulty; cost dollar signs; sign-in placeholder | Proposed | Unassigned |
-| A24 | Consolidated outcome metrics, operational and research quality | Done | Green |
+| A24 | Consolidated outcome metrics, operational and research quality | Ready to assign; not verified started | Green proposed |
 
 ### A23+ scope
 
@@ -103,8 +103,8 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 | Codex | Last assignment | Current work |
 |---|---|---|
 | Blue | A18 merged | No active task verified |
-| Green | A24 complete | [PR #13](https://github.com/bkramerext/sigma/pull/13) open for review |
+| Green | A19 merged | A24 proposed next; not confirmed started |
 
 **Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. There is no confirmed currently-running worker from the repository evidence in this snapshot.
 
-**Delivery target:** October 26, 2026. Outstanding integration, cloud work, A23+ pills and A17.8 acceptance should be tracked separately; completion of software work does not close the research-quality gate.
+**Delivery target:** October 26, 2026. Outstanding integration, cloud work, A23+ pills, A24 metrics and A17.8 acceptance should be tracked separately; completion of software work does not close the research-quality gate.

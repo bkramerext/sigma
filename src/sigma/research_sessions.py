@@ -896,7 +896,20 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         {"label": "Strategy contribution", "value": contribution_value},
         {"label": "Unresolved objections", "value": objections_value},
     ]
-    return {"operational": operational, "research_quality": research_quality}
+    return {
+        "operational": operational,
+        "research_quality": research_quality,
+        # An inventory of existing evidence IDs, not verification authority or
+        # a claim that every row uses every source. Full evidence stays in the
+        # owning session's steps/artifacts and original execution records.
+        "sources": {
+            "session_id": session_id if isinstance(session_id, str) else None,
+            "step_ids": sorted(step_ids),
+            "artifact_ids": sorted(artifact_ids),
+            "execution_ids": sorted(executions),
+            "strategy_ids": sorted(strategies),
+        },
+    }
 
 
 def _outcome(record: dict[str, Any]) -> dict[str, Any]:

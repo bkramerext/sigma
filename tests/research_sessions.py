@@ -288,6 +288,15 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     assert skeptic_context["python_execution"] == execution
     assert skeptic_context["python_execution"]["status"] == "timeout"
     assert finished["steps"][0]["output"] == skeptic_context
+    sources = finished["outcome"]["metrics"]["sources"]
+    assert sources["session_id"] == started["id"]
+    assert sources["execution_ids"] == [execution["id"]]
+    assert sources["artifact_ids"] == [finished["artifacts"][0]["id"]]
+    assert sources["step_ids"] == sorted(step["id"] for step in finished["steps"])
+    artifact = finished["artifacts"][0]
+    assert artifact["session_id"] == started["id"] and artifact["strategy_id"] == strategy.id
+    assert artifact["strategy_cycle"] == 1
+    assert artifact["investigator_output"]["python_execution"] == execution
     assert finished["artifacts"][0]["investigator_output"] == skeptic_context
     assert (
         finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
@@ -3543,6 +3552,20 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     metrics = loaded["outcome"]["metrics"]
     operational = {item["label"]: item["value"] for item in metrics["operational"]}
     quality = {item["label"]: item["value"] for item in metrics["research_quality"]}
+    assert metrics["sources"] == {
+        "session_id": session_id,
+        "step_ids": sorted({step["id"] for step in record["steps"]}),
+        "artifact_ids": ["finding-a", "finding-b"],
+        "execution_ids": [execution_id],
+        "strategy_ids": ["strategy-a", "strategy-b"],
+    }
+    # The source inventory resolves to unchanged structured evidence, including
+    # interrupted/reused states. Counts alone are not claim provenance.
+    assert loaded["steps"] == record["steps"]
+    assert loaded["artifacts"] == record["artifacts"]
+    assert loaded["artifacts"][1]["investigator_output"]["python_execution"] == shared_python
+    saved = json.loads((path / "research-sessions" / f"{session_id}.json").read_text())
+    assert "metrics" not in saved.get("outcome", {})
 
     calls = operational["Model calls by status"]
     assert calls.startswith("5 budget-counted calls (1 step status unavailable")
