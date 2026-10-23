@@ -159,8 +159,67 @@ def test_unequal_metric_groups() -> None:
         )
 
 
+def test_context_manifest_is_reported() -> None:
+    data = fixture()
+    data["research_sessions"][0]["artifacts"][0]["skeptic_output"] = {
+        "obligation_reviews": [
+            {
+                "obligation_id": "obligation-1",
+                "status": "addressed",
+                "basis_artifact_ids": ["artifact-1"],
+                "basis_step_ids": [],
+                "rationale": "The linked construction covers this case.",
+            }
+        ]
+    }
+    data["research_sessions"][0]["steps"] = [
+        {
+            "id": "step-1",
+            "role": "skeptic",
+            "context_manifest": {
+                "selected_count": 2,
+                "omitted_count": 8,
+                "assembled_context_bytes": 12000,
+                "sources": [
+                    {
+                        "source_ids": ["artifact-critical"],
+                        "category": "counterexample_or_latest",
+                        "reason": "explicitly unresolved obligation or marked counterexample",
+                        "status": "selected",
+                    },
+                    {
+                        "source_ids": ["artifact-old"],
+                        "category": "history",
+                        "reason": "lower priority; original retained in session",
+                        "status": "omitted",
+                    },
+                ],
+                "omitted_prior_session_findings": {
+                    "count": 3,
+                    "source_ids": ["prior-old"],
+                    "reason": "bounded index",
+                },
+            },
+        }
+    ]
+    report, _ = render_report(data, "txt")
+    assert isinstance(report, str)
+    for expected in (
+        "Agent context selection",
+        "2 selected, 8 current-session artifacts omitted",
+        "artifact-critical",
+        "artifact-old",
+        "original retained in session",
+        "Omitted prior-session findings: 3",
+        "Obligation disposition: addressed · obligation-1",
+        "model-reported, unverified",
+    ):
+        assert expected in report
+
+
 def main() -> None:
     test_unequal_metric_groups()
+    test_context_manifest_is_reported()
     data = fixture()
     plain, plain_type = render_report(data, "txt")
     assert isinstance(plain, str)
