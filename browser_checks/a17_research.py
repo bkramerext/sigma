@@ -23,6 +23,7 @@ with sync_playwright() as playwright:
     )
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     page = context.new_page()
+
     def select_samples():
         tab = page.get_by_role("tab", name="Samples", exact=True)
         if tab.get_attribute("aria-selected") != "true":
@@ -272,8 +273,10 @@ with sync_playwright() as playwright:
         == "rgb(224, 196, 160)"
     )
     expect(first_export.get_by_role("radio", name="Project Audit")).to_be_checked()
-    expect(first_export.get_by_role("radio")).to_have_count(3)
-    expect(first_export).not_to_contain_text("Academic paper using LaTeX")
+    # Current main adds the fourth fixed report type; no format dropdown is
+    # used for any of the four choices.
+    expect(first_export.get_by_role("radio")).to_have_count(4)
+    expect(first_export).to_contain_text("LaTeX report")
     expect(first_export.locator("select")).to_have_count(0)
     expect(first_export.get_by_label("Open in browser tab")).not_to_be_checked()
     export_title_box = first_export.locator("#export-project-heading").bounding_box()
@@ -347,10 +350,14 @@ with sync_playwright() as playwright:
     rounds_input = settings.get_by_label("Skeptic iterations")
     assert rounds_input.evaluate("element => getComputedStyle(element).appearance") == "textfield"
     rounds_input.fill("6")
-    expect(settings.get_by_role("alert").filter(has_text="whole number from 1 to 5")).to_be_visible()
+    expect(
+        settings.get_by_role("alert").filter(has_text="whole number from 1 to 5")
+    ).to_be_visible()
     expect(save_settings).to_be_disabled()
     rounds_input.fill("0")
-    expect(settings.get_by_role("alert").filter(has_text="whole number from 1 to 5")).to_be_visible()
+    expect(
+        settings.get_by_role("alert").filter(has_text="whole number from 1 to 5")
+    ).to_be_visible()
     rounds_input.fill("3")
     duration_input = settings.get_by_label("Maximum session duration", exact=True)
     duration_unit = settings.get_by_label("Maximum session duration unit")
@@ -413,7 +420,9 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-a177-after-settings-main-mobile.png")
     save_settings.click()
     expect(settings).to_be_hidden()
-    saved_limits = page.evaluate("async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }")
+    saved_limits = page.evaluate(
+        "async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }"
+    )
     assert saved_limits["session_duration_minutes"] == 7 * 24 * 60, saved_limits
     assert saved_limits["maximum_estimated_cost_usd"] is None, {
         "saved": saved_limits,
@@ -428,7 +437,9 @@ with sync_playwright() as playwright:
     settings.get_by_label("Maximum session duration unit").select_option("hours")
     settings.get_by_role("button", name="Save", exact=True).click()
     expect(settings).to_be_hidden()
-    saved_limits = page.evaluate("async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }")
+    saved_limits = page.evaluate(
+        "async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }"
+    )
     assert saved_limits["session_duration_minutes"] == 120, saved_limits
     page.reload()
     page.get_by_role("button", name="Project settings", exact=True).click()
@@ -862,7 +873,9 @@ with sync_playwright() as playwright:
     expect(
         page.locator("li[data-session-id]").first.locator(".session-row-content")
     ).to_be_visible()
-    open_outcome_section(page.locator("li[data-session-id]").first, "Citations, Evidence & Obligations")
+    open_outcome_section(
+        page.locator("li[data-session-id]").first, "Citations, Evidence & Obligations"
+    )
     expect(page.locator(".research-artifacts li")).to_have_count(3)
     restored = page.evaluate(
         "async ({path,id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()",
@@ -1013,7 +1026,16 @@ with sync_playwright() as playwright:
         toggle_style = outcome_toggle.evaluate(
             "e => { const s=getComputedStyle(e), r=e.getBoundingClientRect(); return [s.display, s.width, r.width, r.height, s.borderWidth, s.boxShadow, s.backgroundColor, s.position]; }"
         )
-        assert toggle_style == ["flex", "28px", 28, 28, "0px", "none", "rgba(0, 0, 0, 0)", "static"], toggle_style
+        assert toggle_style == [
+            "flex",
+            "28px",
+            28,
+            28,
+            "0px",
+            "none",
+            "rgba(0, 0, 0, 0)",
+            "static",
+        ], toggle_style
 
     assert_outcome_markdown_control_flow()
     assert first_session.locator(".session-outcome table").count() == 0
@@ -1030,7 +1052,13 @@ with sync_playwright() as playwright:
     subsection_summaries = first_session.locator(".outcome-subsection > summary")
     expect(subsection_summaries).to_have_count(5)
     expect(subsection_summaries).to_contain_text(
-        ["Status", "Strategy Assessments", "Metrics", "Provenance", "Citations, Evidence & Obligations"]
+        [
+            "Status",
+            "Strategy Assessments",
+            "Metrics",
+            "Provenance",
+            "Citations, Evidence & Obligations",
+        ]
     )
     for section in first_session.locator(".outcome-subsection").all():
         assert section.get_attribute("open") is None, section.inner_text()
@@ -1053,6 +1081,12 @@ with sync_playwright() as playwright:
     provenance_detail = open_outcome_section(first_session, "Provenance")
     expect(provenance_detail).to_contain_text("Session ID")
     provenance_detail.get_by_text("Model call attempts", exact=True).wait_for()
+    context_used = provenance_detail.locator(".context-used-disclosure").first
+    expect(context_used).to_be_visible()
+    expect(context_used.locator("summary")).to_contain_text("Context used")
+    context_used.locator("summary").click()
+    expect(context_used).to_contain_text("Deterministic extracts are untrusted")
+    expect(context_used).to_contain_text("UTF-8 input")
     page.screenshot(path="/tmp/sigma-t25-outcome-desktop.png", full_page=True)
     # T24 supplies data; T25 owns the Outcome presentation.
     expect(first_session.get_by_role("region", name="Research outcome metrics")).to_have_count(0)
@@ -1069,7 +1103,24 @@ with sync_playwright() as playwright:
     expect(provenance_detail).to_contain_text(metrics_session["id"])
     for width, height in ((1440, 900), (1280, 800), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
-        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), width
+        overflow = page.evaluate(
+            """() => [...document.querySelectorAll('*')].filter(element => {
+              const rect = element.getBoundingClientRect();
+              return rect.left < -1 || rect.right > window.innerWidth + 1;
+            }).slice(0, 12).map(element => ({
+              tag: element.tagName,
+              className: typeof element.className === 'string' ? element.className : '',
+              left: Math.round(element.getBoundingClientRect().left),
+              right: Math.round(element.getBoundingClientRect().right),
+              scrollWidth: element.scrollWidth,
+              clientWidth: element.clientWidth,
+              text: (element.textContent || '').trim().slice(0, 90),
+            }))"""
+        )
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth"), (
+            width,
+            overflow,
+        )
         assert_outcome_markdown_control_flow()
         outcome_box = first_session.locator(".session-outcome").bounding_box()
         assert (
@@ -1078,6 +1129,9 @@ with sync_playwright() as playwright:
             and outcome_box["x"] + outcome_box["width"] <= width + 1
         )
         if width == 390:
+            context_box = context_used.bounding_box()
+            assert context_box and context_box["x"] >= 0
+            assert context_box["x"] + context_box["width"] <= width + 1
             page.screenshot(path="/tmp/sigma-t25-outcome-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
     conversion_count = len(provider_calls)
@@ -1093,9 +1147,9 @@ with sync_playwright() as playwright:
     assert len(provider_calls) == conversion_count
     first_session.get_by_role("button", name="Show plain outcome text").focus()
     page.keyboard.press("Space")
-    expect(first_session.get_by_role("button", name="Render outcome as Markdown")).to_have_attribute(
-        "aria-pressed", "false"
-    )
+    expect(
+        first_session.get_by_role("button", name="Render outcome as Markdown")
+    ).to_have_attribute("aria-pressed", "false")
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
@@ -1252,7 +1306,7 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    expect(export_dialog.get_by_role("radio")).to_have_count(3)
+    expect(export_dialog.get_by_role("radio")).to_have_count(4)
     export_dialog.get_by_role("radio", name="Text file").check()
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".txt")
     export_dialog.get_by_label("Filename").fill("a17-blocked-tab")

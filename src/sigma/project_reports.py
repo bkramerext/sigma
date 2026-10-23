@@ -166,6 +166,8 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
         if not artifacts:
             lines += ["No completed research artifact is recorded.", ""]
         for index, artifact in enumerate(artifacts, 1):
+            skeptic = artifact.get("skeptic_output")
+            skeptic = skeptic if isinstance(skeptic, dict) else {}
             lines += [
                 f"Artifact {index} · {_value(artifact.get('note'))}",
                 f"Claim: {_value(artifact.get('claim') or artifact.get('claim_or_question'))}",
@@ -179,6 +181,75 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
                 f"Next question: {_value(artifact.get('next_question'))}",
                 "",
             ]
+            for disposition in _rows(skeptic.get("obligation_reviews")):
+                lines.append(
+                    "Obligation disposition: "
+                    f"{_value(disposition.get('status'))} · {_value(disposition.get('obligation_id'))} · "
+                    f"{_value(disposition.get('rationale'))} · evidence: "
+                    f"{'; '.join(_items(disposition.get('basis_artifact_ids')) + _items(disposition.get('basis_step_ids'))) or 'none recorded'} · model-reported, unverified"
+                )
+            if _rows(skeptic.get("obligation_reviews")):
+                lines.append("")
+        steps_with_context = [
+            step
+            for step in _rows(session.get("steps"))
+            if isinstance(step.get("context_manifest"), dict)
+        ]
+        if steps_with_context:
+            lines += ["Agent context selection", "~~~~~~~~~~~~~~~~~~~~~~~"]
+            lines.append(
+                "Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records."
+            )
+            for step in steps_with_context:
+                manifest = step["context_manifest"]
+                lines.append(
+                    f"Step {_value(step.get('id'))} · {_value(step.get('role'))}: "
+                    f"{_value(manifest.get('selected_count'))} selected, "
+                    f"{_value(manifest.get('omitted_count'))} current-session artifacts omitted, "
+                    f"{_value(manifest.get('assembled_context_bytes'))} UTF-8 bytes"
+                )
+                obligation_counts = manifest.get("obligation_disposition_counts")
+                if isinstance(obligation_counts, dict):
+                    lines.append(
+                        "Obligation ledger dispositions: "
+                        + ", ".join(
+                            f"{state} {_value(obligation_counts.get(state, 0))}"
+                            for state in (
+                                "unresolved",
+                                "addressed",
+                                "superseded",
+                                "retracted",
+                                "unknown",
+                            )
+                        )
+                    )
+                omitted_obligations = manifest.get("omitted_obligations")
+                if isinstance(omitted_obligations, dict) and omitted_obligations.get("count"):
+                    lines.append(
+                        f"Omitted obligations: {_value(omitted_obligations.get('count'))}; "
+                        f"IDs: {_value(omitted_obligations.get('obligation_ids'))}; "
+                        f"{_value(omitted_obligations.get('reason'))}"
+                    )
+                for source in _rows(manifest.get("sources")):
+                    lines.append(
+                        f"- {_value(source.get('status'))} {_value(source.get('category'))}: "
+                        f"{_value(source.get('source_ids', source.get('source_id')))} · {_value(source.get('reason'))}"
+                    )
+                omitted_prior = manifest.get("omitted_prior_session_findings")
+                if isinstance(omitted_prior, dict) and omitted_prior.get("count"):
+                    lines.append(
+                        f"- Omitted prior-session findings: {_value(omitted_prior.get('count'))}; "
+                        f"source pointers: {_value(omitted_prior.get('source_ids'))}; "
+                        f"{_value(omitted_prior.get('reason'))}"
+                    )
+                omitted_failures = manifest.get("omitted_prior_failures")
+                if isinstance(omitted_failures, dict) and omitted_failures.get("count"):
+                    lines.append(
+                        f"- Omitted operational failures: {_value(omitted_failures.get('count'))}; "
+                        f"attempt pointers: {_value(omitted_failures.get('attempt_ids'))}; "
+                        f"{_value(omitted_failures.get('reason'))}"
+                    )
+            lines.append("")
         if session.get("terminal_reason"):
             lines += [f"Terminal reason: {_value(session.get('terminal_reason'))}", ""]
 

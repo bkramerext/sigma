@@ -142,10 +142,8 @@ def capture_session(case_id: str, session: dict[str, Any]) -> dict[str, Any]:
     """
     if case_id not in CASES:
         raise ValueError("Unknown challenge")
-    if not isinstance(session, dict):
-        raise TypeError("SIGMA session must be an object")
-    if not isinstance(session.get("id"), str):
-        raise TypeError("SIGMA session ID must be a string")
+    if not isinstance(session, dict) or not isinstance(session.get("id"), str):
+        raise TypeError("Missing SIGMA session ID")
     claim = CASES[case_id][0]
     interventions = [
         item

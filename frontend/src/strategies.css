@@ -646,6 +646,12 @@
 .workspace-page .outcome-provenance-list { margin: 4px 0 0; padding-left: 20px; }
 .workspace-page .outcome-provenance-list > li { margin: 8px 0; padding-left: 2px; }
 .workspace-page .outcome-provenance-list p { margin: 3px 0; }
+.workspace-page .context-used-disclosure { margin: 7px 0; padding: 7px 9px; border-left: 2px solid #b87849; color: #bdc8cf; background: rgb(12 23 31 / 62%); overflow-wrap: anywhere; }
+.workspace-page .context-used-disclosure > summary { color: #e3b486; cursor: pointer; font-size: 12px; }
+.workspace-page .context-used-disclosure p { margin: 5px 0; }
+.workspace-page .context-used-disclosure ul { margin: 4px 0; padding-left: 18px; }
+.workspace-page .context-used-disclosure li { margin: 4px 0; }
+.workspace-page .context-used-disclosure .context-omission-notes { color: #e0b989; }
 .workspace-page .outcome-provenance-list pre, .workspace-page .research-execution-record pre { max-width: 100%; margin: 5px 0; padding: 8px; border: 1px solid #293d49; border-radius: 4px; background: #050d14; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-page .outcome-provider-attempts ul { margin: 4px 0; padding-left: 20px; }
 .workspace-page .outcome-provider-attempts li { display: grid; gap: 2px; margin: 6px 0; }

@@ -1,7 +1,25 @@
 T22 Gate B — Green handoff
 Date: 2026-10-23
 Branch: feature/t22-gate-b-durable-execution
-Base: current main at cd85552 (includes T22.3, T22.4, T22.5 specifications and latest acceptance updates)
+Base: current main at 803e655 (includes requested 40df3f4 and later T37 integration)
+
+CURRENT MAIN INTEGRATION
+
+- Integrated latest `origin/main` at `803e655`, whose history includes requested
+  merge `40df3f4`. Preserved the newer T37 bounded context-selection and
+  obligation-ledger behavior, project-report provenance, frontend work, and their
+  deterministic regressions while retaining Gate B's cloud research service and
+  recovery hooks.
+- Resolved the shared status-file overlap by retaining current main's T30/T37
+  records and carrying the Gate B section forward. Kept current main's T39
+  implementation at the T39 conflict.
+- `./sigma test` passed on the integrated tree, including research sessions,
+  cloud recovery/API/workspace tests, reports, Ruff, formatting, Pyright,
+  frontend typecheck, and production build.
+- Focused `tests/cloud_research.py`, `tests/cloud_research_api.py`,
+  `tests/research_sessions.py` and `tests/project_reports.py` passed.
+  Real Chrome checks passed for durable restart/recovery, private workspace
+  isolation, and T37's A17 research workflow. No live provider calls were made.
 
 IMPLEMENTED
 
