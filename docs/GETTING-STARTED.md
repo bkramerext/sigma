@@ -351,7 +351,7 @@ other processes already running as your OS account remain a trust boundary.
 checkout and project packages. Never copy tokens from another app or put them in
 `.env`, Vite, URLs, browser storage, logs or project JSON. Only a retained ID-token
 hint is sent directly to the trusted authorization endpoint through a backend
-redirect, never in a React payload. See [security notes](asn8.2-security.md).
+redirect, never in a React payload. See [security notes](../tickets/t8.2-security.md).
 
 Optional API keys use `.env`; no configuration is needed for manual or ChatGPT
 work. Restart with `./sigma start` after changing a file key. The launcher

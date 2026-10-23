@@ -1249,7 +1249,7 @@ name reservation and staged publication reject existing directories/files,
 including symlinks, and preserve concurrent research during rollback. New schema
 v4 persists Default/Mathematical; legacy v1–v3 reads default without rewriting,
 retaining existing migration/backup and history semantics. See
-[design](asn6-design.md) and [decisions](DECISIONS.md) for limits.
+[design](../tickets/t6-design.md) and [decisions](DECISIONS.md) for limits.
 
 Actual verification on 2026-10-20:
 
@@ -1558,7 +1558,7 @@ Implemented documented local OSS Sign in with ChatGPT. The repository's public
 visibility and Apache license were checked, and current official SIWC discovery,
 registration, session, token, model/inference, preview and UI documentation was
 read before implementation. Exact sources and security decisions are in
-[asn8.2-security.md](asn8.2-security.md).
+[../tickets/t8.2-security.md](../tickets/t8.2-security.md).
 
 Home/workspace reuse the small top-right account control: Connect AI, official
 Continue with ChatGPT button, connected/account/usage/reconnect states, account
