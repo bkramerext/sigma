@@ -2,7 +2,7 @@ T26 coordinator handoff — Green
 Date: 2026-10-23
 Specification/review: ChatGPT-authored T26 ticket and Green architecture review,
 merged in PR #20. Implementation based on main b917e24.
-PR: the implementation PR containing this message (link added after creation).
+Implementation PR: https://github.com/bkramerext/sigma/pull/24
 
 Result
 SageMath is integrated alongside Python through the existing Investigator →

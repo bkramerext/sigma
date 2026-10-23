@@ -3230,3 +3230,10 @@ reservation. Its deterministic regression passed; Pyright caught loop-scoped
 fixture variables in that new test, which were initialized explicitly before
 the final full-suite rerun. The public capability CLI reported both locally
 built runtimes with their distinct 15s/60s limits.
+
+T26 implementation is submitted in [PR #24](https://github.com/bkramerext/sigma/pull/24), open for review and not
+self-merged. The [coordinator handoff](../messages/t26_coordinator_handoff.txt)
+is created and ready to read. Final `./sigma test` passed after the profile
+recovery and command-default checks; the worktree contains no test project
+data. Owned browser fixture/dev servers were stopped, and no research
+containers remained running.

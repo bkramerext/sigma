@@ -49,7 +49,7 @@
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
 | T25 | Outcome hierarchy and collapsible subsections | Implemented; open for review | Gray · ChatGPT authored ticket · [PR #19](https://github.com/bkramerext/sigma/pull/19) |
-| T26 | SageMath agent-aware sandboxed execution, Python parity | Assigned; implementation pending | Green · ChatGPT authored ticket · PR #15 |
+| T26 | SageMath agent-aware sandboxed execution, Python parity | Implemented and validated; review pending | Green · ChatGPT authored ticket · [PR #24](https://github.com/bkramerext/sigma/pull/24) |
 | T27 | Research intelligence, cross-strategy learning and agent guidance | Assigned; immediate | Blue · ChatGPT authored ticket |
 | T28 | Rich computational artifact inspection and cross-session evidence | Pending; Green unavailable | Green · ChatGPT authored ticket |
 | T29 | Human intervention during active concurrent research | Pending after T27 | Blue · ChatGPT authored ticket |
@@ -109,7 +109,7 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 | Codex | Last ticket | Current work |
 |---|---|---|
 | Blue | T18 merged ([PR #8](https://github.com/bkramerext/sigma/pull/8)) | T23.1 implementation in [PR #12](https://github.com/bkramerext/sigma/pull/12); reviewed, awaiting integration |
-| Green | T19 merged ([PR #9](https://github.com/bkramerext/sigma/pull/9)) | T24 [PR #13](https://github.com/bkramerext/sigma/pull/13) reconciled with migrated main; checks passed; awaiting final merge approval |
+| Green | T24 merged ([PR #13](https://github.com/bkramerext/sigma/pull/13)) | T26 [PR #24](https://github.com/bkramerext/sigma/pull/24) implemented and validated; awaiting review |
 
 **Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. Activity is inferred from reported PR work; current Codex process status is not independently visible.
 
