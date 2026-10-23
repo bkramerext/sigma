@@ -1,0 +1,13 @@
+{
+  "name": "sigma-cloud-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "test": "node --test test/*.test.js",
+    "deploy": "wrangler deploy --config wrangler.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "4.152.0"
+  }
+}

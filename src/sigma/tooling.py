@@ -30,6 +30,7 @@ def run_tooling(command: str) -> int:
         steps = [
             ["uv", "sync", "--locked", "--group", "dev"],
             ["npm", "--prefix", "frontend", "ci"],
+            ["npm", "--prefix", "deploy/cloudflare", "ci"],
         ]
     else:
         python = ["uv", "run", "--locked", "--no-sync"]
@@ -64,6 +65,8 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/cloud_demo.py"],
             [*python, "python", "tests/cloud_auth.py"],
             [*python, "python", "tests/cloud_workspaces.py"],
+            [*python, "python", "tests/deployment.py"],
+            ["npm", "--prefix", "deploy/cloudflare", "test"],
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_orphans.py"],
             [*python, "ruff", "check", "src", "tests", "sigma"],

@@ -1,0 +1,229 @@
+T22 cloud deployment and operations preparation — R4R
+Date: 2026-10-23
+Branch: cloud/t22-deployment
+Base at start: c4b18d36349170b07e48c4cdf0c38aeb532fc958 (current main after Gate C PR #44)
+Head: set to commit SHA after final validation and push
+PR: set after opening the pull request; do not merge
+
+Scope and architecture
+----------------------
+Gate A private-workspace isolation and Gate C public Demo remain the merged
+main implementations. This change prepares the parent T22 cloud deployment
+path without changing Green's Gate B execution/provider/budget implementation.
+
+The selected hybrid design serves the Vite build and `/api/*` routing from a
+Cloudflare Worker. The Worker is bound to the configurable HTTPS public
+origin. It strips incoming Access and identity headers, injects its own
+Access Service Token to an HTTPS API origin, and proxies the request without
+changing the browser's public Origin or session cookie. The API host is
+reachable through a remotely managed Cloudflare Tunnel with an Access Service
+Auth policy that permits only that Worker token. The host exposes the API on
+loopback only. FastAPI runs in an unprivileged, read-only container with a
+durable host volume for Google auth SQLite and Gate A workspace/project/session/
+artifact data. The Gate C snapshot remains a separately configured immutable
+image resource and startup rejects any snapshot resolving inside private
+storage. Uvicorn access logging is disabled to avoid OAuth callback query
+values in logs.
+
+Cloudflare container filesystems are ephemeral by default, so this does not
+put SIGMA's current POSIX filesystem/SQLite requirements on an ephemeral
+Worker/container disk. No D1/R2 storage rewrite is included. Cloudflare's
+Workers pricing page, checked 2026-10-23, lists Free at 100,000 requests/day
+and 10ms CPU per invocation; Workers Paid has a $5/month minimum and metered
+overages; static asset requests are free at present. This does not include
+the durable host, disk, backups, custom-domain registration, or model usage.
+Pricing: https://developers.cloudflare.com/workers/platform/pricing/
+Container persistence note: https://developers.cloudflare.com/containers/faq/
+
+Files added or changed
+----------------------
+- deploy/Dockerfile, .dockerignore: pinned Python base digest and uv version;
+  locked production dependencies, non-root runtime, healthcheck and
+  fail-closed startup.
+- src/sigma/deployment.py: explicit production config, durable-volume marker,
+  ownership/mode, storage-write, cloud OIDC, and Demo boundary validation.
+- deploy/cloudflare/src/index.js, wrangler.jsonc, pinned package files and
+  Node tests: HTTPS Worker asset routing, protected API origin, health
+  readiness, header trust boundary and failure handling.
+- deploy/install-volume.sh, build-api.sh, run-api.sh, stop-api.sh,
+  run-tunnel.sh, deploy-worker.sh, rollback-worker.sh: repeatable local-host
+  initialization/build/run/tunnel/Worker deploy and rollback commands.
+- deploy/runtime.env.example, deploy/cloudflare/worker-secrets.example.json:
+  configuration templates only; placeholders are not credentials.
+- ops/data_archive.py, deploy/backup.sh: private stop-the-world archive and
+  safe empty-target restore for the persistent data root.
+- ops/container_smoke.sh: production-mode container startup, exports,
+  authorization, restart persistence, and fail-closed config smoke.
+- browser_checks/t22_deployment_smoke.py: real Chrome through Wrangler local
+  Worker into the actual running API container, with no mocked Demo APIs.
+- tests/deployment.py and Worker Node tests: deterministic startup, storage,
+  archive, routing and header-boundary checks, included by `./sigma test`.
+- deploy/README.md, tickets/t22.md, docs/STATUS.md, TICKET_TRACKING.md:
+  runbook, in-place T22 scope/acceptance update, and results.
+
+Prerequisites / secret handling
+-------------------------------
+- Linux host with Docker Engine and a durable filesystem; run the API on the
+  Linux host, not an ephemeral container disk. The host must retain the data
+  root across container replacement.
+- Cloudflare account, verified custom domain or a configured workers.dev
+  public URL, remotely managed Tunnel hostname, Access Service Auth policy,
+  and least-privilege Worker deployment API token. This PR created none.
+- Google OAuth Web client ID/secret, exact public origin and callback
+  `https://<public-host>/api/cloud-auth/callback`, bootstrap admin email, and
+  admin contact email. These must be operator-supplied. No Google login was
+  performed.
+- `/etc/sigma/runtime.env` mode 0600; `/etc/sigma/worker-secrets.json` mode
+  0600; `/etc/sigma/tunnel-token` owner root/group 65532 mode 0640. Secrets
+  remain outside source, image layers, generated assets, and browser code.
+  Never enable Uvicorn access logs.
+- Gate B must integrate and verify durable bounded execution, concurrency,
+  per-user provider authorization and global spend controls before cloud
+  research is opened to users. This deployment work does not duplicate that
+  behavior or claim cloud research readiness.
+- An encrypted off-host backup destination and key-management procedure are
+  operator prerequisites. The included local archive is mode 0600 but is not
+  itself encrypted.
+
+Deployment commands (Linux operator host)
+-----------------------------------------
+From the repo root, set up the durable volume and backend:
+
+  sudo install -d -o root -g root -m 0700 /etc/sigma
+  install -d -m 0700 "$HOME/.config/sigma"
+  install -m 0600 deploy/runtime.env.example "$HOME/.config/sigma/runtime.env"
+  ${EDITOR:-vi} "$HOME/.config/sigma/runtime.env"
+  sudo deploy/install-volume.sh /srv/sigma/data
+  sudo deploy/build-api.sh sigma-api:2026-10-23-a1b2c3d
+  sudo deploy/run-api.sh /srv/sigma/data "$HOME/.config/sigma/runtime.env" sigma-api:2026-10-23-a1b2c3d
+
+Configure the Tunnel in Cloudflare to reach the host's loopback port 8000;
+set its HTTP Host Header to the exact public SIGMA hostname. Configure
+Cloudflare Access Service Auth on the origin hostname for only the Worker
+service token. Then:
+
+  sudo install -o root -g 65532 -m 0640 /dev/null /etc/sigma/tunnel-token
+  sudoedit /etc/sigma/tunnel-token
+  sudo chown root:65532 /etc/sigma/tunnel-token
+  sudo chmod 0640 /etc/sigma/tunnel-token
+  sudo deploy/run-tunnel.sh /etc/sigma/tunnel-token
+  install -m 0600 /dev/null "$HOME/.config/sigma/worker-secrets.json"
+  ${EDITOR:-vi} "$HOME/.config/sigma/worker-secrets.json"
+  SIGMA_WORKER_SECRETS_FILE="$HOME/.config/sigma/worker-secrets.json" deploy/deploy-worker.sh
+
+Set the Worker's custom hostname equal to SIGMA_PUBLIC_ORIGIN. Then verify:
+
+  curl --fail --show-error https://sigma.example.org/healthz
+  curl --fail --show-error https://sigma.example.org/api/cloud-demo/ > /tmp/sigma-demo.json
+  curl -i https://sigma.example.org/api/projects/recent  # expected 401
+  docker inspect --format '{{.State.Health.Status}}' sigma-api
+
+Worker rollback uses `deploy/rollback-worker.sh PREVIOUS_VERSION_ID`, replacing
+the placeholder with the version ID from Wrangler's deployment history.
+Backend rollback replaces the container while reusing the durable volume:
+
+  sudo deploy/stop-api.sh
+  sudo deploy/run-api.sh /srv/sigma/data "$HOME/.config/sigma/runtime.env" sigma-api:2026-10-22-cafe123
+
+Keep immutable backend tags and the prior Worker version until the rollback
+has passed health and Demo checks. The runbook is `deploy/README.md`.
+
+Backup and restore commands
+---------------------------
+Create a private stop-the-world archive outside the data root:
+
+  sudo deploy/backup.sh /srv/sigma/data /srv/sigma-backups/sigma-20261023T000000Z.tar.gz
+  AGE_RECIPIENT='age1replace-with-approved-public-recipient'
+  age -r "$AGE_RECIPIENT" -o /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age /srv/sigma-backups/sigma-20261023T000000Z.tar.gz
+
+Encrypt before copying off-host. Restore only to a new empty directory, then
+install the volume marker; never restore over the active directory:
+
+  age -d -i /etc/sigma/backup-identity.age -o /srv/sigma-restore/backup.tar.gz /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age
+  sudo docker stop sigma-api
+  sudo install -d -o 10001 -g 10001 -m 0700 /srv/sigma/data-restored
+  sudo python3 ops/data_archive.py restore /srv/sigma-restore/backup.tar.gz /srv/sigma/data-restored --uid 10001 --gid 10001
+  sudo install -o 10001 -g 10001 -m 0600 /dev/null /srv/sigma/data-restored/.sigma-deployment-volume-v1
+  sudo sh -c "printf 'SIGMA durable cloud data volume v1\\n' > /srv/sigma/data-restored/.sigma-deployment-volume-v1"
+  sudo chown 10001:10001 /srv/sigma/data-restored/.sigma-deployment-volume-v1
+  sudo docker rm sigma-api
+  sudo deploy/run-api.sh /srv/sigma/data-restored /etc/sigma/runtime.env sigma-api:2026-10-22-cafe123
+  curl --fail https://sigma.example.org/healthz
+
+The archive contains auth SQLite and private workspaces (including project,
+session, and artifact data). The public Demo is in the tagged image and is
+restored by image rollback. Keep original data and validate representative
+accounts/projects before reopening access.
+
+Verification evidence
+--------------------
+- `./sigma test`: PASS on final implementation before final documentation
+  edits; included local app regressions, Gate A/Gate C tests, cloud auth,
+  deployment validation/archive tests, Worker Node suite (4/4), Ruff check and
+  format, Pyright (zero diagnostics), frontend typecheck and production build.
+- `./deploy/build-api.sh sigma-api:t22-deployment-test`: PASS on Docker 29.5.2
+  Linux/arm64 using the pinned Python base digest. After adding `.dockerignore`,
+  context size was 24.81MB.
+- `./ops/container_smoke.sh sigma-api:t22-deployment-test`: PASS. Production
+  container became ready from a deterministic fixture on a Docker named
+  volume; anonymous Demo audit and Text/HTML/LaTeX exports passed; private GET
+  and mutation returned 401; auth SQLite SHA-256 remained identical after a
+  real container restart; missing Google secret and HTTP public origin exited
+  with safe configuration error code 78.
+- `uv run --with playwright python browser_checks/t22_deployment_smoke.py`:
+  PASS in real Chrome at 1440×1000 and 390×844. Browser loaded `/demo`,
+  inspected saved session/evidence and called the actual API through Wrangler
+  local Worker to the running production API container; audit and all three
+  report formats passed, private read/mutation were denied, no UI API mocks
+  were installed, and mobile had no horizontal overflow. This is local real
+  browser-to-backend integration evidence, not a live Cloudflare edge smoke.
+- `npm --prefix deploy/cloudflare test`: PASS, 4/4.
+- `uv run --locked --no-sync python tests/deployment.py`: PASS, including
+  private/missing volume marker, unsafe permissions, invalid OIDC/origin,
+  Demo path separation, backup/restore, symlink and archive traversal cases.
+- Wrangler `4.152.0 deploy --dry-run --config wrangler.jsonc --secrets-file
+  <fixture-file>`: PASS; read 73 static assets and validated bindings; no
+  Cloudflare account request or deployment occurred.
+- No paid model calls, Google calls, production credentials, Cloudflare
+  resources or billable infrastructure were used. `./sigma test` printed the
+  existing Starlette/httpx deprecation warning; it did not fail checks.
+
+Requirement assessment
+----------------------
+1. Hosting and HTTPS — MET as implementation/configuration: Worker provides
+   HTTPS-capable static hosting and exact-origin API routing; the origin is
+   private behind Tunnel/Access; live edge HTTPS/domain routing is UNVERIFIED
+   until operator Cloudflare setup.
+2. Persistent storage — MET in deterministic container verification: private
+   SQLite/workspace state stayed byte-identical through container restart;
+   archive and restore code/tests passed. Actual durable host storage, disk
+   failure behavior, encrypted offsite backups and recovery drill are
+   UNVERIFIED pending host/account/key provisioning.
+3. Secrets/config — MET in code/fixture checks: explicit OIDC, HTTPS origin,
+   private volume marker/ownership, write probe and Demo separation fail
+   closed; Worker deployment secrets are separate from assets. Live secret
+   rotation, Cloudflare Access verification and production log review are
+   UNVERIFIED.
+4. Deployment — MET for reproducible image/Worker build, pinned dependencies,
+   scripts, startup, rollback procedures and dry-run. Actual push to Worker,
+   origin update, rollback drill and paid tier/host cost measurement are
+   UNVERIFIED.
+5. Health/diagnostics — MET locally: container healthcheck validates auth and
+   storage readiness; `/healthz` is safe and public, logs omit Uvicorn request
+   URLs. Live operational alerts/log retention are UNVERIFIED.
+6. T22's auth/private-workspace/Demo gates — covered by current main and
+   passing suite; this PR preserved those implementations. Production
+   cross-user workflows remain subject to integrated release gate.
+7. Gate B durable bounded research/provider authorization/global budgets —
+   UNMET here by ownership boundary, pending Green. Do not open cloud research
+   routes to users before Gate B review and integration.
+8. Actual cloud deployment/OAuth/Cloudflare Access and an external backup
+   restore — UNVERIFIED, intentionally not performed without credentials and
+   explicit infrastructure authorization.
+9. Local SIGMA unrestricted operation — MET by the existing full local test
+   suite; cloud startup checks only run from the container entrypoint and
+   cloud auth remains opt-in.
+
+No PR conflict resolution or Gate B edits were needed at branch creation. If
+main advanced after the base SHA above, the integration result and final head
+must be recorded again before coordinator review. R4R; do not self-merge.
