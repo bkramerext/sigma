@@ -88,6 +88,31 @@ No invented test results. Report skipped, unavailable, or inconclusive verificat
 
 Review must account for downstream behavior, not just diff size. A fixture mismatch may be a test update rather than a product defect, but must be demonstrated rather than assumed.
 
+## 5A. Explicit review, merge, and message-passing state machine
+
+The normal work cycle is **ASSIGNED → IMPLEMENTING → R4R → REVIEW → (CHANGES REQUESTED → IMPLEMENTING → R4R)* → APPROVED → MERGED → INTEGRATION VERIFIED**. A PR can be merged without overall product acceptance; release signoff is a separate human decision.
+
+| Event | Who initiates | Required response | Who owns next action |
+|---|---|---|---|
+| Assignment ready | ChatGPT coordinator | Send one copyable message to the human; human forwards it to the named color and confirms when necessary | Human dispatch, then Codex |
+| Worker blocked or dependency found | Codex | Write a concise handoff; do not contact another worker or alter another branch | ChatGPT decides resolution; human forwards any new instruction |
+| PR ready for review (R4R) | Codex | Provide PR URL/number and repository message-file path; report executed tests and remaining gaps | ChatGPT |
+| Review finds defects or missing evidence | ChatGPT | Send a single actionable, copyable correction request tied to the existing ticket/PR; do not create a new ticket for routine fixes | Human forwards; same Codex worker corrects |
+| Review approves | ChatGPT | Verify current head SHA, mergeability, intended scope, and evidence; record outstanding integration obligations | ChatGPT merges under standing human authorization |
+| Branch conflict or stale base | ChatGPT or GitHub | Explain exact conflict and expected combined behavior | PR-author Codex rebases/resolves, retests, resubmits R4R; ChatGPT re-reviews |
+| PR merged | ChatGPT | Tell human PR number, merge SHA, what is complete, and what remains unverified | Coordinator schedules combined tests; human may redirect priorities |
+| Integrated product ready | ChatGPT and workers | Exercise relevant workflows on updated main and report MET/UNMET/UNVERIFIED | Human decides alpha acceptance |
+
+**Merge authority is deliberately asymmetric.** Codex workers must never merge their own PRs. ChatGPT coordinators conduct the independent review and may execute the merge within their assigned domain under the human's standing authorization. The human can pause, veto, or require explicit approval for any merge. A coordinator does not merge another coordinator's domain without an agreed handoff. Review and merge should not be delegated back to the PR author merely because that author reports tests passing.
+
+**Review means more than reading the PR description.** The coordinator reads the worker's `messages/` handoff file, examines changed code and tests, compares against the ticket, checks merge state and relevant dependencies, and evaluates whether the claimed checks actually support the acceptance criteria. A green test report from the author is evidence, not independent verification. If review is incomplete, report it as pending rather than silently merging.
+
+**Corrections stay in the same PR.** The coordinator sends one consolidated correction message to the original color; the worker updates the branch, executes appropriate regressions, updates its message file, and announces **R4R again**. ChatGPT re-reads the changed head and message file before approving. Do not merge on the basis of an earlier review after the branch changes.
+
+**Message-passing path:** `Codex → repository message file + R4R notice → human → ChatGPT coordinator → copyable response → human → same Codex`. ChatGPT may inspect GitHub directly, but does not thereby gain access to a worker's local terminal. The human is the transport between disconnected conversations; GitHub is the durable record. Messages should be addressed to a color and ticket, state the requested action, and distinguish decisions from suggestions. The coordinator must never assert that a message was delivered merely because it generated one.
+
+**Post-merge discipline:** Notify the human of the merge result and immediately update the dependency picture. If another worker's branch is affected, send that worker a targeted update through the human. Run or assign cross-PR regression checks; do not mistake per-PR test success for a tested combined system. The final acceptance report names outstanding risks and explicitly identifies any unverified live-model behavior.
+
 ## 6. Verification and release gates
 
 SIGMA is being delivered as a **local alpha**, not production-hardened software. Prioritize functioning core workflows, bounded execution, coherent UX, recoverable failures, evidence integrity, and truthful limitations. Defer unrelated enhancements.
