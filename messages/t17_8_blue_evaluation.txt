@@ -37,6 +37,16 @@ Deterministic changes and checks
   /tmp/sigma-a18-coordinator-review-mobile.png. This is a mock-provider UI
   check, not a real research run.
 
+Latest-main revalidation
+- Integrated `origin/main` at 703442cfef6be004e8ed28e46f211ecf151e3f6e
+  (Gate B durable research) in merge commit
+  7808430c99562cddfbe53fb906a55757e096eb46. Resolved the sole STATUS conflict
+  while preserving both records.
+- After integration, `./sigma test` — PASS, including Ruff, format (76 files),
+  Pyright (0), frontend typecheck, and production build.
+- The real-Chrome A17.7/A17.6 fixture journey passed again at 1440/1280/390/320px.
+- No provider calls; independent-discovery criterion remains unverified.
+
 Live provider status
 - No provider call was dispatched. A local connection-discovery command
   inadvertently printed a stored OAuth credential into tool output. Provider

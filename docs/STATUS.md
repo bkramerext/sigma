@@ -4380,6 +4380,18 @@ No product-code correction was indicated by this audit.
   `/tmp/sigma-a18-coordinator-review-mobile.png` were inspected. This verifies
   the integrated workspace/export UI, not a live run of the prepared project.
 
+### Verification after latest-main integration
+
+Merged `origin/main` at `703442cfef6be004e8ed28e46f211ecf151e3f6e` in merge
+commit `7808430c99562cddfbe53fb906a55757e096eb46`, including Gate B durable
+research. Resolved the sole `docs/STATUS.md` conflict while retaining both the
+T17.8 evidence above and Gate B's status record. On this integrated tree,
+`./sigma test` passed all scenarios, Ruff, format check (76 files), Pyright
+(0 diagnostics), frontend typecheck and build. The real-Chrome
+`browser_checks/a17_research.py` check passed again at 1440/1280/390/320 widths.
+These checks exercise the integrated product through mock fixtures and do not
+constitute the required answer-free model run.
+
 No provider request or model call was made in this follow-up. During a local
 connection-discovery command, a stored OAuth credential was inadvertently
 printed into tool output. Provider work was stopped immediately, and the user
