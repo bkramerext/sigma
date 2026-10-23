@@ -1,7 +1,8 @@
 T22 Gate B — Green handoff
 Date: 2026-10-23
 Branch: feature/t22-gate-b-durable-execution
-Base: current main at cd85552 (includes T22.3, T22.4, T22.5 specifications and latest acceptance updates)
+Base before refresh: current main at cd85552. Refreshed against current main
+at 803e655 (which includes the referenced 40df3f4 and subsequent merged work).
 
 IMPLEMENTED
 
@@ -37,21 +38,27 @@ IMPLEMENTED
 - Documented configuration and recovery semantics in docs/CLOUD-AUTH.md and
   recorded actual verification and limitations in docs/STATUS.md.
 
-VERIFICATION — MET
+VERIFICATION — MET on the refreshed integrated tree
 
-- `./sigma test` — passed on integrated source head `5b5241a` after merging
-  current main at `cd85552`. This includes all backend regressions (Gate C Demo,
-  cloud auth/workspaces, Gate B reconciliation and session tests), Ruff,
-  formatting, Pyright (0 diagnostics), frontend typecheck and production build.
+- `./sigma test` — passed after integrating current main at `803e655`. This
+  includes Gate C Demo, cloud auth/workspaces, Gate B reconciliation and
+  session tests, T30 sample/report tests, T37 context-selection regressions,
+  Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and build.
 - `uv run --with playwright python browser_checks/t22_private_workspaces.py` —
-  passed in real Chrome after the latest change, with separate A/B contexts and
-  production API/storage fixture.
+  passed in real Chrome, with separate A/B contexts and the production
+  API/storage fixture.
 - `uv run --with playwright python browser_checks/t22_durable_research.py` —
   passed in real Chrome. Two browser contexts disconnected during a blocked
   fake call, backend was hard-killed and restarted, owner recovered the
   interrupted/unknown attempt, the other owner got 404, and duplicate start
-  returned the same job without a second provider dispatch, after the latest
-  change.
+  returned the same job without a second provider dispatch.
+- `uv run --with playwright python browser_checks/a17_research.py` — passed in
+  real Chrome with fresh local Vite and provider fixture servers on dedicated
+  ports. The first attempt used shared ports occupied by other checkout
+  fixtures and received a stale-fixture 404; those processes were left alone.
+- `uv run --with playwright python browser_checks/nonconsecutive_sample.py` —
+  passed in real Chrome at desktop and 390px/320px mobile widths, preserving
+  main's merged sample, five saved sessions and report behavior.
 - `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5199 uv run --with playwright
   python browser_checks/t22_demo.py` — passed against a fresh Vite instance on
   the rebased head, retaining Gate C's read-only Demo and export behavior.
@@ -68,20 +75,22 @@ VERIFICATION — MET
 - No live Google or model-provider calls; no paid calls.
 
 
-INTEGRATION UPDATE — current main `cd85552`
+INTEGRATION UPDATE — current main `803e655`
 
-- Integrated latest `main`, including T22.3 and the new T22.5 per-user spend
-  specification. T22.5 explicitly is not assigned as part of this Gate B repair;
-  cumulative per-user USD caps and owner budget summaries remain unimplemented
-  and are not claimed as complete.
-- The newly merged T39 code exposed Ruff lint/format failures in the repository
-  gate. Corrected the invalid-type exception and formatted the three affected
-  T39 files so the integrated `./sigma test` can pass.
-- Final checks on source head `5b5241a`: `./sigma test` passed; focused
-  `tests/cloud_research.py`, real-Chrome `t22_durable_research.py`, and
-  real-Chrome `t22_private_workspaces.py` passed. The handoff update is committed
-  on top of that verified source head; final PR head is reported in the coordinator
-  response.
+- Current `main` had advanced from the referenced `40df3f4` to `803e655`, so
+  the PR branch integrates the newer head as well. This includes merged T37
+  research-context work and T30 sample changes. Reconciled conflicts in
+  `docs/STATUS.md` by retaining both main's T30/T37 records and the complete
+  Gate B status, and in `src/sigma/t39_evaluation.py` by preserving precise
+  invalid-session errors alongside main's type-error behavior. `src/sigma/api.py`
+  and `src/sigma/research_sessions.py` merged automatically; the full suite and
+  focused real-browser checks passed on the integrated tree.
+- T22.5 remains out of scope. Its cumulative per-user USD ceiling and owner
+  budget summary are specified by the ticket but remain unimplemented and are
+  not claimed as complete.
+- T39's imported formatting/lint changes are retained so repository checks
+  pass. Invalid-session errors distinguish a non-object session from a missing
+  or invalid session ID.
 
 LIMITATIONS / UNVERIFIED
 

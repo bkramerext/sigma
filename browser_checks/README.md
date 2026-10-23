@@ -101,6 +101,17 @@ ChatGPT connection disclosure/actions, and no horizontal overflow. Screenshots
 are `/tmp/sigma-a23-model-controls-*.png` and
 `/tmp/sigma-a13-header-*.png`.
 
+## Nonconsecutive Subset Sums sample review
+
+With the local SIGMA UI running, run
+`uv run --with playwright python browser_checks/nonconsecutive_sample.py`.
+This check opens the existing **Nonconsecutive Subset Sums Modulo 3** sample,
+reviews its five saved sessions and collapsible outcome sections, checks the
+exported research report, and checks 390px and 320px layouts for horizontal
+overflow. It reads saved evidence only and makes no model/provider calls.
+Screenshots are written to `/tmp/sigma-nonconsecutive-desktop.png` and
+`/tmp/sigma-nonconsecutive-mobile.png`.
+
 ## A15 single-request Generate Strategy
 
 Start a fresh `provider_fixture:app` on port 8002 and keep the normal UI on
