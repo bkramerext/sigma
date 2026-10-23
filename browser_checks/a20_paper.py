@@ -63,23 +63,44 @@ with sync_playwright() as playwright:
         page.evaluate("() => document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))")
         actions = page.locator(".project-pane-actions")
         expect(actions.locator(".project-latex-button")).to_have_count(1)
+        expect(actions.locator(".project-lean-button")).to_have_count(1)
         action_buttons = actions.get_by_role("button")
-        expect(action_buttons.nth(0)).to_have_attribute("aria-label", "Export project")
-        expect(action_buttons.nth(1)).to_have_attribute("aria-label", "LaTeX research paper")
-        expect(action_buttons.nth(2)).to_have_attribute("aria-label", "Project settings")
+        expect(action_buttons.nth(0)).to_have_attribute("aria-label", "LaTeX research paper")
+        expect(action_buttons.nth(1)).to_have_attribute("aria-label", "Lean proof verification (coming soon)")
+        expect(action_buttons.nth(1)).to_be_disabled()
+        expect(action_buttons.nth(2)).to_have_attribute("aria-label", "Export project")
+        expect(action_buttons.nth(3)).to_have_attribute("aria-label", "Project settings")
+        expect(action_buttons.nth(0)).to_have_attribute("title", "Generate a LaTeX research paper")
+        expect(action_buttons.nth(0)).to_have_attribute("data-tooltip", "Generate a LaTeX research paper")
+        expect(action_buttons.nth(1)).to_have_attribute("title", "Lean proof verification (coming soon)")
+        expect(action_buttons.nth(1)).to_have_attribute("data-tooltip", "Lean proof verification (coming soon)")
         expect(actions.locator(".latex-wordmark")).to_have_text("TEX")
+        logo = actions.locator(".project-lean-button img")
+        expect(logo).to_have_attribute("src", "/lean-logo.svg")
+        assert logo.evaluate("e => [e.naturalWidth, e.naturalHeight]") == [300, 150]
+        assert logo.evaluate("e => getComputedStyle(e).filter") != "none"
         action_boxes = actions.evaluate("e => [...e.children].map(b => { const r = b.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })")
-        export_box, latex_box, settings_box = action_boxes
-        assert export_box["width"] == latex_box["width"] == settings_box["width"] == 34
-        assert export_box["height"] == latex_box["height"] == settings_box["height"] == 34
-        assert abs(latex_box["y"] + latex_box["height"] / 2 - export_box["y"] - export_box["height"] / 2) <= 3, (export_box, latex_box, settings_box)
-        assert export_box["x"] + export_box["width"] <= latex_box["x"], (export_box, latex_box)
-        assert latex_box["x"] + latex_box["width"] <= settings_box["x"], (latex_box, settings_box)
-        gap_before = latex_box["x"] - (export_box["x"] + export_box["width"])
-        gap_after = settings_box["x"] - (latex_box["x"] + latex_box["width"])
-        assert abs(gap_before - gap_after) <= 1 and gap_before >= 0, (gap_before, gap_after)
+        assert all(box["width"] == 34 and box["height"] == 34 for box in action_boxes), action_boxes
+        tex_box = action_boxes[0]
+        assert all(abs(box["y"] + box["height"] / 2 - tex_box["y"] - tex_box["height"] / 2) <= 3 for box in action_boxes), action_boxes
+        gaps = [
+            next_box["x"] - box["x"] - box["width"]
+            for box, next_box in zip(action_boxes, action_boxes[1:])
+        ]
+        assert all(gap >= 0 for gap in gaps) and max(gaps) - min(gaps) <= 1, gaps
 
     assert_project_actions()
+    latex_button.hover()
+    expect(page.get_by_role("tooltip")).to_have_text("Generate a LaTeX research paper")
+    lean_button = page.locator(".project-lean-button")
+    lean_button.hover()
+    expect(page.get_by_role("tooltip")).to_have_text("Lean proof verification (coming soon)")
+    lean_button.focus()
+    expect(lean_button).not_to_be_focused()
+    page.keyboard.press("Enter")
+    expect(page.get_by_role("dialog", name="Academic paper using LaTeX")).to_be_hidden()
+    expect(page.get_by_role("dialog", name="Export Project")).to_be_hidden()
+    page.mouse.move(0, 0)
     page.screenshot(path="/tmp/sigma-t20-project-download-desktop.png", full_page=True)
     for width, height in ((1280, 800), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
@@ -213,5 +234,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS real Chrome A20: copper TeX Project Download action, keyboard activation, three-format Export Project, saved evidence, traceable claims, durable version and compiled PDF."
+    "PASS real Chrome A20: copper TeX and disabled Lean Project actions, tooltips, keyboard behavior, three-format Export Project, saved evidence, traceable claims, durable version and compiled PDF."
 )

@@ -274,5 +274,7 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 /* Compact TeX wordmark alongside the Project pane's existing export actions. */
 .workspace-page .project-pane-actions .text-view-icon.project-latex-button:not(:disabled) { color: #e4b57c; }
 .workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
+.workspace-page .project-pane-actions .project-lean-button:disabled { color: #a0aab2; cursor: not-allowed; opacity: 1; }
+.workspace-page .project-pane-actions .project-lean-button img { display: block; width: 29px; height: 15px; object-fit: contain; filter: brightness(0) invert(.9); }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }

@@ -3,8 +3,9 @@
 ## T20.1: Minor UI acceptance fixes (2026-10-23)
 
 Replaced the Project action's LaTeX wordmark with a compact typographic TeX
-mark and retained the standard six-pixel spacing between Export, TeX, and
-Settings. Centered the Model pill, changed the muted Google placeholder to
+mark and added the official Lean Prover logo as a muted, disabled action. The
+Project actions now follow TeX → Lean → Export/Download → Settings, with equal
+six-pixel gaps and 34px controls. Centered the Model pill, changed the muted Google placeholder to
 Google Sign-in with a gray status dot, and made connected ChatGPT accounts read
 ChatGPT connected. API-key connections remain labeled OpenAI API connected.
 Removed the redundant AI paper choice from Export Project; the TeX shortcut
@@ -14,7 +15,8 @@ Citations, Evidence & Obligations.
 
 Validation: `./sigma test` passed. Real Chrome `browser_checks/a20_paper.py`,
 `browser_checks/header.py`, and `browser_checks/a17_research.py` passed; checks
-covered Project actions and Export at 1440, 1280, 390, and 320 px, header pills
+covered Project actions, both tooltips and disabled Lean keyboard behavior, and
+Export at 1440, 1280, 390, and 320 px; header pills
 through 320 px, and Outcome disclosure/toggle behavior including historical,
 interrupted, and multi-strategy records. Desktop/mobile screenshots were
 inspected at `/tmp/sigma-t20-project-download-desktop.png`,
@@ -25,10 +27,10 @@ provider fixture; no paid provider call was made.
 
 ## T20 project-header LaTeX shortcut reconciliation
 
-Reconciled the existing direct LaTeX paper action with the current project
-header. Its TeX wordmark follows Project Download in the Project pane action row
-and precedes Project Settings, using the existing compact copper icon-control
-style. The four Model, Google, Thinking, and ChatGPT pills retain their existing
+Reconciled the existing direct paper action with the project header. The initial
+T20 action row placed its TeX wordmark after Project Download and before Project
+Settings, using the existing compact copper icon-control style. The four Model,
+Google, Thinking, and ChatGPT pills retain their existing
 2×2 grid and compact header geometry. Closing direct paper authoring restores
 focus to the shortcut. T20.1 removes the redundant paper option from Export
 Project and keeps the direct authoring shortcut as the sole paper entry point.
