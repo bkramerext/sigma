@@ -435,6 +435,101 @@ async def test_stop_during_python_execution_preserves_provenance(path: Path):
     assert any(event["kind"] == "python.completed" for event in saved["events"])
 
 
+async def test_failed_experiment_is_reused_then_revised(path: Path):
+    view, strategy, credential, config = await setup(path)
+    bad_code, repaired_code = (
+        "raise ValueError('singular system')",
+        "print('rank=1; underdetermined')",
+    )
+    calls, contexts = [], []
+
+    async def compute(_path, source, **provenance):
+        calls.append(source)
+        result = python_sandbox.ExecutionResult(
+            "failed" if source == bad_code else "completed",
+            1 if source == bad_code else 0,
+            "" if source == bad_code else "rank=1; underdetermined\n",
+            "ValueError: singular system" if source == bad_code else "",
+            5,
+        )
+        with patch.object(python_sandbox, "execute", return_value=result):
+            return await python_sandbox.execute_research_code(_path, source, **provenance)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        cycle = context["cycle"]
+        if payload["text"]["format"]["name"] == "research_investigator":
+            if cycle > 1:
+                assert (
+                    context["prior_artifacts"][-1]["investigator_output"]["python_execution"][
+                        "status"
+                    ]
+                    == "failed"
+                )
+            output = {
+                **investigation(cycle),
+                "python_code": bad_code if cycle < 3 else repaired_code,
+            }
+        else:
+            evidence = context["investigator_output"]
+            contexts.append(evidence)
+            assert evidence["python_execution"]["source"] == evidence["python_code"]
+            output = skeptic(cycle)
+            output["next_question"] = (
+                "Use rank-revealing least squares and report the null space; failure is not mathematical refutation."
+            )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execute_research_code", new=compute),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+    assert finished["status"] == "ended" and len(finished["artifacts"]) == 3, finished
+    assert calls == [bad_code, repaired_code]
+    assert contexts[0]["python_execution"] == contexts[1]["python_execution"]
+    assert contexts[1]["python_execution"]["cycle"] == 1
+    assert "original" in contexts[1]["python_execution_reuse_reason"]
+    assert contexts[2]["python_execution"]["status"] == "completed"
+    assert any(event["kind"] == "python.reused" for event in finished["events"])
+
+
+async def test_restart_during_python_has_no_automatic_rerun(path: Path):
+    await test_recovery_reuses_saved_python_execution(path)
+    record = research_sessions._all(str(path))[0]
+    branch = record["strategy_runs"][0]
+    prior = branch["pending_investigation"].pop("python_execution")
+    stored = path / "research-executions" / f"{prior['id']}.json"
+    # Reproduce a real crash state: intent was published, terminal result was
+    # never written. The host cannot infer whether the program actually ran.
+    prior.update(status="running", exit_code=None, stdout="", stderr="", duration_ms=None)
+    stored.write_text(json.dumps(prior))
+    research_sessions._save(str(path), record)
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("uncertain execution must not rerun")),
+    ):
+        await research_sessions._complete_pending_python(
+            record["id"], str(path), branch["strategy_id"], 1, asyncio.Lock()
+        )
+    recovered = research_sessions._read(str(path), record["id"])
+    evidence = recovered["strategy_runs"][0]["pending_investigation"]["python_execution"]
+    assert evidence["status"] == "interrupted" and evidence["exit_code"] is None
+    assert evidence["stdout"] == "" and "may have run" in evidence["interruption_reason"]
+
+
 async def test_new_session_receives_prior_saved_findings(path: Path):
     view, strategy, credential, config = await setup(path)
     outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
@@ -2788,6 +2883,8 @@ def main():
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
         asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
         asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
+        asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))
+        asyncio.run(test_failed_experiment_is_reused_then_revised(root / "python-revision.sigma"))
         asyncio.run(
             test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
         )

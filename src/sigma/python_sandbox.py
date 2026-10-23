@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import fcntl
 import hashlib
 import json
@@ -31,7 +32,9 @@ MAX_SOURCE_BYTES = 16_000
 MAX_OUTPUT_BYTES = 32_000
 EXECUTION_TIMEOUT_SECONDS = 15
 MAX_STORAGE_BYTES = 16_000_000
-MAX_ARTIFACT_BYTES = 64_000
+# JSON escapes control bytes by up to 6x. Source/output caps must still be
+# persistable, including optional base64 for non-UTF-8 output and file metadata.
+MAX_ARTIFACT_BYTES = 384_000
 MAX_CAPTURED_ARTIFACT_BYTES = 4_000_000
 MAX_CAPTURED_ARTIFACTS = 8
 MAX_CAPTURE_ARCHIVE_BYTES = 16 * 1024 * 1024
@@ -47,6 +50,9 @@ class ExecutionResult:
     duration_ms: int
     image_id: str | None = None
     artifacts: tuple[tuple[str, str, bytes], ...] = ()
+    artifact_error: str | None = None
+    stdout_base64: str | None = None
+    stderr_base64: str | None = None
 
 
 def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
@@ -54,6 +60,7 @@ def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
     command = [
         CONTAINER_RUNTIME,
         "run",
+        "--rm",
         "--interactive",
         "--pull=never",
         "--network=none",
@@ -123,6 +130,10 @@ def _capture_artifacts(container_id: str) -> tuple[tuple[str, str, bytes], ...]:
         with tarfile.open(fileobj=BytesIO(archive_bytes), mode="r:") as archive:
             for member in archive:
                 filename = member.name.removeprefix("./")
+                try:
+                    filename.encode("utf-8")
+                except UnicodeEncodeError as exc:
+                    raise ProjectError("Research output filenames must be valid UTF-8") from exc
                 if member.isdir() and filename in {"", "."}:
                     continue
                 if (
@@ -132,6 +143,7 @@ def _capture_artifacts(container_id: str) -> tuple[tuple[str, str, bytes], ...]:
                     or "/" in filename
                     or "\\" in filename
                     or not member.isfile()
+                    or any(item[0] == filename for item in captured)
                     or member.size > MAX_CAPTURED_ARTIFACT_BYTES
                 ):
                     raise ProjectError(
@@ -194,7 +206,7 @@ def _image_identity() -> str | None:
 
 def _run(
     source: str, image_id: str
-) -> tuple[int | None, bytes, bytes, str, tuple[tuple[str, str, bytes], ...]]:
+) -> tuple[int | None, bytes, bytes, str, tuple[tuple[str, str, bytes], ...], str | None]:
     encoded = _validate_source(source)
     cid_fd, cid_name = tempfile.mkstemp(prefix="sigma-python-", suffix=".cid")
     os.close(cid_fd)
@@ -233,20 +245,15 @@ def _run(
         )
     except OSError:
         cidfile.unlink(missing_ok=True)
-        return None, b"", b"Container runtime could not start.", "unavailable", ()
+        return None, b"", b"Container runtime could not start.", "unavailable", (), None
     assert process.stdin and process.stdout and process.stderr
     started = time.monotonic()
-    try:
-        process.stdin.write(
-            str(len(encoded)).encode("ascii")
-            + b"\n"
-            + encoded
-            + runner_token.encode("ascii")
-            + b"\n"
-        )
-    except BrokenPipeError:
-        pass
+    pending_input = (
+        str(len(encoded)).encode("ascii") + b"\n" + encoded + runner_token.encode("ascii") + b"\n"
+    )
     selector = selectors.DefaultSelector()
+    os.set_blocking(process.stdin.fileno(), False)
+    selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
     selector.register(process.stdout, selectors.EVENT_READ, "stdout")
     selector.register(process.stderr, selectors.EVENT_READ, "stderr")
     chunks = {"stdout": bytearray(), "stderr": bytearray()}
@@ -255,6 +262,8 @@ def _run(
     pending_stdout = bytearray()
     marker_seen = False
     artifacts: tuple[tuple[str, str, bytes], ...] = ()
+    artifact_error = None
+    deadline = started + EXECUTION_TIMEOUT_SECONDS
 
     def close_pipes() -> None:
         for key in list(selector.get_map().values()):
@@ -276,26 +285,42 @@ def _run(
         return reason
 
     while selector.get_map():
-        elapsed = time.monotonic() - started
-        if elapsed >= EXECUTION_TIMEOUT_SECONDS and status == "completed" and not marker_seen:
-            status = stop_container("timeout")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            status = stop_container("failed" if marker_seen else "timeout")
+            if marker_seen:
+                artifact_error = "Container runtime did not exit after artifact capture."
             break
-        for key, _ in selector.select(min(0.1, max(0.001, EXECUTION_TIMEOUT_SECONDS - elapsed))):
-            chunk = os.read(key.fd, MAX_OUTPUT_BYTES + 1)
-            if not chunk:
-                if key.data == "stdout" and pending_stdout and not marker_seen:
-                    chunk = bytes(pending_stdout)
-                    pending_stdout.clear()
-                else:
-                    selector.unregister(key.fileobj)
+        for key, _ in selector.select(min(0.1, remaining)):
+            if key.data == "stdin":
+                try:
+                    written = os.write(key.fd, pending_input)
+                    pending_input = pending_input[written:]
+                except BlockingIOError:
                     continue
+                except BrokenPipeError:
+                    pending_input = b""
+                if not pending_input:
+                    selector.unregister(key.fileobj)
+                continue
+            chunk = os.read(key.fd, MAX_OUTPUT_BYTES + 1)
+            eof = not chunk
+            if not chunk:
+                selector.unregister(key.fileobj)
+                if key.data != "stdout" or not pending_stdout:
+                    continue
+            just_finished = False
             if key.data == "stdout":
                 pending_stdout.extend(chunk)
                 marker_at = pending_stdout.find(marker)
-                if marker_at >= 0:
+                if marker_at >= 0 and not marker_seen:
                     output_chunk = bytes(pending_stdout[:marker_at])
                     pending_stdout.clear()
                     marker_seen = True
+                    just_finished = True
+                elif eof:
+                    output_chunk = bytes(pending_stdout)
+                    pending_stdout.clear()
                 else:
                     keep = min(len(marker) - 1, len(pending_stdout))
                     output_chunk = bytes(pending_stdout[:-keep] if keep else pending_stdout)
@@ -312,7 +337,7 @@ def _run(
             if len(output_chunk) > room and status == "completed":
                 status = stop_container("output_limit")
                 break
-            if marker_seen:
+            if just_finished:
                 try:
                     cid = cidfile.read_text(encoding="ascii").strip()
                     artifacts = _capture_artifacts(cid)
@@ -323,18 +348,26 @@ def _run(
                         if isinstance(exc, ProjectError)
                         else "Could not capture research output files."
                     )
-                    chunks["stderr"] = bytearray(message.encode("utf-8")[:MAX_OUTPUT_BYTES])
+                    artifact_error = message
                 try:
                     process.stdin.close()
                 except BrokenPipeError:
                     pass
-                break
-        if marker_seen:
-            continue
+                deadline = time.monotonic() + 3
         if process.poll() is not None and not selector.get_map():
             break
+    try:
+        return_code = process.wait(timeout=max(0.01, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        status = stop_container("failed" if marker_seen else "timeout")
+        return_code = process.wait(timeout=3)
     selector.close()
-    return_code = process.wait()
+    if status == "completed" and not marker_seen:
+        status = "failed"
+        artifact_error = "Container exited without the execution completion marker; output files were not captured."
+    process.stdin.close()
+    process.stdout.close()
+    process.stderr.close()
     try:
         cid = cidfile.read_text(encoding="ascii").strip()
     except (OSError, UnicodeError):
@@ -365,7 +398,7 @@ def _run(
         stderr.extend(diagnostic)
     else:
         stdout, stderr = chunks["stdout"], chunks["stderr"]
-    return return_code, bytes(stdout), bytes(stderr), status, artifacts
+    return return_code, bytes(stdout), bytes(stderr), status, artifacts, artifact_error
 
 
 def _execute(source: str) -> ExecutionResult:
@@ -380,7 +413,7 @@ def _execute(source: str) -> ExecutionResult:
             0,
         )
     started = time.monotonic()
-    return_code, stdout, stderr, status, artifacts = _run(source, image_id)
+    return_code, stdout, stderr, status, artifacts, artifact_error = _run(source, image_id)
     duration = round((time.monotonic() - started) * 1000)
     if status == "unavailable":
         return ExecutionResult(status, None, "", stderr.decode("utf-8"), duration, image_id)
@@ -394,7 +427,18 @@ def _execute(source: str) -> ExecutionResult:
         duration,
         image_id,
         artifacts,
+        artifact_error,
+        _non_utf8_base64(stdout),
+        _non_utf8_base64(stderr),
     )
+
+
+def _non_utf8_base64(value: bytes) -> str | None:
+    try:
+        value.decode("utf-8")
+    except UnicodeDecodeError:
+        return base64.b64encode(value).decode("ascii")
+    return None
 
 
 def _execute_admitted(source: str) -> ExecutionResult:
@@ -436,6 +480,8 @@ def _save_record(
     directory: Path,
     record: dict[str, Any],
     artifacts: tuple[tuple[str, str, bytes], ...] = (),
+    *,
+    finalizing: bool = False,
 ) -> None:
     encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_ARTIFACT_BYTES:
@@ -446,8 +492,50 @@ def _save_record(
         )
         with os.fdopen(fd, "r+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
+            if not finalizing and record.get("session_id") is not None:
+                for candidate in directory.glob("*.json"):
+                    if candidate.is_symlink() or candidate.stat().st_size > MAX_ARTIFACT_BYTES:
+                        continue
+                    try:
+                        prior = json.loads(candidate.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue
+                    if isinstance(prior, dict) and all(
+                        prior.get(key) == record.get(key)
+                        for key in ("project_id", "session_id", "strategy_id", "cycle", "source")
+                    ):
+                        raise ProjectError(
+                            "This Python proposal is already reserved; no second run was started"
+                        )
+            target_record = directory / f"{record['id']}.json"
+            previous = 0
+            if finalizing:
+                if target_record.is_symlink() or not target_record.is_file():
+                    raise ProjectError("Research execution reservation is missing")
+                previous = target_record.stat().st_size
+                if previous > MAX_ARTIFACT_BYTES:
+                    raise ProjectError("Research execution reservation is invalid")
+                reserved = json.loads(target_record.read_text(encoding="utf-8"))
+                if (
+                    not isinstance(reserved, dict)
+                    or reserved.get("status") != "running"
+                    or any(
+                        reserved.get(key) != record.get(key)
+                        for key in (
+                            "id",
+                            "project_id",
+                            "session_id",
+                            "strategy_id",
+                            "cycle",
+                            "source",
+                        )
+                    )
+                ):
+                    raise ProjectError("Research execution reservation does not match the result")
             artifact_dir = directory / f"{record['id']}.artifacts"
-            artifact_dir.mkdir(mode=0o700, exist_ok=False)
+            if artifact_dir.is_symlink():
+                raise ProjectError("Research output directory must not be a symbolic link")
+            artifact_dir.mkdir(mode=0o700, exist_ok=finalizing)
             artifact_records = []
             try:
                 for filename, media_type, content in artifacts:
@@ -486,22 +574,51 @@ def _save_record(
                     for item in directory.rglob("*")
                     if item.is_file() and not item.is_symlink()
                 )
-                if existing_bytes + len(encoded) > MAX_STORAGE_BYTES:
+                if existing_bytes - previous + len(encoded) > MAX_STORAGE_BYTES:
                     raise ProjectError("Research execution storage limit reached")
                 staged = _stage(directory, encoded)
                 try:
                     os.chmod(staged, 0o600)
-                    os.replace(staged, directory / f"{record['id']}.json")
+                    os.replace(staged, target_record)
                 finally:
                     staged.unlink(missing_ok=True)
             except BaseException:
                 for item in artifact_dir.iterdir():
                     item.unlink(missing_ok=True)
-                artifact_dir.rmdir()
+                if not finalizing:
+                    artifact_dir.rmdir()
                 raise
             fcntl.flock(lock, fcntl.LOCK_UN)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         raise ProjectError("Could not store research execution artifact") from exc
+
+
+def _execution_state(record: dict[str, Any], directory: Path) -> dict[str, Any]:
+    if record.get("status") == "running":
+        active = directory / f"{record['id']}.active"
+        try:
+            fd = os.open(active, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            fd = None
+        if fd is not None:
+            try:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    return record
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+        return {
+            **record,
+            "status": "interrupted",
+            "interruption_reason": (
+                "The backend lost this reserved execution before a terminal result was saved. "
+                "The program may have run; no output or conclusion can be inferred. "
+                "It will not be executed automatically again."
+            ),
+        }
+    return record
 
 
 def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
@@ -521,7 +638,7 @@ def _read_record(path: str | Path, execution_id: str) -> dict[str, Any]:
         or record.get("project_id") != inspect_project(path).project.id
     ):
         raise ProjectError("Research execution artifact does not match this project")
-    return record
+    return _execution_state(record, directory)
 
 
 def list_executions(path: str | Path) -> list[dict[str, Any]]:
@@ -539,8 +656,18 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
             record = json.loads(target.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(record, dict) and record.get("project_id") == project_id:
-            records.append(record)
+        if (
+            not isinstance(record, dict)
+            or record.get("project_id") != project_id
+            or record.get("id") != target.stem
+            or not isinstance(record.get("created_at"), str)
+        ):
+            continue
+        try:
+            _metadata_id(record["id"], "execution")
+        except ProjectError:
+            continue
+        records.append(_execution_state(record, directory))
     return sorted(records, key=lambda item: item.get("created_at", ""), reverse=True)
 
 
@@ -551,6 +678,7 @@ def find_session_execution(
     strategy_id: str,
     cycle: int,
     source: str,
+    include_prior_failures: bool = False,
 ) -> dict[str, Any] | None:
     """Find a durably saved exact proposal result for crash-safe session recovery."""
     return next(
@@ -559,7 +687,15 @@ def find_session_execution(
             for record in list_executions(path)
             if record.get("session_id") == session_id
             and record.get("strategy_id") == strategy_id
-            and record.get("cycle") == cycle
+            and (
+                record.get("cycle") == cycle
+                or (
+                    include_prior_failures
+                    and type(record.get("cycle")) is int
+                    and record["cycle"] < cycle
+                    and record.get("status") in {"failed", "timeout", "output_limit", "interrupted"}
+                )
+            )
             and record.get("source") == source
         ),
         None,
@@ -614,13 +750,15 @@ async def execute_research_code(
         if branch is None or branch.get("cycle") != cycle:
             raise ProjectError("Research strategy and cycle do not match this session")
         session_id, strategy_id = normalized_session, normalized_strategy
-    execution_task = asyncio.create_task(execute(source))
-    cancelled = False
-    try:
-        result = await asyncio.shield(execution_task)
-    except asyncio.CancelledError:
-        cancelled = True
-        result = await asyncio.shield(execution_task)
+        existing = find_session_execution(
+            path, session_id=session_id, strategy_id=strategy_id, cycle=cycle, source=source
+        )
+        if existing is not None:
+            if existing["status"] == "running":
+                raise ProjectError(
+                    "This Python proposal is already active; no second run was started"
+                )
+            return existing
     record = {
         "schema_version": 1,
         "id": str(uuid4()),
@@ -629,15 +767,16 @@ async def execute_research_code(
         "strategy_id": _metadata_id(strategy_id, "strategy"),
         "cycle": cycle,
         "created_at": datetime.now(UTC).isoformat(),
-        "status": result.status,
-        "exit_code": result.exit_code,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "duration_ms": result.duration_ms,
+        "status": "running",
+        "exit_code": None,
+        "stdout": "",
+        "stderr": "",
+        "duration_ms": None,
         "source": source,
+        "artifact_error": None,
         "environment": {
             "image": IMAGE,
-            "image_id": result.image_id,
+            "image_id": None,
             "network": "none",
             "memory_bytes": 512 * 1024 * 1024,
             "cpu_limit": 1,
@@ -645,7 +784,45 @@ async def execute_research_code(
             "wall_limit_seconds": EXECUTION_TIMEOUT_SECONDS,
         },
     }
-    _save_record(_execution_directory(path), record, result.artifacts)
+    directory = _execution_directory(path)
+    identifier = record["id"]
+    active = directory / f"{identifier}.active"
+    active_fd = os.open(
+        active, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600
+    )
+    fcntl.flock(active_fd, fcntl.LOCK_EX)
+    cancelled = False
+    try:
+        # Reserve before dispatch. A process death at any later point leaves
+        # inspectable uncertain evidence and cannot silently trigger a rerun.
+        _save_record(directory, record)
+        execution_task = asyncio.create_task(execute(source))
+        while True:
+            try:
+                result = await asyncio.shield(execution_task)
+                break
+            except asyncio.CancelledError:
+                cancelled = True
+                if execution_task.cancelled():
+                    raise
+        record.update(
+            status=result.status,
+            exit_code=result.exit_code,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            duration_ms=result.duration_ms,
+            artifact_error=result.artifact_error,
+            finished_at=datetime.now(UTC).isoformat(),
+        )
+        record["environment"]["image_id"] = result.image_id
+        for stream, raw in (("stdout", result.stdout_base64), ("stderr", result.stderr_base64)):
+            if raw is not None:
+                record[f"{stream}_base64"] = raw
+        _save_record(directory, record, result.artifacts, finalizing=True)
+    finally:
+        fcntl.flock(active_fd, fcntl.LOCK_UN)
+        os.close(active_fd)
+        active.unlink(missing_ok=True)
     if cancelled:
         raise asyncio.CancelledError
     return record
@@ -662,7 +839,10 @@ def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -
     )
     if metadata is None or Path(filename).name != filename:
         raise ProjectError("Research output artifact not found")
-    target = _execution_directory(path) / f"{record['id']}.artifacts" / filename
+    artifact_directory = _execution_directory(path) / f"{record['id']}.artifacts"
+    if artifact_directory.is_symlink():
+        raise ProjectError("Research output artifact directory is unsafe")
+    target = artifact_directory / filename
     if (
         target.is_symlink()
         or not target.is_file()

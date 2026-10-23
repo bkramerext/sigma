@@ -2680,3 +2680,74 @@ production build). Fresh actual-Docker runs of both
 `sandbox-poc/runtime-check.py` and `sandbox-poc/agent-workflow-check.py` passed;
 the latter completed the fixture-backed Investigator→sandbox→Skeptic cycle
 and retrieved its 17,141-byte PNG. No live provider call was made.
+
+### A19 computation usefulness and adversarial continuation (2026-10-23)
+
+The next review found concrete evidence-loss bugs. A 30,000-byte control-character
+stream and a 30,000-byte invalid UTF-8 stream each ran successfully but failed
+the old 64 KB JSON storage bound after escaping/decoding. The execution record
+cap now accommodates the worst bounded JSON expansion; exact non-UTF-8 bytes
+are additionally retained in base64. Rejecting a symlink artifact previously
+replaced the program's stderr; `artifact_error` now records capture failures
+separately while preserving both program streams. The host transport now uses
+nonblocking input and bounded process reaping, including a stalled runtime and
+an early EOF without a completion marker.
+
+Recovery now reserves code and provenance durably **before** dispatch. A held
+file lock identifies a live execution across processes; an orphan reservation
+is exposed as interrupted with no invented output. This closes the earlier
+crash window before terminal persistence. Reservation deduplication is atomic
+under the sidecar lock. Later identical failed source in the same session and
+strategy reuses the original failure and its actual cycle provenance; changed
+source runs normally. Deterministic regressions exercise failure→unchanged
+reuse→revised program, exact Skeptic propagation, interrupted recovery, expanded
+output storage, early EOF, stalled runtime, and hostile archives.
+
+Agent instructions now state `/artifacts`, file/output/memory/time limits,
+fresh-filesystem behavior, experiment design, numerical controls and the need
+to inspect actual code rather than trust a printed answer. Removed a generic
+"no tools" instruction that conflicted with the sandbox capability. The basic
+workflow check now computes the line recurrence rather than printing a
+hardcoded answer. No UI was added.
+
+Six actual-Docker scientific workflows passed through scripted
+Investigator→Python→Skeptic cycles. The scripted provider examines captured
+results and carries its revised question into the next cycle. These establish
+software behavior, not model research ability:
+
+| Investigation | Actual observation |
+| --- | --- |
+| Catastrophic cancellation | At x=1e-16, direct evaluation returned 0.0 while the stable form returned 0.5; the revised experiment agreed with the SymPy limit 1/2. |
+| Ill-conditioned Hilbert solve | Condition number about 1.60e13; relative residual 1.22e-16 but relative solution error 6.19 under a 1e-12 alternating perturbation. An initial test used only the first component and incorrectly expected error >0.1; its assertion failed. The recorded failure was retained, the perturbation was diagnosed, and a discriminating direction was used. |
+| Singular system | NumPy's direct solve failed; the next experiment used least squares, found rank 1 and an explicit null vector, and did not mistake nonuniqueness for inconsistency. |
+| Prime polynomial | No counterexample in n=0..39; an expanded exact search found n=40, giving 1681=41². The finite search was never treated as a universal proof. |
+| Monte Carlo integration | 24 fixed-seed trials over 888,000 total samples; SciPy reference 0.7468241328124271; mean standard error fell from about 0.00636 to 0.000636. pandas CSV and Matplotlib PNG passed retrieval and SHA-256 checks. |
+| Unbounded computation | A real 15-second timeout was followed by a changed finite geometric-sum experiment with an explicit 1.82e-12 remainder bound. |
+
+Full sources, sessions, outputs and binary artifacts for these experiments are
+retained locally under `projects/a19-computation-evaluation-20261023.sigma/`;
+they are private local evaluation data, not committed fixtures. The actual
+Docker adversarial script passed symlink/FIFO/nested/oversized/excess/invalid-name
+artifact rejection, 32,000-byte control/invalid-UTF-8 outputs, host-file and
+credential exclusion, exhaustion at 62 child processes, tmpfs exhaustion,
+concurrent busy admission, repeated cancellation, and backend SIGKILL while a
+detached descendant retained pipes. The runner watchdog and automatic removal
+left no new running or stopped container. The container image was rebuilt for
+the runner change.
+
+Two real plan-backed trials used the already selected connected ChatGPT plan,
+without paid API calls or any billing switch. Both timed out on their first
+Investigator request at the then-current 60-second A18 deadline: High with a
+4096-token output cap (session `e1cea997-a554-4a2a-a23e-e6157f7e2201`, 60.3 s),
+then a changed Medium/2048-token experiment (session
+`fd68c069-e608-4ec6-aea4-286f30f6142a`, 60.4 s). Each charged one dispatched
+call to its local budget, produced no research artifact and ran no Python.
+The records remain in `projects/a19-plan-stability-20261023.sigma` and
+`projects/a19-plan-stability-medium-20261023.sigma`. Timed-out remote work may
+consume plan allowance; usage could not be quantified. Live ability to choose
+and critique computation is therefore still unverified by these trials.
+
+Before the next A18 sync, `./sigma test` passed all checks and real Chrome
+`browser_checks/a17_research.py` passed against a fresh local fixture and UI
+from this checkout. Further validation against Blue's newly advanced branch
+is recorded below when complete.

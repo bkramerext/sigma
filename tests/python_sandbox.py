@@ -1,6 +1,13 @@
 """Research code isolation contract and immutable artifact capture."""
 
 import asyncio
+import base64
+import json
+import subprocess
+import sys
+import tarfile
+import time
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -13,6 +20,115 @@ from sigma import python_sandbox, research_sessions
 from sigma.api import app
 from sigma.projects import ProjectError, create_strategy, initialize_project, project_path
 
+REAL_POPEN = subprocess.Popen
+
+
+def test_host_boundary_failures() -> None:
+    # A stalled Docker client must not block a large write to stdin before the
+    # wall watchdog starts. This executable is a transport fixture, not Python
+    # research execution on the host.
+    with TemporaryDirectory() as temporary:
+        runtime = Path(temporary) / "stalled-runtime"
+        runtime.write_text(
+            f"#!{sys.executable}\nimport sys,time\nif sys.argv[1] == 'run': time.sleep(10)\n"
+        )
+        runtime.chmod(0o700)
+        with (
+            patch.object(python_sandbox, "CONTAINER_RUNTIME", str(runtime)),
+            patch.object(python_sandbox, "EXECUTION_TIMEOUT_SECONDS", 0.05),
+        ):
+            started = time.monotonic()
+            result = python_sandbox._run("x" * 16_000, "unused")
+            assert result[3] == "timeout" and time.monotonic() - started < 2
+        runtime.write_text(
+            f"#!{sys.executable}\nimport sys,time,os\n"
+            "if sys.argv[1] == 'run':\n os.close(1); os.close(2); time.sleep(10)\n"
+        )
+        with (
+            patch.object(python_sandbox, "CONTAINER_RUNTIME", str(runtime)),
+            patch.object(python_sandbox, "EXECUTION_TIMEOUT_SECONDS", 0.1),
+        ):
+            started = time.monotonic()
+            result = python_sandbox._run("pass", "unused")
+            assert result[3] == "timeout" and time.monotonic() - started < 2
+        runtime.write_text(
+            f"#!{sys.executable}\nimport sys\n"
+            "if sys.argv[1] == 'run': print('tail retained without marker')\n"
+        )
+        with patch.object(python_sandbox, "CONTAINER_RUNTIME", str(runtime)):
+            result = python_sandbox._run("pass", "unused")
+        assert result[1] == b"tail retained without marker\n" and result[3] == "failed"
+        assert result[5] and "completion marker" in result[5]
+
+    for name, kind in (
+        ("../escape", tarfile.REGTYPE),
+        ("link", tarfile.SYMTYPE),
+        ("pipe", tarfile.FIFOTYPE),
+    ):
+        archive = BytesIO()
+        with tarfile.open(fileobj=archive, mode="w") as output:
+            member = tarfile.TarInfo(name)
+            member.type = kind
+            output.addfile(member)
+        payload = base64.b64encode(archive.getvalue()).decode()
+
+        def fixture_process(*_args, payload=payload, **_kwargs):
+            return REAL_POPEN(
+                [
+                    sys.executable,
+                    "-c",
+                    f"import sys,base64;sys.stdout.buffer.write(base64.b64decode('{payload}'))",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+
+        with patch.object(python_sandbox.subprocess, "Popen", side_effect=fixture_process):
+            rejects(lambda: python_sandbox._capture_artifacts("fixture"))
+
+
+def test_expanded_output_and_interrupted_reservation(path: Path) -> None:
+    initialize_project(path, "Output and crash evidence", "Preserve bounded execution evidence")
+    for text in ("\x00" * 32_000, "\ufffd" * 32_000):
+        fake = python_sandbox.ExecutionResult("completed", 0, text, "", 1)
+        with patch.object(python_sandbox, "execute", return_value=fake):
+            record = asyncio.run(python_sandbox.execute_research_code(path, "print('bounded')"))
+        assert python_sandbox.get_execution(path, record["id"])["stdout"] == text
+        assert record["finished_at"] >= record["created_at"]
+        rejects(
+            lambda record=record: python_sandbox._save_record(
+                path / "research-executions", record, finalizing=True
+            )
+        )
+
+    async def lost_backend():
+        async def fail(_source):
+            records = python_sandbox.list_executions(path)
+            assert any(item["status"] == "running" for item in records)
+            raise RuntimeError("simulated process death before terminal write")
+
+        with patch.object(python_sandbox, "execute", side_effect=fail):
+            try:
+                await python_sandbox.execute_research_code(path, "print('lost result')")
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError("Expected simulated failure")
+
+    asyncio.run(lost_backend())
+    lost = next(
+        item
+        for item in python_sandbox.list_executions(path)
+        if item["source"] == "print('lost result')"
+    )
+    assert lost["status"] == "interrupted" and lost["exit_code"] is None
+    assert lost["stdout"] == "" and "may have run" in lost["interruption_reason"]
+    assert python_sandbox.get_execution(path, lost["id"]) == lost
+    assert (
+        json.loads((path / "research-executions" / f"{lost['id']}.json").read_text())["status"]
+        == "running"
+    )
+
 
 def rejects(action) -> None:
     try:
@@ -23,6 +139,9 @@ def rejects(action) -> None:
 
 
 def main() -> None:
+    test_host_boundary_failures()
+    with TemporaryDirectory() as temporary:
+        test_expanded_output_and_interrupted_reservation(Path(temporary) / "evidence.sigma")
     args = python_sandbox.docker_command()
     joined = " ".join(args)
     for required in (

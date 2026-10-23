@@ -5,9 +5,14 @@ strategy_id, cycle)` is the typed service boundary used by the A18 portfolio
 research loop. An Investigator may return `python_code` (or `null`) in its
 strict response. The proposal is limited to 4,000 characters and checked
 against the sandbox's 16,000-byte source bound. SIGMA executes a nonempty proposal once before the Skeptic
-call. The call returns an execution record only after the bounded run and
-durable project-sidecar write have completed. There is no automatic repair or
-additional provider call.
+call. Before dispatch, the service durably reserves the exact proposal and
+provenance. A process-held file lock distinguishes an active reservation from
+one left behind by a dead backend, including inspection from another process.
+The call returns after the bounded run and durable terminal write. A stale
+reservation is exposed as `interrupted`: the code may have run, and no result
+can be inferred. Recovery never reruns that uncertain proposal automatically.
+Final records are immutable. There is no automatic repair or additional
+provider call.
 
 The Skeptic receives the full Investigator output, including the exact source
 and a `python_execution` record with execution ID, status, exit code,
@@ -16,7 +21,11 @@ same nested record is retained in the Investigator step and the committed
 session artifact. A stop or pause during execution waits for the bounded
 container to finish, stores its terminal record, and then preserves the user's
 control action. Timeouts, nonzero exits, output-limit stops, unavailable images,
-and busy admission remain explicit statuses. Serialized provider input is
+and busy admission remain explicit statuses. Identical failed, timed-out,
+output-limited, or interrupted source in a later cycle of the same strategy
+and session reuses the original evidence and its original cycle provenance,
+with an explicit reuse reason. Changed source can run; busy/unavailable runs
+can be attempted again after the environment recovers. Serialized provider input is
 bounded at 256,000 characters so the Skeptic can inspect complete bounded code
 and output without an unbounded request.
 
@@ -49,11 +58,18 @@ alive and persists them with the record.
 Session, strategy, and cycle references must be supplied together and are
 checked against the selected project's saved session. Sample projects cannot
 receive execution records; open a sample copy first.
-Execution status is `completed`, `failed`, `timeout`, `output_limit`,
-`unavailable`, or `busy`. Only one container is admitted per local backend
+Execution status is `running`, `interrupted`, `completed`, `failed`, `timeout`,
+`output_limit`, `unavailable`, or `busy`. Only one container is admitted per local backend
 process; concurrent attempts are captured as busy without starting a container.
 A nonzero process exit is never a successful execution. Failed,
 timed-out, output-limited, or unavailable attempts are retained as such.
+Artifact collection errors are retained separately as `artifact_error`, without
+replacing program stdout/stderr. Such a run is `failed` even if the program
+exited zero. UTF-8 display text uses replacement decoding; when a stream is not
+valid UTF-8, its exact bytes are also retained as `stdout_base64` or
+`stderr_base64`. The execution JSON bound is 384,000 bytes to accommodate JSON
+escaping of the bounded source/output. Session and context caps remain in
+force; print summaries and save datasets as files instead of flooding output.
 
 The locally built `sigma-research-python:0.1` image is resolved to its local
 immutable SHA-256 image ID and run by that ID; it is never pulled by a research
@@ -78,3 +94,19 @@ The boundary assumes a trusted host kernel, Docker daemon, and image-build
 process. Build-time dependency download requires network access; research
 containers have none. Users must rebuild the image after changing the pinned
 lock or image definition.
+
+The agent guidance supplies the exact limits, fresh-filesystem semantics and
+`/artifacts` path. It asks for discriminating experiments, fixed seeds,
+controls, conditioning/tolerance checks, and concrete revised experiments
+after failure. The Skeptic must inspect source as well as output: a hardcoded
+answer, a small residual, a successful exit, and metadata about a plot do not
+establish the claimed result. Numerical contradiction and operational failure
+require different follow-up questions.
+
+`sandbox-poc/research-check.py` exercises six multi-cycle scientific workflows
+with real Docker and scripted provider responses. `adversarial-check.py`
+attacks output/artifact handling, cancellation, concurrent admission, resource
+exhaustion, and a real backend SIGKILL with detached-child cleanup. Neither
+tests live model judgment. `plan-research-check.py --run` is an explicit bounded
+live evaluation that refuses every billing mode except an already connected
+ChatGPT plan. It is never invoked by the regression suite.

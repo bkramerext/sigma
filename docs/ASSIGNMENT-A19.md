@@ -63,6 +63,8 @@ proof of a general mathematical claim.
 Run `./sigma test`, relevant browser checks, lint/type checks via the project
 test command, and an actual local container smoke test if the runtime is
 available. Record exact outcomes and any engine limitation in `docs/STATUS.md`.
-Do not use live provider calls or claim independent mathematical verification.
+Do not make paid API calls or switch billing methods. Real model evaluations
+must use an already selected connected ChatGPT plan with an explicit small
+call budget and no billing fallback. Do not claim independent mathematical verification.
 Keep the PR based on the active A18 integration branch until A18 lands; do not
 self-merge.

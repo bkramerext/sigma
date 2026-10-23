@@ -51,12 +51,15 @@ def main() -> int:
     deadline = time.monotonic() + EXECUTION_TIMEOUT_SECONDS
     timed_out = False
     while selector.get_map():
-        if time.monotonic() >= deadline and child.poll() is None:
+        if time.monotonic() >= deadline:
             timed_out = True
             try:
                 os.killpg(child.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            # A child may exit while a detached descendant retains its pipes.
+            # End the runner even then; container teardown kills descendants.
+            break
         for key, _ in selector.select(0.1):
             chunk = os.read(key.fd, 8192)
             if chunk:
@@ -71,6 +74,8 @@ def main() -> int:
                 selector.unregister(key.fileobj)
     selector.close()
     return_code = child.wait()
+    child.stdout.close()
+    child.stderr.close()
     if timed_out:
         sys.stderr.buffer.write(b"\nExecution exceeded the 15-second wall limit.\n")
     try:
@@ -81,7 +86,7 @@ def main() -> int:
     # The host captures /artifacts while this container remains alive, then
     # closes stdin to release the entrypoint and let docker run exit.
     sys.stdin.buffer.read(1)
-    return return_code
+    return 124 if timed_out else return_code
 
 
 if __name__ == "__main__":

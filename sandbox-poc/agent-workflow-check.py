@@ -18,9 +18,13 @@ from sigma.python_sandbox import get_execution_artifact
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 CODE = """import matplotlib.pyplot as plt
-print('ANSWER: 79 regions for 12 lines')
+counts = [1]
+for n in range(1, 13):
+    counts.append(counts[-1] + n)
+assert counts[-1] == 1 + 12*13//2
+print(f'ANSWER: {counts[-1]} regions for 12 lines')
 fig, ax = plt.subplots()
-ax.plot([0, 1, 2], [1, 2, 4])
+ax.plot(range(13), counts)
 fig.savefig('/artifacts/line-count.png')
 """
 
