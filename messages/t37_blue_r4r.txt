@@ -1,74 +1,69 @@
-T37: Trustworthy Research Memory, Evidence Selection, and Continuity
-Blue handoff for coordinator review
+T37 PR #45 — coordinator review revision
+Status: R4R pending GitHub mergeability confirmation
 
 Branch: blue/t37-trustworthy-research-memory
-Base integrated: origin/main 113436118514ff7cca2c806c8924f958ff16392f
-Tested implementation head: f9f617deb7ee0f9f3cd3fed7b34fe6f13530e0e4
+Integrated base: origin/main c4ef4f0af5c795657f0c55579bfef051c9e78f45
+Tested code head: 3e57eba9306421282f1e26530fb848e610cd52d1
+PR: https://github.com/bkramerext/sigma/pull/45
 
-Reproduced baseline weaknesses before refactoring:
-- 110 long artifacts assembled to 308,902 bytes and blocked dispatch even
-  though optional history crowded out a recent disproof.
-- The 12-entry prior-session limit silently omitted an early concrete disproof
-  from 13 findings and provided no omission count or source pointers.
-- A 70,000-emoji question passed a character-count check at 70,394 characters
-  despite occupying 280,394 UTF-8 bytes, above the 256,000-byte limit.
-- Saved steps had no canonical selection manifest or human-readable reason for
-  selected/omitted sources.
-These are deterministic observations, not claims about how a live model reasons.
+Review findings reproduced and corrected
 
-Implemented:
-- Deterministic, bounded contexts for legacy and multi-strategy agents: all
-  unresolved obligation sources, current Investigator output for Skeptic review,
-  newest artifact and marked counterexamples/retractions precede optional
-  history. Deterministic extracts retain links to originals; source history is
-  not rewritten. Historical obligations are not resolved by omission.
-- Skeptic obligation dispositions are restricted to supplied evidence and exact
-  basis artifact/step IDs, and remain labeled model-reported/unverified.
-- Prior-session disproof selection, newest-first metadata-only failures, peer
-  source/domain/assumption/computation/retraction context, and active guidance
-  have bounded omission counts and source pointers.
-- UTF-8 input and manifest storage bounds fail closed before provider preflight
-  when mandatory content cannot fit. The branch pauses with an audit event and
-  preserves all saved artifacts; no provider request or hidden charge occurs.
-- Each dispatched step persists its context manifest before provider dispatch.
-  The existing Provenance disclosure and text/HTML/LaTeX reports expose source
-  categories, reasons, representation, byte budget, and omission details.
-- Current main integration exposed a 320px overflow in project-header controls.
-  A narrow-screen grid track fix preserves the controls and prevents horizontal
-  overflow.
+1. Obligation identity/lifecycle — MET.
+   Stable IDs include full normalized obligation text, project, strategy, and
+   normalized assumptions. Chronological explicit restatement reopens an older
+   disposition. Legacy text-only IDs resolve only when unambiguous; ambiguity
+   leaves obligations unresolved. The regression proves same wording under
+   integer/real assumptions does not cross-resolve, a later reopen works, two
+   obligations sharing the first 700 characters remain distinct, and an old
+   record without new IDs remains readable.
 
-Verification on the integrated tree:
-- `./sigma test` — passed, including backend scenarios, research-session and
-  concurrency regressions, T22 current-main tests, Ruff, format check, Pyright
-  (0 errors), frontend typecheck, and production build.
-- `uv run --with playwright --locked python browser_checks/a17_research.py`
-  with isolated Vite `127.0.0.1:5174` and fixture `127.0.0.1:8003` — passed in
-  real Google Chrome at 1440, 1280, 390, and 320 CSS pixels; checks Context used
-  and no page-level horizontal overflow.
-- `uv run --locked --no-sync ruff check browser_checks/a17_research.py browser_checks/provider_fixture.py`
-  — passed.
-- Desktop and 390px screenshots: `/tmp/sigma-t25-outcome-desktop.png` and
-  `/tmp/sigma-t25-outcome-mobile.png` (ephemeral local files, not tracked).
-- No live model/provider calls were made.
+2. Repeated history/criticality — MET.
+   A 105-artifact regression repeats one unresolved obligation while every
+   routine note mentions a counterexample. `_agent_context` now selects a
+   bounded origin/latest source sample, retains the obligation, and reports 102
+   omitted source occurrences with bounded ID pointers. Ordinary keyword
+   mentions are no longer marked decisive; structured outcome fields are used.
 
-Known limitations:
-- Deterministic tests show what evidence is selected and preserved; they do not
-  establish that a model notices or reasons correctly about it. No live model
-  quality evaluation was authorized.
-- Model-reported addressed/superseded/retracted obligation dispositions are
-  epistemically unverified and should not be treated as proof.
-- Context selection is deliberately bounded (24 current artifacts, 12 peer
-  artifacts, 64 obligations, 256 KB UTF-8); mandatory overflow pauses for human
-  narrowing rather than attempting AI summarization.
-- T17.8's independent research-quality gate remains separate and unchanged.
+3. Cross-session unresolved obligations — MET.
+   An ordinary-language unresolved obligation followed by 13 routine findings
+   is selected into a later session ahead of routine history, with its strategy,
+   assumptions, and source artifact provenance. Two omitted routine findings
+   are reported. Another strategy's unrelated obligation is excluded. The
+   snapshot is saved at session creation and reused after paused-record reload;
+   the actual fixture `start_session` continuation test confirms an earlier
+   obligation reaches the next Investigator context. Per-strategy bound
+   overflow blocks dispatch before provider preflight and preserves the source.
 
-T37 is ready for coordinator review. Do not merge without review.
+4. Evidence actually supplied — MET, with explicit boundary.
+   Required current evidence whose method extract would truncate now blocks
+   before authentication/provider preflight. Historical source extracts carry
+   truncation metadata; an unresolved obligation with a truncated historical
+   method remains unresolved and is labeled
+   `incomplete_extract_original_not_supplied`. Pointer-only originals are not
+   represented as inspected or verified. No model summary call was added.
 
-PR #45: https://github.com/bkramerext/sigma/pull/45
-PR head after handoff/tracker documentation: 9eed632e862dccf0a550ea3e29144ff08335cde6.
-The tested implementation tree is f9f617deb7ee0f9f3cd3fed7b34fe6f13530e0e4;
-subsequent commits only add this handoff and tracker PR metadata.
-GitHub reports PR #45 open; the latest connector response says mergeable=false.
-The current origin/main is an ancestor of the pushed head and the local merge had
-no application-code conflicts, so this is ready for content review; do not treat
-the connector result as confirmation of mergeability. R4R.
+5. Current main/layout — MET.
+   Integrated `origin/main` at c4ef4f0...; resolved the sole workspace CSS
+   conflict by keeping Gray's responsive two-column Model/Google and
+   Thinking/ChatGPT layout and dropping T37's conflicting narrow three-column
+   rule. Gray's separate Lean-logo work was not changed.
+
+6. Verification/handoff — MET.
+   - `./sigma test` — passed all steps: research sessions/concurrency,
+     computation, reports, Ruff, format check, Pyright (0 diagnostics), frontend
+     typecheck, and production build.
+   - `uv run --locked --no-sync python tests/research_sessions.py` — passed,
+     including 10-strategy concurrency and continuation coverage.
+   - `uv run --locked --no-sync python tests/project_reports.py` — passed.
+   - `uv run --with playwright --locked python browser_checks/a17_research.py`
+     with isolated UI 127.0.0.1:5174 and fixture 127.0.0.1:8003 — passed in
+     real Google Chrome at 1440/1280 desktop and 390/320 widths. The 404 from
+     the first attempt at unrelated 5173/8002 listeners was discarded; those
+     listeners were not used as evidence.
+   - Screenshots inspected: `/tmp/sigma-a18-coordinator-review-desktop.png`
+     and `/tmp/sigma-a18-coordinator-review-mobile.png`.
+
+No live provider calls or paid API calls were made. Deterministic evidence
+handling and fixture plumbing are verified; empirical live-model research
+quality is UNVERIFIED. Model-reported dispositions remain unverified. T17.8
+remains separate. PR #45 is open; do not self-merge.

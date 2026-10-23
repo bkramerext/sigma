@@ -4171,3 +4171,81 @@ per-user provider credentials/budgets. This increment did not add Gate B's
 provider authorization, durable-job controls or compute budgets, and no paid
 calls were made. Public Demo behavior and cloud deployment remain later T22
 gates.
+
+## T37 PR #45 coordinator review revision (2026-10-23)
+
+This focused revision reproduced each requested defect before changing the
+policy. No live or paid provider calls were made. It integrates
+`origin/main` at `c4ef4f0af5c795657f0c55579bfef051c9e78f45` (Gray PR #46).
+The only conflict was `frontend/src/workspace.css`; the responsive two-column
+Model/Google and Thinking/ChatGPT layout from main is retained, and T37's
+conflicting three-column narrow layout was removed. Gray's separate Lean-logo
+work was not changed.
+
+| Review issue | Result | Reproducer and correction |
+| --- | --- | --- |
+| Obligation identity and lifecycle | **MET** | `test_t37_obligation_identity_lifecycle_and_history` proves the same wording under integer and real assumptions has distinct IDs and only the integer-scoped item can be addressed; a later restatement reopens it. Two long obligations sharing the first 700 characters remain distinct. Legacy text-only IDs still resolve when unambiguous; ambiguous old IDs leave both obligations unresolved. |
+| Repeated source artifacts and criticality | **MET** | A 105-artifact fixture repeats one unresolved obligation and casually mentions counterexamples in every ordinary note. Context assembly completes under the 24-source bound, retains the obligation and representative origin/latest support, and explicitly reports 102 omitted source occurrences. Plain keyword mentions are no longer treated as decisive; structured outcomes remain material. |
+| Prior-session obligation continuity | **MET** | The fixture places an ordinary-language unresolved obligation before 13 routine findings. The frozen later-session index selects its original source ahead of routine findings, reports the two omitted findings, preserves strategy/assumption and source provenance, and excludes a different strategy's obligation. The persisted paused-record reload is assembled through `_agent_context`; the actual `start_session` continuation scenario also asserts the prior obligation reaches the provider context and remains frozen in saved session state. |
+| Evidentiary extract availability | **MET** | A current mandatory source with a 2,401-character method and an unresolved obligation now fails before auth/provider preflight rather than silently passing a method whose decisive tail was truncated. A prior-session source with a truncated method remains bounded but is labeled `incomplete_extract_original_not_supplied`; its obligation remains unresolved. Complete bounded extracts and pointer-only references are distinct. No summarization call is introduced. |
+| Current-main responsive header integration | **MET** | The merged main CSS retains the approved two-column compact header on narrow screens. Fixture-backed real Chrome passed `browser_checks/a17_research.py` at 1440, 1280, 390, and 320 CSS pixels, with no unrelated UI or artwork edits. |
+| Tests, handoff, and PR update | **MET** | Full `./sigma test`, focused research-session and report suites, fixture-backed real Chrome checks at 1440/1280/390/320px, handoff update, and push to PR #45 completed. The PR remains open for review; no self-merge. |
+
+The previous implementation had collapsed same-text obligations despite
+different assumptions, allowed an older addressed disposition to dominate a
+later explicit reopening, and merged long obligations sharing the first 700
+characters. Its all-source mandatory policy blocked at 25 routine repeats;
+keyword scanning made routine counterexample discussion look decisive. The
+12-finding previous-session index also omitted an early ordinary-language
+obligation when followed by 13 newer routine findings. These are evidence
+selection defects, not demonstrations of live model reasoning quality.
+
+Stable obligation IDs now hash full normalized text together with project,
+strategy, and normalized assumptions. Ledger events apply chronologically:
+explicit later notes reopen; dispositions require an exact scoped identity.
+Historical text-only IDs are mapped only when the mapping is unique, preserving
+older saved records without allowing ambiguous resolution. Source references
+and occurrence counts remain bounded, with omitted support explicitly counted.
+Prior-session unresolved obligations are frozen at session creation per
+selected strategy, byte/count bounded, and persisted so pause/recovery does not
+re-query mutable history. If a strategy's frozen unresolved obligations exceed
+the bound, dispatch fails before provider preflight and the saved evidence is
+kept.
+
+Deterministic regressions cover identity, reopening, legacy records, long
+history, strategy scoping, prior-source selection, persisted context, truncated
+mandatory evidence, no-provider-call failure, and existing pause/resume,
+concurrency, recovery, computational evidence, and report paths. The 105-item
+case runs through `_agent_context`, not only the selection helper. The existing
+continuation integration test starts real local fixture sessions and checks
+that an earlier unresolved obligation reaches the subsequent Investigator.
+
+Verification on tested code head: `3e57eba9306421282f1e26530fb848e610cd52d1`.
+Base integrated: `c4ef4f0af5c795657f0c55579bfef051c9e78f45`.
+
+- `./sigma test` — **passed** all steps, including research session and
+  concurrency scenarios, computational evidence, project reports, Ruff,
+  format check (67 files), Pyright (0 diagnostics), frontend typecheck, and
+  production build.
+- `uv run --locked --no-sync python tests/research_sessions.py` — **passed**
+  after the review changes, including 10-strategy concurrency and continuation.
+- `uv run --locked --no-sync python tests/project_reports.py` — **passed** report
+  and unchanged Project Audit export checks.
+- `uv run --with playwright --locked python browser_checks/a17_research.py`
+  with isolated UI `127.0.0.1:5174` and fixture `127.0.0.1:8003` — passed in
+  installed Google Chrome at 1440/1280 desktop and 390/320 narrow widths. The
+  initial attempt against unrelated listeners on 5173/8002 returned 404 and
+  was discarded; those listeners were left untouched.
+- No live model/provider calls were made. Fixture tests verify deterministic
+  context plumbing and billing/call boundaries, not empirical research quality.
+
+PR #45 was pushed at the code head above; the following handoff commit contains
+only this status and `messages/t37_blue_r4r.txt` updates. GitHub's PR metadata
+check and mergeability result are documented in the handoff after the push.
+
+Remaining limits: model-reported addressed/superseded/retracted statuses are
+still unverified judgments; bounded extracts cannot replace original source
+inspection. When an original is not among the supplied sources, the context
+explicitly says so. Deterministic success does not establish that a live model
+will reason correctly or discover new mathematics. T17.8 remains a separate
+evaluation and no scientific-quality claim is made here.
