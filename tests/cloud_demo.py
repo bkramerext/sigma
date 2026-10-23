@@ -103,11 +103,18 @@ class CloudDemoTests(TestCase):
             self.assertEqual(guessed_report.content, report.content)
         self.assertEqual(
             self.client.post(
-                "/api/projects/strategies/add", json={"path": str(self.root)}
+                "/api/projects/strategies/add",
+                json={"path": str(self.root)},
+                headers={"Origin": "https://sigma.test"},
             ).status_code,
-            403,
+            401,
         )
-        self.assertEqual(self.client.post("/api/cloud-demo/", json={}).status_code, 403)
+        self.assertEqual(
+            self.client.post(
+                "/api/cloud-demo/", json={}, headers={"Origin": "https://sigma.test"}
+            ).status_code,
+            401,
+        )
         denied_cookie = secrets.token_urlsafe(32)
         with cloud_auth._db(cloud_auth.config()) as db:
             db.execute(
