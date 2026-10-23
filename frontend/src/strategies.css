@@ -2,7 +2,7 @@
 .workspace-page { --workspace-bg: #04101b; --workspace-panel: #030e18; --workspace-line: #233c4b; background: radial-gradient(ellipse at 80% 15%, #0c2031, transparent 65%), var(--workspace-bg); }
 .workspace-page .workspace-layout { grid-template-columns: 246px minmax(0, 1fr); }
 .workspace-page .site-header { min-height: 96px; }
-.workspace-page .workspace-content { padding: 0 40px 40px; }
+.workspace-page .workspace-content { padding: 12px 40px 40px; }
 .workspace-page .project-intro { padding: 22px 0 12px; margin-bottom: 0; max-height: min(55dvh, 560px); overflow-y: auto; overflow-x: hidden; border-bottom: 0; scrollbar-color: #6b5847 transparent; }
 .workspace-page .project-intro .objective { max-width: none; }
 .workspace-page .project-pane-resizer { display: grid; place-items: center; height: 22px; margin: 0 0 12px; border-top: 1px solid var(--workspace-line); cursor: ns-resize; touch-action: none; user-select: none; }
@@ -429,7 +429,7 @@
 .workspace-page .strategy-rename-form { align-items: center; }
 .workspace-page .strategy-expanded { margin-top: 5px; padding-top: 4px; border-top: 0; }
 .workspace-page .strategy-expanded .strategy-approach { margin: 0 0 8px; }
-.workspace-page .sessions-pane { margin-top: 24px; }
+.workspace-page .sessions-pane { margin-top: 16px; }
 .workspace-page .sessions-pane-heading .section-count { margin-left: auto; }
 .workspace-page .session-columns { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); padding: 14px 24px; text-transform: uppercase; letter-spacing: .16em; color: #e5b270; font-size: 11px; border-bottom: 1px solid var(--workspace-line); }
 .workspace-page .session-table { border: 2px solid var(--workspace-line); border-radius: 12px; }
