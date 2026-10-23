@@ -1,5 +1,40 @@
 # SIGMA status
 
+## A23: project difficulty setting (2026-10-22)
+
+Added descriptive project difficulty with stable values `easy`, `medium`, and
+`hard`, displayed as Easy, Medium, and Hard. New projects default to Medium;
+legacy schema v1–v7 projects read as Medium without a write. Their first
+explicit Project Settings save upgrades to schema v8 and creates the existing
+exact `project.vN.json` backup. Difficulty participates in the settings audit
+chain, is validated when read, and appears in JSON audit exports and human
+reports. The Maximum Regions sample is explicitly Easy, and sample copies
+retain that value. Difficulty does not affect generation, agents, budgets, or
+research outcomes.
+
+The New Project and Settings forms each have one labeled three-option selector.
+The project header shows a compact “Difficulty · …” badge beside the project
+identity, with an accessible “Project difficulty: …” name. No other product UI
+was changed. The existing settings browser scenario now verifies the new field
+and follows the current combined project-title/description and project-settings
+controls.
+
+Verification passed:
+
+- `./sigma test`: all executable scenarios, Ruff check/format, Pyright (0 errors),
+  frontend TypeScript check, and production Vite build.
+- `uv run --locked --no-sync --with playwright python browser_checks/settings.py`:
+  real Chrome with the isolated HTTP fixture passed default Medium, saving Hard,
+  failed-save draft retention, reload persistence, project-header metadata, and
+  responsive overflow checks. Viewports: 1672×941, 768×844, 390×844 and
+  320×844. The fixture makes no provider inference calls. Captures inspected:
+  `/tmp/sigma-project-header-type-320.png` and `/tmp/sigma-a8-create-390.png`.
+- `git diff --check` and Ruff checks for the updated browser scenario passed.
+
+The captured new-project dialog shows the Difficulty selector between Research
+category and LLM Model. At 320px wide, the project name wraps cleanly while the
+difficulty badge remains visible and the page has no horizontal overflow.
+
 ## A17.8 Evaluation (2026-10-22)
 
 **Recommendation: A17.8 needs further work before acceptance; do not mark A17

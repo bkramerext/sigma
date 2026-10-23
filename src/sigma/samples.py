@@ -30,6 +30,7 @@ class SampleProject:
     title: str
     problem: str
     investigation_type: str
+    difficulty: str
     strategy_count: int
 
 
@@ -61,6 +62,7 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
             project.title,
             project.problem,
             project.investigation_type.value,
+            project.difficulty.value,
             len(project.active_order),
         ),
     )

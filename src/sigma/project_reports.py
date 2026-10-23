@@ -65,6 +65,14 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
     mode = project.get("investigation_type")
     mode_label = research_type_labels.get(mode, mode) if isinstance(mode, str) else mode
     lines += [f"Research type: {_value(mode_label)}", ""]
+    difficulty_labels = {"easy": "Easy", "medium": "Medium", "hard": "Hard"}
+    difficulty = project.get("difficulty", "medium")
+    difficulty_label = (
+        difficulty_labels.get(difficulty, "Unavailable")
+        if isinstance(difficulty, str)
+        else "Unavailable"
+    )
+    lines += [f"Difficulty: {difficulty_label}", ""]
 
     lines += ["Strategies", "----------"]
     strategies = _rows(project.get("strategies"))

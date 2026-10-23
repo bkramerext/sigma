@@ -172,6 +172,7 @@ class InitRequest(OpenRequest):
     )
     ai_model: str | None = None
     reasoning_effort: str = "high"
+    difficulty: str = "medium"
 
 
 @app.post("/api/projects/open")
@@ -188,6 +189,7 @@ def init_view(body: InitRequest):
         body.investigation_type,
         body.ai_model,
         body.reasoning_effort,
+        body.difficulty,
     )
     from sigma.recents import record_access
 
@@ -299,6 +301,7 @@ class CreateProjectRequest(BaseModel):
     )
     ai_model: str | None = None
     reasoning_effort: str = "high"
+    difficulty: str = "medium"
 
 
 @app.get("/api/projects/destination")
@@ -310,7 +313,12 @@ def destination_view(title: str = ""):
 def create_project_view(body: CreateProjectRequest):
     return asdict(
         create_project(
-            body.title, body.problem, body.investigation_type, body.ai_model, body.reasoning_effort
+            body.title,
+            body.problem,
+            body.investigation_type,
+            body.ai_model,
+            body.reasoning_effort,
+            body.difficulty,
         )
     )
 
@@ -488,6 +496,7 @@ class ProjectSettingsRequest(BaseModel):
     )
     ai_model: str
     reasoning_effort: str
+    difficulty: str
 
 
 class UpdateProjectRequest(ProjectSettingsRequest):
@@ -506,6 +515,7 @@ def update_project_view(body: UpdateProjectRequest):
             body.ai_model,
             body.reasoning_effort,
             body.expected.model_dump(),
+            difficulty=body.difficulty,
         )
     )
 

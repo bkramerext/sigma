@@ -51,7 +51,8 @@ def main() -> None:
                 assert expected.path and not expected.exists
                 created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
-                assert created.project.schema_version == 6
+                assert created.project.schema_version == 8
+                assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
                 raw = json.loads((Path(created.path) / STATE).read_bytes())
                 assert raw["investigation_type"] == mode.value
@@ -63,7 +64,7 @@ def main() -> None:
                 edit_strategy(created.path, strategy_id, "Edited idea", "Updated approach")
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
-                assert removed.project.schema_version == 6
+                assert removed.project.schema_version == 8
                 snapshot = (Path(created.path) / STATE).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
@@ -155,10 +156,12 @@ def main() -> None:
                     "title": "API math",
                     "problem": "A mathematical question",
                     "research_mode": "mathematical",
+                    "difficulty": "hard",
                 }
                 response = client.post("/api/projects/create", json=body)
                 assert response.status_code == 201, response.text
                 assert response.json()["project"]["investigation_type"] == "mathematical"
+                assert response.json()["project"]["difficulty"] == "hard"
                 chemistry = client.post(
                     "/api/projects/create",
                     json={
@@ -169,10 +172,18 @@ def main() -> None:
                 )
                 assert chemistry.status_code == 201, chemistry.text
                 assert chemistry.json()["project"]["investigation_type"] == "chemistry"
+                assert chemistry.json()["project"]["difficulty"] == "medium"
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(
                         "/api/projects/create", json={**body, "research_mode": "invalid"}
+                    ).status_code
+                    == 400
+                )
+                assert (
+                    client.post(
+                        "/api/projects/create",
+                        json={**body, "title": "Bad difficulty", "difficulty": "trivial"},
                     ).status_code
                     == 400
                 )
@@ -205,6 +216,8 @@ def main() -> None:
                         "CLI question",
                         "--research-mode",
                         mode.value,
+                        "--difficulty",
+                        "hard",
                     ],
                     env=environment,
                     capture_output=True,
@@ -214,6 +227,7 @@ def main() -> None:
                 assert result.returncode == 0, result.stderr
                 data = json.loads(result.stdout)
                 assert data["project"]["investigation_type"] == mode.value
+                assert data["project"]["difficulty"] == "hard"
                 assert inspect_project(data["path"]).project.research_mode == mode
             print("PASS API create/preview/errors and both CLI research modes")
 
@@ -229,9 +243,11 @@ def main() -> None:
             raw = json.loads((legacy / STATE).read_bytes())
             raw["schema_version"] = version
             raw.pop("active_order", None)
+            raw.pop("difficulty", None)
             for item in raw.get("strategies", []):
                 for key in ("stage", "summary", "provenance"):
                     item.pop(key, None)
+                item.pop("enabled", None)
             raw.pop("ai_model", None)
             raw.pop("reasoning_effort", None)
             raw.pop("research_mode", None)
