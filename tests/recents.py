@@ -76,7 +76,8 @@ def check(root: Path, base: Path) -> None:
     reopened = open_sample_project(selected["id"])
     assert reopened.project.id not in {first.project.id, second.project.id}
     assert len(reopened.project.active_order) == selected["strategy_count"]
-    assert sample_projects()["projects"][0]["strategy_count"] == selected["strategy_count"]
+    refreshed_catalog = {item["id"]: item for item in sample_projects()["projects"]}
+    assert refreshed_catalog[selected["id"]]["strategy_count"] == selected["strategy_count"]
     assert Path(first.path, "project.json").read_bytes() != sources[source_path]
 
     other = open_sample_project(catalog[-1]["id"])

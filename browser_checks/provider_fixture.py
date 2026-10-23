@@ -257,6 +257,7 @@ async def handler(request):
                     "verification_status": "convincing_unverified",
                     "strategy_contribution": "solution",
                     "contribution_rationale": "This strategy supplies both the upper-bound induction and an explicit arrangement attaining equality.",
+                    "cross_strategy_relations": [],
                 }
                 if maximum_regions
                 else {
@@ -276,6 +277,7 @@ async def handler(request):
                     "verification_status": "convincing_unverified",
                     "strategy_contribution": "productive",
                     "contribution_rationale": "The saved derivation advances the objective.",
+                    "cross_strategy_relations": [],
                 }
             )
         return httpx.Response(

@@ -1,0 +1,59 @@
+{
+  "schema_version": 8,
+  "id": "cec11fe5-9c2f-4ca3-af2d-a46da30f7782",
+  "title": "Prime Factorization and the Euler Product",
+  "problem": "For complex s with Re(s) > 1, investigate the relationship between the Dirichlet series \u03b6(s) = \u03a3(n\u22651) n^(-s) and products indexed by primes. Determine and prove any exact factorization, with precise convergence conditions. Separate finite-product identities from infinite limits and justify every interchange using absolute convergence or another explicit bound. Check a small numerical case with a certified tail estimate. Explain what prime-power information follows from logarithmic differentiation, and why that does not by itself prove the Riemann Hypothesis. Distinguish recalled standard results from facts derived in this investigation; do not invent sources or claim computation that was not performed.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T06:16:05.802187+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.803389+00:00",
+      "strategy_id": "f7f92cc4-160e-4556-bc78-f0603a1100a9"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.804773+00:00",
+      "strategy_id": "8b147df8-b8d1-40a1-85ac-a0393443e323"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "f7f92cc4-160e-4556-bc78-f0603a1100a9",
+      "title": "Finite products and unique factorization",
+      "approach": "Expand products over a finite set of primes using unique factorization. Relate the terms to integers whose prime factors all lie in that set. Bound the omitted integer tail using absolute convergence, then pass to the limit. State carefully which convergence is uniform on compact subsets of Re(s) > 1 and check the boundary Re(s) = 1 separately rather than extending the proof there.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.803389+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "8b147df8-b8d1-40a1-85ac-a0393443e323",
+      "title": "Logarithmic derivatives and prime powers",
+      "approach": "Start from absolute convergence in a right half-plane and derive a logarithmic expansion organized by prime powers. Track the von Mangoldt weights and convergence domain. Use this as a second route to understand what prime-counting information the factorization carries; identify which additional estimates would be needed to approach zeros near Re(s) = 1/2. Do not infer the zero locations from a formal identity.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.804773+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "f7f92cc4-160e-4556-bc78-f0603a1100a9",
+    "8b147df8-b8d1-40a1-85ac-a0393443e323"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "medium"
+}

@@ -1,5 +1,371 @@
 # SIGMA status
 
+## A18 continuation: live research and portfolio coordination (2026-10-22–23)
+
+This continues the A18 work on PR #8; it does not replace the earlier baseline
+and implementation record below. I added an Easy-to-Hard research ladder, a
+saved-evidence coordinator review, adversarial portfolio tests, and real-plan
+evaluation. I did not run any API-key-billed call.
+
+### Engineering changes
+
+- Added the answer-free Easy sample **Counting Pairwise Handshakes**, followed
+  by the existing Medium Euler-product and Hard alternating-series,
+  theta-functional-equation, and RH portfolio samples. The first three
+  mathematical samples have explicit methodological hints; those runs cannot
+  establish independent method discovery. The RH entry remains a research
+  program for an open problem, not a candidate proof.
+- The portfolio coordinator now validates Skeptic references against exact
+  supplied peer artifact IDs, records cited cross-strategy relations, and
+  presents evidence-linked continue/revise/hold/challenge/abandon suggestions.
+  It can flag cited contradictions and overlaps, and proposes combining two
+  strategies only when the complementary judgments are reciprocal. All such
+  judgments are unverified and do not mutate the saved strategy pool.
+- Added deterministic tests for failed approaches, fabricated references,
+  one-sided versus reciprocal complement claims, contradictions, strategy
+  evolution/recovery, stop/resume, and timeout isolation. A transport timeout
+  is stored as a failed provider step; the affected branch is marked
+  `hold_after_failure`, its peer branch continues, and the timeout is not
+  reinterpreted as mathematical evidence.
+- The new timeout test exposed a stale portfolio recommendation at terminal
+  budget exhaustion: a branch could retain a pre-finalization `continue`
+  recommendation after its status had changed to ended. Terminal cleanup now
+  recomputes the coordinator summary after final branch statuses and budget
+  reasons are applied; the regression requires a terminal branch never to
+  advertise `continue` or `revise`.
+- A separate adversarial review found three lifecycle gaps beyond provider
+  timeouts: a wave-level preflight exception could be returned as a branch
+  result and leave the portfolio spinning; stop/pause could leave queued
+  branches and a stale coordinator snapshot; and resume after duration/call
+  exhaustion could end only the parent session. Wave failures now terminate
+  through the session failure path. Stop/pause reconcile every queued/running
+  branch and return the persisted post-cancellation state. Resume-limit exits
+  terminalize eligible branches and refresh outcome, attribution, and
+  coordinator summaries. Deterministic regressions exercise all three cases,
+  including three in-flight workers plus a fourth queued strategy.
+- Model/account preflight exceptions and hangs now pause the session before
+  dispatching a provider call. A bounded 30-second preflight timeout is
+  separate from the model-call timeout. A deterministic recovery test
+  forces a preflight timeout, verifies zero calls were charged, then resumes and
+  completes one full Investigator/Skeptic cycle.
+- The reviewer was right that cross-strategy coordinator actions were
+  advisory: the scheduler fair-rotated active branches and the Investigator
+  received peer artifacts only as generic context. Material cited relations
+  (`supports`, `contradicts`, `complements`, `overlaps`) now create a persisted
+  handoff on the cited target branch. The target's next question explicitly
+  asks it to test that relation against both cited artifacts, and pending
+  handoff targets take selection priority when the shared call budget cannot
+  fund every branch. The Investigator instructions require an explicit
+  adopt/reject/unresolved judgment. Each handoff has a stable ID; call steps
+  record the handoff ID and both artifact IDs, and the resulting research
+  artifact records the handoff it was prompted with.
+- A deterministic end-to-end regression produces a source finding in strategy
+  A that cites strategy B's saved artifact, stops the session while B's next
+  handoff preflight is blocked, then resumes. With only one complete cycle
+  remaining, the scheduler selects B rather than A; the exact provider request
+  contains the handoff question, both IDs, and the directed instruction. B's
+  resulting artifact retains the evidence link. This proves the orchestration
+  changes B's prompt and survives stop/recovery; it does not prove a real model
+  will make a sound or useful change in response.
+- Added a no-op control: an `unrelated` report creates no handoff and leaves the
+  target question unchanged. A reported contradiction with a stated integer vs
+  real-domain mismatch creates only a scoped challenge; it does not set the
+  target branch to refuted. The Investigator prompt explicitly requires a
+  domain/assumption check. This is a prompt-level guard, not a deterministic
+  semantic validator; real model rejection of a false transfer remains
+  unverified.
+- Added explicit Skeptic retractions for a strategy's own earlier
+  cross-strategy source artifacts. References are validated against that
+  branch's saved evidence. A retraction removes an unconsumed handoff and
+  restores the target's prior question; consumed handoffs remain in history
+  with the retraction source. The coordinator no longer reports a retracted
+  relation as an active conflict/combination. Deterministic controls cover both
+  withdrawal before use and withdrawal after use: the former restores the
+  target question, while the latter preserves the target's prompted-artifact
+  lineage and marks that handoff retracted. Neither deletes the original
+  evidence or marks the target disproven.
+- Corrected the ladder documentation count: it has five runnable samples.
+- Added the run protocol and scoring rubric in
+  [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact
+  finite checks in `tests/research_ladder.py` validate example arithmetic only;
+  they do not prove any analytic claim or RH.
+
+### Live ChatGPT-plan evidence
+
+I checked the active provider mode before each session; all were `chatgpt`,
+connected, and used `gpt-6.1-sol` (High for the first two, Medium for the transfer
+trial). No request was sent unless that check passed. The three captured project/session records remain
+locally available under `projects/` and are not committed as source fixtures:
+
+| Stage | Saved project and session | Calls / elapsed | Result |
+|---|---|---:|---|
+| Easy: Counting Pairwise Handshakes | `projects/a18-live-easy-20261022-232853.sigma`; session `1935da6d-5ad6-4d64-9982-06fe5f802300`; artifact `5f2e756e-f7ae-4780-9424-763195af2e7f` | 2 / 39 s | Completed. The Investigator derived `n(n−1)/2`, checked `n=1,2,3`, and supplied an incidence-count argument. The Skeptic raised a specific objection: the distinct-person convention was assumed rather than tied to the wording. It asked for the alternative convention to be handled. The saved outcome is **Mixed · partial progress, unresolved**, with verification `incomplete`; it did not label the result verified. |
+| Medium: Prime Factorization and the Euler Product | `projects/a18-live-medium-20261022-233002.sigma`; session `16316d1d-fdca-4042-85dd-79e03828920f` | 2 dispatched / 40 s | Both concurrent Investigator calls timed out before producing an artifact. The session records both branches as failed, with `hold_after_failure`; strategy assessments are `not_used`, and the outcome is `Pending · execution failed`. No inference about either mathematical approach was made. The configured cap was four calls; no Skeptic calls were dispatched. |
+| Medium: A18 Cross-Strategy Transfer Trial | `projects/a18-live-cross-transfer-20261023.sigma`; session `31cc2a95-5981-4b31-b4e7-1d11625c1180` | 2 dispatched / 60 s | Both concurrent Investigator calls timed out exactly at SIGMA's 60-second client ceiling. No artifacts or Skeptic calls; both branches were `hold_after_failure`; outcome `Pending · execution failed`. No handoff or research-quality observation was possible. The session call cap was 10; live work stopped after these two calls. |
+
+Together these account for six dispatched plan calls: two completed and four
+timed out. The session records contain no token-usage metadata, so token use
+and remaining plan allowance cannot be quantified here. A timed-out remote
+request may still consume plan allowance. There was no reported HTTP 429,
+quota-limit response, or automatic billing fallback, but I stopped live
+experiments after a second Medium trial also timed out at the raised 60-second
+ceiling. Repeating the request would add uncertain usage without new
+diagnostic information. No Hard or RH live session was run.
+
+The cross-strategy trial protocol and oracle criteria were recorded before the
+second Medium trial in
+[the A18 transfer evaluation](evaluations/a18-cross-strategy-transfer.md).
+The active connection was checked as `chatgpt / connected`; the trial used
+`gpt-6.1-sol` at Medium reasoning. It did not reach the Skeptic or coordinator
+stages.
+
+### Research-quality assessment
+
+- **Independent discovery:** Partially demonstrated only for the Easy count.
+  The answer was absent from the saved problem and generic strategy. The
+  derivation is short and familiar, and one task cannot establish general
+  discovery ability. The Medium and harder runs supply method hints and are
+  unsuitable for measuring independent method selection.
+- **Skeptic criticism:** Demonstrated once with a concrete assumption tied to
+  the Investigator's formula and an explicit way to resolve it. The objection
+  may be stricter than ordinary mathematical usage, where “pair” conventionally
+  means two distinct people; this is still a useful calibration test, not proof
+  of consistently strong criticism.
+- **Coordinator recognition:** On the Easy artifact, the outcome remained
+  mixed/partial with an unresolved objection and incomplete verification. This
+  is appropriately cautious. It did not claim the count was externally or
+  formally verified. The Medium failure was correctly treated as an execution
+  failure, not disproof of a strategy. Real multi-strategy synthesis remains
+  unverified because that run timed out before any artifact or Skeptic review.
+- **Strategy improvement:** Deterministic tests show that saved objections,
+  peer findings, and revised questions flow into later cycles and that failed
+  strategies remain distinct from mathematically unproductive ones. There is
+  no live evidence yet that agents improved a strategy over a previous attempt.
+- **Cross-strategy reasoning:** Deterministic integration now shows a cited
+  finding from A alters B's scheduled next Investigator question and survives
+  stop/resume with source/target artifact attribution. The live transfer trial
+  timed out before artifacts existed; real-model transfer precision, Skeptic
+  quality, and whether the prompted change improves the result remain
+  unverified.
+
+The earlier Medium run used a 40-second request timeout and both concurrent
+High-reasoning calls reached it. The new trial used the raised 60-second
+request timeout at Medium reasoning; both initial calls again reached the
+client ceiling. The per-call timeout was initially raised to 120 seconds, then
+increased to **15 minutes** after the human correctly challenged the short
+ceiling for sustained research. Each call is capped by the session's remaining
+time; Stop still cancels local provider work immediately. A deterministic
+transport regression verifies an in-flight call is cancelled at the session
+deadline despite the generous call ceiling. The new ceiling is not live-validated because
+allowance consumption from the four timed-out requests is unknown. Timeout
+steps now persist `failure_kind=timeout`, the effective call/session seconds, and a clear
+note that remote processing may continue and consume plan usage. A separate
+30-second preflight timeout protects model/account checks without charging a
+provider call. Deterministic tests exercise fail-fast preflight recovery and
+both timeout classification paths. No live request was retried. SIGMA still lacks external reference search,
+computation tools, or a formal proof checker; model statements cannot certify
+mathematical truth.
+
+### Verification
+
+- Final `./sigma test` passed after adding all five samples, the timeout
+  isolation regression, and the terminal-recommendation fix. It covered all
+  executable scenarios, Ruff check/format, Pyright, frontend typecheck, and
+  production build. The ladder check confirmed five independent sample copies,
+  answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
+  checks; its printed note explicitly limits those checks to finite examples.
+- Adversarial lifecycle and peer-handoff regressions passed in `./sigma test`
+  on 2026-10-23, including preflight failure/timeout recovery, queued-branch
+  stop, duration/call-limit resume, the A-to-B finding that changes B's
+  scheduled next question and survives stop/resume, and source-evidence
+  retraction both before and after the target consumes the handoff. The suite
+  passed again after raising the call ceiling to 15 minutes and adding the
+  in-flight session-deadline cancellation regression. Ruff check
+  and format, Pyright (zero errors), frontend typecheck, and production Vite
+  build also passed.
+- Real Chrome `browser_checks/a17_research.py` passed against a local provider
+  fixture at desktop (1440px) and mobile (390px), including multi-strategy
+  selection, stop during provider work, resume, and the coordinator panel. I
+  inspected both screenshots. Real Chrome `browser_checks/a20_paper.py` also
+  passed after setting its dedicated UI/fixture ports explicitly.
+
+**Recommendation:** Accept the coordinator and failure-handling engineering as
+implemented once the final full suite passes, but do not accept A18 as evidence
+of research effectiveness. Live evidence is limited to one elementary result
+with a useful criticism and two Medium provider timeout trials; strategy improvement,
+cross-strategy synthesis, and all Hard/RH capability remain unverified.
+
+## A18 implementation and evaluation (started 2026-10-22)
+
+### Baseline and research-quality boundary
+
+The branch is `a18-blue`, originally based on `origin/main` at `6adbeed`;
+checkpoint `0377231` contains the bounded-continuity and answer-leakage work. Baseline
+inspection found one strategy per session, sequential Investigator/Skeptic
+calls, provider gates held per call, and no persisted branch-level execution
+state. The A17.8 Maximum Regions trial is not independent-discovery evidence:
+its saved strategy already contained the answer. At this original checkpoint,
+no live-provider A18 research had been run; the subsequent bounded plan-backed
+trials and their limitations are recorded in the continuation section above.
+Mocked outputs establish software behavior only, not model ability or research
+quality.
+
+### Completed engineering work
+
+- **Bounded continuity:** a new session freezes up to 12 prior findings and
+  16 KB serialized, with source session, strategy, artifact, objections,
+  obligations, disposition, and next question. Long fields are visibly clipped;
+  the full source remains inspectable. Both roles receive the unverified
+  findings, and steps record cited source artifact IDs. Legacy session records
+  remain readable. A large-history fixture checks the prompt stays below its
+  48 KB bound and that project data is not rewritten.
+- **Answer-leakage guard:** a fresh Easy Maximum Regions fixture starts with the
+  objective and a generic line-insertion strategy. A deterministic assertion
+  checks the exact provider inputs do not contain the known formula or attaining
+  construction. The mocked output is not counted as a solution attempt.
+- **Concurrent distinct strategies:** the start API accepts up to 12 distinct,
+  saved, enabled strategy IDs and rejects disabled, removed, missing, or
+  over-budget selections. Duplicate IDs are normalized. Every selected strategy
+  must have budget for an Investigator/Skeptic pair. A fair rotating allocator
+  spends from one shared call budget. Provider work runs with a semaphore capped
+  at three calls; shared proposal, agentic, text-conversion, and session gates
+  are held across each concurrent call wave and released in `finally`. Each
+  branch has its own question, current action, cycle, call count, pending
+  output, status, reason, and artifact attribution. Peer evidence is explicitly
+  marked and source IDs are persisted on steps.
+- **Coordination and outcomes:** the coordinator commits A17.6-compatible
+  artifacts and strategy assessments per branch, then records continuing and
+  stopped branches and the artifact IDs used for comparison. Provider and
+  malformed-review failures are isolated to their branch; remaining work can
+  continue. A budget unable to fund a complete pair finalizes outcome,
+  assessments, event, and timestamp. The overall outcome remains based on
+  saved artifacts, not operational success or failure.
+- **Stop and recovery:** stop cancels all in-flight portfolio calls, preserves
+  completed role outputs, marks unfinished steps interrupted, clears active
+  step IDs, and does not silently replay them. Explicit resume uses remaining
+  budget and completed pending output only. Recovery validates selected
+  strategies. Existing duplicate-start and idempotency protections remain.
+- **Existing workspace UI:** the start confirmation defaults to one strategy
+  for compatibility and shows an explicit selector when more are available;
+  users may select multiple within the shared-call limit. The existing session
+  pane polls and displays each strategy's status, current action/question,
+  cycle, calls, artifacts, and coordinator reason. No additional dashboard was
+  introduced. “Fork strategy from findings” prefills the existing authoring
+  form with source strategy ID, session, findings, criticism, open obligations,
+  decisions, and questions; parent text truncation is disclosed. The source
+  artifact and fork draft remain available through existing project/session
+  surfaces.
+
+### Deterministic and browser evidence
+
+`tests/research_sessions.py` exercises single-strategy compatibility, bounded
+continuity, answer-free inputs, three-strategy concurrent execution,
+ten-strategy stress, out-of-order completions, branch-local provider rejection,
+shared-budget exhaustion, parent/fork follow-up, and stop/resume during three
+simultaneous requests.
+The ten-strategy fixture observed a maximum of **3 simultaneous provider calls**
+for 20 total calls and 10 attributed artifacts, with out-of-order responses in
+**0.225 seconds** in the latest full-suite run on this machine. All four shared
+provider gates were held during calls and released afterward. The stop/resume
+fixture confirms no new call is dispatched after stop, interrupted calls are
+not fabricated as artifacts, and the project file remains byte-for-byte
+unchanged.
+
+The real-Chrome fixture scenario exercises actual multi-strategy selection,
+observes two branch states while one provider fixture is delayed, and stops the
+session during provider work. The provider is an isolated local mock. The same
+scenario retains continuation, fork-draft, Maximum Regions artifact/outcome,
+reload, Markdown, and report-export checks. This is engineering evidence, not a
+live research evaluation.
+
+### Evaluation and remaining gaps
+
+- **Engineering gate: pass.** The final deterministic suite and isolated real-
+  Chrome workflow pass. Core continuity, bounded concurrency, live activity,
+  recovery, provenance, and branch isolation are covered. New single-strategy
+  sessions now share the same A17.6-compatible coordinator path; the legacy
+  worker remains for pre-portfolio records.
+- **Research gate: limited and still incomplete.** At this original checkpoint,
+  no live model run was authorized; the later Easy and timed-out Medium sessions
+  are recorded above. Their evidence does not establish multi-strategy quality.
+  No claim is made that agents independently solved Maximum Regions. The
+  earlier A17.8 result is disqualified by answer leakage.
+- **Not implemented:** a user-authored next-step instruction during a running
+  session. In a multi-branch wave, deciding which strategy receives that
+  instruction and recording exactly when it entered the prompt needs a durable,
+  attributed intervention contract; silently applying one session-level text
+  to several concurrent branches would be ambiguous. Existing stop, strategy
+  selection, and evidence-based fork controls remain usable. This is a known
+  supervision limitation, not a passed criterion.
+- **Research coordination limitation:** the local coordinator compares
+  branch-level saved artifact IDs, Skeptic dispositions, and remaining
+  questions; it does not call a separate model to synthesize or merge the
+  strategies. No evidence supports claiming that a real coordinator chose the
+  best mechanism. A deterministic parent/fork scenario confirms that a follow-
+  up session can carry both strategy identities, preserve the parent's text,
+  include prior findings, and attribute separate artifacts and assessments.
+  No live-provider parent-versus-fork comparison has been run.
+- **Live evaluation protocol:** use an answer-free Maximum Regions project with
+  a sealed external solution/rubric; an Incremental Dependency Scheduler
+  (Computer Science, Medium) scored for algorithm, proof, complexity, and
+  adversarial cases; and Unexpected Oscillation (Physics, Medium) scored for
+  evidence handling and non-fabrication. Record initial inputs, strategy text,
+  model/effort, fixed call/time limits, session IDs, every role output, external
+  scoring, failures, and usage. Count a Medium partial result as progress, not
+  a solve. Audit every prompt source for leakage before each trial. Do not run
+  these trials without explicit usage authorization.
+
+The universal Easy/Medium solve aspiration is not established by finite mocks or
+one future live trial. These changes improve control and observability; they do
+not show SIGMA is yet a trustworthy research agent. A bounded user-direction
+mechanism and actual cross-domain live evidence are the clearest remaining
+limitations.
+
+Final verification:
+
+- `uv run --locked --no-sync python tests/research_sessions.py`: passed,
+  including the 10-strategy load (20 calls, 10 artifacts, maximum concurrency
+  3, out-of-order responses, 0.225 seconds in the latest full-suite run),
+  parent/fork follow-up, partial provider failure, low budget, stop/recovery,
+  guard changes, and A17.6 outcome regressions.
+- `./sigma test`: passed all scenarios, Ruff check/format, Pyright (0 errors),
+  frontend typecheck, and production Vite build. This is deterministic or
+  mocked software evidence; it contains no live model research evaluation.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5175
+  SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8014 uv run --locked --no-sync
+  --with playwright python browser_checks/a17_research.py`: passed in real
+  Chrome against the isolated A18 mock, including two selected strategy
+  branches, visible activity after reload during a delayed request, a stop with
+  a completed role output retained and the in-flight call marked interrupted,
+  and existing continuation/fork-draft, Maximum Regions, outcome, and export
+  checks. This does not execute a real research model.
+
+### Post-merge verification (2026-10-22)
+
+Merged the then-current `origin/main` (`6a64976`, including A20 paper authoring)
+into `a18-blue` with merge commit `4addffa`. The full `./sigma test` passed
+after that merge: all source-controlled scenarios, Ruff check/format, Pyright
+(0 errors), frontend typecheck, and production build. The ten-strategy stress
+fixture completed 20 calls and saved 10 artifacts at a maximum concurrency of
+3, with out-of-order completions in 0.226 seconds. These remain deterministic
+and mocked engineering checks, not model-quality evidence.
+
+The merge changed the LaTeX export choice from direct PDF download to the A20
+paper-authoring handoff. Updated the older A17 browser scenario to check the
+authoring handoff and return path without making a provider request, and to
+check preserved/nonempty mobile filenames rather than relying on stale
+defaults. Real Chrome then passed both the A18/A17 workspace scenario against
+the isolated fixture (`SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5175`, fixture
+8014) and `browser_checks/a20_paper.py` against the isolated paper fixture
+(UI 5175, fixture 8012). A20 browser coverage generated and retrieved its
+fixture-authored compiled PDF. No live provider call was made. The A18 research
+gate remains untested, with the limitations and no-independent-solve claims
+above unchanged.
+
+Before opening the review, fetched and merged the subsequently advanced
+`origin/main` tip `b04a319` (journal-only changes) in merge commit `bfd8587`.
+The PR head includes this latest base; GitHub reports the PR mergeable.
+
 ## A23: project difficulty setting (2026-10-22)
 
 Added descriptive project difficulty with stable values `easy`, `medium`, and

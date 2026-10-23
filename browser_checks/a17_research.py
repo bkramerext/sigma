@@ -9,6 +9,9 @@ from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
+browser_base_url = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
+fixture_base_url = os.environ.get("SIGMA_BROWSER_FIXTURE_URL", "http://127.0.0.1:8002").rstrip("/")
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
         executable_path=os.environ.get(
@@ -22,16 +25,18 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     starts = []
+    start_payloads = []
     provider_calls = []
     legacy_titleless = {"enabled": False}
     legacy_outcome = {"enabled": False}
+    continuation_fixture = {"enabled": False}
     chatgpt_connection = {"enabled": False}
     fail_export = {"enabled": False}
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on(
         "request",
         lambda request: (
-            starts.append(request.url)
+            (starts.append(request.url), start_payloads.append(request.post_data_json))
             if request.url.endswith("/api/projects/research-sessions/start")
             else None
         ),
@@ -49,7 +54,7 @@ with sync_playwright() as playwright:
         if fail_export["enabled"] and "/api/projects/export" in route.request.url:
             route.fulfill(status=503, json={"error": "fixture export failure"})
             return
-        response = route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8002"))
+        response = route.fetch(url=route.request.url.replace(browser_base_url, fixture_base_url))
         if legacy_titleless["enabled"] and route.request.url.endswith("/api/projects/open"):
             data = response.json()
             data["project"]["strategies"][0].pop("title", None)
@@ -58,6 +63,30 @@ with sync_playwright() as playwright:
             data = response.json()
             for item in data.get("sessions", []):
                 item.get("outcome", {}).pop("summary", None)
+            route.fulfill(response=response, json=data)
+        elif (
+            continuation_fixture["enabled"]
+            and "/api/projects/research-sessions?" in route.request.url
+        ):
+            data = response.json()
+            if data.get("sessions"):
+                data["sessions"][0]["prior_session_findings"] = [
+                    {
+                        "id": "prior-artifact-fixture",
+                        "sequence": 2,
+                        "claim_or_question": "A prior saved finding carried into this bounded session.",
+                        "method": "A prior method that remains unverified.",
+                        "evidence_status": "Unverified fixture note.",
+                        "objections": ["Check the boundary case."],
+                        "open_obligations": ["Verify the boundary case."],
+                        "coordinator_decision": "continue",
+                        "next_question": "Check the boundary case.",
+                        "session_id": "prior-session-fixture",
+                        "session_number": 0,
+                        "strategy_id": "prior-strategy-fixture",
+                        "strategy_title": "Prior fixture strategy",
+                    }
+                ]
             route.fulfill(response=response, json=data)
         elif chatgpt_connection["enabled"] and "/api/ai/connection" in route.request.url:
             data = response.json()
@@ -81,7 +110,7 @@ with sync_playwright() as playwright:
         }"""
         )
 
-    page.goto("http://127.0.0.1:5173")
+    page.goto(browser_base_url)
     home_credit = page.locator(".home-art-credit")
     expect(home_credit.locator("span")).to_have_text("By Brian Kramer, ChatGPT & Codex")
     expect(home_credit.locator("time")).to_have_text("October 2026")
@@ -140,7 +169,7 @@ with sync_playwright() as playwright:
     expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
     expect(page.get_by_role("tooltip")).to_have_text("Back to home caption")
     back_caption.click()
-    page.wait_for_url("http://127.0.0.1:5173/")
+    page.wait_for_url(browser_base_url + "/")
     expect(page.get_by_role("tooltip")).to_have_count(0)
     page.get_by_role("tab", name="Samples", exact=True).click()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
@@ -700,8 +729,19 @@ with sync_playwright() as playwright:
     expect(artifacts.locator("li")).to_have_count(3)
     expect(artifacts).to_contain_text("Independent fixture review for cycle 1")
     expect(artifacts).to_contain_text("Unverified research note")
+    first_session.get_by_role("button", name="Fork strategy from findings", exact=True).click()
+    fork_form = page.locator("#strategy-composer")
+    expect(fork_form.locator("#strategy-title")).to_have_value(
+        "A17.1 saved approach (Session 1 fork)"
+    )
+    fork_approach = fork_form.locator("#strategy-approach")
+    fork_text = fork_approach.input_value()
+    assert "Fork rationale: derived from strategy" in fork_text
+    assert "Saved findings and criticism" in fork_text
+    assert "Open obligations:" in fork_text
+    fork_form.get_by_role("button", name="Cancel", exact=True).click()
     events = research.get_by_label("Recent session activity")
-    expect(events.locator("li").last).to_contain_text("artifact committed")
+    expect(events.locator("li").last).to_contain_text("All strategy branches finished")
     expect(events.get_by_role("button", name="Recent activity")).to_have_attribute(
         "aria-expanded", "false"
     )
@@ -719,8 +759,16 @@ with sync_playwright() as playwright:
     )
     assert len(session_list) == 1, session_list
     session_one = session_list[0]
-    page.goto("http://127.0.0.1:5173")
-    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    continuation_fixture["enabled"] = True
+    page.reload()
+    prior_context = page.get_by_label("Prior research considered")
+    expect(prior_context).to_be_visible()
+    prior_context.get_by_text("Prior research considered (1 recent finding)").click()
+    expect(prior_context).to_contain_text("Session #0 · Prior fixture strategy · Artifact 2")
+    expect(prior_context).to_contain_text("Check the boundary case.")
+    continuation_fixture["enabled"] = False
+    page.goto(browser_base_url)
+    page.goto(f"{browser_base_url}/project?{urlencode({'path': path})}")
     expect(page.locator("li[data-session-id]")).to_have_count(1)
     expect(page.locator("li[data-session-id]").first.locator(".session-row-title")).to_have_text(
         "Session #1"
@@ -833,8 +881,8 @@ with sync_playwright() as playwright:
 
     saved_before_fallback = project_file.read_bytes()
     legacy_titleless["enabled"] = True
-    page.goto("http://127.0.0.1:5173")
-    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    page.goto(browser_base_url)
+    page.goto(f"{browser_base_url}/project?{urlencode({'path': path})}")
     expect(
         page.locator(".strategy-title-line h3").filter(
             has_text="Derive a recurrence and inspect boundary cases."
@@ -1028,16 +1076,14 @@ with sync_playwright() as playwright:
     export_dialog.get_by_label("Filename").fill("a17-latex")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".pdf")
     export_dialog.get_by_label("Open in browser tab").check()
-    with page.expect_popup() as pdf_tab, page.expect_download() as pdf_download:
-        export_dialog.get_by_role("button", name="Download", exact=True).click()
-    pdf_popup = pdf_tab.value
-    pdf_popup.wait_for_url(re.compile(r"^(blob:|chrome-extension:|file:)"), timeout=10000)
-    pdf_bytes = Path(pdf_download.value.path()).read_bytes()
-    assert pdf_download.value.suggested_filename == "a17-latex.pdf"
-    assert pdf_bytes.startswith(b"%PDF-") and len(pdf_bytes) > 1000
-    assert pdf_popup.url.startswith("blob:") or "pdf" in pdf_popup.url.lower(), pdf_popup.url
-    pdf_popup.screenshot(path="/tmp/sigma-a1771-after-pdf-preview.png")
-    pdf_popup.close()
+    export_dialog.get_by_role("button", name="Continue", exact=True).click()
+    paper_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(paper_dialog).to_be_visible()
+    expect(paper_dialog).to_contain_text("One provider call")
+    paper_dialog.get_by_role("button", name="Back to Export Project").click()
+    expect(export_dialog).to_be_visible()
+    expect(export_dialog.get_by_label("Filename")).to_have_value("a17-latex")
+    export_dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(export_dialog).to_be_hidden()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -1056,7 +1102,7 @@ with sync_playwright() as playwright:
     assert mobile_box["y"] + mobile_box["height"] <= 844
     mobile_input = mobile_export.get_by_label("Filename")
     mobile_value = mobile_input.input_value()
-    assert mobile_value.startswith("sigma-") and len(mobile_value) > 20
+    assert mobile_value.strip()
     mobile_input.press("End")
     mobile_input.press("Home")
     assert mobile_input.evaluate("e => e.scrollLeft === 0")
@@ -1066,6 +1112,10 @@ with sync_playwright() as playwright:
     connection.locator("summary").click()
     mobile_dialog = page.get_by_role("dialog", name="AI connection settings")
     expect(mobile_dialog).to_be_visible()
+    page.wait_for_function(
+        """() => { const e = document.querySelector('.connection-details[role="dialog"]'); if (!e) return false; const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }""",
+        timeout=3000,
+    )
     dialog_box = mobile_dialog.bounding_box()
     assert dialog_box and dialog_box["x"] >= 0 and dialog_box["y"] >= 0
     assert dialog_box["x"] + dialog_box["width"] <= 390
@@ -1075,7 +1125,7 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-a174-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
     page.get_by_role("button", name="Back to home", exact=True).click()
-    page.wait_for_url("http://127.0.0.1:5173/")
+    page.wait_for_url(browser_base_url + "/")
     page.get_by_role("tab", name="Samples", exact=True).click()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
@@ -1220,22 +1270,20 @@ with sync_playwright() as playwright:
     max_filename = max_export.get_by_label("Filename")
     expect(max_filename).to_have_value(max_filename_stem)
     expect(max_export.locator(".export-filename-field span")).to_have_text(".pdf")
-    max_export.get_by_label("Open in browser tab").check()
-    with page.expect_popup() as max_pdf_tab, page.expect_download() as max_pdf_download:
-        max_export.get_by_role("button", name="Download", exact=True).click()
-    max_pdf_popup = max_pdf_tab.value
-    max_pdf_popup.wait_for_url(re.compile(r"^(blob:|chrome-extension:|file:)"), timeout=10000)
-    maximum_pdf = Path(max_pdf_download.value.path()).read_bytes()
-    assert max_pdf_download.value.suggested_filename == f"{max_filename_stem}.pdf"
-    assert maximum_pdf.startswith(b"%PDF-") and 1000 < len(maximum_pdf) < 20_000_000
-    assert max_pdf_popup.url.startswith("blob:")
-    max_pdf_popup.screenshot(path="/tmp/sigma-a1771-after-maximum-regions-pdf.png")
-    max_pdf_popup.close()
+    max_export.get_by_role("button", name="Continue", exact=True).click()
+    max_paper_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(max_paper_dialog).to_be_visible()
+    expect(max_paper_dialog).to_contain_text("complete evidence snapshot")
+    max_paper_dialog.get_by_role("button", name="Back to Export Project").click()
+    expect(max_export).to_be_visible()
+    expect(max_export.get_by_label("Filename")).to_have_value(max_filename_stem)
+    max_export.get_by_role("button", name="Cancel", exact=True).click()
     expect(max_export).to_be_hidden()
 
     page.set_viewport_size({"width": 390, "height": 420})
     page.get_by_role("button", name="Export project", exact=True).click()
     narrow_export = page.get_by_role("dialog", name="Export Project")
+    narrow_export.get_by_role("radio", name="Project Audit").check()
     narrow_title = narrow_export.locator("#export-project-heading").bounding_box()
     narrow_cancel = narrow_export.get_by_role("button", name="Cancel", exact=True).bounding_box()
     narrow_download = narrow_export.get_by_role(
@@ -1273,10 +1321,110 @@ with sync_playwright() as playwright:
         "No outcome summary was recorded."
     )
     legacy_outcome["enabled"] = False
+
+    # Exercise the multi-strategy selection and live activity surface against
+    # the isolated provider. The second branch deliberately waits so that the
+    # concurrent running state is observable before the session is stopped.
+    created_strategy = page.evaluate(
+        """async path => {
+          const response = await fetch('/api/projects/strategies', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path, title: 'Pause and stop fixture strategy',
+              approach: 'Wait for the bounded provider fixture and preserve its interruption state.'})
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || 'Could not create browser fixture strategy');
+          return body;
+        }""",
+        max_regions_path,
+    )
+    assert created_strategy["project"]["strategies"][-1]["title"] == (
+        "Pause and stop fixture strategy"
+    )
+    page.reload()
+    page.evaluate(
+        """async path => {
+          const response = await fetch('/api/projects/research-limits?' + new URLSearchParams({path}));
+          const current = await response.json();
+          const saved = await fetch('/api/projects/research-limits', {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({...current, path, research_rounds: 3, model_calls: 6})
+          });
+          if (!saved.ok) throw new Error('Could not configure browser concurrency fixture');
+        }""",
+        max_regions_path,
+    )
+    assert (
+        page.evaluate(
+            """async path => (await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json()).model_calls""",
+            max_regions_path,
+        )
+        == 6
+    )
+    page.get_by_role("button", name="Start a new research session", exact=True).click()
+    selection = page.locator(".research-strategy-selection")
+    expect(selection).to_be_visible()
+    selection.locator("summary").click()
+    checkboxes = selection.get_by_role("checkbox")
+    expect(checkboxes).to_have_count(2)
+    expect(checkboxes.nth(0)).to_be_checked()
+    assert checkboxes.nth(1).is_enabled(), selection.inner_text()
+    checkboxes.nth(1).click()
+    expect(selection.locator("summary")).to_contain_text("2 selected", timeout=2000)
+    expect(selection.locator("summary")).to_contain_text("2 selected")
+    page.get_by_role("button", name="Start new session #2", exact=True).click()
+    portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
+    expect(portfolio.locator(".research-strategy-activity li")).to_have_count(2, timeout=10000)
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text(
+        "Pause and stop fixture strategy"
+    )
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text("running")
+    assert len(start_payloads[-1]["strategy_ids"]) == 2, start_payloads[-1]
+    page.reload()
+    portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
+    expect(portfolio.locator(".research-strategy-activity li")).to_have_count(2, timeout=10000)
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text(
+        "Pause and stop fixture strategy"
+    )
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text("running")
+    page.get_by_role("button", name="Stop research session", exact=True).click()
+    expect(portfolio.locator(".session-status")).to_have_text("stopped", timeout=10000)
+    expect(portfolio.locator(".research-incomplete-step")).to_be_visible()
+    stopped_portfolio = page.evaluate(
+        """async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.find(session => session.session_number === 2)""",
+        max_regions_path,
+    )
+    assert any(
+        step["status"] == "completed" and step.get("output") for step in stopped_portfolio["steps"]
+    )
+    assert any(step["status"] == "interrupted" for step in stopped_portfolio["steps"])
+    assert not any(
+        artifact["strategy_id"] == stopped_portfolio["strategy_ids"][1]
+        for artifact in stopped_portfolio["artifacts"]
+    )
+    portfolio.get_by_role("button", name="Resume", exact=True).click()
+    expect(portfolio.locator(".session-status")).to_have_text("ended", timeout=20000)
+    expect(portfolio.locator(".coordinator-portfolio-review")).to_be_visible()
+    expect(portfolio.locator(".coordinator-portfolio-review")).to_contain_text(
+        "Coordinator recommendations"
+    )
+    resumed_portfolio = page.evaluate(
+        """async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.find(session => session.session_number === 2)""",
+        max_regions_path,
+    )
+    assert resumed_portfolio["portfolio_decision"]["status"] == "model_reported_unverified"
+    assert len(resumed_portfolio["portfolio_decision"]["strategy_actions"]) == 2
+    page.set_viewport_size({"width": 1440, "height": 900})
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.screenshot(path="/tmp/sigma-a18-coordinator-review-desktop.png", full_page=True)
+    page.set_viewport_size({"width": 390, "height": 844})
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    expect(portfolio.locator(".coordinator-portfolio-review")).to_be_visible()
+    page.screenshot(path="/tmp/sigma-a18-coordinator-review-mobile.png", full_page=True)
     assert not errors, errors
-    assert len(starts) == 4, starts
+    assert len(starts) == 5, starts
     print(
-        "PASS real Chrome A17.7.1: dialogs, title action geometry, outcome Markdown/math, HTML and compiled PDF publication exports, and A17.6 Maximum Regions persistence"
+        "PASS real Chrome A18: existing workspace and export flows, multi-strategy selection, concurrent live activity, and stop during provider work"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

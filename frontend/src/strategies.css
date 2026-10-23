@@ -318,6 +318,31 @@
 .workspace-page .research-session-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 4px 24px; color: #c4d0da; }
 .workspace-page .research-session-facts p { margin: 3px 0; }
 .workspace-page .research-session-message { color: #e7c08d; }
+.workspace-page .research-continuation-context { margin: 12px 0; color: #c4d0da; }
+.workspace-page .research-continuation-context summary { color: #e4c39c; cursor: pointer; }
+.workspace-page .research-continuation-context ol { margin: 8px 0; padding-left: 22px; }
+.workspace-page .research-continuation-context li { margin: 8px 0; }
+.workspace-page .research-continuation-context p { margin: 3px 0; overflow-wrap: anywhere; }
+.workspace-page .research-strategy-activity { margin: 14px 0; padding: 12px 14px; border-left: 2px solid #5986a3; background: #0c1822; }
+.workspace-page .research-strategy-activity h3 { margin: 0 0 7px; color: #bfd5e5; font-size: 15px; }
+.workspace-page .research-strategy-activity ul { margin: 0; padding-left: 20px; }
+.workspace-page .research-strategy-activity li { margin: 7px 0; }
+.workspace-page .research-strategy-activity p { margin: 3px 0; overflow-wrap: anywhere; }
+.workspace-page .coordinator-portfolio-review { margin: 14px 0; padding: 12px 14px; border-left: 2px solid #b78658; background: #15130f; color: #c7c0b6; }
+.workspace-page .coordinator-portfolio-review h3 { margin: 0 0 5px; color: #e6c49c; font-size: 14px; }
+.workspace-page .coordinator-portfolio-review > p { margin: 4px 0 8px; font-size: 12px; }
+.workspace-page .coordinator-portfolio-review ul { margin: 0; padding-left: 20px; }
+.workspace-page .coordinator-portfolio-review li { margin: 7px 0; }
+.workspace-page .coordinator-portfolio-review li p { margin: 3px 0; overflow-wrap: anywhere; }
+.workspace-page .coordinator-combinations { margin-top: 10px; padding-top: 8px; border-top: 1px solid #574837; color: #e2c49f; }
+.workspace-page .coordinator-conflicts, .workspace-page .coordinator-overlaps { margin-top: 9px; padding: 8px 10px; border: 1px solid #5d4932; color: #e2c49f; }
+.workspace-page .coordinator-conflicts ul, .workspace-page .coordinator-overlaps ul { margin-top: 5px; }
+.workspace-page .coordinator-review-limit { color: #8f9ba5; font-size: 11px; }
+.workspace-page .research-strategy-selection { flex: 1 1 100%; max-width: 400px; color: #c4d0da; }
+.workspace-page .research-strategy-selection summary { color: #e4c39c; cursor: pointer; }
+.workspace-page .research-strategy-selection p { margin: 6px 0; font-size: 12px; }
+.workspace-page .research-strategy-selection fieldset { display: grid; gap: 4px; margin: 6px 0; padding: 6px 9px; border: 1px solid #344754; }
+.workspace-page .research-strategy-selection label { display: flex; align-items: center; gap: 7px; font-size: 12px; }
 .workspace-page .research-session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 14px 0; }
 .workspace-page .research-consent, .workspace-page .research-stop-confirm { margin: 8px 0; padding: 14px 16px; border: 1px solid #66533d; border-radius: 6px; background: #101820; color: #d5dfe7; line-height: 1.6; }
 .workspace-page .research-consent p, .workspace-page .research-stop-confirm p { margin: 5px 0 10px; }
