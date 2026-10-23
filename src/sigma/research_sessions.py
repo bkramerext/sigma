@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from sigma import cloud_research, cloud_workspaces
 from sigma.computational_evidence import inspect_execution_artifacts
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
@@ -717,9 +718,14 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
 
     calls_used = record.get("calls_used")
     saved_call_count = calls_used if type(calls_used) is int and calls_used >= 0 else None
-    dispatched = max(saved_call_count or 0, len(unique_steps))
-    unrecorded_calls = max(0, dispatched - len(unique_steps))
-    call_counter_disagrees = saved_call_count is not None and saved_call_count != len(unique_steps)
+    provider_steps = [
+        step for step in unique_steps if step.get("attempt_status") != "not_dispatched"
+    ]
+    dispatched = max(saved_call_count or 0, len(provider_steps))
+    unrecorded_calls = max(0, dispatched - len(provider_steps))
+    call_counter_disagrees = saved_call_count is not None and saved_call_count != len(
+        provider_steps
+    )
     call_counts = {
         "completed": 0,
         "rejected": 0,
@@ -727,6 +733,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         "interrupted / cancelled": 0,
         "failed": 0,
         "in progress": 0,
+        "not dispatched": 0,
         "status unavailable": unrecorded_calls,
     }
     role_names = {"investigator": "Investigator", "skeptic": "Skeptic"}
@@ -754,10 +761,13 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         )
         cycle = step.get("cycle") if type(step.get("cycle")) is int else "unknown"
         role_key = role if isinstance(role, str) else "unknown"
+        status = step.get("status")
+        if step.get("attempt_status") == "not_dispatched":
+            call_counts["not dispatched"] += 1
+            continue
         retry_key = (scope, cast(int | str, cycle), role_key)
         retry_keys[retry_key] = retry_keys.get(retry_key, 0) + 1
 
-        status = step.get("status")
         failure_kind = step.get("failure_kind")
         http_status = step.get("provider_http_status")
         if status == "completed":
@@ -1708,6 +1718,11 @@ def _save(path: str, record: dict[str, Any]) -> None:
         finally:
             staged.unlink(missing_ok=True)
         fcntl.flock(lock, fcntl.LOCK_UN)
+    if cloud_workspaces.enabled():
+        try:
+            cloud_research.sync_job(record)
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
 
 
 def _read(path: str, session_id: str) -> dict[str, Any]:
@@ -1787,6 +1802,11 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
 def _recover(record: dict[str, Any]) -> dict[str, Any]:
     if record["status"] not in {"queued", "running"} or record["id"] in _tasks:
         return record
+    # Queued cloud sessions have not crossed a provider-dispatch boundary and
+    # can be safely picked up when an owner reconnects. Running calls are never
+    # replayed automatically; _recover below records them as interrupted.
+    if record["status"] == "queued" and cloud_workspaces.enabled():
+        return record
     directory = _directory(record["project_path"])
     lock_path = directory / f"{record['id']}.worker.lock"
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -1798,13 +1818,42 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         record["status"] = "paused"
         record["updated_at"] = _now()
         record["message"] = (
-            "Backend restarted before the session completed. Any in-flight step is interrupted and will not be retried automatically."
+            "Backend restarted before the session completed. In-flight provider calls are interrupted and will not be retried automatically."
         )
         for step in record.get("steps", []):
             if step.get("status") == "running":
+                if (
+                    cloud_workspaces.enabled()
+                    and step.get("attempt_status") == "preparing"
+                    and isinstance(step.get("attempt_id"), str)
+                ):
+                    cloud_research.mark_call_not_dispatched(record["id"], step["attempt_id"])
+                    step["status"] = "failed"
+                    step["failure_kind"] = "budget_denied"
+                    step["attempt_status"] = "not_dispatched"
+                    step["interruption_reason"] = "backend_restart_before_dispatch"
+                    step["finished_at"] = _now()
+                    record["calls_used"] = max(0, int(record.get("calls_used", 0)) - 1)
+                    if step.get("cost_reserve") is not None:
+                        record["estimated_cost_reserved_usd"] = max(
+                            0.0,
+                            float(record.get("estimated_cost_reserved_usd", 0.0))
+                            - float(step["cost_reserve"]),
+                        )
+                    for branch in record.get("strategy_runs", []):
+                        if branch.get("strategy_id") == step.get("strategy_id"):
+                            branch["calls_used"] = max(0, int(branch.get("calls_used", 0)) - 1)
+                    _event(
+                        record,
+                        "call.not_dispatched",
+                        "Backend restarted before provider dispatch; the reservation was released and the request was not billed by SIGMA.",
+                        step.get("role"),
+                    )
+                    continue
                 step["status"] = "interrupted"
                 step["failure_kind"] = "interrupted"
                 step["interruption_reason"] = "backend_restart"
+                step["attempt_status"] = "unknown"
                 step["finished_at"] = _now()
                 _record_guidance_interruption(record, step, "interrupted")
         record["current_step"] = None
@@ -1814,8 +1863,18 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 branch["status"] = "paused"
                 branch["current_action"] = "Interrupted after backend restart"
         record["current_action"] = "Paused after backend restart"
+        if record.get("mode") == "api_key" and any(
+            step.get("failure_kind") == "interrupted" for step in record.get("steps", [])
+        ):
+            record["cost_status"] = "unavailable"
+            record["estimated_cost_usd"] = None
         _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
+        if cloud_workspaces.enabled():
+            try:
+                cloud_research.recover_job(record["id"])
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise ProjectError(str(exc)) from exc
     finally:
         try:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -1826,6 +1885,23 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
 
 def list_sessions(path: str) -> list[dict[str, Any]]:
     return [_public(_recover(item)) for item in _all(path)]
+
+
+async def ensure_queued_workers(path: str) -> None:
+    """Restart only durable queued jobs when their owner reconnects."""
+    if not cloud_workspaces.enabled():
+        return
+    try:
+        cloud_research.reconcile_orphaned_jobs()
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
+    async with _manager_lock:
+        for record in _all(path):
+            if record.get("status") != "queued" or record["id"] in _tasks:
+                continue
+            event = asyncio.Event()
+            _control[record["id"]] = event
+            _tasks[record["id"]] = asyncio.create_task(_worker(record["id"], path))
 
 
 def get_session(path: str, session_id: str) -> dict[str, Any]:
@@ -2113,6 +2189,11 @@ async def start_session(
         raise ProjectError("Choose a saved, active strategy before investigating")
     if not strategy.enabled:
         raise ProjectError("This strategy is disabled; enable it before starting research")
+    if cloud_workspaces.enabled():
+        try:
+            cloud_research.reconcile_orphaned_jobs()
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
     async with _manager_lock:
         with _project_manager_lock(view.path):
             limits = get_limits(view.path)
@@ -2139,7 +2220,7 @@ async def start_session(
                         "Idempotency key is already bound to a different research request"
                     )
                 return _public(_recover(existing))
-            if any(not task.done() for task in _tasks.values()):
+            if not cloud_workspaces.enabled() and any(not task.done() for task in _tasks.values()):
                 raise ProjectError("Another research worker is active. No provider call was made.")
             active = next((r for r in records if r["status"] in {"queued", "running"}), None)
             if active:
@@ -2161,6 +2242,14 @@ async def start_session(
             ):
                 raise ProjectError(
                     "No reviewed published price is available for this model; a cost-limited session cannot start"
+                )
+            if cloud_workspaces.enabled() and (
+                credential["mode"] != "api_key"
+                or limits["maximum_estimated_cost_usd"] is None
+                or config["model"] not in TOKEN_PRICES_PER_MILLION
+            ):
+                raise ProjectError(
+                    "Cloud research requires the server API credential, a configured per-session cost limit, and a model with a reviewed price."
                 )
             session_number = _allocate_session_number(view.path, records)
             record = {
@@ -2228,6 +2317,10 @@ async def start_session(
                 "cycle_limit": limits["research_rounds"],
                 "duration_limit_minutes": limits["session_duration_minutes"],
                 "output_token_limit": limits["output_tokens_per_call"],
+                "total_token_limit": limits["model_calls"]
+                * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
+                "tokens_used": 0,
+                "tokens_reserved": 0,
                 "maximum_estimated_cost_usd": limits["maximum_estimated_cost_usd"],
                 "estimated_cost_usd": 0.0 if credential["mode"] == "api_key" else None,
                 "cost_status": "available"
@@ -2277,6 +2370,11 @@ async def start_session(
                 record["prior_session_failure_omitted_attempt_ids"],
             ) = _prior_session_failures_index(view.path, record["id"])
             _event(record, "queued", record["message"])
+            if cloud_workspaces.enabled():
+                try:
+                    cloud_research.prepare_job(record)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    raise ProjectError(str(exc)) from exc
             _save(view.path, record)
             event = asyncio.Event()
             _control[record["id"]] = event
@@ -2288,6 +2386,11 @@ async def start_session(
 async def control_session(path: str, session_id: str, action: str) -> dict[str, Any]:
     if action not in {"pause", "resume", "stop"}:
         raise ProjectError("Unknown research session action")
+    if action == "resume" and cloud_workspaces.enabled():
+        try:
+            cloud_research.reconcile_orphaned_jobs()
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
     state_lock = _session_state_lock(session_id)
     if action in {"stop", "pause"}:
         async with state_lock:
@@ -2430,7 +2533,9 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                 raise ProjectError(
                     "Another research session is active or needs attention in this project"
                 )
-            if any(task_id != session_id and not task.done() for task_id, task in _tasks.items()):
+            if not cloud_workspaces.enabled() and any(
+                task_id != session_id and not task.done() for task_id, task in _tasks.items()
+            ):
                 raise ProjectError(
                     "Another research worker is active. Wait for it to pause or finish before resuming."
                 )
@@ -2456,6 +2561,11 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             )
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])
+            if cloud_workspaces.enabled():
+                try:
+                    cloud_research.prepare_job(record)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    raise ProjectError(str(exc)) from exc
             _save(record["project_path"], record)
             event = asyncio.Event()
             _control[session_id] = event
@@ -4723,6 +4833,24 @@ async def _portfolio_role_call(
                 _save(path, record)
                 return False
             reserve = None
+            token_reserve = (
+                len(json.dumps(context, ensure_ascii=False).encode("utf-8"))
+                + 65_536
+                + int(record.get("output_token_limit", 4000))
+            )
+            if cloud_workspaces.enabled() and (
+                int(record.get("tokens_used", 0))
+                + int(record.get("tokens_reserved", 0))
+                + token_reserve
+                > int(record.get("total_token_limit", 0))
+            ):
+                branch["status"] = "ended"
+                branch["reason"] = (
+                    "The bounded session token budget cannot reserve another provider call."
+                )
+                branch["current_action"] = "Token limit"
+                _save(path, record)
+                return False
             if (
                 record.get("mode") == "api_key"
                 and record.get("maximum_estimated_cost_usd") is not None
@@ -4765,9 +4893,14 @@ async def _portfolio_role_call(
             )
             step_id = record["current_step"]
             timeout_seconds = _call_timeout_seconds(record)
-            _event(record, "call.started", record["message"], role)
+            if cloud_workspaces.enabled():
+                _event(record, "call.preparing", record["message"], role)
+            else:
+                _event(record, "call.started", record["message"], role)
             step = {
                 "id": step_id,
+                "attempt_id": step_id,
+                "attempt_status": "preparing" if cloud_workspaces.enabled() else None,
                 "cycle": cycle,
                 "role": role,
                 "strategy_id": strategy_id,
@@ -4808,6 +4941,8 @@ async def _portfolio_role_call(
                 "human_intervention_ids": [item["intervention_id"] for item in human_guidance],
                 "computation_inspections": _context_computation_inspections(context),
                 "cost_reserve": reserve,
+                "global_cost_reservation_usd": reserve if cloud_workspaces.enabled() else None,
+                "token_reservation": token_reserve if cloud_workspaces.enabled() else None,
             }
             _record_guidance_delivery(
                 record,
@@ -4819,11 +4954,50 @@ async def _portfolio_role_call(
             )
             record["steps"].append(step)
             _save(path, record)
+            if cloud_workspaces.enabled():
+                try:
+                    if reserve is None:
+                        raise cloud_research.CloudResearchUnavailable(
+                            "Cloud inference cannot be bounded for this model."
+                        )
+                    cloud_research.reserve_call(session_id, step_id, reserve, token_reserve)
+                except cloud_research.CloudResearchUnavailable as exc:
+                    record["calls_used"] = max(0, record["calls_used"] - 1)
+                    branch["calls_used"] = max(0, branch["calls_used"] - 1)
+                    if reserve is not None:
+                        record["estimated_cost_reserved_usd"] = max(
+                            0.0,
+                            float(record.get("estimated_cost_reserved_usd", 0.0)) - float(reserve),
+                        )
+                    step.update(
+                        {
+                            "status": "failed",
+                            "attempt_status": "not_dispatched",
+                            "failure_kind": "budget_denied",
+                            "finished_at": _now(),
+                        }
+                    )
+                    branch["status"] = "ended"
+                    branch["current_action"] = "Budget limit"
+                    branch["reason"] = str(exc)
+                    _event(record, "call.not_dispatched", str(exc), role)
+                    record["current_step"] = None
+                    record["current_steps"] = [
+                        item["id"] for item in record["steps"] if item.get("status") == "running"
+                    ]
+                    _save(path, record)
+                    return False
+                record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
+                step["attempt_status"] = "reserved"
+                _event(record, "call.started", record["message"], role)
+                _save(path, record)
             call_record = record
         try:
             output, usage = await _call(call_record, role, context, timeout_seconds)
             _validate_guidance_acknowledgments(human_guidance, output)
         except asyncio.CancelledError:
+            if cloud_workspaces.enabled():
+                cloud_research.mark_call_unknown(session_id, step_id)
             raise
         except Exception as exc:
             if isinstance(exc, ProjectError) and _is_guard_failure(str(exc)):
@@ -4834,6 +5008,9 @@ async def _portfolio_role_call(
                     item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
                 )
                 step = next(item for item in record["steps"] if item["id"] == step_id)
+                if cloud_workspaces.enabled():
+                    cloud_research.mark_call_unknown(session_id, step_id)
+                    step["attempt_status"] = "unknown"
                 timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
                 step.update({"status": "failed", "finished_at": _now()})
                 if timeout_failure:
@@ -4894,6 +5071,25 @@ async def _portfolio_role_call(
                 output=output,
             )
             step.update({"status": "completed", "finished_at": _now(), "output": output})
+            if cloud_workspaces.enabled():
+                estimate = _estimate_cost(record["model"], usage) if usage is not None else None
+                input_tokens = usage.get("input_tokens") if usage else None
+                output_tokens = usage.get("output_tokens") if usage else None
+                if type(input_tokens) is int and type(output_tokens) is int:
+                    record["tokens_reserved"] = max(
+                        0, int(record.get("tokens_reserved", 0)) - token_reserve
+                    )
+                    record["tokens_used"] = int(record.get("tokens_used", 0)) + int(
+                        input_tokens + output_tokens
+                    )
+                cloud_research.settle_call(
+                    session_id,
+                    step_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    estimated_cost_usd=estimate,
+                )
+                step["attempt_status"] = "usage_estimated" if estimate is not None else "unknown"
             if usage is not None:
                 step["token_usage"] = usage
             if record.get("mode") == "api_key":
@@ -5709,6 +5905,33 @@ def _prior_session_failures_index(
     )
 
 
+async def _claim_cloud_job(session_id: str, path: str) -> bool:
+    if not cloud_workspaces.enabled():
+        return True
+    while True:
+        record = _read(path, session_id)
+        if record.get("status") != "queued":
+            return False
+        try:
+            if cloud_research.claim_job(session_id):
+                return True
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
+        if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+            async with _session_state_lock(session_id):
+                record = _read(path, session_id)
+                record["status"] = "ended"
+                record["message"] = (
+                    "Cloud research queue wait reached the configured session time limit."
+                )
+                record["current_action"] = "Completed · duration limit"
+                record["updated_at"] = _now()
+                _event(record, "queue.expired", record["message"])
+                _save(path, record)
+            return False
+        await asyncio.sleep(0.1)
+
+
 async def _worker(session_id: str, path: str) -> None:
     worker_lock = _directory(path) / f"{session_id}.worker.lock"
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -5717,9 +5940,13 @@ async def _worker(session_id: str, path: str) -> None:
         fcntl.flock(worker_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(worker_fd)
+        _tasks.pop(session_id, None)
+        _control.pop(session_id, None)
         return
     try:
         initial = _read(path, session_id)
+        if not await _claim_cloud_job(session_id, path):
+            return
         # All newly started sessions use the branch-aware path, including a
         # one-strategy session. The legacy worker below remains only for
         # persisted records created before per-strategy state existed.
@@ -6143,6 +6370,13 @@ async def _worker(session_id: str, path: str) -> None:
             ]
             for step in running_steps:
                 step["status"] = "interrupted"
+                if cloud_workspaces.enabled() and step.get("attempt_id"):
+                    step["attempt_status"] = "unknown"
+                    try:
+                        cloud_research.mark_call_unknown(record["id"], step["attempt_id"])
+                    except cloud_research.CloudResearchUnavailable:
+                        # Keep the existing spend hold if ledger reconciliation fails.
+                        pass
                 step["failure_kind"] = (
                     "cancelled" if record["status"] == "stopped" else "interrupted"
                 )
@@ -6241,6 +6475,16 @@ async def _worker(session_id: str, path: str) -> None:
         except (ProjectError, OSError):
             pass
     finally:
+        if cloud_workspaces.enabled():
+            try:
+                current = _read(path, session_id)
+                cloud_research.release_job(
+                    session_id, paused=current.get("status") in {"paused", "stopped"}
+                )
+            except (ProjectError, cloud_research.CloudResearchUnavailable, OSError):
+                # A failed release leaves the persisted slot held, which is safer
+                # than admitting more inference while accounting is uncertain.
+                pass
         _tasks.pop(session_id, None)
         _control.pop(session_id, None)
         fcntl.flock(worker_fd, fcntl.LOCK_UN)

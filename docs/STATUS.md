@@ -4316,3 +4316,126 @@ reproducible, and deterministic contract behavior is now covered; this does
 not demonstrate empirical model reasoning quality or establish any research
 claim as mathematically verified. T17.8 remains its separate research-quality
 gate. T37 introduces no T17.8 scope changes or migration requirement.
+
+## T22 Gate B durable bounded research (2026-10-23)
+
+Started `feature/t22-gate-b-durable-execution` from merged Gate A main at
+`1134361`, rebased onto `c4b18d3` (PR #44 Gate C), then onto current main
+`6b0d0c9` (T22.3 specification). Both Gate C and Gate B status evidence were
+preserved. Gate B keeps the existing Research Session/project JSON as the
+source of truth for session transitions, events, model outputs, computational
+evidence and outcomes. Added a private SQLite admission/accounting ledger beside
+cloud workspace storage for owner-bound jobs and provider-call reservations.
+SQLite immediate transactions serialize queue admission, concurrent worker
+claims, global inference-spend reservations and per-user token reservations.
+The cloud path requires an explicitly configured server API key, a reviewed
+model price, a per-session cost ceiling and a global spend ceiling; it never
+uses the local checkout's provider key or ChatGPT account. Standalone cloud
+proposal, agentic-proposal, paper-generation and text-conversion routes are
+blocked until they have bounded accounting of their own. Local mode retains
+the existing provider and worker behavior.
+
+Every model call writes a project-record `preparing` step, then a durable
+ledger reservation and a project-record `reserved` state before provider I/O.
+Known usage reconciles the held estimate. Timeout, cancellation, or restart
+records an unknown attempt and retains the spend/token hold; start idempotency
+and call IDs prevent replaying the same reservation. A queued job with no
+provider attempt can be scheduled after an owner reconnects. A running job is
+reconciled as interrupted and is not automatically replayed. Per-user/global
+worker and queue ceilings are environment-configurable and fail closed.
+
+Deterministic regressions exercise duplicate start/attempt IDs, concurrent
+two-workspace claims and spend races, token/spend exhaustion, owner denial,
+known/unknown/not-dispatched accounting, cancellation and timeout, queued
+reconnection, interrupted session recovery, and the authenticated HTTP
+start/status/idempotency/cross-owner workflow with a fake provider. Cloud
+workspace regressions also confirm standalone inference routes return 403.
+`tests/cloud_research_api.py` uses the production FastAPI route/services and a
+deterministic principal fixture; it does not contact a provider. The real
+Chrome `browser_checks/t22_private_workspaces.py` continues to pass A/B
+workspace isolation through the production API fixture.
+
+Final verification on this branch: `./sigma test` passed all backend scenarios,
+including cloud-auth/workspace/research regressions, Ruff, format check, Pyright
+(zero diagnostics), frontend typecheck and Vite production build. The command
+`uv run --with playwright python browser_checks/t22_private_workspaces.py`
+passed in real Chrome. No provider or Google calls were made. The first local
+Playwright invocation without `--with playwright` could not import the optional
+browser dependency; rerunning with the documented ephemeral dependency
+provisioning passed. Existing Starlette/httpx deprecation warnings remain
+informational.
+
+Added `browser_checks/t22_durable_research.py` and ran
+`uv run --with playwright python browser_checks/t22_durable_research.py` in
+real Chrome. Two authenticated browser contexts start/reconnect around a
+blocked fake provider call; both contexts disconnect, the backend process is
+hard-killed, and a fresh backend reads the same persistent workspace. The
+owner sees a paused session with an unknown attempt, a second owner receives
+404, and repeating the same start key returns the original job without a
+second fake dispatch. This exercises actual process restart and browser
+disconnect without live Google or provider calls.
+
+After rebasing onto Gate C main `c4b18d3`, `./sigma test` passed again with the
+Demo regression suite included. The durable research and private workspace
+Chrome checks passed again. `browser_checks/t22_demo.py` also passed against a
+fresh Vite instance on port 5199, verifying the existing Gate C Demo remains
+available with saved evidence, read-only controls, all four exports, and
+desktop/mobile layout. Its first invocation hit an existing Vite listener on
+5173 serving a placeholder page; that unrelated process was left running, and
+the check passed when rerun against the fresh instance.
+
+Coordinator review of PR #49 identified the `prepare_job()` to `_save()` crash
+window. Corrected this by storing a project-relative session location and
+process epoch in each queued job. On start, resume, or owner reconnect, recovery
+considers only prior-epoch queued rows and takes the same per-project admission
+lock used during publication. It removes a row only if the project path and
+project ID validate, the session record is still absent, and no model-call rows
+exist. No age threshold is used. Unsafe/missing metadata, any existing session,
+all running jobs, and all provider-call reservations are retained.
+
+The focused deterministic regression injects a crash immediately after
+`prepare_job()` and before `_save()`, then changes the simulated process epoch
+and retries the same request. The orphan row is reclaimed and the retry
+dispatches exactly one Investigator/Skeptic pair. Additional assertions prove
+that a valid saved queued job and running job survive, a queued job with an
+unknown call and its full cost hold survive despite a missing session file, a
+new job can use the recovered queue slot, and owner A's recovery cannot touch
+owner B's orphan. `tests/cloud_research.py` passed after this correction. The
+real-Chrome hard-restart scenario also passed again, confirming valid running
+work and its ambiguous attempt remain recoverable.
+
+No cloud deployment or paid provider smoke test was run. The global spend
+ceiling accounts conservatively for ambiguous calls; operator-visible cost is
+an estimate, not a provider invoice. The SQLite queue and project-file writes
+remain separate durable stores; provably orphaned queued rows are automatically
+reconciled as described above. Gate C, public Demo, Cloudflare deployment, and
+public release remain outside this Gate B implementation.
+
+
+After current main advanced to `cd85552`, integrated its T22.3–T22.5 specs and
+latest evaluation updates. Full `./sigma test` initially surfaced merged T39
+Ruff lint/format violations; corrected them and reran successfully. Final checks
+on source head `5b5241a`: full suite (backend, Ruff/format, Pyright, frontend
+typecheck/build), focused cloud recovery, real-Chrome durable restart/cancel,
+and real-Chrome private workspace isolation all passed. T22.5's cumulative
+per-user USD ceiling and owner budget summary remain explicitly unimplemented
+and not assigned to this Gate B repair.
+
+### Gate B refresh against current main (2026-10-23)
+
+Refreshed the Gate B branch against current `main` at `803e655`, which includes
+the requested `40df3f4` merge and later T37/T30 work. Reconciled the
+`docs/STATUS.md` conflict by preserving main's sample and research-context
+records alongside the complete Gate B record. Reconciled the T39 helper
+conflict by retaining precise errors for a non-object session and invalid or
+missing session ID. API and research-session integrations merged without
+conflict. T22.5 remains unimplemented and out of scope for Gate B.
+
+On the integrated tree, `./sigma test` passed, including cloud research
+recovery/API, T37 context selection, Ruff/format, Pyright (zero diagnostics),
+frontend typecheck and build. Real Chrome checks passed for
+`browser_checks/t22_durable_research.py`,
+`browser_checks/t22_private_workspaces.py`,
+`browser_checks/a17_research.py` (isolated Vite/provider fixture ports), and
+`browser_checks/nonconsecutive_sample.py` (desktop and 390px/320px mobile).
+No paid provider calls were made.

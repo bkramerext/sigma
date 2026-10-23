@@ -192,6 +192,31 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             a_path, b_path = a_project["path"], b_project["path"]
             a_id, b_id = a_project["project"]["id"], b_project["project"]["id"]
             assert a_id != b_id and Path(a_path).parent != Path(b_path).parent
+            inference_body = {
+                "path": a_path,
+                "seed": "Generate a short proposal",
+                "expected_binding": "unused-in-cloud-mode",
+                "expected_project_id": a_id,
+            }
+            for endpoint, body in (
+                ("/api/projects/proposals", inference_body),
+                ("/api/projects/proposals/agentic", inference_body),
+                (
+                    "/api/projects/papers",
+                    {"path": a_path, "expected_binding": "unused", "expected_project_id": a_id},
+                ),
+                (
+                    "/api/projects/text/convert",
+                    {
+                        "path": a_path,
+                        "scope": "problem",
+                        "target": "plain_text",
+                        "expected_digest": "0" * 64,
+                    },
+                ),
+            ):
+                blocked = request(user_a, "POST", endpoint, json=body)
+                assert blocked.status_code == 403, (endpoint, blocked.status_code, blocked.text)
 
             # Subjects, not mutable emails or administrator roles, determine
             # ownership. Email changes retain the same workspace; an admin is
