@@ -269,25 +269,10 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-google-placeholder { min-width: 0; padding-inline: 4px; font-size: 9px; }
 }
 
-/* Project-header entry for LaTeX paper authoring. Letter offsets evoke the TeX logotype. */
-.workspace-page .project-art-header .project-latex-button {
-  flex: 0 0 auto;
-  align-self: center;
-  padding: 5px 10px 7px;
-  border: 1px solid #8b6745;
-  border-radius: 6px;
-  background: #0b1a27;
-  color: var(--workspace-copper);
-  box-shadow: none;
-  white-space: nowrap;
-}
-.workspace-page .project-art-header .project-latex-button:hover:not(:disabled) { border-color: #e4b57c; background: #342418; color: #ffe1b5; }
-.workspace-page .project-art-header .project-latex-button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
-.workspace-page .project-art-header .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
-.workspace-page .latex-wordmark { display: inline-block; font: 500 25px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
+/* Compact TeX wordmark alongside the Project pane's existing export actions. */
+.workspace-page .project-pane-actions .text-view-icon.project-latex-button:not(:disabled) { color: #e4b57c; }
+.workspace-page .project-pane-actions .text-view-icon.project-latex-button { width: 42px; min-width: 42px; }
+.workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
+.workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 20px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-raised-a { display: inline-block; font-size: .71em; transform: translateY(-.35em); margin-left: -.11em; margin-right: -.08em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
-@media (max-width: 700px) {
-  .workspace-page .project-art-header .project-latex-button { padding: 4px 9px 6px; }
-  .workspace-page .latex-wordmark { font-size: 21px; }
-}

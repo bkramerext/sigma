@@ -125,13 +125,6 @@ with sync_playwright() as playwright:
     assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
     assert grid["x"] + grid["width"] <= 1280
     assert grid["x"] >= 1280 * 0.55
-    latex_button = header.get_by_role("button", name="LaTeX research paper", exact=True)
-    expect(latex_button).to_be_visible()
-    latex_box = latex_button.bounding_box()
-    back_label_box = header.get_by_role("button", name="Back to home caption").bounding_box()
-    assert latex_box and back_label_box and abs(
-        latex_box["y"] + latex_box["height"] / 2 - back_label_box["y"] - back_label_box["height"] / 2
-    ) < 2
     expect(header.locator(".project-controls-message")).to_have_text("Next model uses Medium.")
     update_requests: list[dict] = []
     observed_urls: list[str] = []
@@ -232,12 +225,6 @@ with sync_playwright() as playwright:
         assert title_box["x"] + title_box["width"] <= width + 1
         assert controls_box["x"] >= 0 and controls_box["x"] + controls_box["width"] <= width + 1
         assert model_control.bounding_box() and thinking_control.bounding_box() and google_signin.bounding_box()
-        expect(latex_button).to_be_visible()
-        latex_box = latex_button.bounding_box()
-        back_label_box = header.get_by_role("button", name="Back to home caption").bounding_box()
-        assert latex_box and back_label_box and abs(
-            latex_box["y"] + latex_box["height"] / 2 - back_label_box["y"] - back_label_box["height"] / 2
-        ) < 2
         model_box = model_control.bounding_box()
         thinking_box = thinking_control.bounding_box()
         google_box = google_signin.bounding_box()
