@@ -32,9 +32,10 @@ Updated T22.2 acceptance criteria in place; no follow-up ticket. PR #37 remains 
 
 ## PR #37 deeper-review correction handoff (2026-10-23)
 
-The branch now merges current `main` (`62b23c9`) as parent in commit
-`15ba056`; conflicts in the ticket/status/decision records and Home/header CSS
-were resolved while retaining current-main catalog and project-difficulty work.
+The branch includes current `main` through `fc3713e` as parent of final merge
+commit `ed5ff0e`. Main advanced from `62b23c9` during review; its later T30/T33
+work and status conflict were incorporated and resolved while retaining the
+current-main catalog, project-difficulty, and roadmap changes.
 
 Account switching now deletes the prior server session and expires its cookie
 when Google login starts; denied callbacks defensively clear any presented prior
@@ -45,7 +46,8 @@ bootstrap administrator and active authorized sessions with role and expiry;
 expired/revoked sessions are filtered by the backend. Local unrestricted mode
 is preserved.
 
-Final integrated-head verification passed:
+Final integrated-head verification passed on the `fc3713e` merge tree, which is
+the tree in final commit `ed5ff0e`:
 - `./sigma test` — all scenarios, 10 cloud-auth tests, Ruff, formatting, Pyright
   (zero diagnostics), frontend typecheck, and production build.
 - `uv run --with playwright python browser_checks/t22_access_denied.py` — real
