@@ -9,9 +9,9 @@ from uuid import uuid4
 import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
-from sigma import python_sandbox
+from sigma import python_sandbox, research_sessions
 from sigma.api import app
-from sigma.projects import ProjectError, initialize_project
+from sigma.projects import ProjectError, create_strategy, initialize_project, project_path
 
 
 def rejects(action) -> None:
@@ -52,9 +52,25 @@ def main() -> None:
         python_sandbox._EXECUTION_GATE.release()
 
     with TemporaryDirectory() as temporary:
+        missing_project = Path(temporary) / "missing.sigma"
+        rejects(lambda: python_sandbox.list_executions(missing_project))
+        assert not missing_project.exists()
         path = Path(temporary) / "p.sigma"
-        initialize_project(path, "Sandbox project", "Run a finite computation")
-        session_id, strategy_id = str(uuid4()), str(uuid4())
+        view = initialize_project(path, "Sandbox project", "Run a finite computation")
+        strategy = create_strategy(path, "Sandbox strategy", "Check a finite computation.")
+        session_id, strategy_id = str(uuid4()), strategy.project.strategies[0].id
+        research_sessions._save(
+            str(path),
+            {
+                "id": session_id,
+                "project_path": str(project_path(path)),
+                "project_id": view.project.id,
+                "status": "running",
+                "strategy_runs": [{"strategy_id": strategy_id, "cycle": 2}],
+                "steps": [],
+                "events": [],
+            },
+        )
         fake = python_sandbox.ExecutionResult(
             "completed",
             0,
@@ -103,6 +119,53 @@ def main() -> None:
         rejects(
             lambda: asyncio.run(
                 python_sandbox.execute_research_code(str(path), "print(1)", session_id="../x")
+            )
+        )
+        rejects(
+            lambda: asyncio.run(
+                python_sandbox.execute_research_code(str(path), "print(1)", session_id=session_id)
+            )
+        )
+        rejects(
+            lambda: asyncio.run(
+                python_sandbox.execute_research_code(
+                    str(path),
+                    "print(1)",
+                    session_id=session_id,
+                    strategy_id=str(uuid4()),
+                    cycle=2,
+                )
+            )
+        )
+        rejects(
+            lambda: asyncio.run(
+                python_sandbox.execute_research_code(
+                    str(path), "print(1)", session_id=session_id, strategy_id=strategy_id, cycle=1
+                )
+            )
+        )
+        foreign_session_id = str(uuid4())
+        research_sessions._save(
+            str(path),
+            {
+                "id": foreign_session_id,
+                "project_path": str(project_path(path)),
+                "project_id": str(uuid4()),
+                "status": "running",
+                "strategy_runs": [{"strategy_id": strategy_id, "cycle": 2}],
+                "steps": [],
+                "events": [],
+            },
+        )
+        rejects(
+            lambda: asyncio.run(
+                python_sandbox.execute_research_code(
+                    str(path),
+                    "print(1)",
+                    session_id=foreign_session_id,
+                    strategy_id=strategy_id,
+                    cycle=2,
+                )
             )
         )
         directory = path / "research-executions"
@@ -161,7 +224,7 @@ def main() -> None:
         with patch.object(python_sandbox, "execute", return_value=fake):
             response = client.post(
                 "/api/projects/research-executions",
-                json={"path": str(path), "source": "print(1+1)", "cycle": 1},
+                json={"path": str(path), "source": "print(1+1)"},
             )
         assert response.status_code == 201 and response.json()["status"] == "completed"
         invalid = client.post(
@@ -169,6 +232,13 @@ def main() -> None:
             json={"path": str(path), "source": "print(1)", "unexpected": "field"},
         )
         assert invalid.status_code == 422
+
+    sample_root = Path(__file__).resolve().parents[1] / "samples"
+    with TemporaryDirectory(prefix=".a19-sandbox-check-", dir=sample_root) as temporary:
+        sample = Path(temporary) / "sample.sigma"
+        initialize_project(sample, "Temporary sample", "Must not receive execution data")
+        rejects(lambda: python_sandbox.list_executions(sample))
+        assert not (sample / "research-executions").exists()
 
     print(
         "PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API"

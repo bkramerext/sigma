@@ -2495,3 +2495,23 @@ execution ID. Corrected Getting Started documentation that still described the
 sandbox as awaiting A18 integration. Re-ran `tests/research_sessions.py`,
 `tests/papers.py`, lint/format for changed code, `./sigma test`, and the real
 Chrome A18 workflow; all passed.
+
+### Adversarial review follow-up
+
+Review found that a backend crash after execution-sidecar persistence but
+before session update could cause a resumed session to execute the identical
+proposal again. Recovery now looks up the exact project/session/strategy/cycle
+and source tuple and reattaches the existing terminal record. The public
+execution API now requires provenance references as a complete tuple and
+checks them against the selected project's saved session. Execution reads
+validate that the project exists before creating sidecar storage; sample
+projects reject execution evidence, preserving their source files.
+
+Validation passed `tests/python_sandbox.py` (including forged/partial
+provenance, nonexistent project side effects, and sample write protection),
+`tests/research_sessions.py` (including crash-window recovery without a second
+execution), Ruff and format checks, `./sigma test`, the actual Docker runtime
+check, and the fixture-backed real Docker Investigator→Skeptic workflow. The
+first full-suite rerun caught a Pyright mismatch in the new path-typed recovery
+call and the runtime smoke caught invalid synthetic provenance; both were
+fixed before the final passing run. No live provider calls were made.

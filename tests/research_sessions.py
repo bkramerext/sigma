@@ -10,12 +10,13 @@ from uuid import uuid4
 
 import httpx
 
-from sigma import agentic, proposals, research_sessions, text_views
+from sigma import agentic, papers, proposals, python_sandbox, research_sessions, text_views
 from sigma.projects import (
     ProjectError,
     create_strategy,
     edit_strategy,
     initialize_project,
+    project_path,
     set_strategy_enabled,
 )
 
@@ -295,8 +296,6 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     exported_artifact = exported["research_sessions"][0]["artifacts"][0]
     assert exported_artifact["investigator_output"]["python_code"] == code
     assert exported_artifact["investigator_output"]["python_execution"] == execution
-    from sigma import papers
-
     with patch("sigma.api.export_project_view", return_value=exported):
         paper_evidence, _ = papers._snapshot(str(path))
     paper_sources = {item["id"]: item["data"] for item in paper_evidence["sources"]}
@@ -305,6 +304,64 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     )
     assert paper_artifact["investigator_output"]["python_code"] == code
     assert paper_artifact["investigator_output"]["python_execution"]["source"] == code
+
+
+async def test_recovery_reuses_saved_python_execution(path: Path):
+    view, strategy, _, _ = await setup(path)
+    session_id = str(uuid4())
+    code = "print('persist before session update')"
+    investigation_output = {**investigation(1), "python_code": code}
+    record = {
+        "id": session_id,
+        "project_path": str(project_path(path)),
+        "project_id": view.project.id,
+        "status": "running",
+        "strategy_runs": [
+            {
+                "strategy_id": strategy.id,
+                "strategy_title": "Saved approach",
+                "cycle": 1,
+                "pending_investigation": investigation_output,
+                "current_action": "Python execution",
+            }
+        ],
+        "steps": [
+            {
+                "id": str(uuid4()),
+                "strategy_id": strategy.id,
+                "role": "investigator",
+                "cycle": 1,
+                "output": investigation_output,
+            }
+        ],
+        "events": [],
+    }
+    research_sessions._save(str(path), record)
+    container_result = python_sandbox.ExecutionResult(
+        "completed", 0, "persist before session update\n", "", 50, "sha256:" + "a" * 64
+    )
+    with patch.object(python_sandbox, "execute", return_value=container_result):
+        saved_execution = await python_sandbox.execute_research_code(
+            str(path),
+            code,
+            session_id=session_id,
+            strategy_id=strategy.id,
+            cycle=1,
+        )
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("recovery must not rerun saved code")),
+    ) as execute:
+        await research_sessions._complete_pending_python(
+            session_id, str(path), strategy.id, 1, asyncio.Lock()
+        )
+    execute.assert_not_awaited()
+    recovered = research_sessions._read(str(path), session_id)
+    branch = recovered["strategy_runs"][0]
+    assert branch["pending_investigation"]["python_execution"] == saved_execution
+    assert recovered["steps"][0]["output"]["python_execution"] == saved_execution
+    assert any(event["kind"] == "python.recovered" for event in recovered["events"])
 
 
 async def test_stop_during_python_execution_preserves_provenance(path: Path):
@@ -2182,6 +2239,7 @@ def main():
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
         asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
+        asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
         asyncio.run(
             test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
         )

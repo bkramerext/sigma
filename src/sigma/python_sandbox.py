@@ -407,7 +407,11 @@ def _execute_admitted(source: str) -> ExecutionResult:
 
 
 def _execution_directory(path: str | Path) -> Path:
+    inspect_project(path)
     target = project_path(path)
+    samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
+    if target.is_relative_to(samples):
+        raise ProjectError("Research executions cannot be stored in sample projects")
     directory = target / "research-executions"
     if directory.is_symlink():
         raise ProjectError("Research execution directory must not be a symbolic link")
@@ -540,6 +544,28 @@ def list_executions(path: str | Path) -> list[dict[str, Any]]:
     return sorted(records, key=lambda item: item.get("created_at", ""), reverse=True)
 
 
+def find_session_execution(
+    path: str | Path,
+    *,
+    session_id: str,
+    strategy_id: str,
+    cycle: int,
+    source: str,
+) -> dict[str, Any] | None:
+    """Find a durably saved exact proposal result for crash-safe session recovery."""
+    return next(
+        (
+            record
+            for record in list_executions(path)
+            if record.get("session_id") == session_id
+            and record.get("strategy_id") == strategy_id
+            and record.get("cycle") == cycle
+            and record.get("source") == source
+        ),
+        None,
+    )
+
+
 async def execute(source: str) -> ExecutionResult:
     """Execute one bounded code proposal without blocking the event loop."""
     task = asyncio.create_task(asyncio.to_thread(_execute_admitted, source))
@@ -562,8 +588,32 @@ async def execute_research_code(
     """Execute and durably capture one code proposal for later role-loop integration."""
     _validate_source(source)
     view = inspect_project(path)
-    if cycle is not None and (type(cycle) is not int or cycle < 1):
-        raise ProjectError("Research cycle must be a positive integer")
+    provenance = (session_id, strategy_id, cycle)
+    if any(item is not None for item in provenance):
+        if not all(item is not None for item in provenance):
+            raise ProjectError("Session, strategy, and cycle provenance must be supplied together")
+        normalized_session = _metadata_id(session_id, "session")
+        normalized_strategy = _metadata_id(strategy_id, "strategy")
+        assert normalized_session and normalized_strategy and cycle is not None
+        if type(cycle) is not int or cycle < 1:
+            raise ProjectError("Research cycle must be a positive integer")
+        # Import lazily because the research-session service calls this module.
+        from sigma.research_sessions import _read as read_session
+
+        session = read_session(str(path), normalized_session)
+        if session.get("project_id") != view.project.id:
+            raise ProjectError("Research session does not belong to this project")
+        branch = next(
+            (
+                item
+                for item in session.get("strategy_runs", [])
+                if item.get("strategy_id") == normalized_strategy
+            ),
+            None,
+        )
+        if branch is None or branch.get("cycle") != cycle:
+            raise ProjectError("Research strategy and cycle do not match this session")
+        session_id, strategy_id = normalized_session, normalized_strategy
     execution_task = asyncio.create_task(execute(source))
     cancelled = False
     try:

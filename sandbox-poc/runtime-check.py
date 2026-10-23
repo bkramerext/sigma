@@ -110,9 +110,6 @@ else:
             execute_research_code(
                 str(project),
                 research_source,
-                session_id="f7b95c68-af09-49d6-9b6f-3454bdfd1d93",
-                strategy_id="977c41d9-208f-4657-a2af-4fc5a32042b0",
-                cycle=1,
             )
         )
         assert saved["status"] == "completed", saved

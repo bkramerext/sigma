@@ -28,8 +28,9 @@ artifact endpoint.
 
 The local API mirrors this contract:
 
-- `POST /api/projects/research-executions` with `{path, source, session_id?,
-  strategy_id?, cycle?}` executes once and returns the saved record.
+- `POST /api/projects/research-executions` with `{path, source}` and an optional
+  complete `{session_id, strategy_id, cycle}` tuple executes once and returns
+  the saved record.
 - `GET /api/projects/research-executions?path=...` lists saved records.
 - `GET /api/projects/research-executions/{id}?path=...` retrieves one record.
 - `GET /api/projects/research-executions/{id}/artifacts/{filename}?path=...`
@@ -45,6 +46,9 @@ content is stored separately under the same private sidecar, and the record
 contains media type, byte size, and SHA-256. The runtime uses a private 16 MiB
 tmpfs for `/artifacts`; the host copies files out while the container is still
 alive and persists them with the record.
+Session, strategy, and cycle references must be supplied together and are
+checked against the selected project's saved session. Sample projects cannot
+receive execution records; open a sample copy first.
 Execution status is `completed`, `failed`, `timeout`, `output_limit`,
 `unavailable`, or `busy`. Only one container is admitted per local backend
 process; concurrent attempts are captured as busy without starting a container.

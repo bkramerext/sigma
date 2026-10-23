@@ -22,7 +22,7 @@ from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
-from sigma.python_sandbox import execute_research_code
+from sigma.python_sandbox import execute_research_code, find_session_execution
 
 CALL_LIMIT = 6
 MAX_RECORD = 512_000
@@ -1804,6 +1804,41 @@ async def _complete_pending_python(
         ):
             return
         code = output["python_code"]
+        saved_execution = find_session_execution(
+            path,
+            session_id=session_id,
+            strategy_id=strategy_id,
+            cycle=cycle,
+            source=code,
+        )
+        if saved_execution is not None:
+            output["python_execution"] = saved_execution
+            branch["pending_investigation"] = output
+            investigator_step = next(
+                (
+                    item
+                    for item in reversed(record["steps"])
+                    if item.get("strategy_id") == strategy_id
+                    and item.get("role") == "investigator"
+                    and item.get("cycle") == cycle
+                ),
+                None,
+            )
+            if investigator_step is None:
+                raise ProjectError(
+                    "Saved Investigator step for recovered Python execution is missing"
+                )
+            investigator_step["output"] = output
+            if record["status"] not in {"paused", "stopped", "ended", "completed", "failed"}:
+                branch["current_action"] = "Skeptic"
+            _event(
+                record,
+                "python.recovered",
+                f"Reused saved Python execution {saved_execution['id']} ({saved_execution['status']}) for {branch['strategy_title']}.",
+                "investigator",
+            )
+            _save(path, record)
+            return
         branch["current_action"] = "Python execution"
         record["current_action"] = f"Python execution · {branch['strategy_title']}"
         record["message"] = (
