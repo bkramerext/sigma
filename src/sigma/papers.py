@@ -22,7 +22,7 @@ from sigma.project_reports import _compile_pdf, _latex
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 
-MAX_CONTEXT_CHARS = 65000
+MAX_CONTEXT_BYTES = 100_000
 MAX_RESPONSE_BYTES = 1_000_000
 MAX_PAPER_BYTES = 12_000_000
 CALL_SECONDS = 120
@@ -180,14 +180,20 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
     data = export_project_view(path)
     sources: list[dict[str, Any]] = []
     project = data.get("project", {})
-    sources.append({"id": f"project:{project.get('id')}", "kind": "project", "data": project})
-    for strategy in project.get("strategies", []):
+    project_data = dict(project)
+    strategies = project_data.pop("strategies", [])
+    sources.append({"id": f"project:{project.get('id')}", "kind": "project", "data": project_data})
+    for strategy in strategies:
         sources.append(
             {"id": f"strategy:{strategy.get('id')}", "kind": "strategy", "data": strategy}
         )
     for session in data.get("research_sessions", []):
-        sources.append({"id": f"session:{session.get('id')}", "kind": "session", "data": session})
-        for artifact in session.get("artifacts", []):
+        session_data = dict(session)
+        artifacts = session_data.pop("artifacts", [])
+        sources.append(
+            {"id": f"session:{session.get('id')}", "kind": "session", "data": session_data}
+        )
+        for artifact in artifacts:
             sources.append(
                 {
                     "id": f"artifact:{session.get('id')}:{artifact.get('id')}",
@@ -196,8 +202,10 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
                 }
             )
     for run in data.get("agentic_runs", []):
-        sources.append({"id": f"run:{run.get('run_id')}", "kind": "agentic_run", "data": run})
-        for step in run.get("steps", []):
+        run_data = dict(run)
+        steps = run_data.pop("steps", [])
+        sources.append({"id": f"run:{run.get('run_id')}", "kind": "agentic_run", "data": run_data})
+        for step in steps:
             sources.append(
                 {
                     "id": f"step:{run.get('run_id')}:{step.get('step_id', step.get('id', step.get('sequence', 'unknown')))}",
@@ -206,14 +214,14 @@ def _snapshot(path: str) -> tuple[dict[str, Any], str]:
                 }
             )
     package = {
-        "schema": "sigma-paper-evidence-v1",
+        "schema": "sigma-paper-evidence-v2",
         "project_id": project.get("id"),
         "sources": sources,
     }
     encoded = _json(package)
-    if len(encoded) > MAX_CONTEXT_CHARS:
+    if len(encoded) > MAX_CONTEXT_BYTES:
         raise ProjectError(
-            f"Complete evidence snapshot is {len(encoded)} characters; the generation limit is {MAX_CONTEXT_CHARS}. No evidence was omitted. Reduce or scope the project, then retry."
+            f"Complete evidence snapshot is {len(encoded)} bytes; the generation limit is {MAX_CONTEXT_BYTES}. No evidence was omitted. Reduce or scope the project, then retry."
         )
     return package, hashlib.sha256(encoded).hexdigest()
 
@@ -588,10 +596,6 @@ async def generate(
         if not config["available"]:
             raise ProjectError(config["message"])
         package, snapshot_hash = _snapshot(path)
-        if len(json.dumps(package, ensure_ascii=False)) > MAX_CONTEXT_CHARS:
-            raise ProjectError(
-                "Complete paper prompt exceeds the context limit; no evidence was omitted"
-            )
         draft, model = await _provider(package, initial_auth, config)
         validation_warnings = _validate(draft, package)
         final_auth = await auth_context()

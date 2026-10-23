@@ -57,6 +57,8 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
     export_dialog.get_by_label("Academic paper using LaTeX").check()
+    export_dialog.get_by_label("Filename").fill("maximum-regions-paper")
+    export_dialog.get_by_label("Open in browser tab").check()
     export_dialog.get_by_role("button", name="Continue", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(dialog).to_be_visible()
@@ -70,11 +72,12 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("artifact:")
     expect(dialog).to_contain_text("Conclusion claim links: C1")
     expect(dialog).to_contain_text("Abstract claim links: C1")
-    expect(dialog.get_by_role("link", name="Download compiled PDF")).to_be_visible()
+    expect(dialog.get_by_role("link", name="Open compiled PDF in new tab")).to_be_visible()
     article = dialog.locator(".ai-paper-preview")
     article.screenshot(path="/tmp/sigma-a20-paper-preview.png")
-    pdf_link = dialog.get_by_role("link", name="Download compiled PDF")
+    pdf_link = dialog.get_by_role("link", name="Open compiled PDF in new tab")
     assert "/pdf?" in pdf_link.get_attribute("href")
+    assert pdf_link.get_attribute("target") == "_blank"
     pdf_result = page.evaluate(
         "async href => { const response = await fetch(href); const bytes = new Uint8Array(await response.arrayBuffer()); let binary=''; for (const byte of bytes) binary += String.fromCharCode(byte); return {status:response.status,type:response.headers.get('content-type'),bytes:btoa(binary)}; }",
         pdf_link.get_attribute("href"),
@@ -104,10 +107,25 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-a20-paper-mobile.png", full_page=True)
     page.keyboard.press("Escape")
     expect(dialog).to_be_hidden()
+    expect(export_dialog).to_be_visible()
+    expect(export_dialog.get_by_label("Filename")).to_have_value("maximum-regions-paper")
+    expect(export_dialog.get_by_label("Open in browser tab")).to_be_checked()
+    expect(export_dialog.get_by_label("Academic paper using LaTeX")).to_be_checked()
+    export_dialog.get_by_label("Open in browser tab").uncheck()
+    export_dialog.get_by_role("button", name="Continue", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    download_link = dialog.get_by_role("link", name="Download compiled PDF")
+    expect(download_link).to_be_visible()
+    assert download_link.get_attribute("download") == "maximum-regions-paper.pdf"
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(export_dialog).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(export_dialog).to_be_hidden()
     assert not errors, errors
     context.close()
     browser.close()
 
 print(
-    "PASS real Chrome A20: saved Maximum Regions evidence, explicit authoring, traceable claims, durable version and compiled PDF."
+    "PASS real Chrome A20: saved evidence, Export Project authoring entry, remembered export choices, traceable claims, durable version and compiled PDF."
 )

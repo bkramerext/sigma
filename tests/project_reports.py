@@ -130,6 +130,7 @@ def main() -> None:
     legacy_data = fixture()
     del legacy_data["research_sessions"][0]["outcome"]["solution_review"]["verification_status"]
     legacy_report, _ = render_report(legacy_data, "txt")
+    assert isinstance(legacy_report, str)
     assert "Verification status:" not in legacy_report
 
     html_report, html_type = render_report(data, "html")

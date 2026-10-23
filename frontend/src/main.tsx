@@ -487,8 +487,9 @@ function formatDuration(totalSeconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-function useDocumentScrollLock() {
+function useDocumentScrollLock(enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     const root = document.documentElement;
     const body = document.body;
     const previous = {
@@ -507,11 +508,11 @@ function useDocumentScrollLock() {
       body.style.overflow = previous.bodyOverflow;
       body.style.overscrollBehavior = previous.bodyOverscroll;
     };
-  }, []);
+  }, [enabled]);
 }
 
-function ProjectExportDialog({ path, title, onCancel, onAuthorPaper }: { path: string; title: string; onCancel: () => void; onAuthorPaper?: () => void }) {
-  useDocumentScrollLock();
+function ProjectExportDialog({ path, title, onCancel, onAuthorPaper, open = true }: { path: string; title: string; onCancel: () => void; onAuthorPaper?: (options: { filename: string; openInTab: boolean }) => void; open?: boolean }) {
+  useDocumentScrollLock(open);
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -523,18 +524,25 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper }: { path: s
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  useEffect(() => { dialog.current?.showModal(); input.current?.focus(); input.current?.select(); }, []);
+  useEffect(() => {
+    if (!dialog.current) return;
+    if (open && !dialog.current.open) {
+      dialog.current.showModal();
+      input.current?.focus();
+      input.current?.select();
+    } else if (!open && dialog.current.open) dialog.current.close();
+  }, [open]);
   function cancel() { if (!submitting.current) onCancel(); }
   async function exportFile(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
-    if (exportType === 'latex' && onAuthorPaper) { onCancel(); onAuthorPaper(); return; }
     const chosen = filename.trim();
     const stem = chosen.replace(/\.(json|txt|html|tex|pdf)$/i, '');
     if (!stem || stem === '.' || stem === '..' || /[\/\\<>:"|?*\x00-\x1f]/.test(stem)) {
       setError('Enter a filename stem without path separators or reserved characters.');
       return;
     }
+    if (exportType === 'latex' && onAuthorPaper) { onAuthorPaper({ filename: stem, openInTab }); return; }
     const extension = exportType === 'audit' ? 'json' : reportFormat;
     const downloadName = `${stem}.${extension}`;
     const opened = openInTab ? window.open('about:blank', '_blank') : null;
@@ -619,7 +627,7 @@ function ProjectExportDialog({ path, title, onCancel, onAuthorPaper }: { path: s
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId: string; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -712,7 +720,9 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
         {selected.draft.open_obligations.length > 0 && <><h4>Open obligations</h4><ul>{selected.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
-        {selected.pdf_available && <a className="text-view-link" href={pdfUrl} download={`sigma-ai-paper-${selected.paper_id}.pdf`}>Download compiled PDF</a>}
+        {selected.pdf_available && (openInTab
+          ? <a className="text-view-link" href={pdfUrl} target="_blank" rel="noopener noreferrer">Open compiled PDF in new tab</a>
+          : <a className="text-view-link" href={pdfUrl} download={downloadFilename}>Download compiled PDF</a>)}
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
       </article>}
     </div>
@@ -1767,6 +1777,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [projectEditing, setProjectEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [paperOpen, setPaperOpen] = useState(false);
+  const [paperExportOptions, setPaperExportOptions] = useState({ filename: 'sigma-paper.pdf', openInTab: false });
   const modeOwner = useRef<string | null>(null);
   const [activeMode, setActiveMode] = useState<string | null>(null);
   const enterMode = useCallback((owner: string) => {
@@ -2010,9 +2021,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     </section>
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
-    {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={() => setPaperOpen(true)}/>}
+    <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }} onAuthorPaper={options => { setPaperExportOptions({ ...options, filename: options.filename.endsWith('.pdf') ? options.filename : `${options.filename}.pdf` }); setExportOpen(false); setPaperOpen(true); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename={paperExportOptions.filename} openInTab={paperExportOptions.openInTab} onCancel={() => {
         setPaperOpen(false);
         setExportOpen(true);
       }} />

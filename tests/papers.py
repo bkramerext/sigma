@@ -52,6 +52,58 @@ def draft(ref: str = "project:pid") -> papers.PaperDraft:
 
 
 def main() -> None:
+    evidence_export = {
+        "project": {
+            "id": "pid",
+            "title": "A project",
+            "strategies": [{"id": "strat-1", "approach": "A saved strategy."}],
+        },
+        "research_sessions": [
+            {
+                "id": "session-1",
+                "artifacts": [{"id": "artifact-1", "claim": "A saved finding."}],
+            }
+        ],
+        "agentic_runs": [
+            {
+                "run_id": "run-1",
+                "steps": [{"step_id": "step-1", "output": "A saved step."}],
+            }
+        ],
+    }
+    with patch("sigma.api.export_project_view", return_value=evidence_export):
+        normalized, fingerprint = papers._snapshot("unused")
+    source_map = {source["id"]: source for source in normalized["sources"]}
+    assert source_map["project:pid"]["data"] == {"id": "pid", "title": "A project"}
+    assert source_map["strategy:strat-1"]["data"] == evidence_export["project"]["strategies"][0]
+    assert source_map["session:session-1"]["data"] == {"id": "session-1"}
+    assert (
+        source_map["artifact:session-1:artifact-1"]["data"]
+        == evidence_export["research_sessions"][0]["artifacts"][0]
+    )
+    assert source_map["run:run-1"]["data"] == {"run_id": "run-1"}
+    assert source_map["step:run-1:step-1"]["data"] == evidence_export["agentic_runs"][0]["steps"][0]
+    assert normalized["schema"] == "sigma-paper-evidence-v2" and len(fingerprint) == 64
+    large_export = {
+        "project": {"id": "pid", "problem": "x" * 81_900},
+        "research_sessions": [],
+        "agentic_runs": [],
+    }
+    with patch("sigma.api.export_project_view", return_value=large_export):
+        large_snapshot, _ = papers._snapshot("unused")
+    assert len(papers._json(large_snapshot)) > 65_000
+    assert len(papers._json(large_snapshot)) <= papers.MAX_CONTEXT_BYTES
+    with (
+        patch("sigma.api.export_project_view", return_value=evidence_export),
+        patch.object(papers, "MAX_CONTEXT_BYTES", 10),
+    ):
+        try:
+            papers._snapshot("unused")
+        except ProjectError as exc:
+            assert "bytes" in str(exc) and "No evidence was omitted" in str(exc)
+        else:
+            raise AssertionError("Oversized complete evidence snapshots must be rejected")
+
     package = {"sources": [{"id": "project:pid", "data": {"problem": "A question"}}]}
     parsed = draft()
     warnings = papers._validate(parsed, package)

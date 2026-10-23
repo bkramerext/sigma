@@ -1874,12 +1874,16 @@ retain their existing output semantics. The pipeline is in
 versions. The visible workflow states the selected project model and provider
 mode, one-call limit, API-key billing disclosure, progress, cancellation, saved
 version history, complete structured preview, evidence references, and PDF
-download.
+download. Returning to Export Project preserves its selected report type,
+filename, and tab preference; the filename and tab preference also control the
+compiled paper PDF.
 
 Each request takes the full current project/strategy/session/artifact/agentic-run
 snapshot and stable source IDs, computes a SHA-256 fingerprint, and sends the
-complete package or refuses it above 65,000 bytes; evidence is never silently
-truncated. The provider returns a strict structured draft with claims, evidence
+complete package or refuses it above 100,000 bytes; repeated nested strategy,
+artifact, and step arrays are represented by their own source records rather
+than duplicated in parent records. Evidence is never silently truncated. The
+provider returns a strict structured draft with claims, evidence
 references, claim status, claim-to-narrative links for the abstract/framing/
 methods/sections/conclusions, unresolved obligations, and author self-review
 warnings. The validator rejects unknown source/claim IDs and flags missing
