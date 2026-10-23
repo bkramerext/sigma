@@ -59,13 +59,38 @@ T22 still owns the curated shared Demo, guest-safe read-only APIs and exports;
 this ticket does not implement that full experience.
 
 T22.2 adds identity, API access checks, invitation administration, and the
-minimal access UI. It does not provision per-user project roots, migrate project
-storage, isolate existing filesystem paths by owner, schedule durable work, or
-deploy a cloud service. All authorized users still reach the existing project
-service/storage surface; do not treat this ticket as a completed multi-tenant
-workspace or a deployment-ready public service. Those boundaries remain for
-later cloud work. Cloudflare feasibility and deployment are separate from this
-authentication implementation.
+minimal access UI. Gate A provisions a durable private workspace for each
+authorized Google subject. The internal workspace ID is random and server
+generated; the email is used only by authentication authorization and never to
+choose storage. The workspace root defaults to
+`$SIGMA_CLOUD_AUTH_HOME/workspaces`; set `SIGMA_CLOUD_WORKSPACES_ROOT` to an
+absolute private directory to place it elsewhere. Each workspace contains that
+user's `.sigma` projects and `.sigma-state` Recent index. It is not prefilled
+with local projects or sample copies. The curated Samples catalog remains a
+shared read-only source; opening a sample makes a separate copy in the user's
+workspace.
+
+There is no automatic import or migration from local projects. To bring an
+existing project into a cloud account, its owner must first use the existing
+Project Audit export contract and a separately authorized import path; Gate A
+does not add cloud import. No administrator route provides access to another
+user's project contents. Revoking authorization denies future requests but
+retains the workspace and its data for possible later reauthorization.
+
+Back up both the cloud auth database directory and the workspace root as one
+consistent recovery point, with SIGMA stopped so no SQLite/project write is in
+flight. Keep the backup encrypted and access-controlled like the source. Restore
+the directories to their configured paths with service ownership, mode `0700`
+on directories, and mode `0600` on SQLite files. Start SIGMA and verify that
+two authorized test subjects still see only their own Recents and artifacts.
+The deterministic `tests/cloud_workspaces.py` test exercises an offline copy
+and restore of the workspace root, including its subject mapping, projects,
+Recent indices, execution records, and artifact bytes. The auth database is a
+separate backup component because it stores authorization and sessions.
+
+Gate A does not implement durable job scheduling, anonymous Demo APIs, or cloud
+deployment. Cloudflare feasibility and deployment remain separate from this
+authentication and filesystem-backed workspace implementation.
 
 Automated tests use local RSA signing keys and mocked Google endpoints. They do
 not make network requests or paid model calls. No Google OAuth client, client

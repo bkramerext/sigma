@@ -525,6 +525,15 @@ async def callback(
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
         return response
+    # Provision only after the Google subject has passed authorization, before
+    # an authenticated session is issued. This creates an empty root and keeps
+    # identity/provider concerns out of project path handling.
+    from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
+
+    try:
+        workspace_for_subject(subject)
+    except WorkspaceUnavailable as exc:
+        raise HTTPException(503, "Private workspace is unavailable.") from exc
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
         db.execute(
