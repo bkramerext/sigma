@@ -67,6 +67,8 @@ with sync_playwright() as playwright:
                 if subsection.get_attribute("open") is None:
                     subsection.locator(":scope > summary").click()
                 assert subsection.get_attribute("open") is not None, (index + 1, label)
+                if index == 0 and label == "Metrics":
+                    assert "Negative · counterexample reported" not in subsection.inner_text()
         evidence = row.locator(".outcome-evidence-subsection")
         if evidence.count():
             if evidence.get_attribute("open") is None:

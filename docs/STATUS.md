@@ -13,6 +13,62 @@ placeholder selector; it fails before reaching paper export. Its existing
 Ruff check also reports two RUF007 findings in unrelated adjacent-gap loops.
 No paid provider calls were made.
 
+## T21 final local integration and product acceptance (2026-10-23)
+
+Validated on the locally integrated `main` head `703442cfef6be004e8ed28e46f211ecf151e3f6e` (PR #49 included). This is a local-alpha acceptance pass; no live or paid model/provider calls were made.
+
+`./sigma test` passed after the final sample-history correction. This includes
+the local API and CLI scenarios, research sessions and interruption recovery,
+Python/SageMath evidence, report and Project Audit export tests, formatting,
+Pyright, frontend typecheck, and production build. The suite emits the existing
+Starlette/httpx deprecation warning; all checks complete successfully.
+
+Real Chrome fixture coverage on the same integrated head:
+
+- `browser_checks/a17_research.py`: project title editing, strategy generation
+  and unsaved-draft acceptance, multi-strategy sessions, concurrent activity,
+  stop/pause/resume and failure recovery, history, evidence attribution, and
+  export. It validates a downloaded Project Audit JSON, Text report, HTML
+  report opened in a browser tab with rendered math, and LaTeX report, including
+  session outcomes and evidence references. It also exercises the AI-paper
+  workflow and compiled PDF against a deterministic provider fixture. No live
+  provider calls were made.
+- `browser_checks/settings.py`: create/edit settings, persistence, save failure
+  and retry, focus behavior, offline model state, and responsive layouts.
+- `browser_checks/header.py`: the local 2×2 project header, model/effort
+  reconciliation, Google unavailable placeholder, connection disclosure,
+  keyboard access, persistence, and responsive widths through 320 px.
+- `browser_checks/recents.py`: sample/recent navigation, project copies,
+  strategy expansion, source immutability, and 1280×720, 390 px, and 320 px
+  layouts. The check was run on a fresh isolated fixture.
+- `browser_checks/nonconsecutive_sample.py`: all five saved outcomes display
+  “Mixed · partial progress, unresolved”; Session #1 keeps its exact
+  counterexample and disproved recurrence visible without presenting a negative
+  project outcome in either the Outcome or Metrics subsection. The report
+  retains the three strategies and open obligations. At 390 px and 320 px there
+  is no horizontal overflow; the report is 35,081 characters and no page errors
+  were observed.
+- `browser_checks/t29_intervention.py`: fixture-backed user guidance,
+  acknowledgment/audit provenance, and narrow mobile layout.
+- `browser_checks/a20_paper.py`: project header actions, tooltip/keyboard
+  behavior, export format options, paper snapshot and compiled PDF, and narrow
+  dialog layout.
+
+The sample-export regression `tests/make_sample.py` passed after correcting the
+imported Session #1 metric snapshot; `uv run ruff check
+browser_checks/a17_research.py browser_checks/nonconsecutive_sample.py` passed.
+The historical fixture had retained an obsolete “Negative · counterexample
+reported” metrics label despite the corrected Mixed outcome. The metric label
+now matches the unresolved objective; the counterexample, skeptical findings,
+and strategy hypothesis remain intact. No research-session coordinator logic
+was changed.
+
+Remaining limits: provider behavior was exercised only through deterministic
+fixtures, so live-provider reliability and model research quality remain
+unverified. Cloud authentication was not exercised in the local browser pass;
+it remains with the Cloud team. Mobile checks use Chrome viewport emulation,
+not a physical device.
+
 ## T20.1: Minor UI acceptance fixes (2026-10-23)
 
 Replaced the Project action's LaTeX wordmark with a compact typographic TeX
