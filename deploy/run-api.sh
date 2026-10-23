@@ -13,7 +13,8 @@ test -d "$root" && test -r "$env_file" && test ! -L "$env_file"
 test "$(stat -c '%a' "$env_file")" = 600 || { echo "runtime env file must be mode 0600" >&2; exit 2; }
 if docker container inspect "$container" >/dev/null 2>&1; then docker rm -f "$container" >/dev/null; fi
 docker run -d --name "$container" --restart unless-stopped \
-  --user 10001:10001 --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m \
+  --user 10001:10001 --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+  --pids-limit 256 --tmpfs /tmp:rw,noexec,nosuid,size=32m \
   --mount "type=bind,src=$root,dst=/var/lib/sigma" \
   --env-file "$env_file" -e SIGMA_PERSISTENT_DATA_ROOT=/var/lib/sigma \
   -p 127.0.0.1:8000:8000 "$tag" >/dev/null

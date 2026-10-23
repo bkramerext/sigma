@@ -3,8 +3,8 @@ Date: 2026-10-23
 Branch: cloud/t22-deployment
 Base at start: c4b18d36349170b07e48c4cdf0c38aeb532fc958 (main after Gate C PR #44)
 Integrated current main: cd855525f36c5e248c9604ceb633932a450340cb
-Head: set to commit SHA after final validation and push
-PR: set after opening the pull request; do not merge
+Head: pending final source commit/push
+PR: pending opening; do not merge
 
 Scope and architecture
 ----------------------
@@ -133,14 +133,18 @@ Backup and restore commands
 ---------------------------
 Create a private stop-the-world archive outside the data root:
 
+  sudo install -d -o root -g root -m 0700 /srv/sigma-backups
   sudo deploy/backup.sh /srv/sigma/data /srv/sigma-backups/sigma-20261023T000000Z.tar.gz
   AGE_RECIPIENT='age1replace-with-approved-public-recipient'
-  age -r "$AGE_RECIPIENT" -o /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age /srv/sigma-backups/sigma-20261023T000000Z.tar.gz
+  sudo age -r "$AGE_RECIPIENT" -o /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age /srv/sigma-backups/sigma-20261023T000000Z.tar.gz
+  sudo chmod 0600 /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age
 
 Encrypt before copying off-host. Restore only to a new empty directory, then
 install the volume marker; never restore over the active directory:
 
-  age -d -i /etc/sigma/backup-identity.age -o /srv/sigma-restore/backup.tar.gz /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age
+  sudo install -d -o root -g root -m 0700 /srv/sigma-restore
+  sudo age -d -i /etc/sigma/backup-identity.age -o /srv/sigma-restore/backup.tar.gz /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age
+  sudo chmod 0600 /srv/sigma-restore/backup.tar.gz
   sudo docker stop sigma-api
   sudo install -d -o 10001 -g 10001 -m 0700 /srv/sigma/data-restored
   sudo python3 ops/data_archive.py restore /srv/sigma-restore/backup.tar.gz /srv/sigma/data-restored --uid 10001 --gid 10001
@@ -158,19 +162,19 @@ accounts/projects before reopening access.
 
 Verification evidence
 --------------------
-- `./sigma test`: PASS on final implementation before final documentation
-  edits; included local app regressions, Gate A/Gate C tests, cloud auth,
+- `./sigma test`: PASS on the integrated final tree; included local app
+  regressions, Gate A/Gate C tests, cloud auth,
   deployment validation/archive tests, Worker Node suite (4/4), Ruff check and
   format, Pyright (zero diagnostics), frontend typecheck and production build.
-- `./deploy/build-api.sh sigma-api:t22-deployment-test`: PASS on Docker 29.5.2
-  Linux/arm64 using the pinned Python base digest. After adding `.dockerignore`,
-  context size was 24.81MB.
-- `./ops/container_smoke.sh sigma-api:t22-deployment-test`: PASS. Production
+- `./deploy/build-api.sh sigma-api:t22-deployment-final`: PASS on Docker
+  29.5.2 Linux/arm64 using the pinned Python base digest; final context size
+  was 26.01MB.
+- `./ops/container_smoke.sh sigma-api:t22-deployment-final`: PASS. Production
   container became ready from a deterministic fixture on a Docker named
   volume; anonymous Demo audit and Text/HTML/LaTeX exports passed; private GET
   and mutation returned 401; auth SQLite SHA-256 remained identical after a
-  real container restart; missing Google secret and HTTP public origin exited
-  with safe configuration error code 78.
+  real container restart; missing Google secret, HTTP public origin and an
+  uninitialized storage volume exited with safe configuration error code 78.
 - `uv run --with playwright python browser_checks/t22_deployment_smoke.py`:
   PASS in real Chrome at 1440×1000 and 390×844. Browser loaded `/demo`,
   inspected saved session/evidence and called the actual API through Wrangler
@@ -182,8 +186,9 @@ Verification evidence
 - `uv run --locked --no-sync python tests/deployment.py`: PASS, including
   private/missing volume marker, unsafe permissions, invalid OIDC/origin,
   Demo path separation, backup/restore, symlink and archive traversal cases.
-- Wrangler `4.152.0 deploy --dry-run --config wrangler.jsonc --secrets-file
-  <fixture-file>`: PASS; read 73 static assets and validated bindings; no
+- `npm exec -- wrangler deploy --dry-run --config wrangler.jsonc --secrets-file
+  worker-secrets.example.json` from `deploy/cloudflare/`: PASS; read 73 static
+  assets and validated bindings; no
   Cloudflare account request or deployment occurred.
 - No paid model calls, Google calls, production credentials, Cloudflare
   resources or billable infrastructure were used. `./sigma test` printed the
@@ -232,5 +237,10 @@ scheduled/off-host backups and clean-host restoration drills are deferred to
 T22.4, while retaining this assignment's documented and tested optional local
 backup/restore utility. Main also includes recent Gate B specification updates;
 no Green implementation was present at this fetched head and no Gate B code was
-edited. Re-run required checks after this integration before coordinator review.
-R4R; do not self-merge.
+edited. The imported T39 code/tests had two Ruff findings and three formatting
+findings that prevented `./sigma test` from passing; applied formatting and a
+targeted `TRY004` suppression to preserve its existing ValueError contract, and
+its dedicated scenario passed. After these integration fixes, `./sigma test`,
+the production container smoke, Wrangler dry-run, and real Chrome-to-Worker-to-API
+smoke passed on the integrated tree. Final source head and PR URL are added
+after the commit and push below. R4R; do not self-merge.

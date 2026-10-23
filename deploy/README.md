@@ -114,7 +114,9 @@ curl -i https://sigma.example.org/api/projects/recent  # expected 401
 docker inspect --format '{{.State.Health.Status}}' sigma-api
 ```
 
-`/healthz` exposes only ready/not-ready. The private API must return 401
+`/healthz` exposes only ready/not-ready. The API container has no Linux
+capabilities, cannot gain privileges, has a read-only root filesystem, and
+is limited to 256 processes. The private API must return 401
 without a session. Do not test with real model providers during deployment.
 
 ## Updates and rollback
@@ -152,10 +154,12 @@ recipient private key away from the backup host and make its public recipient
 available to the operator.
 
 ```sh
+sudo install -d -o root -g root -m 0700 /srv/sigma-backups
 sudo deploy/backup.sh /srv/sigma/data /srv/sigma-backups/sigma-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
 AGE_RECIPIENT='age1replace-with-approved-public-recipient'
 archive=/srv/sigma-backups/sigma-20261023T000000Z.tar.gz
-age -r "$AGE_RECIPIENT" -o "${archive}.age" "$archive"
+sudo age -r "$AGE_RECIPIENT" -o "${archive}.age" "$archive"
+sudo chmod 0600 "${archive}.age"
 ```
 
 For restore, stop the API, initialize a **new empty** volume, restore the
@@ -163,7 +167,9 @@ archive, and validate it before pointing the container at it. Never restore
 over the current data root. Example, as root on the host:
 
 ```sh
-age -d -i /etc/sigma/backup-identity.age -o /srv/sigma-restore/backup.tar.gz /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age
+sudo install -d -o root -g root -m 0700 /srv/sigma-restore
+sudo age -d -i /etc/sigma/backup-identity.age -o /srv/sigma-restore/backup.tar.gz /srv/sigma-backups/sigma-20261023T000000Z.tar.gz.age
+sudo chmod 0600 /srv/sigma-restore/backup.tar.gz
 sudo docker stop sigma-api
 sudo install -d -o 10001 -g 10001 -m 0700 /srv/sigma/data-restored
 sudo python3 ops/data_archive.py restore /srv/sigma-restore/backup.tar.gz /srv/sigma/data-restored --uid 10001 --gid 10001

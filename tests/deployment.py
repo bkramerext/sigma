@@ -90,10 +90,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-deploy-test-") as temporary:
     sample.write_text('{"fixture":true}', encoding="utf-8")
     sample.chmod(0o600)
     archive = root / "backup.tar.gz"
-    backup(data, archive)
+    backup(data, archive, source_uid=os.geteuid())
     assert stat.S_IMODE(archive.stat().st_mode) == 0o600
     restored = root / "restored"
-    restore(archive, restored)
+    restore(archive, restored, uid=os.geteuid(), gid=os.getegid())
     assert (restored / "workspace/project.sigma/project.json").read_text() == '{"fixture":true}'
     assert stat.S_IMODE((restored / "workspace").stat().st_mode) == 0o700
 

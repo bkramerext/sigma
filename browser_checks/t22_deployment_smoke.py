@@ -22,7 +22,7 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("request", lambda request: requests.append(request.url) if "/api/" in request.url else None)
-    page.goto(urljoin(base, "/demo"), wait_until="networkidle")
+    page.goto(urljoin(base, "/demo"), wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Explore a SIGMA research project")).to_be_visible()
     expect(page.get_by_role("heading", name="Counting Pairwise Handshakes")).to_be_visible()
     expect(page.get_by_text("Direct counting", exact=True)).to_be_visible()
@@ -54,7 +54,7 @@ with sync_playwright() as playwright:
     assert any("/api/cloud-demo/" in item for item in requests)
     assert not errors, errors
     page.set_viewport_size({"width": 390, "height": 844})
-    page.reload(wait_until="networkidle")
+    page.reload(wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Counting Pairwise Handshakes")).to_be_visible()
     assert page.locator("body").evaluate("el => el.scrollWidth <= window.innerWidth")
     browser.close()

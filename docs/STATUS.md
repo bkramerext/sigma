@@ -13,21 +13,22 @@ strips browser-provided Cloudflare/identity headers, then injects only its
 configured Access service token. Local SIGMA remains outside the container
 entrypoint and cloud auth remains explicitly enabled by deployment env.
 
-Validation: `./sigma test` passed all existing and deployment scenarios,
-Ruff, formatting, Pyright, frontend typecheck, and production build. Cloudflare
-Worker Node tests passed 4/4. The pinned API image built on Docker 29.5.2
-(linux/arm64), and Wrangler 4.152.0 `deploy --dry-run` read all 73 built
-frontend assets and validated the Worker bindings without contacting a
-Cloudflare account. `ops/container_smoke.sh
-sigma-api:t22-deployment-test` passed deterministic production-mode API
-readiness, anonymous Demo access, Project Audit JSON and Text/HTML/LaTeX
-exports, private read and mutation denial (401), auth-database checksum
-stability across container restart, and fail-closed missing-secret and
-invalid-origin startup. Real Chrome `browser_checks/t22_deployment_smoke.py`
-passed at 1440px and 390px through Wrangler local Worker -> the running API
-container, with no mocked Demo API responses; it exercised the saved Demo,
-the four exports, and private API denials. This is real local browser/backend
-routing evidence, not a live Cloudflare edge/Tunnel/Access deployment check.
+Validation on the integrated branch: `./sigma test` passed all existing and
+deployment scenarios, Ruff, formatting, Pyright (zero diagnostics), frontend
+typecheck, and production build. Cloudflare Worker Node tests passed 4/4. The
+pinned API image built on Docker 29.5.2 (linux/arm64; 26.01 MB build context),
+and Wrangler 4.152.0 `deploy --dry-run` read all 73 built frontend assets and
+validated Worker bindings without contacting a Cloudflare account.
+`ops/container_smoke.sh sigma-api:t22-deployment-final` passed deterministic
+production API readiness, anonymous Demo access, Project Audit JSON and
+Text/HTML/LaTeX exports, private read and mutation denial (401), auth-database
+checksum stability across container restart, and fail-closed missing-secret,
+invalid-origin, and uninitialized-volume startup. Real Chrome
+`browser_checks/t22_deployment_smoke.py` passed at 1440px and 390px through
+Wrangler local Worker -> the running API container, with no mocked Demo API
+responses; it exercised the saved Demo, all four exports, and private API
+denials. This is real local browser/backend routing evidence, not a live
+Cloudflare edge/Tunnel/Access deployment check.
 
 UNVERIFIED: no external Cloudflare account, Google client, public hostname,
 Tunnel, Access policy, durable production host/backup target, actual HTTPS

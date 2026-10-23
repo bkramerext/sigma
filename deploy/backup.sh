@@ -13,5 +13,5 @@ if docker inspect -f '{{.State.Running}}' sigma-api 2>/dev/null | grep -q true; 
 fi
 restart() { if [[ $was_running -eq 1 ]]; then docker start sigma-api >/dev/null; fi; }
 trap restart EXIT
-python3 ops/data_archive.py backup "$root" "$archive"
+python3 ops/data_archive.py backup "$root" "$archive" --source-uid 10001
 echo "Created private data backup at $archive. Encrypt before copying off-host."

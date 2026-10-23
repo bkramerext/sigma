@@ -23,14 +23,15 @@ def _safe_tree(root: Path) -> list[Path]:
     return result
 
 
-def backup(source: Path, destination: Path) -> None:
+def backup(source: Path, destination: Path, *, source_uid: int | None = None) -> None:
     root = source.resolve(strict=True)
     root_info = root.lstat()
     destination_parent = destination.parent.resolve(strict=True)
     parent_info = destination_parent.lstat()
+    expected_source_uid = os.geteuid() if source_uid is None else source_uid
     if (
         not stat.S_ISDIR(root_info.st_mode)
-        or root_info.st_uid != os.geteuid()
+        or root_info.st_uid != expected_source_uid
         or root_info.st_mode & 0o077
         or destination.exists()
         or not stat.S_ISDIR(parent_info.st_mode)
@@ -72,7 +73,7 @@ def restore(
     root_info = root.lstat()
     if (
         not stat.S_ISDIR(root_info.st_mode)
-        or root_info.st_uid != os.geteuid()
+        or root_info.st_uid != (os.geteuid() if uid is None else uid)
         or root_info.st_mode & 0o077
     ):
         raise ValueError("restore destination must be an owned private directory")
@@ -115,6 +116,7 @@ def main() -> int:
     make = subparsers.add_parser("backup")
     make.add_argument("source", type=Path)
     make.add_argument("destination", type=Path)
+    make.add_argument("--source-uid", type=int)
     put = subparsers.add_parser("restore")
     put.add_argument("archive", type=Path)
     put.add_argument("destination", type=Path)
@@ -123,7 +125,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.action == "backup":
-            backup(args.source, args.destination)
+            backup(args.source, args.destination, source_uid=args.source_uid)
         else:
             restore(args.archive, args.destination, uid=args.uid, gid=args.gid)
     except (OSError, tarfile.TarError, ValueError) as exc:

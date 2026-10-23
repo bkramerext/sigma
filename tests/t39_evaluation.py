@@ -9,9 +9,9 @@ from sigma.t39_evaluation import (
     CASES,
     SCORE_AXES,
     blank_review,
-    challenge_manifest,
     capture_session,
     captured_review,
+    challenge_manifest,
     validate_review,
 )
 
@@ -103,16 +103,19 @@ def main() -> None:
                 "output": step_output,
             }
         ],
-        "interventions": [{
-            "id": "intervention-1", "text": challenge,
-            "deliveries": [
-                {
-                    "role": "skeptic",
-                    "status": "acknowledged",
-                    "attempts": [{"step_id": "step-1", "status": "acknowledged"}],
-                }
-            ],
-        }],
+        "interventions": [
+            {
+                "id": "intervention-1",
+                "text": challenge,
+                "deliveries": [
+                    {
+                        "role": "skeptic",
+                        "status": "acknowledged",
+                        "attempts": [{"step_id": "step-1", "status": "acknowledged"}],
+                    }
+                ],
+            }
+        ],
         "artifacts": [
             {
                 "id": "artifact-1",

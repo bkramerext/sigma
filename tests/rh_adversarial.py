@@ -55,9 +55,7 @@ def finite_eta_identity(s: int, m: int) -> bool:
     term = lambda n: Fraction(n) ** (-s)
     alternating = sum(((-1) ** (n - 1) * term(n) for n in range(1, 2 * m + 1)), Fraction())
     ordinary = sum((term(n) for n in range(1, 2 * m + 1)), Fraction())
-    even = Fraction(2) ** (1 - s) * sum(
-        (term(n) for n in range(1, m + 1)), Fraction()
-    )
+    even = Fraction(2) ** (1 - s) * sum((term(n) for n in range(1, m + 1)), Fraction())
     return alternating == ordinary - even
 
 
@@ -69,9 +67,7 @@ def main() -> None:
 
     on_line = (q(HALF, 1), q(HALF, -1))
     off_line = tuple(
-        q(real, sign * HIGH_ZERO)
-        for real in (HALF - QUARTER, HALF + QUARTER)
-        for sign in (-1, 1)
+        q(real, sign * HIGH_ZERO) for real in (HALF - QUARTER, HALF + QUARTER) for sign in (-1, 1)
     )
     roots = on_line + off_line
     assert len(set(roots)) == 6  # Degree six: no additional complex roots.

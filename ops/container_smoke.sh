@@ -3,15 +3,18 @@ set -euo pipefail
 
 tag=${1:-sigma-api:t22-smoke}
 volume="sigma-smoke-$RANDOM-$$"
+empty_volume="sigma-empty-$RANDOM-$$"
 container="sigma-smoke-$RANDOM-$$"
 temporary=$(mktemp -d)
 cleanup() {
   docker rm -f "$container" >/dev/null 2>&1 || true
   docker volume rm "$volume" >/dev/null 2>&1 || true
+  docker volume rm "$empty_volume" >/dev/null 2>&1 || true
   rm -rf "$temporary"
 }
 trap cleanup EXIT
 docker volume create "$volume" >/dev/null
+docker volume create "$empty_volume" >/dev/null
 docker run --rm --user 0 -v "$volume:/var/lib/sigma" --entrypoint /bin/sh "$tag" -c \
   'chown 10001:10001 /var/lib/sigma && chmod 700 /var/lib/sigma && printf "SIGMA durable cloud data volume v1\\n" > /var/lib/sigma/.sigma-deployment-volume-v1 && chown 10001:10001 /var/lib/sigma/.sigma-deployment-volume-v1 && chmod 600 /var/lib/sigma/.sigma-deployment-volume-v1'
 cat > "$temporary/runtime.env" <<'EOF'
@@ -26,7 +29,7 @@ SIGMA_CLOUD_WORKSPACES_ROOT=/var/lib/sigma/workspaces
 SIGMA_CLOUD_DEMO_AUDIT=/app/cloud-demo/handshake-demo-audit.json
 EOF
 chmod 600 "$temporary/runtime.env"
-docker run -d --name "$container" --user 10001:10001 --read-only \
+docker run -d --name "$container" --user 10001:10001 --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 256 \
   --tmpfs /tmp:rw,noexec,nosuid,size=32m -v "$volume:/var/lib/sigma" \
   --env-file "$temporary/runtime.env" -e SIGMA_PERSISTENT_DATA_ROOT=/var/lib/sigma \
   -p 127.0.0.1:18080:8000 "$tag" >/dev/null
@@ -70,4 +73,5 @@ grep -v '^GOOGLE_OIDC_CLIENT_SECRET=' "$temporary/runtime.env" > "$temporary/mis
 if docker run --rm --entrypoint /app/.venv/bin/python --user 10001:10001 -v "$volume:/var/lib/sigma" --env-file "$temporary/missing-secret.env" -e SIGMA_PERSISTENT_DATA_ROOT=/var/lib/sigma "$tag" -m sigma.deployment true > "$temporary/missing.log" 2>&1; then exit 1; else test "$?" = 78; fi
 grep -q 'configuration or persistent storage is invalid' "$temporary/missing.log"
 if docker run --rm --entrypoint /app/.venv/bin/python --user 10001:10001 -v "$volume:/var/lib/sigma" --env-file "$temporary/runtime.env" -e SIGMA_CLOUD_PUBLIC_ORIGIN=http://sigma.example.test -e SIGMA_PERSISTENT_DATA_ROOT=/var/lib/sigma "$tag" -m sigma.deployment true > "$temporary/invalid-origin.log" 2>&1; then exit 1; else test "$?" = 78; fi
-echo "production container checks passed: Demo/exports, private API denial, restart persistence, missing-secret and invalid-origin fail-closed"
+if docker run --rm --entrypoint /app/.venv/bin/python --user 10001:10001 -v "$empty_volume:/var/lib/sigma" --env-file "$temporary/runtime.env" -e SIGMA_PERSISTENT_DATA_ROOT=/var/lib/sigma "$tag" -m sigma.deployment true > "$temporary/missing-volume.log" 2>&1; then exit 1; else test "$?" = 78; fi
+echo "production container checks passed: Demo/exports, private API denial, restart persistence, missing-secret, invalid-origin and missing-volume fail-closed"
