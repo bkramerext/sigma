@@ -71,8 +71,9 @@ not a physical device.
 
 ### T22.5 — Per-user cloud research spending limits (2026-10-23)
 
-Implemented on `feature/t22-5-per-user-spending`, based on current `main`
-`703442c`. Cloud inference now requires valid default per-user and global
+Implemented on `feature/t22-5-per-user-spending`, originally based on `main`
+`703442c` and reconciled with current `main` `dc2f914` (including T21 local
+acceptance). Cloud inference now requires valid default per-user and global
 ceilings configured through `SIGMA_CLOUD_USER_SPEND_CEILING_USD` and
 `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` (both fail closed; each is bounded by
 `$15.00`). `$2.00` is the initial per-user default. SQLite `BEGIN IMMEDIATE`
@@ -122,9 +123,10 @@ diagnostics), frontend typecheck, and production build. Real Chrome
 backend and Vite server; cloud identity, budget, and access-rule responses were
 deterministic browser fixtures. It verified the Access Management allowance
 editor and per-user balance display, exhausted owner budget, and opening a
-saved project. No live or paid provider calls were made. Remaining operational
-verification: deploy with five authorized pilot
-accounts and explicitly configure the approved `$2`/`$15` values before
+saved project. After rebasing onto `dc2f914`, `./sigma test` and the same real
+Chrome scenario passed again. No live or paid provider calls were made.
+Remaining operational verification: deploy with five authorized pilot accounts
+and explicitly configure the approved `$2`/`$15` values before
 enabling cloud inference; hosted deployment and real provider billing were
 intentionally not exercised.
 

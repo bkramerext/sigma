@@ -2,6 +2,7 @@ T22.5 — Per-User Cloud Research Spending Limits
 
 Branch: feature/t22-5-per-user-spending
 Base: 703442cfef6be004e8ed28e46f211ecf151e3f6e (current main at branch creation)
+Reconciled with current main: dc2f914 (T21 local acceptance retained)
 PR: #55 — https://github.com/bkramerext/sigma/pull/55
 Implementation commit: f023fc7d21b7944cd4bfb8d1c5949feadcee64c9 (follow-up for configurable allowance controls and durable account balance visibility)
 
