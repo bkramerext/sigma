@@ -4153,3 +4153,21 @@ reports and UI quality remain **UNVERIFIED**. T39's closure records delivery of
 the evaluation infrastructure, not acceptance of SIGMA's research capability.
 Real-agent validation and any failures found belong in a separate follow-up
 research-quality evaluation ticket rather than being silently counted as MET.
+
+## A17.8 follow-up acceptance preparation (2026-10-23)
+
+The coordinator reviewed the 2026-10-22 A17.8 live/evidence record and
+published an [answer-free independent-discovery acceptance packet](evaluations/a17-8-independent-acceptance-packet.md).
+It defines a fresh-project Maximum Regions trial without copying the
+answer-bearing sample strategy, a pre-run leakage checklist, bounded session
+limits, human proof-assessment anchors, a deterministic distinct-problem
+control, and precise provenance requirements. The packet was **not run** and
+does not contain an evaluator answer key.
+
+**A17.8 remains NOT ACCEPTED.** Previously reported criteria 2–5 and 7–8
+retain their documented scope and evidence. Criterion 1 is **UNMET** in the
+earlier contaminated-strategy live run; independence and quality in a fresh
+answer-free run remain **UNVERIFIED**. Criterion 6 is deterministic-only.
+No new provider calls or model fees were incurred. The coordinator has GitHub
+repository access but not access to the running local SIGMA session/provider.
+Do not treat protocol creation or T39 tooling closure as live-agent acceptance.
