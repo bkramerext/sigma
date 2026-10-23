@@ -695,7 +695,8 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Back to Export Project</button></div></header>
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
-      <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong> · one provider call · up to 12,000 output tokens for API-key mode. No research session will be started.</p>
+      <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
+      <p className="settings-hint"><strong>Limits:</strong> complete evidence snapshot up to 100,000 bytes; larger snapshots are rejected without omitting evidence. One provider call, up to 12,000 output tokens in API-key mode, a 1 MB response cap, and a 120-second timeout. Up to 50 saved versions, each capped at 12 MB including its PDF.</p>
       <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
       {busy && <p role="status" aria-live="polite">{phase}</p>}
       {error && <p role="alert" className="error">{error}</p>}
