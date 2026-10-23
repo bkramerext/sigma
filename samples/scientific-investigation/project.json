@@ -2,7 +2,7 @@
   "schema_version": 6,
   "id": "a7d72eb8-95c5-4e48-9d6b-96b63c7c7b6d",
   "title": "Investigate an Unexpected Oscillation in a Controlled Experiment",
-  "problem": "A laboratory reports a repeatable-looking oscillation in a precision sensor after a new control algorithm was deployed. Raw observations, calibration records, environmental logs, and software version history have not yet been supplied. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
+  "problem": "Difficulty: Medium.\n\nA laboratory reports a repeatable-looking oscillation in a precision sensor after a new control algorithm was deployed. Raw observations, calibration records, environmental logs, and software version history have not yet been supplied. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
   "events": [
     {
       "sequence": 1,
@@ -14,6 +14,5 @@
   "research_mode": "physics",
   "active_order": [],
   "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "medium"
+  "reasoning_effort": "high"
 }
