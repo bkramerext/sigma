@@ -3658,14 +3658,24 @@ async def test_response_transport_and_parsed_bounds(path: Path):
     assert failed["status"] == "failed" and "1 MB safety bound" in failed["message"]
     assert failed["artifacts"] == []
 
+    token_limit = 12_000
+
     async def oversized_parsed(request):
         response = provider_response(investigation(1))
         response["output"][0]["content"][0]["text"] += " " * 70_000
         return httpx.Response(200, json=response)
 
+    oversized_text = json.dumps(investigation(1)) + " " * 70_000
+    assert len(oversized_text.encode("utf-8")) > token_limit * 4
+    record = {
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "mode": credential["mode"],
+        "identity_hash": research_sessions._digest(credential["identity"]),
+        "output_token_limit": token_limit,
+    }
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
-        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -3673,12 +3683,15 @@ async def test_response_transport_and_parsed_bounds(path: Path):
             ),
         ),
     ):
-        started = await research_sessions.start_session(
-            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        accepted = await research_sessions._call(
+            record,
+            "investigator",
+            {"problem": view.project.problem, "strategy": strategy.approach},
         )
-        failed = await wait_for(path, started["id"])
-    assert failed["status"] == "failed" and "per-call" in failed["message"], failed["message"]
-    assert failed["artifacts"] == []
+    assert accepted == (
+        investigation(1),
+        {"input_tokens": 120, "cached_input_tokens": 20, "output_tokens": 80},
+    )
 
 
 async def test_changed_bindings_pause_before_provider(path: Path):

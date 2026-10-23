@@ -66,6 +66,27 @@ research-session browser scenario was attempted but did not reach its result
 assertions: its isolated fixture ended the session at 0/30 calls, so its
 expected research artifacts were unavailable. No paid provider call was made.
 
+## PR #35 review follow-up (2026-10-23)
+
+The A17 0/30 stop came from the cost-limit input, not a provider or
+session-engine regression. With a native number field, entering invalid `0`
+and clearing it in the same draft left `$0.01` in the submitted settings and
+correctly blocked the first provider call. The field now uses decimal text
+input with the existing explicit validation, so clearing an invalid value
+persists as unlimited. A17 confirms the saved value is null. The expected
+session usage is 6/30 calls across three rounds.
+
+The response guard now trusts reported output-token usage when it is within the
+configured limit, regardless of UTF-8 byte length. A separate 1 MB transport
+ceiling still rejects malformed or unexpectedly large responses before
+parsing. A regression scenario confirms a response larger than four times the
+token allowance is accepted when reported usage is in bounds, while the
+existing transport-ceiling scenario still rejects oversized bodies.
+
+Validation: `uv run --locked --no-sync python tests/research_sessions.py`,
+real Chrome `browser_checks/a17_research.py` against a fresh isolated fixture,
+and `./sigma test` all passed. No paid provider calls were made.
+
 ## T20 project-header LaTeX shortcut reconciliation
 
 Reconciled the existing direct paper action with the project header. The initial

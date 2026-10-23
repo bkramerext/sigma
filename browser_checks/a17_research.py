@@ -31,6 +31,7 @@ with sync_playwright() as playwright:
     errors = []
     starts = []
     start_payloads = []
+    limit_updates = []
     provider_calls = []
     legacy_titleless = {"enabled": False}
     legacy_outcome = {"enabled": False}
@@ -43,6 +44,14 @@ with sync_playwright() as playwright:
         lambda request: (
             (starts.append(request.url), start_payloads.append(request.post_data_json))
             if request.url.endswith("/api/projects/research-sessions/start")
+            else None
+        ),
+    )
+    page.on(
+        "request",
+        lambda request: (
+            limit_updates.append(request.post_data_json)
+            if request.method == "PUT" and request.url.endswith("/api/projects/research-limits")
             else None
         ),
     )
@@ -362,10 +371,12 @@ with sync_playwright() as playwright:
     assert page.evaluate("window.scrollY") == locked_scroll
     assert limits_panel.evaluate("e => e.scrollTop") > 0
     cost_input = settings.get_by_label("Maximum estimated session cost (USD)")
+    expect(cost_input).to_have_value("")
     cost_input.fill("0")
     expect(settings.get_by_role("alert").filter(has_text="$0.01 to $100.00")).to_be_visible()
     expect(save_settings).to_be_disabled()
     cost_input.fill("")
+    expect(cost_input).to_have_value("")
     expect(save_settings).to_be_enabled()
     limits_box = settings.bounding_box()
     assert (
@@ -404,6 +415,10 @@ with sync_playwright() as playwright:
     expect(settings).to_be_hidden()
     saved_limits = page.evaluate("async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }")
     assert saved_limits["session_duration_minutes"] == 7 * 24 * 60, saved_limits
+    assert saved_limits["maximum_estimated_cost_usd"] is None, {
+        "saved": saved_limits,
+        "updates": limit_updates,
+    }
     page.get_by_role("button", name="Project settings", exact=True).click()
     settings = page.get_by_role("dialog", name="Settings")
     settings.get_by_role("tab", name="Limits").click()
@@ -787,7 +802,7 @@ with sync_playwright() as playwright:
         assert abs(item_rect - summary_rect) < 1.5, (summary_selector, summary_rect, item_rect)
     page.screenshot(path="/tmp/sigma-a177-after-session-card.png")
     expect(research).to_contain_text("Cycle 3 of 3")
-    expect(research).to_contain_text("6/6 calls")
+    expect(research).to_contain_text("6/30 calls")
     expect(first_session.locator(".session-status")).to_have_text("ended")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     artifacts = research.locator("section.research-artifacts")

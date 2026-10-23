@@ -36,6 +36,7 @@ MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
 MAX_DEFERRED_PEER_HANDOFFS = 24
 MAX_RECORDED_HANDOFF_OVERFLOW = 8
 MAX_AGENT_CONTEXT_BYTES = 256_000
+MAX_RESEARCH_RESPONSE_BYTES = 1_000_000
 CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
@@ -2032,7 +2033,7 @@ async def _call(
         collected = bytearray()
         async for chunk in response.aiter_bytes():
             collected.extend(chunk)
-            if len(collected) > 1_000_000:
+            if len(collected) > MAX_RESEARCH_RESPONSE_BYTES:
                 raise ProjectError("Research provider transport exceeded the 1 MB safety bound")
         body = bytes(collected)
         if response.status_code != 200:
@@ -2075,12 +2076,9 @@ async def _call(
         token_limit = record.get("output_token_limit", 4000)
         usage = _usage(raw)
         reported_output_tokens = usage.get("output_tokens") if usage else None
-        response_bytes = len(texts[0].encode("utf-8"))
-        if (
-            reported_output_tokens is not None and reported_output_tokens > token_limit
-        ) or response_bytes > token_limit * 4:
+        if reported_output_tokens is not None and reported_output_tokens > token_limit:
             raise ProjectError(
-                "Provider output exceeded the configured per-call token limit or conservative response-size bound; no artifact was committed"
+                "Provider output exceeded the configured per-call token limit; no artifact was committed"
             )
         try:
             data = json.loads(texts[0])
