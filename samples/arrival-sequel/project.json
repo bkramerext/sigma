@@ -1,0 +1,111 @@
+{
+  "schema_version": 5,
+  "id": "f1cc8b4e-3d41-4a84-a9d1-2a74a84ab9b5",
+  "title": "Sequel to Stories of Your Life / Arrival",
+  "problem": "Develop and critically assess an original sequel to Ted Chiang's 'Story of Your Life' and the film 'Arrival'. This is a literary design investigation, not a claim to be Chiang's writing. Combine the novella's philosophical depth (Fermat's principle, Heptapod B, the completed whole shaping its parts, foreknowledge and agency) with the film's intimate Louise narrative, geopolitical stakes, and the heptapods' promise of a favor in 3,000 years. Span punctuated centuries of humanity's difficult evolution, changing interpretations of the promise, and rare hidden human prescients whose foresight begins at roughly 50 years and may extend to centuries but is always incomplete. Explore the possibility that heptapod semagraphic language is limiting rather than superior and that humanity eventually surpasses them. Include a consequential discovery that destabilizes the original arrangement, and a cooperative 142-year multigenerational interstellar journey to the heptapods, followed by settlement and renewed translation. Test a climax in which humanity learns the heptapods are approaching the end of a 100-million-year existence and are transferring an unknown responsibility. Preserve ambiguity and a satisfying ending in which the reader knows only what humanity knows; do not depend on a third book for resolution. Evaluate multiple possible plot structures, protagonists across centuries, narrative suspense, thematic consistency, emotional stakes, and risks of retreading Arrival. Distinguish established canon, prior brainstorming premises, and new inventions; do not present speculative plot choices as canon. Produce a defensible sequel architecture with clear unresolved questions and concrete revision recommendations.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T18:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T18:00:00+00:00",
+      "strategy_id": "fb172c01-6a62-4b61-912a-4560b0000001"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T18:00:00+00:00",
+      "strategy_id": "fb172c01-6a62-4b61-912a-4560b0000002"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T18:00:00+00:00",
+      "strategy_id": "fb172c01-6a62-4b61-912a-4560b0000003"
+    },
+    {
+      "sequence": 5,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T18:00:00+00:00",
+      "strategy_id": "fb172c01-6a62-4b61-912a-4560b0000004"
+    },
+    {
+      "sequence": 6,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T18:00:00+00:00",
+      "strategy_id": "fb172c01-6a62-4b61-912a-4560b0000005"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "fb172c01-6a62-4b61-912a-4560b0000001",
+      "title": "The 3,000-year narrative spine",
+      "approach": "Compare two or three punctuated-century narrative architectures from the arrival to the promised favor. Track changes in institutions, beliefs, human agency, and what each era thinks the heptapods meant. Test whether the reader can follow stakes and causality without an exposition-heavy chronology.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T18:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Produce a beat map with at least five pivotal eras, each changing the central mystery.",
+      "provenance": null
+    },
+    {
+      "id": "fb172c01-6a62-4b61-912a-4560b0000002",
+      "title": "Prescience, agency, and hidden custodians",
+      "approach": "Define internally consistent limits for rare human prescience: initially about 50 years, sometimes expanding to centuries, never omniscience. Test how secret prescients could preserve a mission without making human choices or suspense meaningless. Compare the novella's completed-action logic with ordinary temporal causality.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T18:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Produce explicit rules, two hard counterexamples, and a character decision with real cost.",
+      "provenance": null
+    },
+    {
+      "id": "fb172c01-6a62-4b61-912a-4560b0000003",
+      "title": "The 142-year voyage",
+      "approach": "Design a plausible multigenerational cooperative voyage and its aftermath: why launch, who commits, how governance and culture survive, what arrival changes, and why translation resumes only after years of settlement. Keep emotional character stakes visible amid centuries.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T18:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Produce a voyage conflict arc, generational handoff, and arrival reversal.",
+      "provenance": null
+    },
+    {
+      "id": "fb172c01-6a62-4b61-912a-4560b0000004",
+      "title": "Heptapod limitation and the final discovery",
+      "approach": "Test competing explanations for Heptapod B and the 3,000-year favor, including the provocative possibility that their language is a limitation and humans surpass them. Evaluate the discovery that heptapods near the end of a 100-million-year existence and intend to transfer an unknown responsibility. Check that the reveal reinterprets earlier scenes rather than merely adding a bigger mystery.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T18:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Produce three competing reveals, their thematic consequences, and strongest objections.",
+      "provenance": null
+    },
+    {
+      "id": "fb172c01-6a62-4b61-912a-4560b0000005",
+      "title": "Ending, intimacy, and thematic integrity",
+      "approach": "Evaluate endings that preserve ambiguity without feeling evasive. Connect the long historical arc to intimate Louise-like emotional stakes while avoiding repetition or a counterfeit authorial voice. Test whether the reader ends beside humanity, ignorant of the full future but with a meaningful completed story.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T18:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Produce a proposed final sequence, an earned-resolution checklist, and adversarial critique.",
+      "provenance": null
+    }
+  ],
+  "research_mode": "default",
+  "active_order": [
+    "fb172c01-6a62-4b61-912a-4560b0000001",
+    "fb172c01-6a62-4b61-912a-4560b0000002",
+    "fb172c01-6a62-4b61-912a-4560b0000003",
+    "fb172c01-6a62-4b61-912a-4560b0000004",
+    "fb172c01-6a62-4b61-912a-4560b0000005"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}
