@@ -8,7 +8,7 @@
 - **Services:** Browser, CLI, API, and scenarios share typed Python application services.
 - **Stack:** Python/uv, FastAPI, argparse, React/TypeScript/Vite.
 - **Research direction:** Strategies and forks, independent evaluation, bounded scheduling, human controls.
-- **Testing:** Executable scenarios and real browser checks; agent runtime deferred.
+- **Testing:** Executable scenarios and real browser checks; bounded research agents are active, while arbitrary code execution was deferred until A19.
 
 ## Storage
 
@@ -366,16 +366,17 @@ the sidebar collapse preference is kept locally across navigation.
 ## A19: isolated research Python execution
 
 Provide `sigma.python_sandbox.execute_research_code` and a local project API as
-the stable seam for A18 agents. Keep A18 orchestration untouched in this PR per
-the concurrent-work instruction; later integration must pass code and returned
-execution IDs/results between Investigator, Skeptic, and saved session artifacts.
-Each call runs once in a locally built image resolved to its immutable image ID,
-with no network, host mounts, or automatic image pull. One backend process
-admits at most one run to bound aggregate local resource use. Persist the exact
-code, output, exit state, image ID, limits, and optional session/strategy/cycle
-references under a private project sidecar. Execution results are finite
-computation evidence, not mathematical verification. Lean remains a separate
-optional checker as specified by `LEAN_VERIFICATION_PLAN.md`.
+the stable seam for A18 agents. The Investigator may propose one optional
+program, which runs once before the Skeptic review; the Skeptic receives the
+code and its returned status, execution ID, output, and artifact metadata. The
+record is linked from the role step and saved research artifact. Each call runs
+once in a locally built image resolved to its immutable image ID, with no
+network, host mounts, or automatic image pull. One backend process admits at
+most one run to bound aggregate local resource use. Persist the exact code,
+output, exit state, image ID, limits, captured-file metadata, and optional
+session/strategy/cycle references under a private project sidecar. Execution
+results are finite computation evidence, not mathematical verification. Lean
+remains a separate optional checker as specified by `LEAN_VERIFICATION_PLAN.md`.
 
 Use a standalone Docker proof of concept first, then the same fixed isolation
 boundary in the SIGMA service. Pin the Python base image by digest and pin all
