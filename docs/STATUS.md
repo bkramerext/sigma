@@ -3638,6 +3638,86 @@ The full `./sigma test` then passed on the rebased tree, including backend
 regressions, Ruff, Pyright (0 errors/warnings/informations), frontend typecheck
 and the Vite production build. No live provider calls were made.
 
+## T29 Human intervention during active research (2026-10-23)
+
+Added a bounded `POST /api/projects/research-sessions/{id}/interventions` service
+and a compact panel in each session. Users can submit an objection, evidence note,
+or priority, targeting selected strategies and Investigator/Skeptic roles. The
+session accepts at most 24 guidance entries and retains at most eight rejected
+attempts in its bounded audit. Empty and malformed targets are rejected; guidance
+does not change the model, billing mode, tool access, token/call budget, deadline,
+or saved findings.
+
+Delivery is serialized with worker step creation and pause/stop transitions using
+the per-session state lock. Each targeted role receives guidance only when a
+subsequent call is prepared. A call already in flight retains its original prompt.
+The step stores intervention IDs; the intervention stores strategy, role, actual
+cycle, step, dispatch/acknowledgment times, uptake, rationale, and repeated
+attempts. Agent output must acknowledge each delivered ID exactly once or that
+branch fails without committing that response. Interrupted calls are recorded and
+re-queued only for a later explicit resume; provider failures remain
+unacknowledged and are not automatically retried. Supersession is allowed only
+before any delivery attempt and only with identical targets.
+
+Deterministic regression evidence in `tests/research_sessions.py`:
+
+- `test_concurrent_human_guidance_is_delivered_and_attributed` holds two
+  Investigator calls concurrently, submits strategy-specific Skeptic guidance,
+  and verifies only the targeted later Skeptic prompt receives it. The guided
+  Skeptic changes its next question, the artifact cites the review ID, and the
+  saved step/event/strategy/cycle attribution matches. Concurrent peer steps stay
+  unguided and both branches complete.
+- `test_intervention_delivery_pause_resume_keeps_attempt_provenance` pauses an
+  in-flight guided provider request, confirms the interrupted call is not
+  committed, resumes explicitly, and verifies the prior interrupted attempt and
+  new acknowledged attempt remain distinct while earlier findings are retained.
+- `test_intervention_recovery_supersession_and_rejection` simulates a persisted
+  running call and backend recovery, checks interruption-to-queued recovery,
+  pre-delivery supersession, the 24-entry bound, and terminal-session rejection.
+
+`browser_checks/t29_intervention.py` uses real Chrome with the isolated fixture:
+it submits during an active delayed call, verifies the call count does not change
+on submission, checks per-role acknowledgment and audit persistence, and checks
+desktop and 390px layouts. It passed; screenshots are
+`/tmp/sigma-t29-intervention-desktop.png` and
+`/tmp/sigma-t29-intervention-mobile.png`.
+The deterministic provider fixture acknowledges only IDs in its supplied prompt.
+No live provider calls were made. `./sigma test` passed, including the CLI smoke
+check, Ruff, format check, Pyright (zero errors/warnings), frontend typecheck and
+production build (T29 adds no CLI command).
+
+Limitations: acknowledgment and uptake are structured agent self-reports, not
+independent evidence that a user-supplied claim is true. Guidance is not injected
+retroactively into an already-dispatched call. Paused/stopped sessions retain
+queued guidance for a later explicit resume. Old legacy sessions without
+strategy-bound execution records reject guidance. Invalid requests rejected by
+HTTP schema validation do not create session audit entries; accepted and
+service-level rejected requests are audited within the configured cap.
+
+### T29 integration with T28 and T21 on current main (2026-10-23)
+
+Integrated current main at `317c5c46` after T28 merged, then incorporated the
+newer `ef3aadcc` T21 alpha acceptance update and the documentation-only
+`e033173` and `e58eccd` software-factory protocol commits. Latest base
+`e58eccd525e475a53319364b1eb8175d711f66f2` was merged at tested head
+`301ca1762983cdcb3aad4ed1c1548c4e9b0dd03f`. Conflict resolution preserves
+T28's SageMath execution records, bounded artifact inspections, and required
+computation citations alongside T29's intervention reviews and per-step
+provenance. The provider fixture now returns both required citation and
+intervention-review fields. On the latest merged tree, `./sigma test` passed,
+including research-session concurrency/recovery, T28 citation and artifact
+regressions, CLI smoke, Ruff, format check, Pyright (0
+errors/warnings/informations), frontend typecheck, and production build.
+
+The first Chrome run correctly exposed that the deterministic provider fixture
+did not yet emit T28's required empty computation-citation list when no tool was
+used. The fixture now emits it, and project names are unique across reruns. The
+real Chrome T29 check then passed at desktop and 390px mobile: guidance submitted
+during an in-flight call made no extra call, subsequent target-role acknowledgments
+and audit provenance persisted, and the mobile layout had no horizontal overflow.
+The real Chrome check passed again after the latest main merge, at desktop and
+390px mobile. No live provider calls were made.
+
 ## T30: Create Samples from exported projects (2026-10-23)
 
 Added the curator command `sigma make_sample exported_project.json --name
@@ -3693,6 +3773,26 @@ calls were used. Final verification on the T30 branch passed:
 
 The suite emitted existing Starlette/httpx deprecation warnings; they did not
 fail tests. No live or paid provider calls were made.
+
+### T29 refresh against PR #40 / current main (2026-10-23)
+
+Merged latest main `7f84d40d7e2cee8ed14423384362319ba6485580` at tested
+integration head `46e5ce5928481a2ea4dac766ecb7f960592ce728`. This brings in PR #40's
+sample-from-export work plus the intervening software-factory and T22 acceptance
+documents. Conflicts were limited to `TICKET_TRACKING.md` and `docs/STATUS.md`;
+both T29's open-review entry and its full evidence section were kept alongside
+T30's tracking and evaluation. The automatically merged code retains the T29
+intervention endpoint, agent prompt delivery/acknowledgment validation, UI, and
+regression tests. `./sigma test` passed on the integrated tree, including T29
+concurrency/recovery, T30 exported-sample import, computational evidence, CLI
+smoke, Ruff, format check, Pyright (0 errors), frontend typecheck, and production
+build.
+
+The real Chrome `browser_checks/t29_intervention.py` check also passed on that
+tree at desktop and 390px mobile. It verified guidance submitted during an
+in-flight request causes no extra call, the targeted agent-step acknowledgment
+and provenance persist, and the mobile UI has no horizontal overflow. No live
+provider calls were made.
 
 ## T22.2 PR #37 review corrections on current main (2026-10-23)
 

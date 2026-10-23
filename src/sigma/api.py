@@ -113,6 +113,17 @@ class ResearchControlRequest(OpenRequest):
     action: str = Field(min_length=4, max_length=6)
 
 
+class ResearchInterventionRequest(OpenRequest):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["objection", "evidence", "priority"]
+    text: str = Field(min_length=1, max_length=1200)
+    strategy_ids: list[str] | None = Field(default=None, min_length=1, max_length=12)
+    agent_roles: list[Literal["investigator", "skeptic"]] = Field(
+        default_factory=lambda: ["investigator", "skeptic"], min_length=1, max_length=2
+    )
+    supersedes_intervention_id: str | None = Field(default=None, max_length=36)
+
+
 class ResearchSessionRemoveRequest(OpenRequest):
     expected_updated_at: str = Field(min_length=1, max_length=64)
 
@@ -232,6 +243,19 @@ async def research_start_view(body: ResearchStartRequest):
 @app.post("/api/projects/research-sessions/{session_id}/control")
 async def research_control_view(session_id: str, body: ResearchControlRequest):
     return await research_sessions.control_session(body.path, session_id, body.action)
+
+
+@app.post("/api/projects/research-sessions/{session_id}/interventions")
+async def research_intervention_view(session_id: str, body: ResearchInterventionRequest):
+    return await research_sessions.submit_intervention(
+        body.path,
+        session_id,
+        body.kind,
+        body.text,
+        body.strategy_ids,
+        body.agent_roles,
+        body.supersedes_intervention_id,
+    )
 
 
 @app.delete("/api/projects/research-sessions/{session_id}")

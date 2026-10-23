@@ -158,6 +158,18 @@ desktop/mobile layout, and unchanged strategy data. It makes no live provider
 call. Screenshots are written to `/tmp/sigma-a171-desktop.png` and
 `/tmp/sigma-a171-mobile.png`.
 
+## T29 Human intervention during research
+
+With the normal UI on port 5173 and a fresh isolated `provider_fixture:app` on
+port 8002, run `uv run --with playwright python
+browser_checks/t29_intervention.py`. This real-Chrome check submits an objection
+while a fixture-backed session is running, verifies submission makes no provider
+call, checks per-target acknowledgment/audit provenance, and checks the narrow
+mobile layout. The deterministic service scenarios in `tests/research_sessions.py`
+add concurrent strategy, safe-boundary delivery, pause/resume, restart recovery,
+supersession and terminal rejection coverage. These are local fixtures and make no
+live provider calls. Screenshot: `/tmp/sigma-t29-intervention-mobile.png`.
+
 ## A20 AI-authored research paper
 
 Start the current Vite frontend on port 5174 and the isolated mock provider/API

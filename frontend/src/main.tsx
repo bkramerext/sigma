@@ -74,7 +74,9 @@ type ProjectView = {
 
 type ResearchArtifact = { id: string; session_id?: string; strategy_id?: string; strategy_cycle?: number; sequence: number; claim_or_question: string; method: string; assumptions: string[]; evidence_status: string; skeptic_response: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; note: string; investigator_output: Record<string, unknown>; skeptic_output: Record<string, unknown> };
 type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?: string | null; message: string };
-type ResearchStep = { id: string; strategy_id?: string | null; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; failure_kind?: string | null; provider_http_status?: number | null; interruption_reason?: string | null; context_artifact_ids?: string[]; prior_session_artifact_ids?: string[]; peer_strategy_artifact_ids?: string[]; peer_handoff_artifact_ids?: string[]; peer_handoff_ids?: string[]; output?: Record<string, unknown> };
+type ResearchStep = { id: string; strategy_id?: string | null; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; failure_kind?: string | null; provider_http_status?: number | null; interruption_reason?: string | null; context_artifact_ids?: string[]; prior_session_artifact_ids?: string[]; peer_strategy_artifact_ids?: string[]; peer_handoff_artifact_ids?: string[]; peer_handoff_ids?: string[]; human_intervention_ids?: string[]; output?: Record<string, unknown> };
+type InterventionDelivery = { strategy_id: string; role: 'investigator' | 'skeptic'; status: string; target_cycle?: number | 'next_eligible'; acknowledged_at?: string; uptake?: string; rationale?: string; attempts: { step_id: string; cycle?: number; status: string; delivered_at: string; acknowledged_at?: string; uptake?: string; rationale?: string }[] };
+type ResearchIntervention = { id: string; kind: 'objection' | 'evidence' | 'priority'; text: string; status: string; submitted_at: string; target_strategy_ids: string[]; target_roles: ('investigator' | 'skeptic')[]; rejection_reason?: string; superseded_by?: string; deliveries: InterventionDelivery[] };
 type PriorSessionFinding = { id: string; sequence: number; claim_or_question: string; method: string; evidence_status: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; session_id: string; session_number: number; strategy_id: string; strategy_title: string };
 type ResearchStrategyRun = { strategy_id: string; strategy_title: string; status: string; current_action: string; current_question: string; cycle: number; calls_used: number; artifacts: string[]; reason?: string | null };
 type PortfolioStrategyAction = { strategy_id: string; strategy_title: string; action: string; rationale: string; basis_artifact_ids: string[]; next_question: string };
@@ -85,7 +87,7 @@ type OutcomeMetric = { label: string; value: string; detail?: string };
 type ResearchOutcomeMetrics = { operational: OutcomeMetric[]; research_quality: OutcomeMetric[]; sources: { session_id: string | null; step_ids: string[]; artifact_ids: string[]; execution_ids: string[]; strategy_ids: string[] } };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { id: string; project_id?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { id: string; project_id?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type DurationUnit = 'minutes' | 'hours' | 'days';
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_value: string; session_duration_unit: DurationUnit; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
@@ -215,15 +217,24 @@ function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
 }
 
-function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onViewPriorSession, onForkFromFindings }: {
+function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
+  path: string;
   session: ResearchSession; expanded: boolean; busy: boolean;
   onViewStrategy: (id: string) => void;
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
+  onInterventionSaved: (sessionId: string) => Promise<void>;
 }) {
   const [outcomeMarkdown, setOutcomeMarkdown] = useState(false);
   const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
+  const [interventionKind, setInterventionKind] = useState<ResearchIntervention['kind']>('priority');
+  const [interventionText, setInterventionText] = useState('');
+  const [interventionStrategy, setInterventionStrategy] = useState('*');
+  const [targetInvestigator, setTargetInvestigator] = useState(true);
+  const [targetSkeptic, setTargetSkeptic] = useState(true);
+  const [interventionBusy, setInterventionBusy] = useState(false);
+  const [interventionError, setInterventionError] = useState('');
   useEffect(() => {
     setActivityExpanded(session.status === 'queued' || session.status === 'running');
   }, [session.status]);
@@ -234,6 +245,33 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
   const metricSources = session.outcome.metrics?.sources;
   const artifactNumber = (id: string) => session.artifacts.find(artifact => artifact.id === id)?.sequence;
   const idList = (ids: string[] | undefined) => ids?.length ? ids.map(id => `Artifact ${artifactNumber(id) ?? '?'} · ${id}`).join(', ') : 'None recorded';
+  const targetStrategies = session.strategy_runs ?? [{ strategy_id: session.strategy_id, strategy_title: session.strategy_title }];
+  const supportsIntervention = !!session.strategy_runs?.length;
+  const interventionCount = session.interventions ?? [];
+  const interventionWindowOpen = ['queued', 'running', 'paused', 'stopped'].includes(session.status);
+  const canIntervene = supportsIntervention && interventionWindowOpen
+    && interventionCount.filter(item => item.status !== 'rejected').length < 24
+    && interventionCount.length < 32;
+  async function submitIntervention(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const agentRoles = [targetInvestigator ? 'investigator' : null, targetSkeptic ? 'skeptic' : null].filter((role): role is 'investigator' | 'skeptic' => role !== null);
+    if (!interventionText.trim() || !agentRoles.length) return;
+    setInterventionBusy(true); setInterventionError('');
+    try {
+      await post<ResearchSession>(`research-sessions/${session.id}/interventions`, {
+        path,
+        kind: interventionKind,
+        text: interventionText,
+        strategy_ids: interventionStrategy === '*' ? targetStrategies.map(item => item.strategy_id) : [interventionStrategy],
+        agent_roles: agentRoles,
+      });
+      setInterventionText('');
+      await onInterventionSaved(session.id);
+    } catch (cause) {
+      setInterventionError(errorMessage(cause));
+      reportRequestFailure(errorMessage(cause));
+    } finally { setInterventionBusy(false); }
+  }
   const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
@@ -243,6 +281,27 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-general"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids?.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>{!!session.outcome.caveats?.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
+
+      {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <section className="human-interventions" aria-label="Human research guidance">
+        <h4>Human guidance</h4>
+        {!supportsIntervention && <p className="human-intervention-note">Guidance is unavailable for this legacy session because it has no strategy-bound execution steps.</p>}
+        {supportsIntervention && interventionWindowOpen && interventionCount.filter(item => item.status !== 'rejected').length >= 24 && <p className="human-intervention-note">This session reached its 24-guidance limit.</p>}
+        {canIntervene && <form className="human-intervention-form" onSubmit={submitIntervention}>
+          <label>Type<select value={interventionKind} onChange={event => setInterventionKind(event.target.value as ResearchIntervention['kind'])}><option value="priority">Priority</option><option value="objection">Objection</option><option value="evidence">New evidence</option></select></label>
+          <label>Strategy<select value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
+          <fieldset><legend>Send to</legend><label><input type="checkbox" checked={targetInvestigator} onChange={event => setTargetInvestigator(event.target.checked)}/> Investigator</label><label><input type="checkbox" checked={targetSkeptic} onChange={event => setTargetSkeptic(event.target.checked)}/> Skeptic</label></fieldset>
+          <label className="human-intervention-text">Guidance<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a bounded research instruction or evidence note."/></label>
+          <div className="human-intervention-submit"><small>{interventionText.length}/1,200 · delivered at a later agent step; no call is made on submit.</small><button type="submit" className="text-view-link" disabled={interventionBusy || busy || !interventionText.trim() || (!targetInvestigator && !targetSkeptic)}>{interventionBusy ? 'Queueing…' : 'Send guidance'}</button></div>
+          {interventionError && <p className="error" role="alert">{interventionError}</p>}
+          {session.status === 'paused' || session.status === 'stopped' ? <p className="human-intervention-note">Guidance is saved for delivery if you resume this session.</p> : <p className="human-intervention-note">Already-running calls keep their original prompts. Existing findings are never rewritten.</p>}
+        </form>}
+        {!!session.interventions?.length && <ol className="human-intervention-history">{session.interventions.slice(-8).reverse().map(item => <li key={item.id}>
+          <div><strong>{item.kind.replaceAll('_', ' ')}</strong><span>{item.status.replaceAll('_', ' ')}</span></div>
+          <p>{item.text}</p>
+          {item.rejection_reason && <small>{item.rejection_reason}</small>}
+          {!!item.deliveries.length && <ul>{item.deliveries.map((delivery, index) => <li key={`${delivery.strategy_id}:${delivery.role}:${index}`}><span>{targetStrategies.find(strategy => strategy.strategy_id === delivery.strategy_id)?.strategy_title ?? 'Strategy'} · {delivery.role}{delivery.target_cycle ? ` · cycle ${delivery.target_cycle === 'next_eligible' ? 'pending' : delivery.target_cycle}` : ''}</span><span>{delivery.status}{delivery.uptake ? ` · ${delivery.uptake}` : ''}</span>{delivery.rationale && <small>{delivery.rationale}</small>}{delivery.attempts.length > 1 && <small>{delivery.attempts.length} delivery attempts; interrupted attempts remain in the audit.</small>}</li>)}</ul>}
+        </li>)}</ol>}
+      </section>}
 
       <div className="outcome-subsections">
         <details className="outcome-subsection">
@@ -451,6 +510,11 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     finally { setBusy(false); }
   }
 
+  const interventionSaved = useCallback(async (sessionId: string) => {
+    await load(sessionId);
+    setAnnouncement('Human guidance queued for a later agent step. No provider call was made.');
+  }, [load]);
+
   function requestResume(target: ResearchSession) {
     revealSession(target.id);
     void control('resume', target);
@@ -544,7 +608,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
               </div>
             </div>
-            <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings}/>
+            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
