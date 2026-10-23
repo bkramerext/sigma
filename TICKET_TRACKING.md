@@ -51,8 +51,9 @@
 | T25 | Outcome hierarchy and collapsible subsections | Implemented; open for review | Gray · ChatGPT authored ticket · [PR #19](https://github.com/bkramerext/sigma/pull/19) |
 | T26 | SageMath agent-aware sandboxed execution, Python parity | Implemented and validated; review pending | Green · ChatGPT authored ticket · [PR #24](https://github.com/bkramerext/sigma/pull/24) |
 | T27 | Research intelligence, cross-strategy learning and agent guidance | Merged, engineering done | Blue · [PR #18](https://github.com/bkramerext/sigma/pull/18) |
-| T28 | Rich computational artifact inspection and cross-session evidence | Implemented; PR open for review | Green · ChatGPT authored ticket |
-| T29 | Human intervention during active concurrent research | Pending after T27 | Blue · ChatGPT authored ticket |
+| T28 | Rich computational artifact inspection and cross-session evidence | Merged, engineering done | Green · ChatGPT authored ticket · [PR #36](https://github.com/bkramerext/sigma/pull/36) |
+| T29 | Human intervention during active concurrent research | Implementation open for review | Blue · ChatGPT authored ticket · [PR #39](https://github.com/bkramerext/sigma/pull/39) |
+
 | T30 | Create Samples entries from exported projects | Implemented; PR open for review | Green · ChatGPT assignment |
 
 ### T23.1 scope
@@ -95,7 +96,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | Real cross-strategy reasoning and handoff uptake not demonstrated | Blue | T27 implementation; T17.8 acceptance |
 | Multi-session improvement of research strategies not demonstrated | Blue | T27 implementation; T17.8 acceptance |
 | False transfer due to domain/assumption mismatch | Blue | T27 adversarial tests; T17.8 acceptance |
-| User intervention during active multi-strategy session not implemented | Blue | T29 (Blue; pending) |
+| User intervention during active multi-strategy session | Blue | Implemented and under review in T29 (PR #39); agent uptake remains self-reported |
 | Revised Python-guidance quality not live validated | Green | T27 guidance; T28 follow-up; T17.8 acceptance |
 | Cross-session computation synthesis not live validated | Green | T28; T17.8 acceptance |
 | Model cannot inspect complete captured binary/plot artifacts | Green | T28 (Green; pending) |
@@ -109,7 +110,7 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 
 | Codex | Last ticket | Current work |
 |---|---|---|
-| Blue | T18 merged ([PR #8](https://github.com/bkramerext/sigma/pull/8)) | T23.1 implementation in [PR #12](https://github.com/bkramerext/sigma/pull/12); reviewed, awaiting integration |
+| Blue | T27 merged ([PR #18](https://github.com/bkramerext/sigma/pull/18)) | T29 implementation in [PR #39](https://github.com/bkramerext/sigma/pull/39); review pending |
 | Green | T24 merged ([PR #13](https://github.com/bkramerext/sigma/pull/13)) | T26 [PR #24](https://github.com/bkramerext/sigma/pull/24) implemented and validated; awaiting review |
 
 **Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. Activity is inferred from reported PR work; current Codex process status is not independently visible.
