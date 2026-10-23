@@ -478,6 +478,17 @@
 .workspace-page .session-outcome > p:first-child { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; color: #f0d1a8; font-size: 15px; }
 .workspace-page .session-outcome > p:first-child strong { color: #e7be8d; }
 .workspace-page .session-outcome ul { margin: 7px 0 0; padding-left: 20px; font-size: 12px; color: #b8c7d3; }
+.workspace-page .solution-review { margin-top: 10px; padding-top: 8px; border-top: 1px solid #33404a; }
+.workspace-page .solution-review p { overflow-wrap: anywhere; }
+.workspace-page .strategy-assessments { margin: 16px 0; min-width: 0; }
+.workspace-page .strategy-assessments h3 { margin: 0 0 5px; color: #ead0ae; font-size: 14px; }
+.workspace-page .strategy-assessments > p { margin: 0 0 8px; color: #9eacb7; font-size: 12px; }
+.workspace-page .strategy-assessments-scroll { overflow-x: auto; }
+.workspace-page .strategy-assessments table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.workspace-page .strategy-assessments th, .workspace-page .strategy-assessments td { padding: 7px 8px; border-top: 1px solid #303b45; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.workspace-page .strategy-assessments th:first-child { min-width: 140px; color: #d7e0e8; font-weight: 500; }
+.workspace-page .strategy-assessments td:nth-child(2) { min-width: 145px; color: #e7be8d; white-space: nowrap; }
+.workspace-page .strategy-assessments td:last-child { color: #b8c7d3; }
 .workspace-page .session-outcome.outcome-positive { border-left-color: #75b18c; }
 .workspace-page .session-outcome.outcome-positive > p:first-child span { color: #a5d1b3; }
 .workspace-page .session-outcome.outcome-negative { border-left-color: #d38578; }
@@ -502,6 +513,8 @@
 .workspace-page .strategy-title-line .strategy-title-editor { flex: 0 1 auto; }
 .workspace-page .strategy-row-disclosure { display: inline-flex; align-items: flex-start; gap: 7px; max-width: 100%; min-width: 0; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: inherit; text-align: left; cursor: pointer; }
 .workspace-page .strategy-row-disclosure h3 { margin: 0; font: 500 16px/1.6 Inter,ui-sans-serif,system-ui,sans-serif; color: inherit; overflow-wrap: anywhere; }
+.workspace-page .strategy-row-disclosure.is-disabled h3 { color: #9ba7b3; }
+.workspace-page .strategy-disabled-label { align-self: center; border: 1px solid #8b99a8; border-radius: 999px; padding: 2px 7px; color: #bdc7d0; font: 600 10px/1.4 Inter,ui-sans-serif,system-ui,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .workspace-page .strategy-row-disclosure:hover { color: #f1c58d; text-decoration: underline; text-underline-offset: 4px; }
 .workspace-page .strategy-row-disclosure .disclosure-chevron { margin-top: 7px; }
 .workspace-page .strategy-title-line > .strategy-commands { flex: 0 0 auto; }

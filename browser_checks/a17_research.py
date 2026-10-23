@@ -376,7 +376,7 @@ with sync_playwright() as playwright:
     )
     expect(first_session.locator(".session-outcome-inline")).to_contain_text("Mixed")
     expect(research).to_contain_text("Cycle 3 of 3")
-    expect(research).to_contain_text("6 of 6 calls used (0 remaining)")
+    expect(research).to_contain_text("6/6 calls")
     expect(first_session.locator(".session-status")).to_have_text("ended")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     artifacts = research.get_by_label("Research artifacts")
@@ -655,10 +655,46 @@ with sync_playwright() as playwright:
     page.keyboard.press("Escape")
     expect(mobile_dialog).to_be_hidden()
     page.screenshot(path="/tmp/sigma-a174-mobile.png", full_page=True)
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.get_by_role("button", name="Back to Home", exact=True).click()
+    page.wait_for_url("http://127.0.0.1:5173/")
+    page.get_by_role("tab", name="Samples", exact=True).click()
+    page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
+        "button", name="Open Maximum Regions Formed by Lines"
+    ).click()
+    page.wait_for_url("**/project?*")
+    max_regions_strategy = page.locator("li[data-strategy-id]").first
+    max_regions_strategy.locator(".strategy-row-disclosure").click()
+    page.get_by_role("button", name="Start research session", exact=True).click()
+    page.get_by_role("button", name="Start session #1", exact=True).click()
+    max_session = page.locator("li[data-session-id]").first
+    expect(max_session.locator(".session-status")).to_have_text("ended", timeout=15000)
+    expect(max_session.locator(".session-outcome-inline")).to_contain_text(
+        "Positive · solution candidate (unverified)"
+    )
+    expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
+    expect(max_session.locator(".strategy-assessments")).to_contain_text("Artifact 1")
+    expect(max_session.locator(".solution-review")).to_contain_text("R(n) = 1 + n(n+1)/2")
+    page.reload()
+    max_session = page.locator("li[data-session-id]").first
+    expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
+    expect(max_session.locator(".session-outcome")).to_contain_text("no formal proof checker")
+    maximum_strategy = page.locator("li[data-strategy-id]").first
+    maximum_strategy.get_by_role("button", name="Disable", exact=True).click()
+    expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_text("Disabled")
+    expect(page.get_by_role("button", name="Start research session")).to_be_disabled()
+    expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
+    page.reload()
+    maximum_strategy = page.locator("li[data-strategy-id]").first
+    expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_text("Disabled")
+    maximum_strategy.get_by_role("button", name="Enable", exact=True).click()
+    expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_count(0)
+    expect(page.get_by_role("button", name="Start research session")).to_be_enabled()
+    expect(page.locator("li[data-session-id]").first.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
     assert not errors, errors
-    assert len(starts) == 3, starts
+    assert len(starts) == 4, starts
     print(
-        "PASS real Chrome A17.5: direct strategy actions and hover titles, lifecycle/outcome distinction, inline start/stop, all export formats and names, HTML tab and blocked-popup recovery, dialog keyboard/mobile layout, artifact visibility, deletion and mobile overflow"
+        "PASS real Chrome A17.6: workspace/export regressions, Maximum Regions positive outcome and attribution persistence, strategy disable/reload/start blocking/re-enable history"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

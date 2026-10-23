@@ -65,6 +65,12 @@ class StageChange:
 
 
 @dataclass(frozen=True)
+class StrategyEnabledChange:
+    previous: bool
+    enabled: bool
+
+
+@dataclass(frozen=True)
 class ProjectSettings:
     title: str
     problem: str
@@ -119,6 +125,7 @@ class Event:
     stage_change: StageChange | None = None
     order: tuple[str, ...] | None = None
     project_change: ProjectChange | None = None
+    enabled_change: StrategyEnabledChange | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +139,7 @@ class Strategy:
     stage: Stage = Stage.DRAFT
     summary: str = ""
     provenance: Provenance | None = None
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -196,11 +204,9 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7)
     ):
-        raise ProjectError(
-            "Unsupported or missing project schema_version (expected 1, 2, 3, 4, 5 or 6)"
-        )
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 7)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -244,6 +250,8 @@ def _decode(raw: Any) -> Project:
                 strategy_fields.add("removed_at")
             if version >= 5:
                 strategy_fields.update({"stage", "summary", "provenance"})
+            if version >= 7:
+                strategy_fields.add("enabled")
             if not isinstance(item, dict) or set(item) != strategy_fields:
                 raise ProjectError("Invalid strategy fields")
             if not isinstance(item["id"], str) or item["id"] in seen:
@@ -258,6 +266,9 @@ def _decode(raw: Any) -> Project:
             if item.get("removed_at") is not None:
                 _timestamp(item["removed_at"])
             values = dict(item)
+            values.setdefault("enabled", True)
+            if type(values["enabled"]) is not bool:
+                raise ProjectError("Strategy enabled state must be a boolean")
             if version >= 5:
                 try:
                     values["stage"] = Stage(item["stage"])
@@ -301,6 +312,7 @@ def _decode(raw: Any) -> Project:
     previous = None
     active_order: list[str] = []
     stages: dict[str, str] = {}
+    enabled_states = {strategy.id: True for strategy in strategies}
     project_change: ProjectChange | None = None
     for index, item in enumerate(raw["events"], 1):
         if not isinstance(item, dict):
@@ -316,6 +328,8 @@ def _decode(raw: Any) -> Project:
             expected.add("project_change")
         if item.get("kind") == "strategy.updated":
             expected.add("change")
+        if item.get("kind") == "strategy.enabled_changed":
+            expected.add("enabled_change")
         if set(item) != expected:
             raise ProjectError("Invalid event fields")
         if type(item["sequence"]) is not int or item["sequence"] != index:
@@ -404,6 +418,21 @@ def _decode(raw: Any) -> Project:
             ):
                 raise ProjectError("Manual stage history is inconsistent")
             stages[strategy_id] = change["stage"]
+        elif item["kind"] == "strategy.enabled_changed" and version >= 7:
+            strategy_id = item["strategy_id"]
+            change = item["enabled_change"]
+            if (
+                not isinstance(strategy_id, str)
+                or strategy_id not in active_order
+                or not isinstance(change, dict)
+                or set(change) != {"previous", "enabled"}
+                or type(change["previous"]) is not bool
+                or type(change["enabled"]) is not bool
+                or change["previous"] != enabled_states[strategy_id]
+                or change["enabled"] == change["previous"]
+            ):
+                raise ProjectError("Strategy enabled-state history is inconsistent")
+            enabled_states[strategy_id] = change["enabled"]
         elif item["kind"] == "project.updated" and version >= 6:
             change = item["project_change"]
             if not isinstance(change, dict) or set(change) != {"previous", "current"}:
@@ -441,6 +470,8 @@ def _decode(raw: Any) -> Project:
             event = replace(event, order=tuple(item["order"]))
         if "project_change" in item:
             event = replace(event, project_change=project_change)
+        if "enabled_change" in item:
+            event = replace(event, enabled_change=StrategyEnabledChange(**item["enabled_change"]))
         events.append(event)
     if created != seen or removed != {s.id for s in strategies if s.removed_at is not None}:
         raise ProjectError("Strategy records and history do not match")
@@ -452,6 +483,10 @@ def _decode(raw: Any) -> Project:
         raw["active_order"] != active_order or any(s.stage != stages[s.id] for s in strategies)
     ):
         raise ProjectError("Strategy order/stages do not match history")
+    if version >= 7 and any(
+        strategy.enabled != enabled_states[strategy.id] for strategy in strategies
+    ):
+        raise ProjectError("Strategy enabled states do not match history")
     if project_change and project_change.current != settings:
         raise ProjectError("Latest project edit does not match settings")
     return Project(
@@ -470,6 +505,9 @@ def _decode(raw: Any) -> Project:
 
 def _document(project: Project) -> bytes:
     raw = asdict(project)
+    if project.schema_version < 7:
+        for strategy in raw["strategies"]:
+            del strategy["enabled"]
     if project.schema_version < 6:
         del raw["ai_model"]
         del raw["reasoning_effort"]
@@ -487,7 +525,7 @@ def _document(project: Project) -> bytes:
         for strategy in raw["strategies"]:
             del strategy["removed_at"]
     for event in raw["events"]:
-        for key in ("stage_change", "order", "project_change"):
+        for key in ("stage_change", "order", "project_change", "enabled_change"):
             if event[key] is None:
                 del event[key]
         if event["change"] is None:
@@ -669,6 +707,40 @@ def create_strategy(
         )
 
     return _update_project(value, append)
+
+
+def set_strategy_enabled(value: str | Path, strategy_id: str, enabled: bool) -> ProjectView:
+    """Persist a strategy's eligibility without changing its content or history."""
+    if type(enabled) is not bool:
+        raise ProjectError("Strategy enabled state must be a boolean")
+
+    def update(project: Project) -> Project:
+        strategy = next((item for item in project.strategies if item.id == strategy_id), None)
+        if strategy is None or strategy.removed_at is not None:
+            raise ProjectError("Strategy not found in this project")
+        if strategy.enabled is enabled:
+            return project
+        timestamp = _next_timestamp(project)
+        return replace(
+            project,
+            schema_version=max(7, project.schema_version),
+            strategies=tuple(
+                replace(item, enabled=enabled) if item.id == strategy_id else item
+                for item in project.strategies
+            ),
+            events=(
+                *project.events,
+                Event(
+                    len(project.events) + 1,
+                    "strategy.enabled_changed",
+                    timestamp,
+                    strategy_id,
+                    enabled_change=StrategyEnabledChange(strategy.enabled, enabled),
+                ),
+            ),
+        )
+
+    return _update_project(value, update)
 
 
 def remove_strategy(value: str | Path, strategy_id: str) -> ProjectView:

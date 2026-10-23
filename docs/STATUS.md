@@ -1,5 +1,62 @@
 # SIGMA status
 
+## A17.6 Research outcomes and strategy attribution (2026-10-22)
+
+Separated research-objective assessment from execution status and strategy
+contribution. Completed, evidence-supported work can now end positively when no
+next question remains, while provider failure, budget exhaustion, stop state,
+and verification caveats remain distinct. Solution reviews retain the claim,
+argument, assumptions, proof obligations, unresolved/resolved objections, and
+artifact references. Model-reported confidence is labeled as an unverified
+candidate unless independent verification actually occurred.
+
+Strategy assessments are persisted in project display order from the session's
+eligibility snapshot. They distinguish **Contributed to solution**,
+**Productive**, **Unproductive**, **Not used**, and **Disabled**; attribution
+requires strategy-linked artifact evidence and survives later strategy edits.
+Legacy sessions without attribution remain unknown. The project report and
+session UI display the same saved review and contribution evidence. Failed
+assessment calls retain earlier committed artifacts and expose a recoverable
+error; empty timeout exceptions now produce a clear timeout message.
+
+Completed the persisted strategy-enable prerequisite needed for A17.6's
+historical eligibility semantics: legacy strategies default to enabled, and a
+first toggle migrates the project to schema 7 with an auditable event and exact
+pre-migration backup. Disabled strategies stay visible but cannot start or
+resume research. Existing session snapshots and assessments remain unchanged
+after later toggles.
+
+The deterministic Maximum Regions regression covers a complete one-cycle proof,
+evidence assembled across multiple cycles, presentation-only follow-up requests,
+an unsupported counterexample signal, material objections, and reload-safe
+strategy attribution. The assigned line-arrangement checklist reconciles saved
+evidence across the ordered session artifacts and never upgrades the result to
+formally verified.
+
+Verification on 2026-10-22:
+
+- `./sigma test` passed all source-controlled scenarios, including research
+  outcomes, Maximum Regions attribution and aggregation, recoverable assessment
+  timeout with retained artifacts, Ruff check/format, Pyright (zero errors),
+  frontend typecheck, and production build. Starlette emitted its existing
+  non-failing TestClient/httpx deprecation warning.
+- `uv run --with playwright python browser_checks/a17_research.py` passed in
+  real Chrome against the isolated mock provider. It verified the Maximum
+  Regions outcome, cited **Contributed to solution** row, rendered proof review,
+  persistence after reload, disabling/re-enabling across reloads, Start blocking
+  while disabled, and preservation of historical attribution alongside the
+  A17.5 workspace/export checks.
+- A separate fresh Maximum Regions project was run with actual
+  Investigator/Skeptic calls through the connected ChatGPT-plan mode using
+  `gpt-6.1-sol` at High effort. The final run ended with **Positive · solution
+  candidate (unverified)**, objective status `achieved`, the incremental-counting
+  strategy attributed **Contributed to solution**, and a link to its saved
+  artifact. The UI/report retained the caveat that no independent verification
+  or formal proof checker was used. This live evaluation was not a deterministic
+  test; earlier live attempts exposed a false mixed outcome and one provider
+  timeout, which informed the regression and recovery-message fixes. No
+  API-key billing path was used.
+
 ## A17.5 Project export and stabilization (2026-10-22)
 
 Replaced the Project-page download icon with a single **Export project** control.

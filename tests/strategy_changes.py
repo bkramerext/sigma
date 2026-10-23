@@ -19,6 +19,7 @@ from sigma.projects import (
     list_strategies,
     open_project,
     remove_strategy,
+    set_strategy_enabled,
 )
 
 
@@ -184,6 +185,31 @@ def main() -> None:
             assert (corrupt / STATE).read_bytes() == before_bad
         print("PASS inconsistent edit/removal histories rejected without repair")
 
+        eligibility_path = root / "eligibility.sigma"
+        _, eligibility_strategy = fixture(eligibility_path)
+        before_eligibility = (eligibility_path / STATE).read_bytes()
+        disabled = set_strategy_enabled(eligibility_path, eligibility_strategy.id, False)
+        assert disabled.project.schema_version == 7
+        assert disabled.project.strategies[0].enabled is False
+        assert disabled.project.events[-1].kind == "strategy.enabled_changed"
+        assert (eligibility_path / "project.v2.json").read_bytes() == before_eligibility
+        reopened_disabled = inspect_project(eligibility_path).project
+        assert reopened_disabled.strategies[0].enabled is False
+        assert reopened_disabled.events[-1].enabled_change
+        enabled = set_strategy_enabled(eligibility_path, eligibility_strategy.id, True)
+        assert enabled.project.strategies[0].enabled is True
+        assert [
+            event.enabled_change.enabled for event in enabled.project.events if event.enabled_change
+        ] == [False, True]
+        assert set_strategy_enabled(eligibility_path, eligibility_strategy.id, True) == enabled
+        damaged = json.loads((eligibility_path / STATE).read_bytes())
+        damaged["events"][-2]["enabled_change"]["previous"] = False
+        (eligibility_path / STATE).write_text(json.dumps(damaged))
+        rejects(lambda: inspect_project(eligibility_path))
+        print(
+            "PASS strategy eligibility schema-v7 migration, durable toggles, audit consistency and no-op"
+        )
+
         api_path = root / "api.sigma"
         _, api_strategy = fixture(api_path)
         with TestClient(app) as client:
@@ -210,6 +236,19 @@ def main() -> None:
                 == 400
             )
             assert client.post("/api/projects/strategies/edit", json=body).status_code == 422
+            enabled_response = client.post(
+                "/api/projects/strategies/enabled",
+                json={**body, "enabled": False},
+            )
+            assert enabled_response.status_code == 200
+            assert enabled_response.json()["project"]["strategies"][0]["enabled"] is False
+            assert (
+                client.post(
+                    "/api/projects/strategies/enabled",
+                    json={**body, "enabled": "false"},
+                ).status_code
+                == 422
+            )
             assert client.post("/api/projects/strategies/remove", json=body).status_code == 200
             assert client.get(
                 "/api/projects/strategies", params={"path": str(api_path)}

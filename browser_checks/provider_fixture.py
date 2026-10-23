@@ -44,23 +44,69 @@ async def handler(request):
         if strategy_title == "Pause and stop fixture strategy":
             await asyncio.sleep(2)
         cycle = context["cycle"]
+        maximum_regions = "maximum number of regions" in context.get("problem", "").lower()
         if body["text"]["format"]["name"] == "research_investigator":
-            result = {
-                "claim": f"Fixture claim {cycle}: a candidate consequence follows from the saved strategy.",
-                "method": f"Use the stated mechanism to derive consequence {cycle}.",
-                "assumptions": [f"Fixture assumption {cycle}"],
-                "evidence_status": "Unverified model derivation; no tool was run.",
-                "open_obligations": [f"Check obligation {cycle}"],
-            }
+            result = (
+                {
+                    "claim": "The maximum is R(n) = 1 + n(n+1)/2 for every n >= 0.",
+                    "method": "Each region is a nonempty intersection of open half-planes with one chosen side of each line, hence convex and connected; different pieces of an inserted line lie in different old regions. Insert lines one at a time. The kth line has at most k-1 distinct intersections and is split into at most k pieces, each increasing the region count by at most one. The lines y=kx+k^2 have pairwise distinct intersections along each newly added line, so each of its k pieces lies in a distinct convex prior region and attains the bound. For n=0 there is one region.",
+                    "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
+                    "evidence_status": "Complete unverified mathematical argument; no proof checker was run.",
+                    "open_obligations": [],
+                }
+                if maximum_regions
+                else {
+                    "claim": f"Fixture claim {cycle}: a candidate consequence follows from the saved strategy.",
+                    "method": f"Use the stated mechanism to derive consequence {cycle}.",
+                    "assumptions": [f"Fixture assumption {cycle}"],
+                    "evidence_status": "Unverified model derivation; no tool was run.",
+                    "open_obligations": [f"Check obligation {cycle}"],
+                }
+            )
         else:
-            result = {
-                "assessment": "revise" if cycle == 1 else "continue",
-                "stop_reason": "recoverable_objection",
-                "response": f"Independent fixture review for cycle {cycle}.",
-                "objections": [f"Check boundary case {cycle}"],
-                "remaining_obligations": [f"Resolve obligation {cycle}"],
-                "next_question": f"Study the distinct consequence for cycle {cycle + 1}.",
-            }
+            result = (
+                {
+                    "assessment": "stop",
+                    "stop_reason": "productive_conclusion",
+                    "response": "The upper bound and explicit general-position construction establish the objective for all n, including n=0. The candidate argument is complete but remains unverified.",
+                    "objections": [],
+                    "remaining_obligations": [],
+                    "next_question": "",
+                    "objective_status": "achieved",
+                    "solution_claim": "R(n) = 1 + n(n+1)/2 for all n >= 0.",
+                    "argument_summary": "The kth line adds at most k regions; y=kx+k^2 attains k at every step; sum from k=1 to n and include the empty arrangement.",
+                    "assumptions_reviewed": ["The lines are distinct straight Euclidean lines."],
+                    "proof_obligations": [
+                        "Prove the per-line upper bound.",
+                        "Show one arrangement attains every increment.",
+                        "Handle n=0.",
+                    ],
+                    "unresolved_objections": [],
+                    "supporting_cycles": [1],
+                    "verification_status": "convincing_unverified",
+                    "strategy_contribution": "solution",
+                    "contribution_rationale": "This strategy supplies both the upper-bound induction and an explicit arrangement attaining equality.",
+                }
+                if maximum_regions
+                else {
+                    "assessment": "revise" if cycle == 1 else "continue",
+                    "stop_reason": "recoverable_objection",
+                    "response": f"Independent fixture review for cycle {cycle}.",
+                    "objections": [f"Check boundary case {cycle}"],
+                    "remaining_obligations": [f"Resolve obligation {cycle}"],
+                    "next_question": f"Study the distinct consequence for cycle {cycle + 1}.",
+                    "objective_status": "partial",
+                    "solution_claim": "A partial consequence follows from the saved work.",
+                    "argument_summary": "The result uses the stated mechanism but does not settle the objective.",
+                    "assumptions_reviewed": [f"Fixture assumption {cycle}"],
+                    "proof_obligations": [f"Resolve obligation {cycle}"],
+                    "unresolved_objections": [],
+                    "supporting_cycles": list(range(1, cycle + 1)),
+                    "verification_status": "convincing_unverified",
+                    "strategy_contribution": "productive",
+                    "contribution_rationale": "The saved derivation advances the objective.",
+                }
+            )
         return httpx.Response(
             200,
             json={

@@ -31,6 +31,7 @@ from sigma.projects import (
     project_destination,
     remove_strategy,
     reorder_strategies,
+    set_strategy_enabled,
     update_project,
 )
 from sigma.proposals import (
@@ -274,6 +275,17 @@ class EditStrategyRequest(StrategyRequest):
 @app.post("/api/projects/strategies/edit")
 def edit_strategy_view(body: EditStrategyRequest):
     return asdict(edit_strategy(body.path, body.strategy_id, body.title, body.approach))
+
+
+class StrategyEnabledRequest(OpenRequest):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    strategy_id: str
+    enabled: bool
+
+
+@app.post("/api/projects/strategies/enabled")
+def strategy_enabled_view(body: StrategyEnabledRequest):
+    return asdict(set_strategy_enabled(body.path, body.strategy_id, body.enabled))
 
 
 class CreateProjectRequest(BaseModel):

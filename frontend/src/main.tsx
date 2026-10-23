@@ -25,6 +25,7 @@ type Strategy = {
   summary: string;
   provenance: { provider: string; model: string; reasoning_effort?: string | null } | null;
   author_kind: 'human';
+  enabled: boolean;
   created_at: string;
   removed_at?: string | null;
 };
@@ -50,8 +51,9 @@ type ProjectView = {
 type ResearchArtifact = { id: string; sequence: number; claim_or_question: string; method: string; assumptions: string[]; evidence_status: string; skeptic_response: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; note: string; investigator_output: Record<string, unknown>; skeptic_output: Record<string, unknown> };
 type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?: string | null; message: string };
 type ResearchStep = { id: string; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; output?: Record<string, unknown> };
-type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean };
-type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'ended' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
+type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
+type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; status: 'queued' | 'running' | 'paused' | 'completed' | 'ended' | 'stopped' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_minutes: string; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
 const limitBounds = {
@@ -115,8 +117,14 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p>
       <p>{session.outcome.summary}</p>
+      {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {session.outcome.solution_review.basis_artifact_ids?.map(id => `Artifact ${session.artifacts.find(artifact => artifact.id === id)?.sequence ?? '?'}`).join(', ') || 'No artifact references'}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}<p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p></div>}
       {!!session.outcome.caveats.length && <ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul>}
     </section>
+    {!!session.strategy_assessments?.length && <section className="strategy-assessments" aria-label="Strategy Assessments"><h3>Strategy Assessments</h3><p>Each assessment is this strategy’s contribution to the project objective in this session.</p><div className="strategy-assessments-scroll"><table><thead><tr><th scope="col">Strategy</th><th scope="col">Assessment</th><th scope="col">Rationale and evidence</th></tr></thead><tbody>{session.strategy_assessments.map((item, index) => {
+      const label: Record<StrategyAssessment['assessment'], string> = { contributed_to_solution: 'Contributed to solution', productive: 'Productive', unproductive: 'Unproductive', not_used: 'Not used', disabled: 'Disabled', unknown: 'Unknown' };
+      const references = item.basis_artifact_ids.map(id => session.artifacts.find(artifact => artifact.id === id)?.sequence).filter((sequence): sequence is number => sequence !== undefined);
+      return <tr key={item.strategy_id ?? index}><th scope="row">{item.strategy_title}</th><td>{label[item.assessment]}</td><td>{item.rationale}{references.length > 0 && <span> · Artifact{references.length > 1 ? 's' : ''} {references.join(', ')}</span>}</td></tr>;
+    })}</tbody></table></div></section>}
     <div className="session-status-row"><span className={`session-status session-${session.status}`}><i aria-hidden="true"/>{session.status}</span></div>
     <div className="research-session-facts"><p><strong>Model:</strong> {session.model} · {thinkingLabels[session.reasoning_effort] ?? session.reasoning_effort} thinking · {session.mode === 'api_key' ? 'API key billing' : 'ChatGPT plan allowance'}</p>
       
@@ -148,7 +156,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
 }
 
 function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; onViewStrategy: (id: string) => void; onControlsChange: (controls: ProcessControls) => void }) {
-  const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at), [strategies]);
+  const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
@@ -1065,9 +1073,10 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
       <button type="submit" className="text-view-link" title="Save strategy title" disabled={busy}>Save</button>
       <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
-      <button type="button" id={`strategy-${strategy.id}`} className="strategy-row-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
+      <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
       <button type="button" ref={trigger} className="text-view-link text-view-icon strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} title={`Edit strategy title: ${shownTitle}`} disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) setEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
+      {!strategy.enabled && <span className="strategy-disabled-label">Disabled</span>}
       {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -1075,9 +1084,11 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
 }
 
 function StrategyCommands({ strategy, onCommand, disabled = false }: {
-  strategy: Strategy; onCommand: (mode: 'remove' | 'fork', strategy: Strategy) => void; disabled?: boolean;
+  strategy: Strategy; onCommand: (mode: 'remove' | 'fork' | 'toggle', strategy: Strategy) => void; disabled?: boolean;
 }) {
   return <span className="strategy-inline-commands">
+    <button type="button" className="text-view-link" disabled={disabled}
+      title={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} onClick={() => onCommand('toggle', strategy)}>{strategy.enabled ? 'Disable' : 'Enable'}</button>
     <button type="button" className="text-view-link" disabled={disabled}
       title="Fork strategy" onClick={() => onCommand('fork', strategy)}>Fork</button>
     <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
@@ -1560,7 +1571,23 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => { if (ordering || dragId || activeMode !== null) return; if (mode === 'fork') { if (!enterMode('new-strategy')) return; expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true); requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' })); } else setCommand({ mode, strategy }); }}/>} />
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => {
+              if (ordering || dragId || activeMode !== null) return;
+              if (mode === 'toggle') {
+                const owner = `strategy-toggle-${strategy.id}`;
+                if (!enterMode(owner)) return;
+                void post<ProjectView>('strategies/enabled', { path: view.path, strategy_id: strategy.id, enabled: !strategy.enabled })
+                  .then(next => { setView(next); setAnnouncement(`${strategy.title} ${strategy.enabled ? 'disabled' : 'enabled'}.`); })
+                  .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
+                  .finally(() => exitMode(owner));
+                return;
+              }
+              if (mode === 'fork') {
+                if (!enterMode('new-strategy')) return;
+                expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true);
+                requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' }));
+              } else setCommand({ mode, strategy });
+            }}/>} />
             <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
           </div>
           <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}

@@ -82,6 +82,43 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             f"Started: {_value(session.get('started_at') or session.get('created_at'))}",
             "",
         ]
+        solution_review_raw = session.get("outcome")
+        solution_review = (
+            cast(dict[str, Any], solution_review_raw)
+            if isinstance(solution_review_raw, dict)
+            else {}
+        )
+        review = solution_review.get("solution_review")
+        if isinstance(review, dict):
+            lines += [
+                f"Solution claim: {_value(review.get('claim'))}",
+                f"Argument: {_value(review.get('argument_summary'))}",
+                f"Assumptions reviewed: {'; '.join(_items(review.get('assumptions'))) or 'Not recorded'}",
+                f"Proof obligations: {'; '.join(_items(review.get('proof_obligations'))) or 'Not recorded'}",
+                f"Verification status: {_value(review.get('verification_status'))}",
+                f"Solution evidence references: {'; '.join(_items(review.get('basis_artifact_ids'))) or 'Not recorded'}",
+                f"Unresolved objections: {'; '.join(_items(review.get('unresolved_objections'))) or 'None recorded'}",
+                f"Resolved review notes: {'; '.join(_items(review.get('resolved_objections'))) or 'None recorded'}",
+                "",
+            ]
+        assessments = _rows(session.get("strategy_assessments"))
+        if assessments:
+            lines += ["Strategy Assessments", "--------------------"]
+            labels = {
+                "contributed_to_solution": "Contributed to solution",
+                "productive": "Productive",
+                "unproductive": "Unproductive",
+                "not_used": "Not used",
+                "disabled": "Disabled",
+                "unknown": "Unknown (historical evidence unavailable)",
+            }
+            for item in assessments:
+                label = labels.get(str(item.get("assessment")), "Unknown")
+                refs = "; ".join(_items(item.get("basis_artifact_ids"))) or "No artifact references"
+                lines.append(
+                    f"{_value(item.get('strategy_title'))} · {label}: {_value(item.get('rationale'))} [Evidence: {refs}]"
+                )
+            lines.append("")
         artifacts = _rows(session.get("artifacts"))
         if not artifacts:
             lines += ["No completed research artifact is recorded.", ""]

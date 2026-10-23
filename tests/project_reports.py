@@ -35,7 +35,28 @@ def fixture() -> dict:
             {
                 "session_number": 3,
                 "status": "ended",
-                "outcome": {"assessment": "mixed", "provisional": False},
+                "outcome": {
+                    "assessment": "mixed",
+                    "provisional": False,
+                    "solution_review": {
+                        "claim": "Candidate formula",
+                        "argument_summary": "Upper bound and attaining construction.",
+                        "assumptions": ["Euclidean lines"],
+                        "proof_obligations": ["Verify n=0"],
+                        "verification_status": "convincing_unverified",
+                        "basis_artifact_ids": ["artifact-1"],
+                        "unresolved_objections": [],
+                    },
+                },
+                "strategy_assessments": [
+                    {
+                        "strategy_id": "strategy-id",
+                        "strategy_title": "Independent counterexample search",
+                        "assessment": "productive",
+                        "rationale": "The linked counterexample attempt clarified the boundary case.",
+                        "basis_artifact_ids": ["artifact-1"],
+                    }
+                ],
                 "strategy_title": "Independent counterexample search",
                 "started_at": "2026-01-02T00:00:00Z",
                 "artifacts": [
@@ -87,6 +108,10 @@ def main() -> None:
         "Session #3",
         "Execution status: ended",
         "Outcome:",
+        "Solution claim: Candidate formula",
+        "Verification status: convincing_unverified",
+        "Strategy Assessments",
+        "Productive: The linked counterexample attempt clarified the boundary case.",
         "Claim: A < B & C",
         "Method: Compute f(x_1)",
         "Assumptions: A&B; x > 0",
