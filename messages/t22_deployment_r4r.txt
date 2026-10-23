@@ -1,7 +1,8 @@
 T22 cloud deployment and operations preparation — R4R
 Date: 2026-10-23
 Branch: cloud/t22-deployment
-Base at start: c4b18d36349170b07e48c4cdf0c38aeb532fc958 (current main after Gate C PR #44)
+Base at start: c4b18d36349170b07e48c4cdf0c38aeb532fc958 (main after Gate C PR #44)
+Integrated current main: cd855525f36c5e248c9604ceb633932a450340cb
 Head: set to commit SHA after final validation and push
 PR: set after opening the pull request; do not merge
 
@@ -224,6 +225,12 @@ Requirement assessment
    suite; cloud startup checks only run from the container entrypoint and
    cloud auth remains opt-in.
 
-No PR conflict resolution or Gate B edits were needed at branch creation. If
-main advanced after the base SHA above, the integration result and final head
-must be recorded again before coordinator review. R4R; do not self-merge.
+During final integration, current main had advanced to
+`cd855525f36c5e248c9604ceb633932a450340cb`. The only content conflict was
+`tickets/t22.md`; both sides were reconciled. Kept main's alpha decision that
+scheduled/off-host backups and clean-host restoration drills are deferred to
+T22.4, while retaining this assignment's documented and tested optional local
+backup/restore utility. Main also includes recent Gate B specification updates;
+no Green implementation was present at this fetched head and no Gate B code was
+edited. Re-run required checks after this integration before coordinator review.
+R4R; do not self-merge.

@@ -38,6 +38,10 @@ with overage charges; static asset requests are currently free. This does not
 estimate the separate Linux host, disk/backups, optional custom domain, or
 model provider costs. Gate B's durable execution, concurrency, usage budgets,
 and per-user provider credentials must integrate before cloud research runs.
+The current T22 alpha decision defers scheduled/off-host backups and clean-host
+restoration drills to T22.4; the optional archive/restore utility is tested
+locally but no production backup target or recovery drill is claimed. Loss of
+the host volume may be unrecoverable until that follow-up is completed.
 See `deploy/README.md` and `messages/t22_deployment_r4r.txt` for commands,
 recovery steps and full requirement-by-requirement status.
 
@@ -4176,3 +4180,39 @@ configured `SIGMA_CLOUD_DEMO_AUDIT` location. Gate A private-workspace isolation
 is integrated from PR #43; Gate B provider authorization/budget controls and
 cloud deployment remain open in parent T22. This PR does not claim those gates
 are complete.
+
+## T39 adversarial RH evaluation tooling (closed 2026-10-23)
+
+**Status: DONE for the scoped tooling deliverable; merged PR #47**
+(`2c533a11dfbc27e0078c99127a41c6f24c8e5197`). The coordinator delivered
+an exact degree-six mathematical countermodel, an exact finite-eta identity
+positive control, four answer-redacted adversarial challenges, an offline human
+scoring/review contract, and capture of acknowledged Skeptic interventions from
+persisted research-session steps and same-cycle artifacts. Deterministic tests
+were added to `./sigma test`. No paid provider calls were made.
+
+**Not validated by closing T39:** the new tests have not been executed in the
+coordinator's environment against the full checkout; real challenge delivery,
+live Investigator/Skeptic mathematical judgment, multi-session adaptation,
+reports and UI quality remain **UNVERIFIED**. T39's closure records delivery of
+the evaluation infrastructure, not acceptance of SIGMA's research capability.
+Real-agent validation and any failures found belong in a separate follow-up
+research-quality evaluation ticket rather than being silently counted as MET.
+
+## A17.8 follow-up acceptance preparation (2026-10-23)
+
+The coordinator reviewed the 2026-10-22 A17.8 live/evidence record and
+published an [answer-free independent-discovery acceptance packet](evaluations/a17-8-independent-acceptance-packet.md).
+It defines a fresh-project Maximum Regions trial without copying the
+answer-bearing sample strategy, a pre-run leakage checklist, bounded session
+limits, human proof-assessment anchors, a deterministic distinct-problem
+control, and precise provenance requirements. The packet was **not run** and
+does not contain an evaluator answer key.
+
+**A17.8 remains NOT ACCEPTED.** Previously reported criteria 2–5 and 7–8
+retain their documented scope and evidence. Criterion 1 is **UNMET** in the
+earlier contaminated-strategy live run; independence and quality in a fresh
+answer-free run remain **UNVERIFIED**. Criterion 6 is deterministic-only.
+No new provider calls or model fees were incurred. The coordinator has GitHub
+repository access but not access to the running local SIGMA session/provider.
+Do not treat protocol creation or T39 tooling closure as live-agent acceptance.
