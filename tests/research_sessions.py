@@ -1989,6 +1989,111 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
     # can independently solve the problem; the provider is mocked above.
 
 
+async def test_maximum_regions_false_candidate_is_rejected(path: Path):
+    problem = (
+        "For each integer n >= 0, determine the maximum number of regions formed by n distinct "
+        "straight lines in the plane. State assumptions, derive an upper bound, and give a "
+        "construction if you can."
+    )
+    view = initialize_project(
+        path,
+        "Maximum Regions · counterexample regression",
+        problem,
+        research_mode="mathematical",
+        difficulty="easy",
+    )
+    strategy = create_strategy(
+        path,
+        "Test the insertion estimate",
+        "Check small arrangements, then look for a general upper bound and a matching construction.",
+    ).project.strategies[0]
+    credential = {
+        "identity": "fixture-account",
+        "mode": "api_key",
+        "token": "fixture-token",
+        "status": "connected",
+    }
+    config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+    incorrect = {
+        **investigation(1),
+        "claim": "The maximum is R(n) = n^2 + 1.",
+        "method": (
+            "Assume each new line adds 2n regions, so summing gives this quadratic candidate. "
+            "This estimate has not been checked against arrangements."
+        ),
+        "evidence_status": "Unverified candidate; the increment estimate is unsupported.",
+        "open_obligations": ["Check the proposed increment against a two-line arrangement."],
+    }
+    genuine_objection = {
+        **skeptic(1, "stop", "decisive_counterexample"),
+        "response": (
+            "For n=2 the claim predicts five regions, but two distinct lines form at most four "
+            "regions: if parallel they form three, and if they intersect they form four. This "
+            "contradicts the claimed maximum, so the proposed formula is false."
+        ),
+        "objections": [
+            "At n=2, the claimed value is unattainable; two lines form at most four regions."
+        ],
+        "remaining_obligations": [],
+        "next_question": "Revise the increment estimate against the two-line case.",
+        "objective_status": "not_achieved",
+        "solution_claim": "The proposed R(n) = n^2 + 1 candidate is false.",
+        "argument_summary": "The n=2 case contradicts the candidate's predicted value.",
+        "proof_obligations": ["Check all arrangements of two distinct lines."],
+        "unresolved_objections": ["The n=2 counterexample refutes the proposed candidate."],
+        "supporting_cycles": [1],
+        "verification_status": "incomplete",
+        "strategy_contribution": "unproductive",
+        "contribution_rationale": "The proposed increment estimate fails on the two-line case.",
+    }
+    outputs = [incorrect, genuine_objection]
+    inputs = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        inputs.append(json.loads(payload["input"]))
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    # The sealed evaluator's counterexample is supplied only as the Skeptic
+    # response. Neither the wrong candidate nor its rebuttal is in the initial
+    # Investigator context, and no general reference formula is disclosed.
+    assert len(inputs) == 2
+    initial_context = json.dumps(inputs[0])
+    assert "n^2 + 1" not in initial_context
+    assert "n(n+1)/2" not in initial_context
+    assert inputs[0]["problem"] == problem
+    assert inputs[0]["strategy"]["approach"] == strategy.approach
+
+    assert finished["status"] == "ended"
+    assert finished["terminal_reason"] == "stop_decisive_counterexample"
+    assert finished["artifacts"][0]["coordinator_decision"] == "stop_decisive_counterexample"
+    assert finished["artifacts"][0]["objections"] == genuine_objection["objections"]
+    assert finished["outcome"]["assessment"] == "negative"
+    assert finished["outcome"]["solution_review"]["status"] == "not_achieved"
+    assert finished["outcome"]["solution_review"]["unresolved_objections"] == [
+        "The n=2 counterexample refutes the proposed candidate."
+    ]
+    assert finished["strategy_assessments"][0]["assessment"] == "unproductive"
+    persisted = research_sessions.get_session(str(path), started["id"])
+    assert persisted["outcome"] == finished["outcome"]
+    assert persisted["artifacts"][0]["skeptic_response"] == genuine_objection["response"]
+
+
 async def test_concurrent_strategy_portfolio(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -4110,6 +4215,11 @@ def main():
         )
         asyncio.run(
             test_answer_free_maximum_regions_prompt(root / "maximum-regions-answer-free.sigma")
+        )
+        asyncio.run(
+            test_maximum_regions_false_candidate_is_rejected(
+                root / "maximum-regions-counterexample.sigma"
+            )
         )
         asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
         asyncio.run(
