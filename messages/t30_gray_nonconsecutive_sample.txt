@@ -1,7 +1,7 @@
 T30 follow-up and existing Nonconsecutive Subset Sums sample review
 
 Branch: gray/nonconsecutive-review-history-resume
-Integrated main: c4b18d3 (T22 Gate C PR #44; includes merged PR #42)
+Integrated main: 6b0d0c9 (T22.3 ticket specification; includes T22 Gate C PR #44 and merged PR #42)
 Status: R4R; no merge performed.
 
 Sample changes
@@ -93,7 +93,10 @@ any other worker.
 
 After main advanced to c4b18d3, I merged it into the branch and resolved the
 append-only `docs/STATUS.md` conflict while retaining both the Gate C and sample
-entries. The integrated tree passed `./sigma test` and the real Chrome sample
-check again. PR #48 contains the updated head.
+entries. Main then advanced to 6b0d0c9 with the T22.3 ticket specification; I
+merged that commit as well. On the current integrated head, `./sigma test`
+passed all steps and the real Chrome sample check passed again at 1440px,
+390px, and 320px with no page errors or horizontal overflow. PR #48 contains
+the updated head.
 
 R4R for coordinator review and integration. Do not self-merge.

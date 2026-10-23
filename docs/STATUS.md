@@ -4169,3 +4169,10 @@ Screenshots are in `/tmp/` as documented in `browser_checks/README.md`. A first 
 rejected because it supplied a formal peer citation absent from the single-
 strategy session's peer bundle; the deterministic fixture was corrected to
 discuss prior-session findings without claiming peer-evidence attribution.
+
+Main advanced to `6b0d0c9` with the T22.3 ticket specification. The sample
+branch integrated that commit without conflicts. On the updated head,
+`./sigma test` passed all backend scenarios, Ruff/format, Pyright (zero
+diagnostics), frontend typecheck, and production build. The real Chrome sample
+check passed again at 1440px, 390px, and 320px, verifying all five outcomes,
+report content, and no page errors or horizontal overflow.
