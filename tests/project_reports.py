@@ -127,6 +127,10 @@ def main() -> None:
         "Finite checks do not prove the claim.",
     ):
         assert expected in plain
+    legacy_data = fixture()
+    del legacy_data["research_sessions"][0]["outcome"]["solution_review"]["verification_status"]
+    legacy_report, _ = render_report(legacy_data, "txt")
+    assert "Verification status:" not in legacy_report
 
     html_report, html_type = render_report(data, "html")
     assert isinstance(html_report, str)
