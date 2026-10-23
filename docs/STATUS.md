@@ -1,5 +1,74 @@
 # SIGMA status
 
+## T22.1: Cloudflare feasibility spike (2026-10-23)
+
+Continued from PR #21 commit `ad06168`, retaining its requirements. Initial
+checkout was `main` at `aa1b4a2`, eight commits behind the fetched remote;
+the untracked `messages/t22_architecture-assessment.txt` was preserved and was
+not added to the spike. Implementation is isolated in `cloud-spike/`, on
+`cloud/t22-1-feasibility-spike`. See its [report](../cloud-spike/README.md) for
+the six-gate evidence table, source links and reproduction steps.
+
+Actual successful verification:
+
+- `./sigma test`: all executable scenarios, Ruff lint/format, Pyright, frontend
+  typecheck and production build passed. Local application code and existing
+  project data were not migrated or changed.
+- `npm --prefix cloud-spike test` and `npm --prefix cloud-spike run typecheck`:
+  passed against real local Miniflare D1/R2 bindings. The scenario covers
+  concurrent project revision CAS, batch rollback, duplicate enqueue/dispatch,
+  global/per-user budgets and concurrency, cross-owner denial, completion
+  races, checkpointed result persistence, restart, missing/corrupt artifacts,
+  queued stop and no automatic replay of uncertain provider attempts. These
+  are internal storage contracts, not production Google/tenant security tests.
+- `npm --prefix cloud-spike run bundle`: Wrangler deploy **dry run** passed;
+  the amd64 FastAPI image built using hash-locked dependencies. Buildx was
+  initially missing and was installed as a local tool prerequisite. A temporary
+  Docker config selected the existing Colima socket; no credential config was
+  changed. No Worker or paid service was deployed.
+- With local `npm --prefix cloud-spike run dev`,
+  `uv run --with playwright python cloud-spike/http_probe.py` passed health,
+  three concurrent clients, mutation/unknown-route denial, incremental HTTP
+  SSE and real Chrome EventSource through Worker → FastAPI Container.
+- `uv run python cloud-spike/sage_probe.py` passed three fresh-container exact
+  algebra/number-theory and Docker isolation runs using the existing pinned
+  SageMath 10.8 image. Raw measurements are committed in
+  [sage-local.json](../cloud-spike/evidence/sage-local.json): 422,512–422,976 KiB
+  peak process RSS and 23.464/23.371/33.652 seconds start-to-exit under local
+  amd64 emulation. These are not Cloudflare measurements or formal proofs.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5188
+  SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:18082 uv run --with playwright
+  python browser_checks/a17_research.py`: passed real Chrome research,
+  multi-strategy activity, stop and exports, including its desktop/mobile
+  assertions. A fresh fixture and Vite from this checkout were used. Earlier
+  attempts against pre-existing servers failed because their sample/metrics
+  versions differed; those servers were left running unchanged.
+- Separate Ruff checks pass for the spike Python files; Pyright passes for
+  all three scripts using a temporary config with the local application and
+  optional Playwright package directories. The Chrome script is executed with
+  Playwright supplied by `uv --with`, as the repository browser checks are.
+
+Important findings: D1 trigger writes contribute to `meta.changes`, so the
+atomic dispatch uses `RETURNING`. Uncertain dispatches remain charged and
+cannot be automatically reclaimed. R2 publication and D1 checkpointing are
+separate; orphaned bytes are not recovered provider output. Call-unit limits
+in this experiment do not implement production dollar/token/time ceilings.
+
+Cloudflare currently documents root-equivalent capabilities for non-root
+processes under its `durable_object` scheduling policy. Local Docker success does not
+pass the hosted scientific isolation gate. Use the conventional sandbox-host
+fallback; the report recommends a small Cloudflare-fronted conventional
+Python hybrid for the first three-user implementation. D1/R2 remain evaluated
+candidates rather than an implemented production storage migration.
+
+T22.1 remains in progress for remote gates: paid deployment, real cloud cold
+starts/image admission, hostile compute isolation, hosted model authorization,
+production job scheduling/recovery and backup restoration were **not** tested.
+Google identity and inference authorization remain separate. No live model
+calls, paid resources, secrets, cloud login or agent delegation were used.
+The server-backed running-session pill remains a documented T22 integration
+requirement; no placeholder counter was added. T22 and T26 are not complete.
+
 ## T25: Outcome visual hierarchy
 
 Replaced the two-column session presentation with one vertical reading flow.

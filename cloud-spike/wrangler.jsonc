@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sigma-t22-1-spike",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-23",
+  "containers": [{
+    "class_name": "FastAPI",
+    "image": "./Dockerfile",
+    "instance_type": "basic",
+    "max_instances": 1
+  }],
+  "durable_objects": {"bindings": [{"name": "API", "class_name": "FastAPI"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["FastAPI"]}],
+  "observability": {"enabled": false}
+}

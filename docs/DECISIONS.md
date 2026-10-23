@@ -1,5 +1,23 @@
 # SIGMA architectural decisions
 
+## T22.1: bounded Cloudflare feasibility (2026-10-23)
+
+Keep the executable infrastructure spike in `cloud-spike/`, separate from local
+SIGMA services, credentials and project packages. Local Worker/FastAPI, Sage
+sizing and D1/R2 contract checks do not establish a deployable multi-user cloud
+service. In particular, deployed scientific isolation must be independently
+verified; capability behavior differs under Cloudflare's documented
+`durable_object` scheduling policy.
+
+Use the conventional sandbox-host fallback for generated code. For the initial
+three-user implementation, recommend a small Cloudflare-fronted conventional
+Python host with durable storage, retaining typed services and filesystem
+packages behind workspace ownership adapters. The native Container/D1/R2 option
+is evaluated but requires more persistence integration and remote verification.
+The [spike report](../cloud-spike/README.md) records evidence, current source
+links, tradeoffs and open gates. No local/cloud runtime selection, production
+migration, hosted inference authorization or UI counter is introduced here.
+
 2026-10-20
 
 ## Foundation
