@@ -288,6 +288,10 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/callback",
         "/api/cloud-auth/denied",
     }
+    demo_public = path in {"/api/cloud-demo", "/api/cloud-demo/report"} and request.method in {
+        "GET",
+        "HEAD",
+    }
     if cfg.error:
         if public:
             return await call_next(request)
@@ -295,7 +299,7 @@ async def middleware(request: Request, call_next):
     origin = request.headers.get("origin")
     if request.method not in {"GET", "HEAD", "OPTIONS"} and origin != cfg.origin:
         return JSONResponse({"error": "Request origin is not authorized."}, status_code=403)
-    if public:
+    if public or demo_public:
         return await call_next(request)
     try:
         principal = resolve_session(request.cookies.get(SESSION_COOKIE))

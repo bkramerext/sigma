@@ -8,12 +8,12 @@ from typing import Any, Literal
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from sigma import chatgpt_auth, cloud_auth, papers, python_sandbox, research_sessions
+from sigma import chatgpt_auth, cloud_auth, cloud_demo, papers, python_sandbox, research_sessions
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.openai_connection import connection, models
@@ -61,6 +61,31 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 def ui_instance() -> dict[str, str | None]:
     """Readiness identity only; grants no control or access to configuration."""
     return {"instance": os.environ.get("SIGMA_UI_INSTANCE_ID")}
+
+
+@app.get("/api/cloud-demo")
+def cloud_demo_view():
+    """Return the one server-configured public audit snapshot, never a caller path."""
+    if not cloud_auth.config().enabled:
+        raise HTTPException(404, "Hosted Demo is unavailable.")
+    try:
+        return JSONResponse(
+            cloud_demo.audit(),
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+    except ProjectError as exc:
+        raise HTTPException(503, "Hosted Demo is not available.") from exc
+
+
+@app.get("/api/cloud-demo/report")
+def cloud_demo_report_view(format: str = "txt"):
+    if not cloud_auth.config().enabled:
+        raise HTTPException(404, "Hosted Demo is unavailable.")
+    try:
+        body, media_type = cloud_demo.report(format)
+    except ProjectError as exc:
+        raise HTTPException(503, "Hosted Demo is not available.") from exc
+    return Response(body, media_type=media_type, headers={"Cache-Control": "no-store"})
 
 
 @app.middleware("http")

@@ -44,9 +44,9 @@
 | T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green · [PR #9](https://github.com/bkramerext/sigma/pull/9) |
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
 | T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
-| T22 | Cloud deployment | In progress; staged tickets | Red |
+| T22 | Cloud deployment | In progress; Gate C public Demo implementation under review | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
-| T22.2 | Google authentication and invited access | Ready for review; [PR #37](https://github.com/bkramerext/sigma/pull/37) | Red |
+| T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
