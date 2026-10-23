@@ -26,6 +26,8 @@ Deterministic changes and checks
 - Strengthened tests/research_sessions.py::test_answer_free_maximum_regions_prompt
   to use the exact packet text and inspect the full normal-flow Investigator
   request, history fields, manifest, formula variants, and construction terms.
+  A synthetic whitespace/Unicode formula and construction is caught by the
+  normalized audit; the old literal-space assertion missed that variant.
 - `uv run --locked --no-sync python tests/research_sessions.py` — PASS.
 - `uv run --locked --no-sync python tests/project_reports.py` — PASS.
 - `./sigma test` — PASS, including Ruff, format (72 files), Pyright (0),
@@ -44,6 +46,8 @@ Latest-main revalidation
   while preserving both records.
 - After integration, `./sigma test` — PASS, including Ruff, format (76 files),
   Pyright (0), frontend typecheck, and production build.
+- After adding the synthetic formula-leak case, `./sigma test` was rerun and
+  all steps passed again.
 - The real-Chrome A17.7/A17.6 fixture journey passed again at 1440/1280/390/320px.
 - No provider calls; independent-discovery criterion remains unverified.
 

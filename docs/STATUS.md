@@ -4358,7 +4358,10 @@ leak patterns. The mock output is explicitly not scored as a research attempt.
 The first test edit incorrectly expected the manifest to contain no source at
 all; inspection showed it correctly contains the fresh project's own strategy
 snapshot. The test now asserts that exact snapshot and no historical evidence.
-No product-code correction was indicated by this audit.
+It also feeds the audit a synthetic whitespace/Unicode rendering of the answer;
+the old literal-string assertion would have missed it, while the normalized
+check detects both formula and construction. No product-code correction was
+indicated by this audit.
 
 ### Deterministic and browser verification
 
@@ -4391,6 +4394,9 @@ T17.8 evidence above and Gate B's status record. On this integrated tree,
 `browser_checks/a17_research.py` check passed again at 1440/1280/390/320 widths.
 These checks exercise the integrated product through mock fixtures and do not
 constitute the required answer-free model run.
+
+After adding the synthetic leak-format regression, `./sigma test` was rerun on
+this same integrated tree and all steps passed again.
 
 No provider request or model call was made in this follow-up. During a local
 connection-discovery command, a stored OAuth credential was inadvertently

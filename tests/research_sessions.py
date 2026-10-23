@@ -2752,6 +2752,11 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
         "linesl_k",
     )
     assert not any(leak in normalized for leak in forbidden)
+    # The old literal-space assertion would miss this formatting variant;
+    # the normalized audit must identify both the formula and construction.
+    synthetic_leak = "R(n) = 1 + n (n + 1) / 2; L_k: y = k x + k²"
+    normalized_synthetic_leak = "".join(synthetic_leak.casefold().split()).replace("²", "^2")
+    assert any(leak in normalized_synthetic_leak for leak in forbidden)
     # This is an answer-leakage regression fixture, not evidence that a model
     # can independently solve the problem; the provider is mocked above.
 
