@@ -55,6 +55,7 @@
 | T29 | Human intervention during active concurrent research | Implementation open for review | Blue · ChatGPT authored ticket · [PR #39](https://github.com/bkramerext/sigma/pull/39) |
 
 | T30 | Create Samples entries from exported projects | Implemented; PR open for review | Green · ChatGPT assignment |
+| T37 | Trustworthy research memory, evidence selection, and continuity | Ready, unassigned until human dispatch | Blue proposed · [ticket](tickets/t37.md) |
 
 ### T23.1 scope
 
