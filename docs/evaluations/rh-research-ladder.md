@@ -78,7 +78,9 @@ These scenarios test the current research workflow and mathematical
 communication, not real-agent generalization. Strategy prompts leak methods by
 design; deterministic provider fixtures test persistence and coordination, not
 reasoning quality. Even a correct run of the first three stages would show
-prerequisite competence only. SIGMA currently has no in-session external
-reference search, numerical experiment runner, symbolic system, or proof
-assistant integration. Those capabilities and expert review are prerequisites
-for a credible RH research campaign, not features that these samples supply.
+prerequisite competence only. SIGMA has no in-session external reference search or formal proof-assistant
+integration. Scientific Python and SageMath are optional local computation
+runtimes; each Investigator/Skeptic call receives the actually observed
+availability in `execution_tools`. The sample must not imply a computation ran
+unless a saved execution record establishes it. Finite numerical or symbolic
+checks do not prove RH or replace independent mathematical and expert review.
