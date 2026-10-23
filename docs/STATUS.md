@@ -83,6 +83,53 @@ caveat projection, is `/tmp/sigma-a178-live-postfix-final-render.png`; the
 browser report capture is
 `/tmp/sigma-a1771-after-maximum-regions-html.png`.
 
+### Current product strength assessment
+
+SIGMA is looking strong as a research-workflow product and promising, but not
+yet proven, as an autonomous research system. Its engineering supports a
+substantial end-to-end loop: parallel Investigator and Skeptic work, saved and
+ordered evidence, criticism that can change the coordinator's decision,
+strategy attribution, resumable sessions, and an outcome that exposes its
+uncertainty. A17.8's deterministic regressions show that important failure
+modes in this loop are testable and that the coordinator no longer treats
+proof-shaped language as proof.
+
+The live Maximum Regions run is encouraging evidence of useful review: the
+Skeptic caught a concrete gap in the initial small-case evidence, the
+Investigator supplied direct counts, and the coordinator recognized the
+resolved objection while preserving the “unverified” qualification. This is
+credible evidence of review and coordination working together. It does not
+show that SIGMA can originate a result: the sample strategy already contained
+the central formula and proof outline, and no independent checker validated
+the mathematics. SIGMA is a capable, evidence-centered research assistant and
+review workspace; its autonomous discovery quality remains unestablished.
+
+### What would improve research-trustworthiness evaluation
+
+The next step needs an answer-free live task whose result can be checked
+independently. The most useful input from the team would be:
+
+- A research question with a precise success criterion, plus domain constraints
+  and permitted sources or tools.
+- Confirmation that the answer, proof outline, or equivalent solution is not
+  already present in the project, samples, repository history, or supplied
+  context. A known answer can be held back for evaluation.
+- An independent reference check: a proof sketch or expected result for a
+  mathematics task, or a domain reviewer and source set for an empirical task.
+  SIGMA's own agents should not be the sole judges of correctness.
+- An agreed evaluation rubric covering correctness, novelty or independent
+  discovery, evidence quality, treatment of counterevidence, calibration, and
+  reproducibility, including what counts as a pass or a failure.
+- A live-run budget and authorization. We can report model, effort, calls,
+  elapsed time, and available usage data; plan-mode records may not expose cost.
+
+With those conditions, we can preserve the prompts, ordered artifacts, and
+decision trail, compare SIGMA's answer with the held-back reference, and have a
+qualified reviewer assess the reasoning. Without them, deterministic tests
+can improve system behavior but cannot establish research discovery; SIGMA
+should be described as a research assistant rather than a trustworthy
+autonomous researcher.
+
 ### Exit criteria
 
 | Criterion | Status | Evidence and limits |
