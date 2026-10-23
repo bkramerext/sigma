@@ -102,6 +102,7 @@ def main() -> None:
                     "verification_status": "incomplete",
                     "strategy_contribution": "productive",
                     "contribution_rationale": "The bounded computation checks the selected finite case.",
+                    "cross_strategy_relations": [],
                 }
             return httpx.Response(200, json=provider_response(result))
 

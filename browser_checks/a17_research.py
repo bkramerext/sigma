@@ -1402,6 +1402,25 @@ with sync_playwright() as playwright:
         artifact["strategy_id"] == stopped_portfolio["strategy_ids"][1]
         for artifact in stopped_portfolio["artifacts"]
     )
+    portfolio.get_by_role("button", name="Resume", exact=True).click()
+    expect(portfolio.locator(".session-status")).to_have_text("ended", timeout=20000)
+    expect(portfolio.locator(".coordinator-portfolio-review")).to_be_visible()
+    expect(portfolio.locator(".coordinator-portfolio-review")).to_contain_text(
+        "Coordinator recommendations"
+    )
+    resumed_portfolio = page.evaluate(
+        """async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.find(session => session.session_number === 2)""",
+        max_regions_path,
+    )
+    assert resumed_portfolio["portfolio_decision"]["status"] == "model_reported_unverified"
+    assert len(resumed_portfolio["portfolio_decision"]["strategy_actions"]) == 2
+    page.set_viewport_size({"width": 1440, "height": 900})
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.screenshot(path="/tmp/sigma-a18-coordinator-review-desktop.png", full_page=True)
+    page.set_viewport_size({"width": 390, "height": 844})
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    expect(portfolio.locator(".coordinator-portfolio-review")).to_be_visible()
+    page.screenshot(path="/tmp/sigma-a18-coordinator-review-mobile.png", full_page=True)
     assert not errors, errors
     assert len(starts) == 5, starts
     print(
