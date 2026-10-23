@@ -68,7 +68,14 @@ The new `src/sigma/t39_evaluation.py` exposes:
 - `python -m sigma.t39_evaluation --score /path/to/review.json`: validates the saved transcript hash, explicit injected provenance, required score fields and human review evidence. A MET judgment cannot have a mathematical score below 2. The returned answer key is for the evaluator, never the tested agent.
 - `tests/t39_evaluation.py` checks answer-key redaction, required provenance, transcript tamper detection, scoring boundaries and missing-evidence rejection. It is included in `./sigma test`.
 
-**Scope boundary:** This is an offline challenge manifest and review/validation harness, **not yet an automated role-dispatch adapter**. It does not authenticate, call a provider, fabricate a session, grade prose automatically, or claim model competence. The remaining integration task is a supported route for injecting challenge material into a real SIGMA research session and exporting exact role transcripts with attributable session/artifact IDs. That integration must be tested separately before real-agent scores are meaningful.
+**Saved-session capture adapter (implemented, no dispatch):**
+
+1. Create a fresh working copy of the RH sample and begin a normal research session with the relevant strategy. **Only with explicit provider-call approval**, supply the challenge text through SIGMA's existing human-guidance intervention targeting the Skeptic. Mark its origin as evaluator-authored; never pretend the Investigator independently discovered this argument.
+2. Once SIGMA saves the Skeptic response, invoke `python -m sigma.t39_evaluation --capture RH-SYM --project-path /path/to/working.sigma --session-id UUID --output /tmp/rh-sym-capture.json`. Capture **fails closed** unless the exact challenge text occurs in precisely one saved intervention, an acknowledged Skeptic delivery matches a completed Skeptic step and saved same-cycle artifact, and the role output acknowledges the intervention ID.
+3. Invoke `python -m sigma.t39_evaluation --captured-review /tmp/rh-sym-capture.json` for an unscored, hash-anchored review template. Save it, fill in the reviewer and observations and the four scores, then invoke `--score /path/to/review.json`.
+4. Keep capture and review files local; saved text may include user-supplied or model-generated sensitive content. The transcript hash detects alteration **relative to its review**, not malicious fabrication by someone controlling both files. Real-model provenance still requires independent source/session inspection.
+
+**Scope boundary:** This is an offline manifest, saved-session extraction and human-review harness, **not automated live provider dispatch**. It uses SIGMA's existing human intervention mechanism for challenge delivery, and does not call a provider, fabricate a session, judge prose automatically, or assert research competence. A real session and browser/report evaluation remain unverified. The evaluator controls challenge injection and explicitly distinguishes those inputs from independent Investigator work.
 
 ## Actual research trial and scoring
 
