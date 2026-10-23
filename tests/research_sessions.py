@@ -12,12 +12,13 @@ from uuid import uuid4
 
 import httpx
 
-from sigma import agentic, proposals, research_sessions, text_views
+from sigma import agentic, papers, proposals, python_sandbox, research_sessions, text_views
 from sigma.projects import (
     ProjectError,
     create_strategy,
     edit_strategy,
     initialize_project,
+    project_path,
     set_strategy_enabled,
 )
 
@@ -46,6 +47,7 @@ def investigation(n):
         "assumptions": [f"Assumption {n}"],
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
+        "python_code": None,
     }
 
 
@@ -214,6 +216,485 @@ async def test_three_cycles_and_idempotency(path: Path):
         range(1, len(finished["events"]) + 1)
     )
     assert any(event["kind"] == "coordinator.started" for event in finished["events"])
+
+
+async def test_investigator_python_is_run_and_reviewed(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 1
+    research_sessions.save_limits(str(path), limits)
+    code = "print(6 * 7)"
+    first = {**investigation(1), "python_code": code}
+    execution = {
+        "id": str(uuid4()),
+        "status": "timeout",
+        "exit_code": 124,
+        "stdout": "",
+        "stderr": "Execution exceeded the 15-second wall limit.",
+        "duration_ms": 15_000,
+        "source": code,
+        "artifacts": [],
+        "environment": {"network": "none", "memory_bytes": 536870912},
+    }
+    outputs = [first, skeptic(1, "stop", "no_progress")]
+    contexts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        contexts.append((payload["text"]["format"]["name"], context))
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(
+            research_sessions,
+            "execute_research_code",
+            new=AsyncMock(return_value=execution),
+        ) as sandbox,
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        finished = await wait_for(path, started["id"])
+
+    sandbox.assert_awaited_once()
+    sandbox_call = sandbox.await_args
+    assert sandbox_call is not None
+    assert sandbox_call.args[1] == code
+    assert sandbox_call.kwargs == {
+        "session_id": started["id"],
+        "strategy_id": strategy.id,
+        "cycle": 1,
+    }
+    assert [role for role, _ in contexts] == [
+        "research_investigator",
+        "research_skeptic",
+    ], (contexts, finished)
+    skeptic_context = contexts[1][1]["investigator_output"]
+    assert skeptic_context["python_code"] == code
+    assert skeptic_context["python_execution"] == execution
+    assert skeptic_context["python_execution"]["status"] == "timeout"
+    assert finished["steps"][0]["output"] == skeptic_context
+    assert finished["artifacts"][0]["investigator_output"] == skeptic_context
+    assert (
+        finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
+    )
+    assert any(event["kind"] == "python.started" for event in finished["events"])
+    completed_event = next(
+        event for event in finished["events"] if event["kind"] == "python.completed"
+    )
+    assert execution["id"] in completed_event["message"]
+    assert execution["status"] in completed_event["message"]
+    from sigma.api import export_project_view
+
+    exported = export_project_view(str(path))
+    exported_artifact = exported["research_sessions"][0]["artifacts"][0]
+    assert exported_artifact["investigator_output"]["python_code"] == code
+    assert exported_artifact["investigator_output"]["python_execution"] == execution
+    with patch("sigma.api.export_project_view", return_value=exported):
+        paper_evidence, _ = papers._snapshot(str(path))
+    paper_sources = {item["id"]: item["data"] for item in paper_evidence["sources"]}
+    paper_artifact = next(
+        value for key, value in paper_sources.items() if key.startswith("artifact:")
+    )
+    assert paper_artifact["investigator_output"]["python_code"] == code
+    assert paper_artifact["investigator_output"]["python_execution"]["source"] == code
+    # Cross-strategy coordination must see the failure, not only the original
+    # pre-execution claim. Its preview leaves the original exact evidence intact.
+    peer_branch = {
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Peer approach",
+        "strategy_text": "Review the computation independently.",
+        "current_question": "Does peer evidence change the approach?",
+        "pending_investigation": investigation(1),
+    }
+    for role in ("investigator", "skeptic"):
+        peer_context = research_sessions._portfolio_context(finished, peer_branch, role, 1)
+        preview = peer_context["other_strategy_evidence"][0]["python_execution"]
+        assert preview["id"] == execution["id"] and preview["status"] == "timeout"
+        assert preview["source"] == code and preview["stderr"] == execution["stderr"]
+    assert finished["artifacts"][0]["investigator_output"]["python_execution"] == execution
+    large_preview_record = json.loads(json.dumps(finished))
+    large_execution = large_preview_record["artifacts"][0]["investigator_output"][
+        "python_execution"
+    ]
+    large_execution.update(stdout="x" * 3000, stderr="e" * 2000)
+    peer_context = research_sessions._portfolio_context(
+        large_preview_record, peer_branch, "skeptic", 1
+    )
+    preview = peer_context["other_strategy_evidence"][0]["python_execution"]
+    assert preview["stdout_truncated"] and len(preview["stdout"]) == 2000
+    assert preview["stderr_truncated"] and len(preview["stderr"]) == 1000
+    assert large_execution["stdout"] == "x" * 3000 and preview["source"] == code
+    prior_findings = research_sessions._prior_session_findings(str(path), str(uuid4()))
+    assert prior_findings[0]["python_execution"]["id"] == execution["id"]
+    assert prior_findings[0]["python_execution"]["status"] == "timeout"
+
+
+async def test_recovery_reuses_saved_python_execution(path: Path):
+    view, strategy, _, _ = await setup(path)
+    session_id = str(uuid4())
+    code = "print('persist before session update')"
+    investigation_output = {**investigation(1), "python_code": code}
+    record = {
+        "id": session_id,
+        "project_path": str(project_path(path)),
+        "project_id": view.project.id,
+        "status": "running",
+        "strategy_runs": [
+            {
+                "strategy_id": strategy.id,
+                "strategy_title": "Saved approach",
+                "cycle": 1,
+                "pending_investigation": investigation_output,
+                "current_action": "Python execution",
+            }
+        ],
+        "steps": [
+            {
+                "id": str(uuid4()),
+                "strategy_id": strategy.id,
+                "role": "investigator",
+                "cycle": 1,
+                "output": investigation_output,
+            }
+        ],
+        "events": [],
+    }
+    research_sessions._save(str(path), record)
+    container_result = python_sandbox.ExecutionResult(
+        "completed", 0, "persist before session update\n", "", 50, "sha256:" + "a" * 64
+    )
+    with patch.object(python_sandbox, "execute", return_value=container_result):
+        saved_execution = await python_sandbox.execute_research_code(
+            str(path),
+            code,
+            session_id=session_id,
+            strategy_id=strategy.id,
+            cycle=1,
+        )
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("recovery must not rerun saved code")),
+    ) as execute:
+        await research_sessions._complete_pending_python(
+            session_id, str(path), strategy.id, 1, asyncio.Lock()
+        )
+    execute.assert_not_awaited()
+    recovered = research_sessions._read(str(path), session_id)
+    branch = recovered["strategy_runs"][0]
+    assert branch["pending_investigation"]["python_execution"] == saved_execution
+    assert recovered["steps"][0]["output"]["python_execution"] == saved_execution
+    assert any(event["kind"] == "python.recovered" for event in recovered["events"])
+
+
+async def test_stop_during_python_execution_preserves_provenance(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 1
+    research_sessions.save_limits(str(path), limits)
+    code = "while True: pass"
+    execution = {
+        "id": str(uuid4()),
+        "status": "timeout",
+        "exit_code": 124,
+        "stdout": "",
+        "stderr": "Execution exceeded the 15-second wall limit.",
+        "duration_ms": 15_000,
+        "source": code,
+        "artifacts": [],
+        "environment": {"network": "none"},
+    }
+    execution_started = asyncio.Event()
+    release_execution = asyncio.Event()
+    provider_calls = []
+
+    async def handler(request):
+        provider_calls.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json=provider_response({**investigation(1), "python_code": code}),
+        )
+
+    async def delayed_execution(*_args, **_kwargs):
+        execution_started.set()
+        await release_execution.wait()
+        return execution
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "execute_research_code", new=delayed_execution),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        await asyncio.wait_for(execution_started.wait(), 2)
+        stop_task = asyncio.create_task(
+            research_sessions.control_session(str(path), started["id"], "stop")
+        )
+        await asyncio.sleep(0)
+        release_execution.set()
+        stopped = await asyncio.wait_for(stop_task, 2)
+
+    assert stopped["status"] == "stopped"
+    assert len(provider_calls) == 1  # the Skeptic is not called after a user stop
+    saved = research_sessions.get_session(str(path), started["id"])
+    pending = saved["strategy_runs"][0]["pending_investigation"]
+    assert pending["python_code"] == code and pending["python_execution"] == execution
+    assert saved["steps"][0]["status"] == "completed"
+    assert saved["steps"][0]["output"] == pending
+    assert any(event["kind"] == "python.completed" for event in saved["events"])
+
+
+async def test_failed_experiment_is_reused_then_revised(path: Path):
+    view, strategy, credential, config = await setup(path)
+    bad_code, repaired_code = (
+        "raise ValueError('singular system')",
+        "print('rank=1; underdetermined')",
+    )
+    calls, contexts = [], []
+
+    async def compute(_path, source, **provenance):
+        calls.append(source)
+        result = python_sandbox.ExecutionResult(
+            "failed" if source == bad_code else "completed",
+            1 if source == bad_code else 0,
+            "" if source == bad_code else "rank=1; underdetermined\n",
+            "ValueError: singular system" if source == bad_code else "",
+            5,
+        )
+        with patch.object(python_sandbox, "execute", return_value=result):
+            return await python_sandbox.execute_research_code(_path, source, **provenance)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        cycle = context["cycle"]
+        if payload["text"]["format"]["name"] == "research_investigator":
+            if cycle > 1:
+                assert (
+                    context["prior_artifacts"][-1]["investigator_output"]["python_execution"][
+                        "status"
+                    ]
+                    == "failed"
+                )
+            output = {
+                **investigation(cycle),
+                "python_code": bad_code if cycle < 3 else repaired_code,
+            }
+        else:
+            evidence = context["investigator_output"]
+            contexts.append(evidence)
+            assert evidence["python_execution"]["source"] == evidence["python_code"]
+            output = skeptic(cycle)
+            output["next_question"] = (
+                "Use rank-revealing least squares and report the null space; failure is not mathematical refutation."
+            )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execute_research_code", new=compute),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+    assert finished["status"] == "ended" and len(finished["artifacts"]) == 3, finished
+    assert calls == [bad_code, repaired_code]
+    assert contexts[0]["python_execution"] == contexts[1]["python_execution"]
+    assert contexts[1]["python_execution"]["cycle"] == 1
+    assert "original" in contexts[1]["python_execution_reuse_reason"]
+    assert contexts[2]["python_execution"]["status"] == "completed"
+    assert any(event["kind"] == "python.reused" for event in finished["events"])
+
+
+async def test_restart_during_python_has_no_automatic_rerun(path: Path):
+    await test_recovery_reuses_saved_python_execution(path)
+    record = research_sessions._all(str(path))[0]
+    branch = record["strategy_runs"][0]
+    prior = branch["pending_investigation"].pop("python_execution")
+    stored = path / "research-executions" / f"{prior['id']}.json"
+    # Reproduce a real crash state: intent was published, terminal result was
+    # never written. The host cannot infer whether the program actually ran.
+    prior.update(status="running", exit_code=None, stdout="", stderr="", duration_ms=None)
+    stored.write_text(json.dumps(prior))
+    research_sessions._save(str(path), record)
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("uncertain execution must not rerun")),
+    ):
+        await research_sessions._complete_pending_python(
+            record["id"], str(path), branch["strategy_id"], 1, asyncio.Lock()
+        )
+    recovered = research_sessions._read(str(path), record["id"])
+    evidence = recovered["strategy_runs"][0]["pending_investigation"]["python_execution"]
+    assert evidence["status"] == "interrupted" and evidence["exit_code"] is None
+    assert evidence["stdout"] == "" and "may have run" in evidence["interruption_reason"]
+    recovered["deadline_at"] = "2000-01-01T00:00:00+00:00"
+    pending = recovered["strategy_runs"][0]["pending_investigation"]
+    pending.pop("python_execution")
+    pending["python_code"] = "print('new work after deadline')"
+    research_sessions._save(str(path), recovered)
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("expired work must not dispatch")),
+    ):
+        await research_sessions._complete_pending_python(
+            record["id"], str(path), branch["strategy_id"], 1, asyncio.Lock()
+        )
+    expired = research_sessions._read(str(path), record["id"])
+    assert "python_execution" not in expired["strategy_runs"][0]["pending_investigation"]
+
+
+async def test_portfolio_python_queue_and_stop(path: Path):
+    for action in ("complete", "stop", "project-change"):
+        stopping = action != "complete"
+        case = path.with_name(action + ".sigma")
+        view, first, credential, config = await setup(case)
+        strategies = [first] + [
+            create_strategy(
+                case, f"Computation {i}", "Run an independently attributed finite experiment."
+            ).project.strategies[-1]
+            for i in (2, 3)
+        ]
+        limits = research_sessions.get_limits(str(case))
+        limits.update(research_rounds=1, model_calls=6)
+        limits = research_sessions.save_limits(str(case), limits)
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        provider_investigations = []
+        state = {"active": 0, "maximum": 0}
+
+        async def handler(request, provider_investigations=provider_investigations):
+            payload = json.loads(request.content)
+            context = json.loads(payload["input"])
+            if payload["text"]["format"]["name"] == "research_investigator":
+                provider_investigations.append(context["strategy"]["id"])
+                output = {**investigation(1), "python_code": "print('finite check')"}
+            else:
+                assert context["investigator_output"]["python_execution"]["status"] == "completed"
+                output = skeptic(1, "stop", "productive_conclusion")
+            return httpx.Response(200, json=provider_response(output))
+
+        async def compute(
+            _path,
+            source,
+            calls=calls,
+            state=state,
+            entered=entered,
+            release=release,
+            stopping=stopping,
+            **provenance,
+        ):
+            calls.append(provenance)
+            state["active"] += 1
+            state["maximum"] = max(state["maximum"], state["active"])
+            entered.set()
+            try:
+                if stopping:
+                    await release.wait()
+                else:
+                    await asyncio.sleep(0.05)
+                return {
+                    "id": str(uuid4()),
+                    "source": source,
+                    "status": "completed",
+                    "exit_code": 0,
+                    "stdout": "finite check\n",
+                    "stderr": "",
+                    "artifacts": [],
+                    **provenance,
+                }
+            finally:
+                state["active"] -= 1
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "execute_research_code", new=compute),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(case),
+                first.id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+                strategy_ids=[item.id for item in strategies],
+            )
+            if stopping:
+                await entered.wait()
+                for _ in range(100):
+                    if len(provider_investigations) == 3:
+                        break
+                    await asyncio.sleep(0.01)
+                assert len(provider_investigations) == 3
+                if action == "stop":
+                    stop = asyncio.create_task(
+                        research_sessions.control_session(str(case), started["id"], "stop")
+                    )
+                    await asyncio.sleep(0.02)
+                    release.set()
+                    finished = await stop
+                else:
+                    set_strategy_enabled(case, first.id, False)
+                    release.set()
+                    finished = await wait_for(case, started["id"])
+            else:
+                finished = await wait_for(case, started["id"])
+        assert state["maximum"] == 1 and state["active"] == 0
+        assert len(calls) == (1 if stopping else 3), calls
+        assert (
+            finished["status"]
+            == {"complete": "ended", "stop": "stopped", "project-change": "paused"}[action]
+        ), finished
+        if stopping:
+            assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 1
+            assert len(finished["steps"]) == 3 and finished["calls_used"] == 3
+        else:
+            assert len(finished["artifacts"]) == 3 and finished["calls_used"] == 6
 
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
@@ -930,6 +1411,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
+        "python_code": None,
     }
     review = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -975,7 +1457,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "artifact-3",
         "artifact-4",
     ]
-    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 50000}]}
+    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 300000}]}
     try:
         research_sessions._agent_context(oversized_context, "skeptic", 2)
     except ProjectError as exc:
@@ -2567,6 +3049,7 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "assumptions": ["The two classes are defined by the final symbol."],
         "evidence_status": "Complete inductive argument; no formal checker was run.",
         "open_obligations": [],
+        "python_code": None,
     }
     accepted = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -2902,6 +3385,14 @@ def main():
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
+        asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
+        asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
+        asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))
+        asyncio.run(test_failed_experiment_is_reused_then_revised(root / "python-revision.sigma"))
+        asyncio.run(test_portfolio_python_queue_and_stop(root / "python-queue.sigma"))
+        asyncio.run(
+            test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
+        )
         asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))

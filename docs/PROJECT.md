@@ -24,9 +24,10 @@ Python/uv, FastAPI, argparse CLI, React/TypeScript/Vite. Browser, CLI, and execu
 
 **Working now:** local project lifecycle; strategy authoring and generation;
 bounded single- and multi-strategy research sessions; persistent evidence,
-continuity, assessments, forks, and report exports. Research still has no
-external source or computation tools, formal proof checker, or user-directed
-mid-session instruction. Live model quality has not been established by the
-deterministic test suite.
+continuity, assessments, forks, report exports, and optional isolated Python
+execution for finite Investigator computations. Research still has no external
+source tool or formal proof checker. Python output is unverified evidence, not a
+proof. Live model quality has not been established by the deterministic test
+suite.
 
 See [Getting Started](GETTING-STARTED.md) to run, [STATUS](STATUS.md) for verification, [DECISIONS](DECISIONS.md) for storage, and [BRAINSTORM](BRAINSTORM.md) for future ideas.
