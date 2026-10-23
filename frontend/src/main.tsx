@@ -1198,7 +1198,8 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
       {cloud ? <CloudIdentityControls compact/> : null}
-      {!cloud && <ConnectionStatus disabled={connectionDisabled} projectHeader/>}
+      {!cloud && <GoogleSignInPlaceholder/>}
+      <ConnectionStatus disabled={connectionDisabled} projectHeader/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
   </header>;
@@ -2519,6 +2520,12 @@ type CloudAccountSession = { email: string; role: string; expires_at: number };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
+function GoogleSignInPlaceholder() {
+  const description = 'Google sign-in is unavailable in the local workspace and is coming soon.';
+  return <div className="project-google-signin" role="status" aria-label={description} title={description} data-tooltip={description}>
+    <span className="connection-dot" aria-hidden="true"/><span>Google Sign-in</span><small>Coming soon</small>
+  </div>;
+}
 function CloudIdentityControls({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
   if (!cloud?.enabled) return null;
