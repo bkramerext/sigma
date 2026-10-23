@@ -48,7 +48,7 @@
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
-| T25 | Outcome hierarchy and collapsible subsections | Proposed; not started | Gray proposed · ChatGPT authored ticket |
+| T25 | Outcome hierarchy and collapsible subsections | Assigned to Gray; not started | Gray · ChatGPT authored ticket · PR pending |
 
 ### T23.1 scope
 
