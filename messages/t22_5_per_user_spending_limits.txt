@@ -30,4 +30,11 @@ VERIFICATION
 - Real Chrome: browser_checks/t23_1_google_signin.py PASS against isolated local backend/Vite on separate ports; budget and cloud identity responses were deterministic browser fixtures. Confirmed Access Management policy/balance rendering and an edited email rule, plus exhausted status, New/Open availability, and opening a saved project. No external Google OAuth or paid API call.
 - git diff --check: PASS.
 
+REBASE VERIFICATION (main dc2f914)
+- Preserved the T21 local acceptance additions in docs/STATUS.md while retaining the T22.5 implementation and status record.
+- ./sigma test: PASS again on the reconciled tree (backend suite, Ruff check/format, Pyright, frontend typecheck and production build).
+- Real Chrome browser_checks/t23_1_google_signin.py: PASS against isolated local API and Vite servers; verified Access Management allowance editing/balances, exhausted-budget messaging, and saved-project access.
+- Exact-head hosted CI was queried after push. GitHub returned no commit statuses and no PR-triggered workflow runs at query time; local verification is complete.
+- Current branch head is recorded in PR #55. No live/paid provider requests were made.
+
 R4R: requested on PR #55. Do not self-merge.
