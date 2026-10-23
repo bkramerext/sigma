@@ -48,6 +48,24 @@ evaluation. I did not run any API-key-billed call.
   separate from the 60-second model-call timeout. A deterministic recovery test
   forces a preflight timeout, verifies zero calls were charged, then resumes and
   completes one full Investigator/Skeptic cycle.
+- The reviewer was right that cross-strategy coordinator actions were
+  advisory: the scheduler fair-rotated active branches and the Investigator
+  received peer artifacts only as generic context. Material cited relations
+  (`supports`, `contradicts`, `complements`, `overlaps`) now create a persisted
+  handoff on the cited target branch. The target's next question explicitly
+  asks it to test that relation against both cited artifacts, and pending
+  handoff targets take selection priority when the shared call budget cannot
+  fund every branch. The Investigator instructions require an explicit
+  adopt/reject/unresolved judgment. Call steps record both artifact IDs, and
+  the resulting research artifact records the handoff it was prompted with.
+- A deterministic end-to-end regression produces a source finding in strategy
+  A that cites strategy B's saved artifact, stops the session while B's next
+  handoff preflight is blocked, then resumes. With only one complete cycle
+  remaining, the scheduler selects B rather than A; the exact provider request
+  contains the handoff question, both IDs, and the directed instruction. B's
+  resulting artifact retains the evidence link. This proves the orchestration
+  changes B's prompt and survives stop/recovery; it does not prove a real model
+  will make a sound or useful change in response.
 - Corrected the ladder documentation count: it has five runnable samples.
 - Added the run protocol and scoring rubric in
   [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact
@@ -120,10 +138,12 @@ mathematical truth.
   production build. The ladder check confirmed five independent sample copies,
   answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
   checks; its printed note explicitly limits those checks to finite examples.
-- An additional adversarial lifecycle pass added preflight-failure, preflight
-  timeout and recovery, queued branch stop, and duration/call-limit resume regressions. The final full-suite
-  `./sigma test` passed on 2026-10-22, including Ruff check/format, Pyright
-  (zero errors), frontend typecheck, and the production Vite build.
+- Adversarial lifecycle and peer-handoff regressions passed in the final full
+  `./sigma test` on 2026-10-22, including preflight failure/timeout recovery,
+  queued-branch stop, duration/call-limit resume, and the A-to-B finding that
+  changes B's scheduled next question and survives stop/resume. Ruff check and
+  format, Pyright (zero errors), frontend typecheck, and production Vite build
+  also passed.
 - Real Chrome `browser_checks/a17_research.py` passed against a local provider
   fixture at desktop (1440px) and mobile (390px), including multi-strategy
   selection, stop during provider work, resume, and the coordinator panel. I

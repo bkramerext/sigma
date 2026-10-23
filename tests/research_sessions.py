@@ -1395,6 +1395,157 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
     assert (path / "project.json").read_bytes() == project_before
 
 
+async def test_peer_finding_changes_target_investigator_after_stop_and_resume(path: Path):
+    view, source, credential, config = await setup(path)
+    target = create_strategy(
+        path, "Target route", "Derive an independent invariant and check its consequences."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits.update({"research_rounds": 3, "model_calls": 10})
+    limits = research_sessions.save_limits(str(path), limits)
+    preflight_waiting = asyncio.Event()
+    preflight_interrupted = False
+    observed = []
+
+    async def configuration_gate(*_args, **_kwargs):
+        nonlocal preflight_interrupted
+        relation_saved = any(
+            artifact.get("skeptic_output", {}).get("cross_strategy_relations")
+            for record in research_sessions._all(str(path))
+            for artifact in record.get("artifacts", [])
+        )
+        if relation_saved and not preflight_interrupted:
+            preflight_interrupted = True
+            preflight_waiting.set()
+            await asyncio.Event().wait()
+        return config
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        role = payload["text"]["format"]["name"]
+        context = json.loads(payload["input"])
+        strategy_id = context["strategy"]["id"]
+        cycle = context["cycle"]
+        observed.append((role, strategy_id, cycle, context))
+        if role == "research_investigator":
+            result = investigation(cycle)
+            if cycle == 3:
+                assert (
+                    "directly examine its cited source and target artifacts"
+                    in payload["instructions"]
+                )
+                assert strategy_id == target.id
+                assert len(context["peer_handoffs"]) == 1
+                handoff = context["peer_handoffs"][0]
+                assert handoff["source_strategy_id"] == source.id
+                assert handoff["target_strategy_id"] == target.id
+                assert handoff["relation"] == "complements"
+                assert handoff["source_artifact_id"] in context["question"]
+                assert handoff["target_artifact_id"] in context["question"]
+                result["method"] = (
+                    "Tested the complementary claim in source artifact "
+                    f"{handoff['source_artifact_id']} against target artifact "
+                    f"{handoff['target_artifact_id']}; this changes the next step to compare "
+                    "the two invariant boundaries before extending the target derivation."
+                )
+            return httpx.Response(200, json=provider_response(result))
+
+        result = skeptic(cycle)
+        if cycle == 1:
+            result["next_question"] = "Continue the distinct branch-local derivation."
+        elif cycle == 2:
+            result["next_question"] = "Test the next consequence of this branch's invariant."
+            if strategy_id == source.id:
+                peer = next(
+                    item
+                    for item in context["other_strategy_evidence"]
+                    if item["strategy_id"] == target.id
+                )
+                result["cross_strategy_relations"] = [
+                    {
+                        "strategy_id": target.id,
+                        "artifact_id": peer["artifact_id"],
+                        "relation": "complements",
+                        "rationale": "The source route's boundary lemma supplies the missing case in the target route's invariant.",
+                    }
+                ]
+        elif strategy_id == target.id:
+            result = skeptic(cycle, "stop", "productive_conclusion")
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=configuration_gate),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            source.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[source.id, target.id],
+        )
+        await asyncio.wait_for(preflight_waiting.wait(), 5)
+        before_stop = research_sessions.get_session(str(path), started["id"])
+        source_artifact = next(
+            artifact
+            for artifact in before_stop["artifacts"]
+            if artifact["strategy_id"] == source.id and artifact["strategy_cycle"] == 2
+        )
+        target_first_artifact = next(
+            artifact
+            for artifact in before_stop["artifacts"]
+            if artifact["strategy_id"] == target.id and artifact["strategy_cycle"] == 1
+        )
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+
+        stopped_target = next(
+            item for item in stopped["strategy_runs"] if item["strategy_id"] == target.id
+        )
+        pending = stopped_target["pending_peer_handoffs"]
+        assert len(pending) == 1
+        assert pending[0]["source_artifact_id"] == source_artifact["id"]
+        assert pending[0]["target_artifact_id"] == target_first_artifact["id"]
+        assert stopped["calls_used"] == 8
+
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 10
+    cycle_three_investigators = [
+        item for item in observed if item[0] == "research_investigator" and item[2] == 3
+    ]
+    assert [
+        (role, strategy_id, cycle) for role, strategy_id, cycle, _ in cycle_three_investigators
+    ] == [("research_investigator", target.id, 3)]
+    target_third = next(
+        artifact
+        for artifact in finished["artifacts"]
+        if artifact["strategy_id"] == target.id and artifact["strategy_cycle"] == 3
+    )
+    assert "changes the next step" in target_third["investigator_output"]["method"]
+    assert target_third["peer_handoffs_prompted"] == pending
+    target_third_step = next(
+        step
+        for step in finished["steps"]
+        if step["strategy_id"] == target.id
+        and step["role"] == "investigator"
+        and step["cycle"] == 3
+    )
+    assert target_third_step["peer_handoff_artifact_ids"] == [
+        source_artifact["id"],
+        target_first_artifact["id"],
+    ]
+
+
 async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_pool(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(
@@ -2581,6 +2732,11 @@ def main():
         asyncio.run(
             test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidence(
                 root / "portfolio-cross-review.sigma"
+            )
+        )
+        asyncio.run(
+            test_peer_finding_changes_target_investigator_after_stop_and_resume(
+                root / "portfolio-peer-handoff.sigma"
             )
         )
         asyncio.run(

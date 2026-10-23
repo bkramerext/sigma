@@ -448,7 +448,11 @@ INVESTIGATOR_GUIDANCE = (
     "a conjecture, example, or assertion; identify every unresolved proof obligation. Do not claim "
     "external checking or formal verification. When other_strategy_evidence is supplied, treat "
     "it as unverified peer work; state whether it changes this strategy's reasoning and never "
-    "silently present another branch's result as independently derived."
+    "silently present another branch's result as independently derived. When a peer_handoff is "
+    "supplied, directly examine its cited source and target artifacts, test whether the finding "
+    "changes this approach, and make the next step reflect that examination. Explicitly say what "
+    "you adopt, reject, or leave unresolved; cite the supplied artifact IDs and do not treat the "
+    "peer claim as verified."
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
@@ -1434,9 +1438,78 @@ def _portfolio_context(
         }
         for artifact in peer_artifacts
     ]
+    if role == "investigator" and branch.get("pending_peer_handoffs"):
+        context["peer_handoffs"] = list(branch["pending_peer_handoffs"])
     if len(json.dumps(context, ensure_ascii=False)) > 48000:
         raise ProjectError("Research context exceeds the safe input limit")
     return context
+
+
+def _peer_handoff_question(handoffs: list[dict[str, Any]]) -> str:
+    prompts = [
+        "Evaluate the reported "
+        f"{item['relation']} finding in Strategy {item['source_strategy_title']} artifact "
+        f"{item['source_artifact_id']}, which cites your artifact {item['target_artifact_id']}. "
+        f"Test this rationale in your own approach: {item['rationale']} State whether it changes "
+        "your next step and why. Treat the peer finding as unverified."
+        for item in handoffs
+    ]
+    return " Address each evidence-linked peer handoff: " + " ".join(prompts)
+
+
+def _queue_peer_handoffs(
+    record: dict[str, Any], source_branch: dict[str, Any], source_artifact: dict[str, Any]
+) -> None:
+    skeptic = source_artifact.get("skeptic_output")
+    if not isinstance(skeptic, dict):
+        return
+    for relation in skeptic.get("cross_strategy_relations", []):
+        if relation.get("relation") not in {"supports", "contradicts", "complements", "overlaps"}:
+            continue
+        target = next(
+            (
+                branch
+                for branch in record.get("strategy_runs", [])
+                if branch.get("strategy_id") == relation.get("strategy_id")
+                and branch.get("strategy_id") != source_branch.get("strategy_id")
+                and branch.get("status") in {"queued", "running"}
+            ),
+            None,
+        )
+        if target is None:
+            continue
+        handoff = {
+            "source_strategy_id": source_branch["strategy_id"],
+            "source_strategy_title": source_branch["strategy_title"],
+            "source_artifact_id": source_artifact["id"],
+            "target_strategy_id": target["strategy_id"],
+            "target_artifact_id": relation["artifact_id"],
+            "relation": relation["relation"],
+            "rationale": _bounded_note(relation["rationale"], 500),
+        }
+        pending = target.setdefault("pending_peer_handoffs", [])
+        if not any(
+            item.get("source_artifact_id") == handoff["source_artifact_id"]
+            and item.get("target_artifact_id") == handoff["target_artifact_id"]
+            for item in pending
+        ):
+            if not pending:
+                target["peer_handoff_base_question"] = target["current_question"]
+            pending.append(handoff)
+            del pending[:-4]
+            target["current_question"] = target[
+                "peer_handoff_base_question"
+            ] + _peer_handoff_question(pending)
+
+
+def _apply_pending_peer_handoffs(record: dict[str, Any]) -> None:
+    for branch in record.get("strategy_runs", []):
+        pending = branch.get("pending_peer_handoffs")
+        if isinstance(pending, list) and pending:
+            base_question = branch.setdefault(
+                "peer_handoff_base_question", branch.get("current_question", "")
+            )
+            branch["current_question"] = base_question + _peer_handoff_question(pending)
 
 
 def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
@@ -1748,6 +1821,7 @@ def _commit_portfolio_review(
         ),
         "investigator_output": investigation,
         "skeptic_output": output,
+        "peer_handoffs_prompted": list(branch.get("active_peer_handoffs", [])),
         "coordinator_decision": decision,
         "next_question": next_question,
         "note": "Unverified research note. No computational or formal tool was run.",
@@ -1788,6 +1862,8 @@ def _commit_portfolio_review(
     )
     branch["status"] = "running" if decision in {"continue", "revise"} else "ended"
     branch["current_action"] = "Investigator" if branch["status"] == "running" else "Completed"
+    branch.pop("active_peer_handoffs", None)
+    _queue_peer_handoffs(record, branch, artifact)
     record["strategy_assessments"] = _strategy_assessments(record)
     _event(
         record,
@@ -1933,8 +2009,23 @@ async def _portfolio_role_call(
                 "call_number": record["calls_used"],
                 "context_artifact_ids": context["context_artifact_ids"],
                 "prior_session_artifact_ids": context["prior_session_artifact_ids"],
-                "peer_strategy_artifact_ids": [
-                    item["artifact_id"] for item in context["other_strategy_evidence"]
+                "peer_strategy_artifact_ids": list(
+                    dict.fromkeys(
+                        [item["artifact_id"] for item in context["other_strategy_evidence"]]
+                        + [
+                            identifier
+                            for item in context.get("peer_handoffs", [])
+                            for identifier in (
+                                item["source_artifact_id"],
+                                item["target_artifact_id"],
+                            )
+                        ]
+                    )
+                ),
+                "peer_handoff_artifact_ids": [
+                    identifier
+                    for item in context.get("peer_handoffs", [])
+                    for identifier in (item["source_artifact_id"], item["target_artifact_id"])
                 ],
                 "context_obligation_count": len(context["outstanding_obligations"]),
                 "cost_reserve": reserve,
@@ -2020,6 +2111,9 @@ async def _portfolio_role_call(
             )
             if role == "investigator":
                 branch["pending_investigation"] = output
+                if branch.get("pending_peer_handoffs"):
+                    branch["active_peer_handoffs"] = branch.pop("pending_peer_handoffs")
+                    branch.pop("peer_handoff_base_question", None)
                 branch["current_action"] = "Skeptic"
             else:
                 branch["pending_skeptic"] = output
@@ -2090,6 +2184,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     if branch["status"] == "running":
                         branch["status"] = "queued"
                         branch["current_action"] = "Investigator"
+            _apply_pending_peer_handoffs(record)
             for branch in runs:
                 if branch["status"] == "queued" and branch["cycle"] >= record["cycle_limit"]:
                     branch["status"] = "ended"
@@ -2134,7 +2229,11 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             selected = []
             calls_allocated = 0
             for branch in sorted(
-                rotated, key=lambda item: 0 if item.get("pending_investigation") else 1
+                rotated,
+                key=lambda item: (
+                    0 if item.get("pending_investigation") else 1,
+                    0 if item.get("pending_peer_handoffs") else 1,
+                ),
             ):
                 cost = 1 if branch.get("pending_investigation") else 2
                 if calls_allocated + cost <= remaining:
