@@ -153,7 +153,11 @@ def main() -> None:
             f"/api/projects/research-executions/{record['id']}/artifacts/plot.png",
             params={"path": str(path)},
         )
-        assert response.status_code == 200 and response.content == b"PNG fixture"
+        assert (
+            response.status_code == 200
+            and response.content == b"PNG fixture"
+            and response.headers["content-disposition"].startswith("attachment;")
+        )
         with patch.object(python_sandbox, "execute", return_value=fake):
             response = client.post(
                 "/api/projects/research-executions",

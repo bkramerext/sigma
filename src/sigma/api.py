@@ -5,6 +5,7 @@ import json
 import os
 from dataclasses import asdict
 from typing import Any
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import FastAPI, Request
@@ -241,7 +242,11 @@ def research_execution_artifact_view(execution_id: str, filename: str, path: str
     return Response(
         content,
         media_type=media_type,
-        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
