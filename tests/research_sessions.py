@@ -207,6 +207,123 @@ async def test_three_cycles_and_idempotency(path: Path):
     assert any(event["kind"] == "coordinator.started" for event in finished["events"])
 
 
+async def test_new_session_receives_prior_saved_findings(path: Path):
+    view, strategy, credential, config = await setup(path)
+    outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    contexts = []
+    continuation_started = asyncio.Event()
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        contexts.append((payload["text"]["format"]["name"], context))
+        if context.get("prior_session_findings"):
+            continuation_started.set()
+            await asyncio.Event().wait()
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        first = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        completed = await wait_for(path, first["id"])
+        assert completed["status"] == "ended" and len(completed["artifacts"]) == 1
+        next_session = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        await asyncio.wait_for(continuation_started.wait(), 2)
+        await research_sessions.control_session(str(path), next_session["id"], "stop")
+
+    next_context = next(
+        item[1]
+        for item in reversed(contexts)
+        if item[0] == "research_investigator" and item[1].get("prior_session_findings")
+    )
+    assert next_context["prior_session_findings"] == [
+        {
+            "id": completed["artifacts"][0]["id"],
+            "sequence": 1,
+            "claim_or_question": completed["artifacts"][0]["claim_or_question"],
+            "method": completed["artifacts"][0]["method"],
+            "evidence_status": completed["artifacts"][0]["evidence_status"],
+            "objections": completed["artifacts"][0]["objections"],
+            "open_obligations": completed["artifacts"][0]["open_obligations"],
+            "coordinator_decision": completed["artifacts"][0]["coordinator_decision"],
+            "next_question": completed["artifacts"][0]["next_question"],
+            "session_id": completed["id"],
+            "session_number": completed["session_number"],
+            "strategy_id": strategy.id,
+            "strategy_title": strategy.title,
+        }
+    ], next_context["prior_session_findings"]
+    assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]
+    persisted = research_sessions.get_session(str(path), next_session["id"])
+    assert (
+        persisted["steps"][0]["prior_session_artifact_ids"]
+        == next_context["prior_session_artifact_ids"]
+    )
+
+
+def test_continuation_context_is_bounded(path: Path):
+    view = initialize_project(path, "Long-history project", "A bounded research question.")
+    source_id = str(uuid4())
+    source = {
+        "id": source_id,
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "session_number": 1,
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Long history approach",
+        "status": "ended",
+        "created_at": research_sessions._now(),
+        "updated_at": research_sessions._now(),
+        "artifacts": [
+            {
+                "id": str(uuid4()),
+                "sequence": sequence,
+                "strategy_id": str(uuid4()),
+                "claim_or_question": f"Finding {sequence} " + "x" * 3000,
+                "method": "Method " + "y" * 3000,
+                "evidence_status": "Unverified " + "z" * 3000,
+                "objections": ["Objection " + "o" * 300 for _ in range(12)],
+                "open_obligations": ["Obligation " + "p" * 300 for _ in range(12)],
+                "coordinator_decision": "continue",
+                "next_question": "Next " + "q" * 3000,
+            }
+            for sequence in range(1, 21)
+        ],
+    }
+    research_sessions._save(view.path, source)
+    current = {
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "problem": view.project.problem,
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Current approach",
+        "strategy_text": "Continue from saved findings.",
+        "current_question": "Avoid repeating prior work.",
+        "strategy_snapshot": [],
+        "artifacts": [],
+    }
+    context = research_sessions._agent_context(current, "investigator", 1)
+    encoded = json.dumps(context, ensure_ascii=False)
+    findings = context["prior_session_findings"]
+    assert 1 <= len(findings) <= 12
+    assert "Finding 20" in findings[0]["claim_or_question"]
+    assert "[truncated; inspect the original saved artifact]" in findings[0]["claim_or_question"]
+    assert len(encoded) < 48000
+    assert source["artifacts"][0]["claim_or_question"].endswith("x" * 3000)
+
+
 async def test_pause_counts_interrupted_call(path: Path):
     view, strategy, credential, config = await setup(path)
     started_call = asyncio.Event()
@@ -826,7 +943,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         finished = await wait_for(path, started["id"])
-        assert "entire ordered set of saved artifacts" in provider_requests[1]["instructions"]
+        assert (
+            "entire ordered set of current-session saved artifacts"
+            in provider_requests[1]["instructions"]
+        )
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
@@ -1003,6 +1123,61 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         reopened = research_sessions.get_session(str(path), started["id"])
         assert reopened["strategy_assessments"] == rows
         assert reopened["strategy_assessments"][0]["strategy_title"] == strategy.title
+
+
+async def test_answer_free_maximum_regions_prompt(path: Path):
+    view = initialize_project(
+        path,
+        "Maximum Regions · answer-free regression",
+        "Determine the greatest number of regions formed by n distinct straight lines in the plane. State assumptions, derive an upper bound, and give a construction if you can.",
+        research_mode="mathematical",
+        difficulty="easy",
+    )
+    strategy = create_strategy(
+        path,
+        "Incremental line insertion",
+        "Study what one newly inserted line can add. Bound its segments by its intersections with the earlier lines, and seek a configuration attaining the bound.",
+    ).project.strategies[0]
+    credential = {
+        "identity": "fixture-account",
+        "mode": "api_key",
+        "token": "fixture-token",
+        "status": "connected",
+    }
+    config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+    outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    inputs = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        inputs.append(json.loads(payload["input"]))
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended" and finished["artifacts"]
+    assert len(inputs) == 2
+    for context in inputs:
+        assert context["problem"] == view.project.problem
+        assert context["strategy"]["approach"] == strategy.approach
+        prompt = json.dumps(context)
+        assert "1 + n(n+1)/2" not in prompt
+        assert "y=kx+k^2" not in prompt
+    # This is an answer-leakage regression fixture, not evidence that a model
+    # can independently solve the problem; the provider is mocked above.
 
 
 async def test_generic_objective_review_on_binary_strings(path: Path):
@@ -1371,6 +1546,8 @@ def main():
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
+        asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
+        test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
@@ -1384,6 +1561,9 @@ def main():
         asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
         asyncio.run(
             test_maximum_regions_solution_and_frozen_attribution(root / "maximum-regions.sigma")
+        )
+        asyncio.run(
+            test_answer_free_maximum_regions_prompt(root / "maximum-regions-answer-free.sigma")
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()

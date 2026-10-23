@@ -1,5 +1,108 @@
 # SIGMA status
 
+## A18 implementation (started 2026-10-22)
+
+### Baseline inspection
+
+Work is on branch `a18-blue`, based on the latest `origin/main` commit
+`6adbeed`. The current implementation is a single-strategy, single-worker
+loop: `start_session` in `src/sigma/research_sessions.py` accepts one
+`strategy_id`; `_worker` performs Investigator and Skeptic calls sequentially;
+and `start_session` rejects a second active worker. The worker holds the
+proposal, agentic, text-view, and research-session gates across each provider
+call, which also serializes those local provider operations. The persisted
+record has one session-level strategy identity and no per-strategy execution
+state. `_agent_context` only reads that record's artifacts, so a fresh session
+does not incorporate prior durable findings. In the UI, `ResearchWorkspace`
+selects `eligible[0]` and submits one strategy ID; it polls the session but has
+no concurrent per-strategy activity model.
+
+These are observed implementation limits, not claims about model capability.
+The A17.8 live Maximum Regions session cannot serve as independent discovery
+evidence because its saved strategy contains the solution. No new live-provider
+evaluation has been run for A18; that requires explicit authorization and will
+remain separate from deterministic tests. The complete current executable
+suite has been rerun after the initial continuity implementation. Work now
+continues on concurrent strategy execution and deterministic stress/recovery
+coverage.
+
+### Work tracking
+
+- **Uncompleted:** genuine concurrent multi-strategy execution. The current
+  code still accepts one strategy per session and holds shared provider gates
+  across sequential Investigator/Skeptic calls. No multi-strategy scheduler
+  has been implemented yet, so the related live activity, cross-strategy
+  compare/continue decisions, and concurrency cancellation scenarios are also
+  uncompleted. This is the primary remaining engineering workstream; it does
+  not require user input.
+- **Completed:** bounded cross-session continuity for newly started work.
+  Sessions freeze up to 12 recent durable findings, attributed to their source
+  session, strategy, and artifact; lengthy fields and lists are clipped with an
+  explicit instruction to inspect the original artifact. Investigator and
+  Skeptic receive the findings, and the skeptical prompt preserves their
+  unverified status and requires artifact-ID attribution. Each provider step
+  records the source artifact IDs. The existing session view now shows a
+  “Prior research considered” disclosure with findings, objections, and open
+  obligations. Existing sessions without this field remain readable.
+- **Completed:** deterministic continuity regression. A first bounded session
+  saves a finding, a later session receives it in provider input, and that
+  context's source artifact IDs are persisted on the new provider step. The
+  original project's canonical `project.json` remains byte-for-byte unchanged.
+- **Completed:** deterministic Maximum Regions answer-free prompt fixture.
+  It creates a fresh Easy mathematics project with only the objective and a
+  general line-insertion approach, then audits the exact mocked-provider input
+  for absence of the known formula and construction. This checks input hygiene;
+  the mocked output is not model-quality evidence.
+- **In progress:** bounded concurrent multi-strategy execution and its live
+  per-strategy state. The baseline one-strategy worker remains in place, so the
+  concurrency acceptance criterion is not met yet.
+- **Not tested:** A18 end-to-end engineering gate and live research gate. The
+  existing real-Chrome A17 workspace scenario passed, but it is not the full
+  A18 workflow; real-provider research remains unauthorized.
+- **In progress:** session-based strategy forking. The session UI now prefills a
+  manual fork draft with the source strategy ID, session number, saved claims,
+  skeptic objections, open obligations, coordinator decisions, and next
+  questions. The source session's original strategy text is used; if it exceeds
+  the 10,000-character strategy limit, the draft explicitly says it was
+  shortened and directs the user to the source session. The Chrome scenario
+  verifies that the draft includes the session's evidence. A follow-up session
+  that compares a saved fork with its parent remains unavailable until
+  multi-strategy scheduling is implemented.
+- **Uncompleted:** live-provider research evaluation. It requires explicit
+  usage authorization; deterministic fixtures do not establish model quality.
+
+### Continuity implementation and verification
+
+The new continuation path is deliberately a bounded index rather than a
+rewrite or silent replay of old research. Its frozen source list survives reload
+and is presented in the session pane; full evidence remains in the source
+session. `tests/research_sessions.py` verifies provider-input inclusion,
+attribution, persistence, and no project-file mutation. `browser_checks/a17_research.py`
+now also checks the continuation disclosure against a fixture response. The
+list is capped at 12 findings and 16 KB serialized, with individual long fields
+and lists clipped visibly; a stress fixture stores a large prior history and
+verifies the resulting input remains below 48 KB. This bounds the added
+continuity cost while leaving older source evidence available in its session.
+
+Verification so far:
+
+- `./sigma test`: all executable scenarios, Ruff checks and formatting,
+  Pyright (0 errors), frontend typecheck, and production Vite build passed
+  (13.0 seconds on the latest run).
+- `uv run --locked --no-sync python tests/research_sessions.py`: persistent
+  session scenarios passed.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5175
+  SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8013 uv run --locked --no-sync
+  --with playwright python browser_checks/a17_research.py`: real Chrome passed
+  on the isolated fixture (21 seconds), including continuation and fork-draft
+  checks.
+  These alternate ports avoid existing SIGMA processes in a separate checkout;
+  they do not reuse that checkout's server or provider fixture.
+- The first browser attempt used occupied default ports whose processes served
+  another checkout and an older fixture that rejected the current sample schema.
+  No product behavior was inferred from that attempt; rerunning against the
+  isolated A18 checkout ports above passed.
+
 ## A23: project difficulty setting (2026-10-22)
 
 Added descriptive project difficulty with stable values `easy`, `medium`, and

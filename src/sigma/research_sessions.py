@@ -26,6 +26,7 @@ from sigma.proposals import configuration
 CALL_LIMIT = 6
 MAX_RECORD = 512_000
 MAX_TOTAL = 16_000_000
+MAX_PRIOR_CONTEXT_BYTES = 16_000
 CALL_TIMEOUT = 40
 DEFAULT_LIMITS = {
     "research_rounds": 3,
@@ -434,7 +435,10 @@ INVESTIGATOR_GUIDANCE = (
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
-    "and the entire ordered set of saved artifacts together, not only the latest write-up. The "
+    "the compact findings from prior sessions, and the entire ordered set of current-session "
+    "saved artifacts together, not only the latest write-up. Treat prior-session notes as "
+    "unverified unless their recorded evidence status says otherwise; cite their artifact IDs "
+    "when relying on them and request the original artifact when a truncated note matters. The "
     "strategy is a proposed approach, not automatic proof; inspect any reasoning it supplies and "
     "do not require a complete argument to be rewritten in every cycle. Earlier artifact evidence "
     "can satisfy a requirement omitted or shortened later; cite the supporting cycle for each "
@@ -902,6 +906,7 @@ async def start_session(
                 "events": [],
             }
             record["outcome"] = _outcome(record)
+            record["prior_session_findings"] = _prior_session_findings(view.path, record["id"])
             _event(record, "queued", record["message"])
             _save(view.path, record)
             event = asyncio.Event()
@@ -1185,6 +1190,16 @@ async def _call(
 def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:
     """Deterministic, durable role context; no dependence on provider conversation state."""
     artifacts = record["artifacts"]
+    prior_session_findings = record.get("prior_session_findings")
+    if not isinstance(prior_session_findings, list):
+        prior_session_findings = _prior_session_findings(
+            record.get("project_path"), record.get("id")
+        )
+    prior_session_artifact_ids = [
+        item["id"]
+        for item in prior_session_findings
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    ]
     # All outstanding objections/obligations are carried forward, even when older
     # full artifacts must be excluded from the bounded model input.
     obligations: list[str] = []
@@ -1205,6 +1220,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         # Keep that contract true here; silently dropping older evidence can
         # manufacture open obligations or cause already-resolved flaws to recur.
         "prior_artifacts": artifacts,
+        "prior_session_findings": prior_session_findings,
+        "prior_session_artifact_ids": prior_session_artifact_ids,
         "outstanding_obligations": obligations,
         "context_artifact_ids": [a["id"] for a in artifacts],
         "project_strategy_snapshot": record.get("strategy_snapshot", []),
@@ -1217,6 +1234,72 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
             "Research context exceeds the safe input limit; no critical objections were discarded"
         )
     return context
+
+
+def _bounded_note(value: Any, limit: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip() + " [truncated; inspect the original saved artifact]"
+
+
+def _bounded_notes(value: Any, item_limit: int, char_limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    notes = [
+        _bounded_note(item, char_limit) for item in value[:item_limit] if isinstance(item, str)
+    ]
+    if len(value) > item_limit:
+        notes.append(
+            f"{len(value) - item_limit} additional notes omitted; inspect the original artifact"
+        )
+    return notes
+
+
+def _prior_session_findings(project_path: Any, current_session_id: Any) -> list[dict[str, Any]]:
+    if not isinstance(project_path, str) or not isinstance(current_session_id, str):
+        return []
+    findings: list[dict[str, Any]] = []
+    # A new bounded session should build on saved work without mutating old
+    # sessions. Include a compact, frozen, explicitly attributed index; full
+    # artifacts remain available in their original session records.
+    previous = [
+        item
+        for item in _all(project_path)
+        if item.get("id") != current_session_id
+        and item.get("status") not in {"queued", "running"}
+        and isinstance(item.get("artifacts"), list)
+    ]
+    for session in previous:
+        for artifact in reversed(session.get("artifacts", [])):
+            if not isinstance(artifact, dict):
+                continue
+            finding = {
+                "id": artifact.get("id"),
+                "sequence": artifact.get("sequence"),
+                "claim_or_question": _bounded_note(artifact.get("claim_or_question"), 1200),
+                "method": _bounded_note(artifact.get("method"), 1000),
+                "evidence_status": _bounded_note(artifact.get("evidence_status"), 300),
+                "objections": _bounded_notes(artifact.get("objections"), 4, 350),
+                "open_obligations": _bounded_notes(artifact.get("open_obligations"), 6, 350),
+                "coordinator_decision": artifact.get("coordinator_decision"),
+                "next_question": _bounded_note(artifact.get("next_question"), 500),
+                "session_id": session.get("id"),
+                "session_number": session.get("session_number"),
+                "strategy_id": artifact.get("strategy_id"),
+                "strategy_title": session.get("strategy_title"),
+            }
+            candidate = [*findings, finding]
+            if (
+                len(json.dumps(candidate, ensure_ascii=False).encode("utf-8"))
+                > MAX_PRIOR_CONTEXT_BYTES
+            ):
+                return findings
+            findings = candidate
+            if len(findings) >= 12:
+                return findings
+    return findings
 
 
 async def _worker(session_id: str, path: str) -> None:
@@ -1341,6 +1424,7 @@ async def _worker(session_id: str, path: str) -> None:
                     "started_at": _now(),
                     "call_number": record["calls_used"],
                     "context_artifact_ids": context["context_artifact_ids"],
+                    "prior_session_artifact_ids": context.get("prior_session_artifact_ids", []),
                     "context_obligation_count": len(context["outstanding_obligations"]),
                 }
                 record["steps"].append(step)

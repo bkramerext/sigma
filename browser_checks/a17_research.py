@@ -9,6 +9,9 @@ from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
+browser_base_url = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
+fixture_base_url = os.environ.get("SIGMA_BROWSER_FIXTURE_URL", "http://127.0.0.1:8002").rstrip("/")
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
         executable_path=os.environ.get(
@@ -25,6 +28,7 @@ with sync_playwright() as playwright:
     provider_calls = []
     legacy_titleless = {"enabled": False}
     legacy_outcome = {"enabled": False}
+    continuation_fixture = {"enabled": False}
     chatgpt_connection = {"enabled": False}
     fail_export = {"enabled": False}
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -49,7 +53,7 @@ with sync_playwright() as playwright:
         if fail_export["enabled"] and "/api/projects/export" in route.request.url:
             route.fulfill(status=503, json={"error": "fixture export failure"})
             return
-        response = route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8002"))
+        response = route.fetch(url=route.request.url.replace(browser_base_url, fixture_base_url))
         if legacy_titleless["enabled"] and route.request.url.endswith("/api/projects/open"):
             data = response.json()
             data["project"]["strategies"][0].pop("title", None)
@@ -58,6 +62,30 @@ with sync_playwright() as playwright:
             data = response.json()
             for item in data.get("sessions", []):
                 item.get("outcome", {}).pop("summary", None)
+            route.fulfill(response=response, json=data)
+        elif (
+            continuation_fixture["enabled"]
+            and "/api/projects/research-sessions?" in route.request.url
+        ):
+            data = response.json()
+            if data.get("sessions"):
+                data["sessions"][0]["prior_session_findings"] = [
+                    {
+                        "id": "prior-artifact-fixture",
+                        "sequence": 2,
+                        "claim_or_question": "A prior saved finding carried into this bounded session.",
+                        "method": "A prior method that remains unverified.",
+                        "evidence_status": "Unverified fixture note.",
+                        "objections": ["Check the boundary case."],
+                        "open_obligations": ["Verify the boundary case."],
+                        "coordinator_decision": "continue",
+                        "next_question": "Check the boundary case.",
+                        "session_id": "prior-session-fixture",
+                        "session_number": 0,
+                        "strategy_id": "prior-strategy-fixture",
+                        "strategy_title": "Prior fixture strategy",
+                    }
+                ]
             route.fulfill(response=response, json=data)
         elif chatgpt_connection["enabled"] and "/api/ai/connection" in route.request.url:
             data = response.json()
@@ -81,7 +109,7 @@ with sync_playwright() as playwright:
         }"""
         )
 
-    page.goto("http://127.0.0.1:5173")
+    page.goto(browser_base_url)
     home_credit = page.locator(".home-art-credit")
     expect(home_credit.locator("span")).to_have_text("By Brian Kramer, ChatGPT & Codex")
     expect(home_credit.locator("time")).to_have_text("October 2026")
@@ -140,7 +168,7 @@ with sync_playwright() as playwright:
     expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
     expect(page.get_by_role("tooltip")).to_have_text("Back to home caption")
     back_caption.click()
-    page.wait_for_url("http://127.0.0.1:5173/")
+    page.wait_for_url(browser_base_url + "/")
     expect(page.get_by_role("tooltip")).to_have_count(0)
     page.get_by_role("tab", name="Samples", exact=True).click()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
@@ -700,6 +728,17 @@ with sync_playwright() as playwright:
     expect(artifacts.locator("li")).to_have_count(3)
     expect(artifacts).to_contain_text("Independent fixture review for cycle 1")
     expect(artifacts).to_contain_text("Unverified research note")
+    first_session.get_by_role("button", name="Fork strategy from findings", exact=True).click()
+    fork_form = page.locator("#strategy-composer")
+    expect(fork_form.locator("#strategy-title")).to_have_value(
+        "A17.1 saved approach (Session 1 fork)"
+    )
+    fork_approach = fork_form.locator("#strategy-approach")
+    fork_text = fork_approach.input_value()
+    assert "Fork rationale: derived from strategy" in fork_text
+    assert "Saved findings and criticism" in fork_text
+    assert "Open obligations:" in fork_text
+    fork_form.get_by_role("button", name="Cancel", exact=True).click()
     events = research.get_by_label("Recent session activity")
     expect(events.locator("li").last).to_contain_text("artifact committed")
     expect(events.get_by_role("button", name="Recent activity")).to_have_attribute(
@@ -719,8 +758,16 @@ with sync_playwright() as playwright:
     )
     assert len(session_list) == 1, session_list
     session_one = session_list[0]
-    page.goto("http://127.0.0.1:5173")
-    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    continuation_fixture["enabled"] = True
+    page.reload()
+    prior_context = page.get_by_label("Prior research considered")
+    expect(prior_context).to_be_visible()
+    prior_context.get_by_text("Prior research considered (1 recent finding)").click()
+    expect(prior_context).to_contain_text("Session #0 · Prior fixture strategy · Artifact 2")
+    expect(prior_context).to_contain_text("Check the boundary case.")
+    continuation_fixture["enabled"] = False
+    page.goto(browser_base_url)
+    page.goto(f"{browser_base_url}/project?{urlencode({'path': path})}")
     expect(page.locator("li[data-session-id]")).to_have_count(1)
     expect(page.locator("li[data-session-id]").first.locator(".session-row-title")).to_have_text(
         "Session #1"
@@ -833,8 +880,8 @@ with sync_playwright() as playwright:
 
     saved_before_fallback = project_file.read_bytes()
     legacy_titleless["enabled"] = True
-    page.goto("http://127.0.0.1:5173")
-    page.goto(f"http://127.0.0.1:5173/project?{urlencode({'path': path})}")
+    page.goto(browser_base_url)
+    page.goto(f"{browser_base_url}/project?{urlencode({'path': path})}")
     expect(
         page.locator(".strategy-title-line h3").filter(
             has_text="Derive a recurrence and inspect boundary cases."
@@ -1075,7 +1122,7 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-a174-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
     page.get_by_role("button", name="Back to home", exact=True).click()
-    page.wait_for_url("http://127.0.0.1:5173/")
+    page.wait_for_url(browser_base_url + "/")
     page.get_by_role("tab", name="Samples", exact=True).click()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
