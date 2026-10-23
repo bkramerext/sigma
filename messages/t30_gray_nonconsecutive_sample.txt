@@ -108,4 +108,9 @@ passed all steps and the real Chrome sample check passed again at 1440px,
 390px, and 320px with no page errors or horizontal overflow. PR #48 contains
 the updated head.
 
+After the review correction, the branch still contains current `origin/main`
+as an ancestor and local `git merge-tree` reports no conflicts. GitHub's PR
+metadata nevertheless currently reports `mergeable: false`; the coordinator
+should check this platform status while reviewing.
+
 R4R for coordinator review and integration. Do not self-merge.
