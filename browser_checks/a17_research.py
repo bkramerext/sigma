@@ -252,7 +252,8 @@ with sync_playwright() as playwright:
         == "rgb(224, 196, 160)"
     )
     expect(first_export.get_by_role("radio", name="Project Audit")).to_be_checked()
-    expect(first_export.get_by_role("radio")).to_have_count(4)
+    expect(first_export.get_by_role("radio")).to_have_count(3)
+    expect(first_export).not_to_contain_text("Academic paper using LaTeX")
     expect(first_export.locator("select")).to_have_count(0)
     expect(first_export.get_by_label("Open in browser tab")).not_to_be_checked()
     export_title_box = first_export.locator("#export-project-heading").bounding_box()
@@ -697,12 +698,13 @@ with sync_playwright() as playwright:
     research = page.locator(".sessions-pane")
     expect(research.get_by_role("heading", name="Sessions")).to_be_visible()
     expect(research.locator(".section-count")).to_have_text("0 sessions, 0 running")
-    expect(research.locator(".session-columns")).to_contain_text("Session")
+    expect(research.locator(".session-columns")).to_have_count(0)
+    expect(research.locator(".sessions-empty")).to_be_visible()
     assert (
-        research.locator(".session-columns").evaluate(
-            "node => getComputedStyle(node).textTransform"
+        research.locator(".sessions-empty").evaluate(
+            "node => getComputedStyle(node).borderTopWidth"
         )
-        == "uppercase"
+        == "0px"
     )
     assert research.get_by_role("button", name=re.compile("start", re.IGNORECASE)).count() == 0
     play = page.get_by_role("button", name="Start a new research session", exact=True)
@@ -802,7 +804,7 @@ with sync_playwright() as playwright:
     expect(
         page.locator("li[data-session-id]").first.locator(".session-row-content")
     ).to_be_visible()
-    open_outcome_section(page.locator("li[data-session-id]").first, "Evidence & Obligations")
+    open_outcome_section(page.locator("li[data-session-id]").first, "Citations, Evidence & Obligations")
     expect(page.locator(".research-artifacts li")).to_have_count(3)
     restored = page.evaluate(
         "async ({path,id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()",
@@ -924,6 +926,8 @@ with sync_playwright() as playwright:
     expect(page.locator(".project-pane").locator("details")).to_have_count(0)
     expect(research).to_be_visible()
     first_session = research.locator("li[data-session-id]").first
+    expect(research.locator(".session-columns")).to_have_count(0)
+    expect(first_session.get_by_role("button", name=re.compile("Session #1"))).to_be_visible()
     expect(first_session.locator(":scope > details")).to_have_count(0)
     first_session.get_by_role("button", name=re.compile("Session #1")).click()
     expect(first_session.locator(".session-row-content")).to_be_visible()
@@ -949,9 +953,9 @@ with sync_playwright() as playwright:
             or label_box["y"] >= toggle_box["y"] + toggle_box["height"] - 1
         ), (title_box, toggle_box, label_box)
         toggle_style = outcome_toggle.evaluate(
-            "e => [getComputedStyle(e).display, getComputedStyle(e).width, e.getBoundingClientRect().width]"
+            "e => { const s=getComputedStyle(e), r=e.getBoundingClientRect(); return [s.display, s.width, r.width, r.height, s.borderWidth, s.boxShadow, s.backgroundColor, s.position]; }"
         )
-        assert toggle_style == ["flex", "28px", 28], toggle_style
+        assert toggle_style == ["flex", "28px", 28, 28, "0px", "none", "rgba(0, 0, 0, 0)", "static"], toggle_style
 
     assert_outcome_markdown_control_flow()
     assert first_session.locator(".session-outcome table").count() == 0
@@ -968,7 +972,7 @@ with sync_playwright() as playwright:
     subsection_summaries = first_session.locator(".outcome-subsection > summary")
     expect(subsection_summaries).to_have_count(5)
     expect(subsection_summaries).to_contain_text(
-        ["Status", "Strategy Assessments", "Metrics", "Provenance", "Evidence & Obligations"]
+        ["Status", "Strategy Assessments", "Metrics", "Provenance", "Citations, Evidence & Obligations"]
     )
     for section in first_session.locator(".outcome-subsection").all():
         assert section.get_attribute("open") is None, section.inner_text()
@@ -1037,7 +1041,7 @@ with sync_playwright() as playwright:
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
-    evidence_detail = open_outcome_section(first_session, "Evidence & Obligations")
+    evidence_detail = open_outcome_section(first_session, "Citations, Evidence & Obligations")
     artifact_section = evidence_detail.locator("section.research-artifacts")
     artifact_markdown_toggle = artifact_section.get_by_role(
         "button", name="Render research artifacts as Markdown"
@@ -1190,7 +1194,7 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    expect(export_dialog.get_by_role("radio")).to_have_count(4)
+    expect(export_dialog.get_by_role("radio")).to_have_count(3)
     export_dialog.get_by_role("radio", name="Text file").check()
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".txt")
     export_dialog.get_by_label("Filename").fill("a17-blocked-tab")
@@ -1214,19 +1218,14 @@ with sync_playwright() as playwright:
     export_dialog = page.get_by_role("dialog", name="Export Project")
     export_dialog.get_by_role("radio", name="Project Audit").check()
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".json")
-    export_dialog.get_by_role("radio", name="Academic paper using LaTeX").check()
-    export_dialog.get_by_label("Filename").fill("a17-latex")
-    expect(export_dialog.locator(".export-filename-field span")).to_have_text(".pdf")
-    export_dialog.get_by_label("Open in browser tab").check()
-    export_dialog.get_by_role("button", name="Continue", exact=True).click()
+    export_dialog.get_by_role("button", name="Cancel", exact=True).click()
+    expect(export_dialog).to_be_hidden()
+    page.locator(".project-latex-button").click()
     paper_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(paper_dialog).to_be_visible()
     expect(paper_dialog).to_contain_text("One provider call")
-    paper_dialog.get_by_role("button", name="Back to Export Project").click()
-    expect(export_dialog).to_be_visible()
-    expect(export_dialog.get_by_label("Filename")).to_have_value("a17-latex")
-    export_dialog.get_by_role("button", name="Cancel", exact=True).click()
-    expect(export_dialog).to_be_hidden()
+    paper_dialog.get_by_role("button", name="Close", exact=True).click()
+    expect(paper_dialog).to_be_hidden()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     assert (
@@ -1288,7 +1287,7 @@ with sync_playwright() as playwright:
         "Contributed to solution"
     )
     expect(max_assessments.locator(".outcome-assessment-list")).to_contain_text("Artifact 1")
-    max_evidence = open_outcome_section(max_session, "Evidence & Obligations")
+    max_evidence = open_outcome_section(max_session, "Citations, Evidence & Obligations")
     expect(max_evidence.locator(".solution-review")).to_contain_text("R(n) = 1 + n(n+1)/2")
     page.mouse.move(1435, 895)
     page.wait_for_timeout(150)
@@ -1323,7 +1322,7 @@ with sync_playwright() as playwright:
     expect(max_session.locator(".outcome-general")).to_have_count(0)
     assert len(provider_calls) == calls_before_math_toggle
     max_session.get_by_role("button", name="Show plain outcome text").click()
-    max_evidence = open_outcome_section(max_session, "Evidence & Obligations")
+    max_evidence = open_outcome_section(max_session, "Citations, Evidence & Obligations")
     expect(max_evidence.locator(".solution-review")).to_contain_text("Solution claim:")
     expect(max_session.locator(".outcome-markdown")).to_have_count(0)
     maximum_strategy = page.locator("li[data-strategy-id]").first
@@ -1418,19 +1417,14 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     max_export = page.get_by_role("dialog", name="Export Project")
-    max_export.get_by_role("radio", name="Academic paper using LaTeX").check()
-    max_filename = max_export.get_by_label("Filename")
-    expect(max_filename).to_have_value(max_filename_stem)
-    expect(max_export.locator(".export-filename-field span")).to_have_text(".pdf")
-    max_export.get_by_role("button", name="Continue", exact=True).click()
+    max_export.get_by_role("button", name="Cancel", exact=True).click()
+    expect(max_export).to_be_hidden()
+    page.locator(".project-latex-button").click()
     max_paper_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(max_paper_dialog).to_be_visible()
     expect(max_paper_dialog).to_contain_text("complete evidence snapshot")
-    max_paper_dialog.get_by_role("button", name="Back to Export Project").click()
-    expect(max_export).to_be_visible()
-    expect(max_export.get_by_label("Filename")).to_have_value(max_filename_stem)
-    max_export.get_by_role("button", name="Cancel", exact=True).click()
-    expect(max_export).to_be_hidden()
+    max_paper_dialog.get_by_role("button", name="Close", exact=True).click()
+    expect(max_paper_dialog).to_be_hidden()
 
     page.set_viewport_size({"width": 390, "height": 420})
     page.get_by_role("button", name="Export project", exact=True).click()
