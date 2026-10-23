@@ -61,10 +61,49 @@ action. Real Chrome confirmed the styling and keyboard activation of Dismiss.
 
 Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
 320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
-`browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The A17
-research-session browser scenario was attempted but did not reach its result
-assertions: its isolated fixture ended the session at 0/30 calls, so its
-expected research artifacts were unavailable. No paid provider call was made.
+`browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The first A17
+attempt stopped at 0/30 calls because clearing the cost field retained a $0.01
+limit. PR #35 fixed the input behavior; the complete A17 flow passed against a
+fresh fixture afterward. No paid provider call was made.
+
+## T21 local alpha UI/browser acceptance (2026-10-23)
+
+Initial acceptance ran against `main` at `9cb487e`; after T28 merged, the
+current integration run used `main` at `317c5c4`. No live provider calls or
+worker coordination were used. Real Chrome passed project creation/open/recent
+navigation and persistence, settings and limit validation/save/reload, strategy
+editing, three-round multi-strategy progress, pause/resume/stop during provider
+work, historical/interrupted session inspection, Outcome/metrics/provenance,
+and audit/text/HTML report downloads with failure recovery. The T20.1 header,
+cost clearing, and responsive checks passed at desktop and phone sizes.
+
+The first post-T28 A17 run exposed a stale shared provider fixture: strict
+research schemas now require `computational_citations`, but the fixture omitted
+it for non-computational responses. The fixture now supplies an empty list and
+the full A17 Chrome flow passes. This was a test-fixture mismatch, not a
+production session regression.
+
+Real Chrome also ran a bounded Python computation and verified the completed
+execution, exact source/stdout, execution ID, and T28's `computed.json` text
+representation in the saved execution record at 1440px and 390px. A real Sage
+10.8 Docker run passed in Chrome: the Skeptic saw the completed execution and
+the captured `witnesses.json` metadata/hash; the Outcome/report and 320px layout
+were inspected. T28 artifact inspections are available inside the expanded
+execution JSON record; the UI does not render a separate preview panel. No
+release-blocking UI defect was found and no product UI changes were needed.
+
+Screenshots are under `/tmp`, including `sigma-a177-after-session-card.png`,
+`sigma-a177-after-export-mobile.png`, `sigma-a23-model-controls-390.png`,
+`sigma-t21-python-evidence-desktop.png`, `sigma-t21-python-evidence-mobile.png`,
+`sigma-t26-sage-desktop.png`, and `sigma-t26-sage-mobile.png`.
+
+Validation: `browser_checks/recents.py`, `browser_checks/settings.py`,
+`browser_checks/a17_research.py`, `browser_checks/header.py`,
+`browser_checks/sage_execution.py`, the real Chrome Python-evidence scenario,
+`tests/computational_evidence.py`, `tests/python_sandbox.py`,
+`tests/research_sessions.py`, `tests/sage_execution.py`,
+`tests/project_reports.py`, and `./sigma test` passed on the integrated main
+state. No paid provider calls were made.
 
 ## PR #35 review follow-up (2026-10-23)
 
@@ -3578,15 +3617,17 @@ strategy-bound execution records reject guidance. Invalid requests rejected by
 HTTP schema validation do not create session audit entries; accepted and
 service-level rejected requests are audited within the configured cap.
 
-### T29 integration with T28 on current main (2026-10-23)
+### T29 integration with T28 and T21 on current main (2026-10-23)
 
-Integrated current main at `317c5c46` after T28 merged. Conflict resolution
-preserves T28's SageMath execution records, bounded artifact inspections, and
-required computation citations alongside T29's intervention reviews and
-per-step provenance. `./sigma test` passed on the combined tree, including
-research-session concurrency/recovery, T28 citation and artifact regressions,
-CLI smoke, Ruff, format check, Pyright (0 errors/warnings/informations),
-frontend typecheck, and production build.
+Integrated current main at `317c5c46` after T28 merged, then incorporated the
+newer `ef3aadcc` T21 alpha acceptance update. Conflict resolution preserves
+T28's SageMath execution records, bounded artifact inspections, and required
+computation citations alongside T29's intervention reviews and per-step
+provenance. The provider fixture now returns both required citation and
+intervention-review fields. `./sigma test` passed on this final combined tree,
+including research-session concurrency/recovery, T28 citation and artifact
+regressions, CLI smoke, Ruff, format check, Pyright (0
+errors/warnings/informations), frontend typecheck, and production build.
 
 The first Chrome run correctly exposed that the deterministic provider fixture
 did not yet emit T28's required empty computation-citation list when no tool was
@@ -3594,4 +3635,5 @@ used. The fixture now emits it, and project names are unique across reruns. The
 real Chrome T29 check then passed at desktop and 390px mobile: guidance submitted
 during an in-flight call made no extra call, subsequent target-role acknowledgments
 and audit provenance persisted, and the mobile layout had no horizontal overflow.
-No live provider calls were made.
+The Chrome check was rerun after the T21 merge and passed again. No live provider
+calls were made.

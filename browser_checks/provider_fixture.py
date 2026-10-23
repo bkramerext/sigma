@@ -219,6 +219,7 @@ async def handler(request):
                     "sage_code": None,
                     "prior_session_failure_attempt_ids": [],
                     "human_guidance_reviews": [],
+                    "computational_citations": [],
                 }
                 if maximum_regions
                 else {
@@ -231,6 +232,7 @@ async def handler(request):
                     "sage_code": None,
                     "prior_session_failure_attempt_ids": [],
                     "human_guidance_reviews": [],
+                    "computational_citations": [],
                 }
             )
         else:
@@ -269,6 +271,7 @@ async def handler(request):
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
+                    "computational_citations": [],
                 }
                 if maximum_regions
                 else {
@@ -292,6 +295,7 @@ async def handler(request):
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
+                    "computational_citations": [],
                 }
             )
         result["human_guidance_reviews"] = [
