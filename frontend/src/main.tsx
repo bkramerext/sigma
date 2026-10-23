@@ -182,7 +182,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; pause: () => void; playDisabled: boolean; pauseDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -366,6 +366,11 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     finally { setBusy(false); }
   }
 
+  function requestResume(target: ResearchSession) {
+    revealSession(target.id);
+    void control('resume', target);
+  }
+
   function revealSession(id: string) {
     setExpanded(true);
     window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
@@ -394,28 +399,29 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
     finally { setBusy(false); }
   }
 
-  const interruptedActive = activeSession?.status === 'paused' && activeSession.steps.at(-1)?.status === 'interrupted';
-  const playLabel = activeSession?.status === 'paused' ? interruptedActive ? 'Resume unavailable · prior call completion is ambiguous' : 'Resume research session' : 'Start research session';
+  const playLabel = activeSession?.status === 'paused' ? 'Resume research session' : 'Start research session';
   const play = useCallback(() => {
     if (busy || readError) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
-    if (activeSession?.status === 'paused') { revealSession(activeSession.id); if (!interruptedActive) void control('resume', activeSession); return; }
+    if (activeSession?.status === 'paused') { requestResume(activeSession); return; }
     if (activeSession || !eligible.length) return;
     setPendingStrategyId(nextStrategyId);
     setConfirmStart(false);
     void begin();
-  }, [activeSession, busy, nextStrategyId, eligible.length, interruptedActive, readError, path]);
-  const pause = useCallback(() => {
-    if (activeSession?.status === 'running' && !busy && !readError) void control('pause', activeSession);
+  }, [activeSession, busy, nextStrategyId, eligible.length, readError, path]);
+  const stop = useCallback(() => {
+    if (activeSession?.status === 'running' && !busy && !readError) void control('stop', activeSession);
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
-      play, pause, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      playDisabled: busy || !!readError || !eligible.length || confirmStart || (!!activeSession && (activeSession.status !== 'paused' || interruptedActive)),
-      pauseDisabled: busy || !!readError || activeSession?.status !== 'running',
+      play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      playDisabled: busy || !!readError || confirmStart || (activeSession
+        ? activeSession.status !== 'paused' || !eligible.some(strategy => strategy.id === activeSession.strategy_id)
+        : !eligible.length),
+      stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, interruptedActive, onControlsChange, pause, play, playLabel, readError, sessions]);
+  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -438,7 +444,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
               <div className="session-summary">
                 <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
                 <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                  {(item.status === 'stopped' || item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}
+                  {(item.status === 'stopped' || item.status === 'paused') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => requestResume(item)}>Resume</button>}
                   {['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
@@ -652,7 +658,7 @@ function FloatingTooltip() {
   }, []);
   useEffect(() => {
     const targetFor = (target: EventTarget | null) => target instanceof Element
-      ? target.closest<HTMLElement>('[data-tooltip], button[aria-label]')
+      ? target.closest<HTMLElement>('[data-tooltip]:not([data-tooltip-disabled]), button[aria-label]:not([data-tooltip-disabled])')
       : null;
     const onPointerOver = (event: PointerEvent) => {
       const element = targetFor(event.target);
@@ -773,12 +779,6 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     if (editingFromRendered) chooseView('rendered');
     if (restoreFocus) requestAnimationFrame(() => bodyTrigger.current?.focus());
   }
-  useEffect(() => {
-    if (!editing) return;
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !editorArea.current?.contains(event.target)) cancelBodyEdit(false); };
-    document.addEventListener('pointerdown', outside, true);
-    return () => document.removeEventListener('pointerdown', outside, true);
-  }, [editing, editingFromRendered]);
   async function convert(targetFormat: TextFormat = format) {
     if (!data || busy) return;
     const controller = new AbortController(); abort.current = controller; setBusy(true); setRendering(true); setError('');
@@ -864,12 +864,6 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => { if (!editing) setDraft(view.project.title); }, [view.project.title, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
-  useEffect(() => {
-    if (!editing) return;
-    const outside = (event: PointerEvent) => { if (event.target instanceof Element && event.target.closest('.text-views')) return; if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
-    document.addEventListener('pointerdown', outside, true);
-    return () => document.removeEventListener('pointerdown', outside, true);
-  }, [editing]);
   function cancel(restoreFocus = true) { setDraft(view.project.title); setError(''); setEditing(false); onExitMode(); if (restoreFocus) requestAnimationFrame(() => trigger.current?.focus()); }
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -890,7 +884,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
       <button type="submit" className="text-view-link" title="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" title="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
-      <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} title="Edit project title and description" data-tooltip="Edit project title and description" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
+      <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip-disabled disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
       </button> </>}
   </div>;
@@ -1369,12 +1363,6 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => { if (!editing) setDraft(shownTitle); }, [shownTitle, editing]);
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
-  useEffect(() => {
-    if (!editing) return;
-    const outside = (event: PointerEvent) => { if (event.target instanceof Element && event.target.closest('.text-views')) return; if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
-    document.addEventListener('pointerdown', outside, true);
-    return () => document.removeEventListener('pointerdown', outside, true);
-  }, [editing]);
   function cancel(restoreFocus = true) {
     setEditing(false); onExitMode(); setDraft(shownTitle); setError('');
     if (restoreFocus) requestAnimationFrame(() => trigger.current?.focus());
@@ -1402,7 +1390,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
       <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
-      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and description: ${shownTitle}`} title={`Edit strategy title and description: ${shownTitle}`} data-tooltip="Edit strategy title and description" disabled={modeDisabled}
+      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and description: ${shownTitle}`} data-tooltip-disabled disabled={modeDisabled}
         onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
       {commands}
     </div>}
@@ -1483,8 +1471,8 @@ function ProcessControlsView({ controls, disabled }: { controls: ProcessControls
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
       </button>
-      <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Pause research session" title="Pause research session" data-tooltip="Pause research session" disabled={controls.pauseDisabled || disabled} onClick={controls.pause}>
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 4h3.2v12H5.5zM11.3 4h3.2v12h-3.2z"/></svg>
+      <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Stop research session" title="Stop research session" data-tooltip="Stop research session" disabled={controls.stopDisabled || disabled} onClick={controls.stop}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5h10v10H5z"/></svg>
       </button>
       </>}
   </span>;
@@ -1696,7 +1684,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const requestTextEdit = (key: string) => setTextEditSignals(current => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
   const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
-  const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, pause: () => {}, playDisabled: true, pauseDisabled: true, playLabel: 'Start research session' });
+  const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, stop: () => {}, playDisabled: true, stopDisabled: true, playLabel: 'Start research session' });
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const introPane = useRef<HTMLDivElement>(null);

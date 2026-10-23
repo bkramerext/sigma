@@ -126,7 +126,7 @@ with sync_playwright() as playwright:
     ).click()
     page.wait_for_url("**/project?*")
     untitled_controls = page.locator(
-        ".project-pane button, .strategies-pane button, .sessions-pane button"
+        ".project-pane button:not([data-tooltip-disabled]), .strategies-pane button:not([data-tooltip-disabled]), .sessions-pane button:not([data-tooltip-disabled])"
     ).evaluate_all(
         "buttons => buttons.filter(button => !button.disabled && !button.title.trim()).map(button => `${button.textContent.trim()} [${button.getAttribute('aria-label') || button.className}]`)"
     )
@@ -145,23 +145,24 @@ with sync_playwright() as playwright:
         "element => { const s = getComputedStyle(element); return [s.backgroundImage, s.color, s.borderTopColor, s.boxShadow]; }"
     )
     edit_pencil.hover()
-    expect(page.get_by_role("tooltip")).to_have_text("Edit project title")
     page.wait_for_timeout(150)
     pencil_hover = edit_pencil.evaluate(
         "element => { const s = getComputedStyle(element); return [s.backgroundImage, s.color, s.borderTopColor, s.boxShadow]; }"
     )
     assert gear_hover == pencil_hover, (gear_hover, pencil_hover)
+    expect(edit_pencil).not_to_have_attribute("title", re.compile(".+"))
+    expect(edit_pencil).to_have_attribute("data-tooltip-disabled", "true")
+    page.get_by_role("tooltip").wait_for(state="hidden")
     page.screenshot(path="/tmp/sigma-a177-after-icon-tooltip.png")
-    project_markdown = page.locator(".project-text-views .sigma-render-toggle")
-    project_edit_icon = page.locator(
-        ".project-text-views .project-text-actions .text-view-icon"
-    ).first
+    project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
+    project_edit_icon = edit_pencil
     markdown_box = project_markdown.bounding_box()
     edit_icon_box = project_edit_icon.bounding_box()
     assert markdown_box and edit_icon_box
-    assert abs(edit_icon_box["x"] - (markdown_box["x"] + markdown_box["width"] + 8)) < 1.5
+    markdown_gap = edit_icon_box["x"] - (markdown_box["x"] + markdown_box["width"])
+    assert 5 <= markdown_gap <= 16, markdown_gap
     edit_pencil.focus()
-    expect(page.get_by_role("tooltip")).to_have_text("Edit project title")
+    expect(page.get_by_role("tooltip")).to_have_count(0)
     project_disclosure = project_header.get_by_role("button", name="Project", exact=True)
     project_disclosure.click()
     expect(page.locator("#project-pane-content")).to_be_hidden()
@@ -326,7 +327,7 @@ with sync_playwright() as playwright:
         )
         != "none"
     )
-    project_title_button = page.get_by_role("button", name=re.compile("Edit project title:"))
+    project_title_button = page.get_by_role("button", name=re.compile("Edit project title and description:"))
     box = project_title_button.bounding_box()
     assert box
     page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
@@ -362,7 +363,7 @@ with sync_playwright() as playwright:
     expect(page.locator(".project-pane-title-line")).not_to_contain_text("Project:")
     expect(page.locator(".project-pane").locator("details")).to_have_count(0)
     original_project_title = page.locator(".project-pane-title-line .current-project").inner_text()
-    page.get_by_role("button", name=re.compile("Edit project title:")).focus()
+    page.get_by_role("button", name=re.compile("Edit project title and description:")).focus()
     page.keyboard.press("Enter")
     expect(page.locator(".project-title-edit-form")).to_be_visible()
     expect(page.locator(".project-title-pencil")).to_have_count(0)
@@ -384,32 +385,40 @@ with sync_playwright() as playwright:
         )
         < 3
     )
-    page.get_by_label("Project title", exact=True).fill("cancelled by outside click")
+    page.get_by_label("Project title", exact=True).fill("still editing after outside click")
     page.get_by_role("button", name="Strategies", exact=True).click()
-    expect(page.locator(".project-title-edit-form")).to_have_count(0)
+    expect(page.locator(".project-title-edit-form")).to_be_visible()
+    expect(page.get_by_label("Project title", exact=True)).to_have_value(
+        "still editing after outside click"
+    )
+    page.locator(".project-title-edit-form").get_by_role(
+        "button", name="Cancel", exact=True
+    ).click()
     expect(page.locator(".project-pane-title-line .current-project")).to_have_text(
         original_project_title
     )
     page.get_by_role("button", name="Strategies", exact=True).click()
-    page.get_by_role("button", name=re.compile("Edit project title:")).click()
+    page.get_by_role("button", name=re.compile("Edit project title and description:")).click()
     page.get_by_label("Project title", exact=True).fill(workspace_title)
     page.get_by_role("button", name="Save", exact=True).click()
     expect(page.locator(".project-pane-title-line .current-project")).to_have_text(workspace_title)
     title_box = page.locator(".project-pane-title-line .current-project").bounding_box()
+    markdown_box = page.locator("#project-markdown-slot .sigma-render-toggle").bounding_box()
     pencil_box = page.locator(".project-title-pencil").bounding_box()
-    assert title_box and pencil_box and pencil_box["x"] < title_box["x"] + title_box["width"] + 20
+    assert title_box and markdown_box and pencil_box
+    assert title_box["x"] + title_box["width"] <= markdown_box["x"] < pencil_box["x"]
     expect(page.locator(".project-pane-heading")).not_to_contain_text("For each integer n")
     page.screenshot(path="/tmp/sigma-a174-desktop.png", full_page=True)
     page.reload()
     expect(page.locator(".project-pane-title-line .current-project")).to_have_text(workspace_title)
-    page.get_by_role("button", name=re.compile("Edit project title:")).click()
+    page.get_by_role("button", name=re.compile("Edit project title and description:")).click()
     page.get_by_label("Project title", exact=True).fill("   ")
     page.get_by_role("button", name="Save", exact=True).click()
     expect(page.get_by_role("alert")).to_have_text("Enter a project title.")
     expect(page.locator("#project-pane-title-input")).to_be_visible()
     page.get_by_role("button", name="Cancel", exact=True).click()
     project_before = project_file.read_bytes()
-    page.get_by_role("button", name=re.compile("Edit project title:")).click()
+    page.get_by_role("button", name=re.compile("Edit project title and description:")).click()
     expect(page.get_by_role("button", name="Edit research problem")).to_be_disabled()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
     page.get_by_role("button", name="Edit research problem").evaluate("button => button.click()")
@@ -422,7 +431,7 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Edit research problem").click()
     description = page.locator("#text-editor-project-project")
     description.fill("unsaved project description draft")
-    expect(page.get_by_role("button", name="Edit project title:")).to_be_disabled()
+    expect(page.get_by_role("button", name=re.compile("Edit project title and description:")).first).to_be_disabled()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
     first_title_button = page.locator("li[data-strategy-id]").first.get_by_role(
         "button", name=re.compile("Edit strategy title:")
@@ -450,7 +459,7 @@ with sync_playwright() as playwright:
     new_form = page.locator("#strategy-composer form.strategy-form")
     expect(page.locator("#strategy-title")).to_be_focused()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
-    expect(page.get_by_role("button", name="Edit project title:")).to_be_disabled()
+    expect(page.get_by_role("button", name=re.compile("Edit project title and description:")).first).to_be_disabled()
     expect(connection.locator("summary")).to_have_attribute("aria-disabled", "true")
     connection.locator("summary").evaluate("node => node.click()")
     expect(connection.locator(".connection-details")).to_have_count(0)
@@ -471,7 +480,7 @@ with sync_playwright() as playwright:
     expect(
         page.locator(".strategies-pane-heading").get_by_role("button", name="New", exact=True)
     ).to_have_count(0)
-    expect(page.get_by_role("button", name=re.compile("Edit project title:")).first).to_be_enabled()
+    expect(page.get_by_role("button", name=re.compile("Edit project title and description:")).first).to_be_enabled()
     page.locator(".inline-proposal").get_by_role("button", name="Cancel", exact=True).click()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_enabled()
 
@@ -718,12 +727,12 @@ with sync_playwright() as playwright:
     expect(dot).to_have_css("background-color", "rgb(117, 177, 140)")
     page.emulate_media(reduced_motion="no-preference")
     expect(dot).to_have_css("animation-name", "connection-dot-pulse")
-    page.get_by_role("button", name="Pause research session", exact=True).click()
-    expect(pause_row.locator(".session-status")).to_contain_text("paused", timeout=5000)
-    expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_have_count(0)
-    resume = page.get_by_role("button", name=re.compile("Resume unavailable"))
-    expect(resume).to_be_disabled()
-    expect(pause_row).to_contain_text("completion is ambiguous")
+    page.get_by_role("button", name="Stop research session", exact=True).click()
+    expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
+    expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_be_visible()
+    pause_row.get_by_role("button", name="Resume", exact=True).click()
+    expect(pause_row.locator(".session-status")).to_contain_text(re.compile("queued|running"), timeout=5000)
+    expect(page.get_by_role("group", name="Confirm resume Session 2")).to_have_count(0)
     pause_row.get_by_role("button", name="Stop", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
     expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_be_visible()

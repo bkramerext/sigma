@@ -274,9 +274,10 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
     project_raw = data.get("project")
     project = cast(dict[str, Any], project_raw) if isinstance(project_raw, dict) else {}
     title = str(project.get("title") or "Research report")
-    blocks: list[str] = [f"<h1>{html.escape(title)}</h1>"]
+    blocks: list[str] = []
     index = 2
     list_items: list[str] = []
+    section_open = False
 
     def flush_list() -> None:
         if list_items:
@@ -293,7 +294,12 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
             flush_list()
             level = {"=": 1, "-": 2, "~": 3}[lines[index + 1].strip()[0]]
             if not (level == 1 and line == title):
-                blocks.append(f"<h{level}>{_html_inline(line)}</h{level}>")
+                if level == 2:
+                    if section_open:
+                        blocks.append("</section>")
+                    blocks.append('<section class="report-section">')
+                    section_open = True
+                blocks.append(f'<h{level} class="report-heading">{_html_inline(line)}</h{level}>')
             index += 2
             if line == "Strategy Assessments":
                 rows: list[tuple[str, str, str, str]] = []
@@ -314,10 +320,15 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
                         for row in rows
                     )
                     blocks.append(
-                        '<div class="table-scroll"><table><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody>'
+                        '<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody>'
                         + cells
                         + "</tbody></table></div>"
                     )
+            continue
+        if re.match(r"^(?:Session #\S+|Artifact \d+ ·|Run \S+)", line):
+            flush_list()
+            blocks.append(f'<h3 class="report-record-heading">{_html_inline(line)}</h3>')
+            index += 1
             continue
         bullet = re.match(r"^(?:[-*]|\d+[.)])\s+(.+)$", line)
         if bullet:
@@ -327,19 +338,66 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
         flush_list()
         label, separator, value = line.partition(": ")
         if separator and len(label) < 60 and re.fullmatch(r"[\w ·#-]+", label):
-            blocks.append(f"<p><strong>{html.escape(label)}:</strong> {_html_inline(value)}</p>")
+            paragraph_class = "report-note" if label == "Interpretation" else "report-field"
+            blocks.append(
+                f'<p class="{paragraph_class}"><strong>{html.escape(label)}:</strong> '
+                f"{_html_inline(value)}</p>"
+            )
         else:
-            blocks.append(f"<p>{_html_inline(line)}</p>")
+            blocks.append(f'<p class="report-paragraph">{_html_inline(line)}</p>')
         index += 1
     flush_list()
+    if section_open:
+        blocks.append("</section>")
     body = "\n".join(blocks)
+    css = """
+      *{box-sizing:border-box}
+      :root{color-scheme:light;--ink:#23313b;--muted:#65737d;--navy:#0b1b29;--blue:#24485e;--copper:#b77943;--line:#dbe2e5;--paper:#fff;--canvas:#edf1f2}
+      body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.72 Georgia,"Iowan Old Style","Palatino Linotype",serif}
+      .report{width:min(960px,calc(100% - 40px));margin:42px auto;background:var(--paper);border:1px solid #d6dfe2;border-radius:12px;box-shadow:0 18px 60px #18304018;overflow:hidden}
+      .report-header{position:relative;padding:52px 68px 46px;background:linear-gradient(125deg,#0a1927,#183348 72%,#24475c);border-bottom:4px solid var(--copper);color:#f7f2ea}
+      .report-header:after{position:absolute;right:68px;bottom:22px;width:76px;height:1px;background:linear-gradient(90deg,transparent,#d7a36d);content:""}
+      .report-kicker{margin:0 0 16px;color:#e3b37d;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase}
+      h1{max-width:760px;margin:0;color:#fff8ee;font:400 clamp(2rem,4vw,3rem)/1.12 Georgia,"Iowan Old Style",serif;letter-spacing:-.025em;overflow-wrap:anywhere}
+      .report-subtitle{margin:18px 0 0;color:#bfd0d9;font:13px/1.5 system-ui,sans-serif;letter-spacing:.04em}
+      .report-content{padding:12px 68px 64px}
+      .report-section{padding:24px 0 12px;border-bottom:1px solid var(--line)}
+      .report-section:last-child{border-bottom:0}
+      .report-heading{color:var(--navy);font-family:Georgia,"Iowan Old Style",serif;font-weight:400;line-height:1.25}
+      h2.report-heading{margin:0 0 22px;padding:0 0 13px;border-bottom:1px solid var(--line);font-size:1.65rem;letter-spacing:-.015em}
+      h2.report-heading:before{display:block;width:34px;height:3px;margin:0 0 13px;background:var(--copper);content:""}
+      h3.report-heading,.report-record-heading{margin:28px 0 10px;color:var(--blue);font:600 1.08rem/1.4 system-ui,sans-serif;overflow-wrap:anywhere}
+      h3.report-heading{padding-bottom:8px;border-bottom:1px solid #e7ecee}
+      .report-record-heading{margin:30px 0 9px;padding:12px 16px;border-left:3px solid var(--copper);background:#f4f6f6;color:var(--navy);font-size:1rem}
+      .report-paragraph,.report-field{margin:10px 0;overflow-wrap:anywhere}
+      .report-field strong{display:inline-block;margin-right:.35em;color:#5b4937;font:700 .76em/1.5 system-ui,sans-serif;letter-spacing:.06em}
+      .report-note{margin:0 0 24px;padding:14px 18px;border-left:3px solid #6d94a5;background:#f1f6f7;color:#455762;font:13px/1.6 system-ui,sans-serif}
+      p{orphans:3;widows:3}
+      ul{margin:10px 0 18px;padding-left:1.4em}
+      li{margin:.4em 0;padding-left:.2em}
+      li::marker{color:var(--copper)}
+      code{padding:.12em .35em;border:1px solid #e2e7e9;border-radius:4px;background:#f4f6f6;color:#274052;font: .88em/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+      .report-math{color:#183a50;font:italic 1.06em Georgia,serif;white-space:normal}
+      .table-scroll{max-width:100%;margin:18px 0 24px;overflow-x:auto;border:1px solid var(--line);border-radius:7px}
+      table{width:100%;border-collapse:collapse;font:13px/1.55 system-ui,sans-serif}
+      .report-assessment-table{min-width:680px;table-layout:fixed}
+      .report-assessment-table col:nth-child(1){width:17%}
+      .report-assessment-table col:nth-child(2){width:15%}
+      .report-assessment-table col:nth-child(3){width:44%}
+      .report-assessment-table col:nth-child(4){width:24%}
+      th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+      th{background:var(--navy);color:#f1c58d;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+      tbody tr:nth-child(even){background:#f6f8f8}
+      tbody tr:last-child td{border-bottom:0}
+      @media(max-width:640px){.report{width:100%;margin:0;border:0;border-radius:0;box-shadow:none}.report-header{padding:36px 25px 32px}.report-header:after{right:25px}.report-content{padding:8px 25px 40px}.report-section{padding-top:20px}h2.report-heading{font-size:1.45rem}}
+      @media print{body{background:#fff;color:#111;font-size:10.5pt}.report{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;overflow:visible}.report-header{padding:0 0 20pt;background:#fff;color:#111;border-bottom:2pt solid #a76d3d;print-color-adjust:exact;-webkit-print-color-adjust:exact}.report-header:after{display:none}.report-kicker{color:#76502f}.report-header h1{color:#111;font-size:25pt}.report-subtitle{color:#555}.report-content{padding:0}.report-section{padding:18pt 0 8pt;break-inside:auto}.report-heading,.report-record-heading{break-after:avoid}.report-note,.report-record-heading,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.table-scroll{overflow:visible;border:0}table{font-size:9pt}th{background:#e8edf0;color:#162d3b}.report-record-heading{break-after:avoid}}
+    """
     return (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'
-        f"{html.escape(title, quote=True)} — Research Report</title><style>"
-        "*{box-sizing:border-box}body{max-width:780px;margin:3rem auto;padding:0 1.5rem;font:16px/1.7 Georgia,'Iowan Old Style',serif;color:#202a32}"
-        "h1,h2,h3{font-family:system-ui,sans-serif;line-height:1.25;color:#18232c}h1{font-size:2rem;border-bottom:1px solid #b8c2c8;padding-bottom:.7em}h2{font-size:1.45rem;margin-top:2em;border-bottom:1px solid #d6dde1;padding-bottom:.3em}h3{font-size:1.12rem;margin-top:1.5em}p{margin:.65em 0}strong{font-family:system-ui,sans-serif;font-size:.94em}ul{padding-left:1.5em}li{margin:.35em 0}code{font-family:ui-monospace,monospace;background:#f0f2f3;padding:.08em .25em}.report-math{font-family:Georgia,serif;font-style:italic;font-size:1.04em;white-space:normal}.table-scroll{max-width:100%;overflow-x:auto}table{width:100%;border-collapse:collapse;font:13px/1.5 system-ui,sans-serif;margin:1em 0}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #d6dde1;padding:.5em .6em}th{background:#f3f5f6}"
-        "@media print{body{max-width:none;margin:0;padding:0;color:#000;font-size:11pt}h1,h2,h3{break-after:avoid}p,li{orphans:3;widows:3}a{color:inherit}}</style></head><body>"
-        f"<main>{body}</main></body></html>\n"
+        f"{html.escape(title, quote=True)} — Research Report</title><style>{css}</style></head><body>"
+        '<main class="report"><header class="report-header"><p class="report-kicker">SIGMA · Research report</p>'
+        f'<h1>{html.escape(title)}</h1><p class="report-subtitle">Project record and research evidence</p></header>'
+        f'<div class="report-content">{body}</div></main></body></html>\n'
     )
 
 

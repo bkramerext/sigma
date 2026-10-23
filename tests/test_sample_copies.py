@@ -67,8 +67,8 @@ class SampleCopyTests(unittest.TestCase):
         self.assertEqual(Path(second.path).name, "sample-2.sigma")
         self.assertNotEqual(first.project.id, second.project.id)
         self.assertNotIn(self.template_id, {first.project.id, second.project.id})
-        self.assertEqual(first.project.title, "Sample Investigation, v1")
-        self.assertEqual(second.project.title, "Sample Investigation, v2")
+        self.assertEqual(first.project.title, "Sample Investigation v1")
+        self.assertEqual(second.project.title, "Sample Investigation v2")
         self.assertEqual(second.project.events, first.project.events)
         self.assertEqual(inspect_project(first.path).project.id, first.project.id)
         self.assertEqual(json.loads((self.sample / STATE).read_text()), self.template)
@@ -85,7 +85,7 @@ class SampleCopyTests(unittest.TestCase):
 
         copy = samples.open_sample_project("sample")
         self.assertEqual(Path(copy.path).name, "sample-2.sigma")
-        self.assertEqual(copy.project.title, "Sample Investigation, v1")
+        self.assertEqual(copy.project.title, "Sample Investigation v1")
         self.assertEqual(inspect_project(existing).project.id, self.template_id)
         self.assertEqual(recents.home_projects()["projects"][0]["id"], copy.project.id)
 
@@ -139,15 +139,15 @@ class SampleCopyTests(unittest.TestCase):
         external = initialize_project(outside, "Sample Investigation (copy)", "Research question")
         recents.record_access(external)
         copied = samples.open_sample_project("sample")
-        self.assertEqual(copied.project.title, "Sample Investigation, v1")
+        self.assertEqual(copied.project.title, "Sample Investigation v1")
         self.assertEqual(Path(copied.path).name, "sample.sigma")
 
     def test_copy_version_skips_existing_project_title(self):
         initialize_project(
-            self.projects / "existing.sigma", "Sample Investigation, v1", "Research question"
+            self.projects / "existing.sigma", "Sample Investigation v1", "Research question"
         )
         copied = samples.open_sample_project("sample")
-        self.assertEqual(copied.project.title, "Sample Investigation, v2")
+        self.assertEqual(copied.project.title, "Sample Investigation v2")
 
     def test_sample_catalog_does_not_change_after_copy(self):
         before = samples.sample_projects()

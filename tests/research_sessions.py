@@ -210,10 +210,15 @@ async def test_three_cycles_and_idempotency(path: Path):
 async def test_pause_counts_interrupted_call(path: Path):
     view, strategy, credential, config = await setup(path)
     started_call = asyncio.Event()
+    resumed_call = asyncio.Event()
+    call_count = [0]
     hang = [True]
 
     async def handler(request):
+        call_count[0] += 1
         started_call.set()
+        if call_count[0] == 2:
+            resumed_call.set()
         if hang[0]:
             await asyncio.Event().wait()
         role = json.loads(request.content)["text"]["format"]["name"]
@@ -256,16 +261,21 @@ async def test_pause_counts_interrupted_call(path: Path):
             ),
         ),
     ):
-        try:
-            await research_sessions.control_session(str(path), started["id"], "resume")
-        except ProjectError as exc:
-            assert "ambiguous" in str(exc)
-        else:
-            raise AssertionError("ambiguous provider work was automatically retried")
-        paused = research_sessions.get_session(str(path), started["id"])
-        assert paused["status"] == "paused" and paused["calls_used"] == 1
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        assert "may still complete or be billed" in resumed["message"]
+        await asyncio.wait_for(resumed_call.wait(), 2)
         stopped = await research_sessions.control_session(str(path), started["id"], "stop")
         assert stopped["status"] == "stopped"
+        await asyncio.sleep(0.02)
+        stopped = research_sessions.get_session(str(path), started["id"])
+        assert stopped["calls_used"] == 2 and stopped["steps"][-1]["status"] == "interrupted"
+        stopped_elapsed = stopped["elapsed_seconds"]
+        await asyncio.sleep(0.02)
+        assert (
+            research_sessions.get_session(str(path), started["id"])["elapsed_seconds"]
+            == stopped_elapsed
+        )
 
     started_call.clear()
     hang[0] = True

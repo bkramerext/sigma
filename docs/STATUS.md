@@ -1,8 +1,31 @@
 # SIGMA status
 
+## Session controls, elapsed time, reports, and editing follow-up (2026-10-22)
+
+Session elapsed time now freezes at Stop and excludes stopped intervals if the
+session is resumed. Interrupted calls can be resumed immediately; the extra
+resume warning dialog is removed. The Strategies toolbar control beside Play is
+Stop, with matching accessible and hover text and a stop-square icon. Paused
+sessions no longer block resuming another session; queued and running sessions
+still enforce single-session execution.
+
+Research Report HTML now has a structured, responsive layout with a compact
+strategy/assessment table and more room for rationale and evidence. Project and
+strategy title/description editing remains active until Save or Cancel, and the
+title pencils have no hover text. Opening a Sample appends `v1`, `v2`, and so on
+without a comma.
+
+Verification: `./sigma test` passed all executable scenarios, Ruff, Pyright
+(zero errors), frontend typecheck, and Vite production build. The focused
+research-session scenario passed, including stopped elapsed-time stability and
+resuming an interrupted provider call. The real-Chrome A17 browser check was
+attempted but currently stops at outdated project-editor assertions; its UI
+checks need updating to the combined title/description editor before it can
+serve as a passing browser regression.
+
 ## Home, sample, and research-type refinements (2026-10-22)
 
-Opening a Sample creates projects named `Foobar, v1`, then `Foobar, v2`, and so
+Opening a Sample creates projects named `Foobar v1`, then `Foobar v2`, and so
 on, skipping titles already in use. New Project calls its field **Research
 category**; Settings retains **Research type**. The alphabetized choices are
 Biology, Chemistry, Computer Science, Economics, Engineering, Law, Mathematics,

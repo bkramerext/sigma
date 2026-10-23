@@ -119,7 +119,7 @@ async def main_async(root: Path):
     before = (Path(path) / "project.json").read_bytes()
     assert before != source_before
     assert view.project.id != "counting-constrained-binary-strings"
-    assert view.project.title == "Counting Constrained Binary Strings, v1"
+    assert view.project.title == "Counting Constrained Binary Strings v1"
 
     # Provider fields capped at 300 characters must never expose clipped prose.
     clipped = {

@@ -138,8 +138,14 @@ def main() -> None:
         "<h1>Riemann &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt; &amp; proof</h1>"
         in html_report
     )
-    assert "<h2>Research sessions</h2>" in html_report
-    assert "<p><strong>Execution status:</strong> ended</p>" in html_report
+    assert '<header class="report-header">' in html_report
+    assert '<section class="report-section">' in html_report
+    assert '<h2 class="report-heading">Research sessions</h2>' in html_report
+    assert '<h3 class="report-record-heading">Session #3</h3>' in html_report
+    assert '<p class="report-field"><strong>Execution status:</strong> ended</p>' in html_report
+    assert '<table class="report-assessment-table">' in html_report
+    assert ".report-assessment-table col:nth-child(3){width:44%}" in html_report
+    assert "@media(max-width:640px)" in html_report and "@media print" in html_report
     assert '<math class="report-math"' in html_report and "R(n)=1+n(n+1)/2" in html_report
     assert 'display="block"' in html_report and "R(0)=1" in html_report
     assert "<script>" not in html_report and "<pre>" not in html_report

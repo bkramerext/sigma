@@ -817,11 +817,18 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         try:
             start = datetime.fromisoformat(record["started_at"])
             end = (
-                datetime.fromisoformat(record["updated_at"])
-                if record.get("status") in {"completed", "ended", "failed"}
-                else datetime.now(UTC)
+                datetime.fromisoformat(record["stopped_at"])
+                if record.get("status") == "stopped" and record.get("stopped_at")
+                else (
+                    datetime.fromisoformat(record["updated_at"])
+                    if record.get("status") in {"completed", "ended", "failed"}
+                    else datetime.now(UTC)
+                )
             )
-            result["elapsed_seconds"] = max(0, int((end - start).total_seconds()))
+            stopped_duration = float(record.get("stopped_duration_seconds", 0))
+            result["elapsed_seconds"] = max(
+                0, int((end - start).total_seconds() - stopped_duration)
+            )
         except (ValueError, TypeError):
             result["elapsed_seconds"] = None
     result["outcome"] = _outcome(record)
@@ -1111,16 +1118,16 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         )
         if strategy is None or strategy.removed_at is not None or not strategy.enabled:
             raise ProjectError("This session's strategy is disabled; enable it before resuming")
-    if (
-        record["status"] == "paused"
-        and record.get("steps")
+    interrupted_call = (
+        record.get("status") == "paused"
+        and bool(record.get("steps"))
         and record["steps"][-1].get("status") == "interrupted"
-    ):
-        raise ProjectError(
-            "This session has an interrupted provider call with ambiguous completion and possible usage. It cannot be resumed safely; stop it and start a new session instead."
-        )
+    )
     if record.get("stopped_at"):
         stopped_for = datetime.now(UTC) - datetime.fromisoformat(record["stopped_at"])
+        record["stopped_duration_seconds"] = (
+            float(record.get("stopped_duration_seconds", 0)) + stopped_for.total_seconds()
+        )
         record["deadline_at"] = (
             datetime.fromisoformat(record["deadline_at"]) + stopped_for
         ).isoformat()
@@ -1172,8 +1179,7 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             others = [
                 _recover(item)
                 for item in _all(path)
-                if item.get("id") != session_id
-                and item.get("status") in {"queued", "running", "paused"}
+                if item.get("id") != session_id and item.get("status") in {"queued", "running"}
             ]
             if others:
                 raise ProjectError(
@@ -1186,7 +1192,9 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
             record["status"] = "queued"
             record["updated_at"] = _now()
             record["message"] = (
-                "Research resumed by user. Previous artifacts and remaining call budget retained."
+                "Research resumed after an interrupted provider call. The call may still complete or be billed; it will not be retried automatically."
+                if interrupted_call
+                else "Research resumed by user. Previous artifacts and remaining call budget retained."
             )
             record["current_action"] = "Resuming"
             _event(record, "resumed", record["message"])

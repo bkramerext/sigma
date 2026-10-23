@@ -32,12 +32,14 @@
 .workspace-page .text-view-working::before { display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: #d8a56e; box-shadow: 0 0 8px #d8a56e; content: ''; animation: text-view-pulse 1.4s ease-in-out infinite; }
 .workspace-page .text-view-working button { min-height: 26px; padding: 3px 7px; font-size: 11px; }
 .workspace-page .text-view-editor label { display: block; margin: 4px 0 7px; font-size: 12px; }
-.workspace-page .text-view-editor textarea { width: 100%; max-width: 100%; }
+.workspace-page .text-view-editor { min-height: 0; overscroll-behavior-y: contain; }
+.workspace-page .text-view-editor textarea { width: 100%; max-width: 100%; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; }
 .workspace-page .project-text-views .text-editable { cursor: text; }
 .workspace-page .project-text-views .text-editable:hover { background: #1a2d3960; }
 .workspace-page .project-text-views .text-editable:focus-visible { outline: 1px solid #c69962; outline-offset: 3px; }
 .workspace-page .project-text-views .text-view-editor { display: flex; flex-direction: column; }
 .workspace-page .project-text-views .text-view-editor textarea { flex: 1 1 auto; min-height: 74px; resize: none; }
+.workspace-page .project-pane .project-text-views .text-view-editor textarea:focus { outline: 2px solid #edbc77; outline-offset: -3px; }
 .workspace-page .project-text-views .text-view-editor .form-actions { flex: 0 0 auto; }
 .workspace-page .inline-description-editor textarea:hover { background: #10202b55; }
 .workspace-page .inline-description-editor textarea:focus-visible { outline: 1px solid #b78955; outline-offset: 4px; }
