@@ -25,6 +25,7 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     starts = []
+    start_payloads = []
     provider_calls = []
     legacy_titleless = {"enabled": False}
     legacy_outcome = {"enabled": False}
@@ -35,7 +36,7 @@ with sync_playwright() as playwright:
     page.on(
         "request",
         lambda request: (
-            starts.append(request.url)
+            (starts.append(request.url), start_payloads.append(request.post_data_json))
             if request.url.endswith("/api/projects/research-sessions/start")
             else None
         ),
@@ -740,7 +741,7 @@ with sync_playwright() as playwright:
     assert "Open obligations:" in fork_text
     fork_form.get_by_role("button", name="Cancel", exact=True).click()
     events = research.get_by_label("Recent session activity")
-    expect(events.locator("li").last).to_contain_text("artifact committed")
+    expect(events.locator("li").last).to_contain_text("All strategy branches finished")
     expect(events.get_by_role("button", name="Recent activity")).to_have_attribute(
         "aria-expanded", "false"
     )
@@ -1113,6 +1114,10 @@ with sync_playwright() as playwright:
     connection.locator("summary").click()
     mobile_dialog = page.get_by_role("dialog", name="AI connection settings")
     expect(mobile_dialog).to_be_visible()
+    page.wait_for_function(
+        """() => { const e = document.querySelector('.connection-details[role="dialog"]'); if (!e) return false; const r = e.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }""",
+        timeout=3000,
+    )
     dialog_box = mobile_dialog.bounding_box()
     assert dialog_box and dialog_box["x"] >= 0 and dialog_box["y"] >= 0
     assert dialog_box["x"] + dialog_box["width"] <= 390
@@ -1320,10 +1325,91 @@ with sync_playwright() as playwright:
         "No outcome summary was recorded."
     )
     legacy_outcome["enabled"] = False
+
+    # Exercise the multi-strategy selection and live activity surface against
+    # the isolated provider. The second branch deliberately waits so that the
+    # concurrent running state is observable before the session is stopped.
+    created_strategy = page.evaluate(
+        """async path => {
+          const response = await fetch('/api/projects/strategies', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path, title: 'Pause and stop fixture strategy',
+              approach: 'Wait for the bounded provider fixture and preserve its interruption state.'})
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || 'Could not create browser fixture strategy');
+          return body;
+        }""",
+        max_regions_path,
+    )
+    assert created_strategy["project"]["strategies"][-1]["title"] == (
+        "Pause and stop fixture strategy"
+    )
+    page.reload()
+    page.evaluate(
+        """async path => {
+          const response = await fetch('/api/projects/research-limits?' + new URLSearchParams({path}));
+          const current = await response.json();
+          const saved = await fetch('/api/projects/research-limits', {
+            method: 'PUT', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({...current, path, research_rounds: 3, model_calls: 6})
+          });
+          if (!saved.ok) throw new Error('Could not configure browser concurrency fixture');
+        }""",
+        max_regions_path,
+    )
+    assert (
+        page.evaluate(
+            """async path => (await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json()).model_calls""",
+            max_regions_path,
+        )
+        == 6
+    )
+    page.get_by_role("button", name="Start a new research session", exact=True).click()
+    selection = page.locator(".research-strategy-selection")
+    expect(selection).to_be_visible()
+    selection.locator("summary").click()
+    checkboxes = selection.get_by_role("checkbox")
+    expect(checkboxes).to_have_count(2)
+    expect(checkboxes.nth(0)).to_be_checked()
+    assert checkboxes.nth(1).is_enabled(), selection.inner_text()
+    checkboxes.nth(1).click()
+    expect(selection.locator("summary")).to_contain_text("2 selected", timeout=2000)
+    expect(selection.locator("summary")).to_contain_text("2 selected")
+    page.get_by_role("button", name="Start new session #2", exact=True).click()
+    portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
+    expect(portfolio.locator(".research-strategy-activity li")).to_have_count(2, timeout=10000)
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text(
+        "Pause and stop fixture strategy"
+    )
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text("running")
+    assert len(start_payloads[-1]["strategy_ids"]) == 2, start_payloads[-1]
+    page.reload()
+    portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
+    expect(portfolio.locator(".research-strategy-activity li")).to_have_count(2, timeout=10000)
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text(
+        "Pause and stop fixture strategy"
+    )
+    expect(portfolio.locator(".research-strategy-activity")).to_contain_text("running")
+    page.get_by_role("button", name="Stop research session", exact=True).click()
+    expect(portfolio.locator(".session-status")).to_have_text("stopped", timeout=10000)
+    expect(portfolio.locator(".research-incomplete-step")).to_be_visible()
+    stopped_portfolio = page.evaluate(
+        """async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.find(session => session.session_number === 2)""",
+        max_regions_path,
+    )
+    assert any(
+        step["status"] == "completed" and step.get("output") for step in stopped_portfolio["steps"]
+    )
+    assert any(step["status"] == "interrupted" for step in stopped_portfolio["steps"])
+    assert not any(
+        artifact["strategy_id"] == stopped_portfolio["strategy_ids"][1]
+        for artifact in stopped_portfolio["artifacts"]
+    )
     assert not errors, errors
-    assert len(starts) == 4, starts
+    assert len(starts) == 5, starts
     print(
-        "PASS real Chrome A17.7.1: dialogs, title action geometry, outcome Markdown/math, HTML and compiled PDF publication exports, and A17.6 Maximum Regions persistence"
+        "PASS real Chrome A18: existing workspace and export flows, multi-strategy selection, concurrent live activity, and stop during provider work"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -9,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 
-from sigma import research_sessions
+from sigma import agentic, proposals, research_sessions, text_views
 from sigma.projects import (
     ProjectError,
     create_strategy,
@@ -1180,6 +1181,456 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
     # can independently solve the problem; the provider is mocked above.
 
 
+async def test_concurrent_strategy_portfolio(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Boundary-first", "Start with degenerate and small boundary cases."
+    ).project.strategies[-1]
+    third = create_strategy(
+        path, "Counterexample search", "Search for assumptions that make the claim fail."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits["model_calls"] = 8
+    limits = research_sessions.save_limits(str(path), limits)
+    state = {"active": 0, "maximum": 0}
+    request_contexts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        request_contexts.append((payload["text"]["format"]["name"], context))
+        state["active"] += 1
+        state["maximum"] = max(state["maximum"], state["active"])
+        try:
+            await asyncio.sleep(0.04)
+            strategy_name = context["strategy"]["title"]
+            cycle = context["cycle"]
+            if payload["text"]["format"]["name"] == "research_investigator":
+                output = {
+                    **investigation(cycle),
+                    "claim": f"{strategy_name} claim for branch cycle {cycle}.",
+                }
+            else:
+                output = skeptic(cycle)
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            state["active"] -= 1
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended", (
+        finished["status"],
+        finished["message"],
+        finished["calls_used"],
+        finished["strategy_runs"],
+    )
+    expected_strategy_ids = {first.id, second.id, third.id}
+    assert finished["strategy_ids"] == [first.id, second.id, third.id]
+    assert state["maximum"] == 3, state
+    assert state["maximum"] <= 3
+    assert finished["calls_used"] == 8
+    assert len(finished["artifacts"]) == 4
+    assert {item["strategy_id"] for item in finished["artifacts"]} == expected_strategy_ids
+    assert {
+        item["strategy_id"]
+        for item in finished["strategy_assessments"]
+        if item["assessment"] != "not_used"
+    } == expected_strategy_ids
+    assert all(step["status"] == "completed" for step in finished["steps"])
+    assert finished.get("current_steps", []) == []
+    assert any(step.get("peer_strategy_artifact_ids") for step in finished["steps"])
+    assert len(request_contexts) == 8
+    assert {context["strategy"]["id"] for _, context in request_contexts} == expected_strategy_ids
+    assert finished["portfolio_decision"]["basis_artifact_ids"] == [
+        item["id"] for item in finished["artifacts"]
+    ]
+
+
+async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path):
+    view, first, credential, config = await setup(path)
+    strategies = [first]
+    for index in range(1, 10):
+        strategies.append(
+            create_strategy(
+                path,
+                f"Independent route {index}",
+                f"Use a distinct route and explicitly test boundary {index}.",
+            ).project.strategies[-1]
+        )
+    limits = research_sessions.get_limits(str(path))
+    limits["model_calls"] = 20
+    limits = research_sessions.save_limits(str(path), limits)
+    state = {"active": 0, "maximum": 0}
+    delays = {
+        strategy.id: (len(strategies) - index) * 0.005 for index, strategy in enumerate(strategies)
+    }
+    completion_order = []
+    started_at = time.perf_counter()
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        assert all(
+            gate.locked()
+            for gate in (proposals._gate, agentic._gate, text_views._gate, research_sessions._gate)
+        )
+        state["active"] += 1
+        state["maximum"] = max(state["maximum"], state["active"])
+        try:
+            await asyncio.sleep(delays[context["strategy"]["id"]])
+            role = payload["text"]["format"]["name"]
+            output = (
+                investigation(context["cycle"])
+                if role == "research_investigator"
+                else skeptic(context["cycle"])
+            )
+            completion_order.append((context["strategy"]["id"], role))
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            state["active"] -= 1
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[strategy.id for strategy in strategies],
+        )
+        finished = await wait_for(path, started["id"])
+
+    expected_ids = {strategy.id for strategy in strategies}
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 20
+    assert len(finished["steps"]) == 20
+    assert len(finished["artifacts"]) == 10
+    assert {artifact["strategy_id"] for artifact in finished["artifacts"]} == expected_ids
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    assert state["maximum"] == 3
+    assert state["maximum"] <= 3
+    assert not any(
+        gate.locked()
+        for gate in (proposals._gate, agentic._gate, text_views._gate, research_sessions._gate)
+    )
+    assert completion_order[0][0] != first.id, completion_order
+    print(
+        "PASS 10-strategy load: "
+        f"max provider concurrency {state['maximum']}, 20/20 calls, "
+        f"10 artifacts, out-of-order responses, {time.perf_counter() - started_at:.3f}s"
+    )
+
+
+async def test_forked_strategy_followup_preserves_parent_comparison(path: Path):
+    view, parent, credential, config = await setup(path)
+    first_outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+
+    async def first_handler(_request):
+        return httpx.Response(200, json=provider_response(first_outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(first_handler), **kwargs
+            ),
+        ),
+    ):
+        first_start = await research_sessions.start_session(
+            str(path), parent.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        first_session = await wait_for(path, first_start["id"])
+
+    assert len(first_session["artifacts"]) == 1
+    source = first_session["artifacts"][0]
+    fork = create_strategy(
+        path,
+        "Evidence-based revision",
+        "Fork rationale: revise parent strategy "
+        f"{parent.id} after Session #{first_session['session_number']}. "
+        f"Saved finding: {source['claim_or_question']} "
+        f"Objections: {', '.join(source['objections'])}. "
+        f"Open obligations: {', '.join(source['open_obligations'])}. "
+        f"Next question: {source['next_question']}",
+    ).project.strategies[-1]
+    assert parent.approach == "Derive a recurrence and check its boundary cases."
+    assert parent.id in fork.approach and source["claim_or_question"] in fork.approach
+    followup_contexts = []
+
+    async def followup_handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        followup_contexts.append(context)
+        role = payload["text"]["format"]["name"]
+        if role == "research_investigator":
+            result = {
+                **investigation(context["cycle"]),
+                "claim": f"{context['strategy']['title']} makes a distinct claim.",
+            }
+        else:
+            result = skeptic(context["cycle"], "stop", "productive_conclusion")
+        return httpx.Response(200, json=provider_response(result))
+
+    limits = research_sessions.get_limits(str(path))
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(followup_handler), **kwargs
+            ),
+        ),
+    ):
+        followup_start = await research_sessions.start_session(
+            str(path),
+            parent.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[parent.id, fork.id],
+        )
+        followup = await wait_for(path, followup_start["id"])
+
+    assert followup["status"] == "ended"
+    assert followup["strategy_ids"] == [parent.id, fork.id]
+    assert len(followup["artifacts"]) == 2
+    assert {artifact["strategy_id"] for artifact in followup["artifacts"]} == {
+        parent.id,
+        fork.id,
+    }
+    assert len(followup["strategy_assessments"]) == 2
+    assert all(item["assessment"] == "productive" for item in followup["strategy_assessments"])
+    assert all(context["prior_session_findings"] for context in followup_contexts)
+    assert {item["strategy_id"] for item in followup["strategy_assessments"]} == {
+        parent.id,
+        fork.id,
+    }
+
+
+async def test_stop_concurrent_portfolio_preserves_completed_boundary(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(path, "Second line", "Try a distinct derivation.").project.strategies[
+        -1
+    ]
+    third = create_strategy(path, "Third line", "Search for a counterexample.").project.strategies[
+        -1
+    ]
+    entered = asyncio.Event()
+    request_state = {"count": 0, "active": 0, "maximum": 0}
+    project_before = (path / "project.json").read_bytes()
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        request_state["count"] += 1
+        request_state["active"] += 1
+        request_state["maximum"] = max(request_state["maximum"], request_state["active"])
+        entered.set()
+        try:
+            context = json.loads(payload["input"])
+            role = payload["text"]["format"]["name"]
+            if (
+                request_state["count"] <= 3
+                and context["strategy"]["id"] != first.id
+                and role == "research_investigator"
+            ):
+                await asyncio.Event().wait()
+            elif request_state["count"] <= 3:
+                await asyncio.sleep(0.03)
+            cycle = context["cycle"]
+            output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
+            return httpx.Response(200, json=provider_response(output))
+        finally:
+            request_state["active"] -= 1
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id, third.id],
+        )
+        for _ in range(100):
+            if request_state["count"] >= 3 and request_state["active"] == 2:
+                break
+            await asyncio.sleep(0.01)
+        assert request_state["count"] == 3
+        assert request_state["active"] == 2
+        assert request_state["maximum"] == 3
+        stopped = await research_sessions.control_session(str(path), started["id"], "stop")
+        assert stopped["status"] == "stopped"
+        assert request_state["count"] == 3
+        assert request_state["active"] == 0
+        interrupted = research_sessions.get_session(str(path), started["id"])
+        assert interrupted["artifacts"] == []
+        assert interrupted["calls_used"] == 3
+        assert len(interrupted["steps"]) == 3
+        assert sum(step["status"] == "completed" for step in interrupted["steps"]) == 1
+        assert sum(step["status"] == "interrupted" for step in interrupted["steps"]) == 2
+        completed = next(step for step in interrupted["steps"] if step["status"] == "completed")
+        assert completed["output"]["claim"]
+        assert interrupted["current_steps"] == []
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        finished = await wait_for(path, resumed["id"])
+
+    assert finished["status"] == "ended", (
+        finished["status"],
+        finished["message"],
+        finished["calls_used"],
+        finished["strategy_runs"],
+    )
+    assert finished["calls_used"] == 6
+    assert request_state["count"] == 6
+    assert len(finished["artifacts"]) == 2
+    assert any(step["status"] == "completed" and step.get("output") for step in finished["steps"])
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    assert (path / "project.json").read_bytes() == project_before
+
+
+async def test_portfolio_isolates_one_strategy_provider_failure(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent approach", "Use a different derivation."
+    ).project.strategies[-1]
+    roles = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        roles.append((context["strategy"]["id"], payload["text"]["format"]["name"]))
+        if context["strategy"]["id"] == first.id:
+            return httpx.Response(500, json={"error": {"message": "fixture branch failure"}})
+        role = payload["text"]["format"]["name"]
+        cycle = context["cycle"]
+        output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    branches = {item["strategy_id"]: item for item in finished["strategy_runs"]}
+    assert branches[first.id]["status"] == "failed"
+    assert branches[first.id]["reason"]
+    assert branches[second.id]["status"] == "ended"
+    assert finished["artifacts"]
+    assert {item["strategy_id"] for item in finished["artifacts"]} == {second.id}
+    assert any(
+        strategy_id == first.id and role == "research_investigator" for strategy_id, role in roles
+    )
+    assert all(strategy_id == second.id for strategy_id, _ in roles if strategy_id != first.id)
+
+
+async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(path, "Second strategy", "Try another mechanism.").project.strategies[
+        -1
+    ]
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 2
+    limits["model_calls"] = 5
+    limits = research_sessions.save_limits(str(path), limits)
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        output = (
+            investigation(context["cycle"])
+            if role == "research_investigator"
+            else skeptic(context["cycle"])
+        )
+        return httpx.Response(200, json=provider_response(output))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 4
+    assert finished["outcome"]["assessment"]
+    assert len(finished["strategy_assessments"]) == 2
+    assert all(branch["status"] == "ended" for branch in finished["strategy_runs"])
+    assert finished["events"][-1]["kind"] == "portfolio.completed"
+
+
 async def test_generic_objective_review_on_binary_strings(path: Path):
     problem = (
         "For each integer n >= 0, count binary strings of length n containing no two "
@@ -1537,7 +1988,8 @@ async def test_storage_limit_pauses_without_artifact(path: Path):
         paused = await wait_for(path, started["id"])
     assert paused["status"] == "paused" and paused["calls_used"] == 2
     assert paused["artifacts"] == []
-    assert paused["steps"][-1]["status"] == "interrupted"
+    assert all(step["status"] == "completed" and step.get("output") for step in paused["steps"])
+    assert paused["strategy_runs"][0]["pending_skeptic"]
     assert "storage limit reached" in paused["message"].lower()
 
 
@@ -1564,6 +2016,32 @@ def main():
         )
         asyncio.run(
             test_answer_free_maximum_regions_prompt(root / "maximum-regions-answer-free.sigma")
+        )
+        asyncio.run(test_concurrent_strategy_portfolio(root / "portfolio.sigma"))
+        asyncio.run(
+            test_ten_strategy_portfolio_respects_concurrency_and_budget(
+                root / "portfolio-ten.sigma"
+            )
+        )
+        asyncio.run(
+            test_forked_strategy_followup_preserves_parent_comparison(
+                root / "portfolio-followup.sigma"
+            )
+        )
+        asyncio.run(
+            test_stop_concurrent_portfolio_preserves_completed_boundary(
+                root / "portfolio-stop.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_isolates_one_strategy_provider_failure(
+                root / "portfolio-isolated-failure.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_budget_too_small_for_next_pair_is_finalized(
+                root / "portfolio-tight-budget.sigma"
+            )
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()

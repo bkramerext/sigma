@@ -708,9 +708,16 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         record["message"] = (
             "Backend restarted before the session completed. Any in-flight step is interrupted and will not be retried automatically."
         )
-        if record.get("current_step"):
-            record["steps"][-1]["status"] = "interrupted"
-            record["current_step"] = None
+        for step in record.get("steps", []):
+            if step.get("status") == "running":
+                step["status"] = "interrupted"
+                step["finished_at"] = _now()
+        record["current_step"] = None
+        record["current_steps"] = []
+        for branch in record.get("strategy_runs", []):
+            if branch.get("status") == "running":
+                branch["status"] = "paused"
+                branch["current_action"] = "Interrupted after backend restart"
         record["current_action"] = "Paused after backend restart"
         _event(record, "interrupted", record["message"])
         _save(record["project_path"], record)
@@ -783,6 +790,7 @@ async def start_session(
     expected_project_id: str,
     expected_binding: str,
     expected_limits: dict[str, Any] | None = None,
+    strategy_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     try:
         UUID(idempotency_key)
@@ -791,6 +799,20 @@ async def start_session(
     view, guard = _snapshot(path)
     if view.project.id != expected_project_id:
         raise ProjectError("Project changed; reopen it before starting research")
+    selected_ids = list(dict.fromkeys(strategy_ids or [strategy_id]))
+    if not selected_ids or len(selected_ids) > 12 or strategy_id not in selected_ids:
+        raise ProjectError("Select between one and twelve distinct saved strategies")
+    selected_strategies = [
+        next(
+            (s for s in view.project.strategies if s.id == identifier and s.removed_at is None),
+            None,
+        )
+        for identifier in selected_ids
+    ]
+    if any(strategy is None for strategy in selected_strategies):
+        raise ProjectError("Choose saved, active strategies before investigating")
+    if any(not strategy.enabled for strategy in selected_strategies if strategy is not None):
+        raise ProjectError("Disabled strategies cannot enter a new research session")
     strategy = next(
         (s for s in view.project.strategies if s.id == strategy_id and s.removed_at is None), None
     )
@@ -802,6 +824,10 @@ async def start_session(
         with _project_manager_lock(view.path):
             limits = get_limits(view.path)
             limits = _validate_limits(limits)
+            if len(selected_ids) * 2 > limits["model_calls"]:
+                raise ProjectError(
+                    "The model-call limit must allow one Investigator/Skeptic pair for every selected strategy"
+                )
             if expected_limits is not None and _validate_limits(expected_limits) != limits:
                 raise ProjectError(
                     "Research limits changed before confirmation; review the current limits and retry"
@@ -814,6 +840,7 @@ async def start_session(
                 if (
                     existing.get("project_id") != expected_project_id
                     or existing.get("strategy_id") != strategy_id
+                    or existing.get("strategy_ids", [existing.get("strategy_id")]) != selected_ids
                 ):
                     raise ProjectError(
                         "Idempotency key is already bound to a different research request"
@@ -852,6 +879,27 @@ async def start_session(
                 "strategy_id": strategy.id,
                 "strategy_title": strategy.title,
                 "strategy_text": strategy.approach,
+                "strategy_ids": selected_ids,
+                "strategy_runs": [
+                    {
+                        "strategy_id": item.id,
+                        "strategy_title": item.title,
+                        "strategy_text": item.approach,
+                        "status": "queued",
+                        "current_action": "Queued",
+                        "current_question": (
+                            "Advance this strategy with one specific claim, lemma, calculation, "
+                            "counterexample candidate, or discriminating test."
+                        ),
+                        "cycle": 0,
+                        "calls_used": 0,
+                        "artifacts": [],
+                        "pending_investigation": None,
+                        "reason": None,
+                    }
+                    for item in selected_strategies
+                    if item is not None
+                ],
                 "strategy_snapshot": [
                     {
                         "id": item.id,
@@ -963,11 +1011,13 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
         return _public(record)
     if action == "resume":
         project = inspect_project(path).project
-        strategy = next(
-            (item for item in project.strategies if item.id == record.get("strategy_id")), None
-        )
-        if strategy is None or strategy.removed_at is not None or not strategy.enabled:
-            raise ProjectError("This session's strategy is disabled; enable it before resuming")
+        strategy_ids = record.get("strategy_ids", [record.get("strategy_id")])
+        for strategy_id in strategy_ids:
+            strategy = next((item for item in project.strategies if item.id == strategy_id), None)
+            if strategy is None or strategy.removed_at is not None or not strategy.enabled:
+                raise ProjectError(
+                    "A strategy in this session is disabled; enable it before resuming"
+                )
     interrupted_call = (
         record.get("status") == "paused"
         and bool(record.get("steps"))
@@ -1040,6 +1090,19 @@ async def control_session(path: str, session_id: str, action: str) -> dict[str, 
                     "Another research worker is active. Wait for it to pause or finish before resuming."
                 )
             record["status"] = "queued"
+            for branch in record.get("strategy_runs", []):
+                if branch.get("status") in {"paused", "stopped"}:
+                    branch["status"] = "queued"
+                    branch["current_action"] = "Resuming"
+                    if branch.get("pending_investigation") is None:
+                        branch["cycle"] = max(
+                            (
+                                artifact.get("strategy_cycle", 0)
+                                for artifact in record.get("artifacts", [])
+                                if artifact.get("strategy_id") == branch["strategy_id"]
+                            ),
+                            default=0,
+                        )
             record["updated_at"] = _now()
             record["message"] = (
                 "Research resumed after an interrupted provider call. The call may still complete or be billed; it will not be retried automatically."
@@ -1073,6 +1136,18 @@ async def _acquire_gates() -> list[Any]:
                 break
         else:
             return acquired
+
+
+def _is_guard_failure(message: str) -> bool:
+    return any(
+        marker in message.lower()
+        for marker in (
+            "identity changed",
+            "account or billing",
+            "project or strategy changed",
+            "model is no longer available",
+        )
+    )
 
 
 async def _call(
@@ -1236,6 +1311,700 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     return context
 
 
+def _portfolio_context(
+    record: dict[str, Any], branch: dict[str, Any], role: str, cycle: int
+) -> dict[str, Any]:
+    strategy_id = branch["strategy_id"]
+    branch_artifacts = [
+        {
+            **artifact,
+            "sequence": artifact.get("strategy_cycle", artifact["sequence"]),
+        }
+        for artifact in record["artifacts"]
+        if artifact.get("strategy_id") == strategy_id
+    ]
+    branch_record = {
+        **record,
+        "strategy_id": strategy_id,
+        "strategy_title": branch["strategy_title"],
+        "strategy_text": branch["strategy_text"],
+        "current_question": branch["current_question"],
+        "artifacts": branch_artifacts,
+        "pending_investigation": branch.get("pending_investigation"),
+    }
+    context = _agent_context(branch_record, role, cycle)
+    peer_artifacts = [
+        artifact for artifact in record["artifacts"] if artifact.get("strategy_id") != strategy_id
+    ][-6:]
+    context["other_strategy_evidence"] = [
+        {
+            "artifact_id": artifact["id"],
+            "sequence": artifact["sequence"],
+            "strategy_id": artifact["strategy_id"],
+            "claim_or_question": _bounded_note(artifact.get("claim_or_question"), 500),
+            "evidence_status": _bounded_note(artifact.get("evidence_status"), 200),
+            "objections": _bounded_notes(artifact.get("objections"), 3, 200),
+            "open_obligations": _bounded_notes(artifact.get("open_obligations"), 3, 200),
+        }
+        for artifact in peer_artifacts
+    ]
+    if len(json.dumps(context, ensure_ascii=False)) > 48000:
+        raise ProjectError("Research context exceeds the safe input limit")
+    return context
+
+
+def _commit_portfolio_review(
+    record: dict[str, Any], session_id: str, branch: dict[str, Any], cycle: int
+) -> dict[str, Any]:
+    investigation = branch.pop("pending_investigation")
+    output = branch.pop("pending_skeptic")
+    branch_artifacts = [
+        item for item in record["artifacts"] if item.get("strategy_id") == branch["strategy_id"]
+    ]
+    all_reviews = [
+        item["skeptic_output"]
+        for item in branch_artifacts
+        if isinstance(item.get("skeptic_output"), dict)
+    ] + [output]
+    _event(
+        record,
+        "coordinator.started",
+        f"Coordinator is applying {branch['strategy_title']}'s Skeptic review for cycle {cycle}.",
+    )
+    decision, next_question = coordinate_decision(
+        output["assessment"],
+        output["stop_reason"],
+        output["next_question"],
+        output["remaining_obligations"],
+        cycle,
+        record.get("cycle_limit", 3),
+        record["calls_used"],
+        record.get("call_limit", CALL_LIMIT),
+    )
+    objective_candidate = (
+        output["objective_status"] == "achieved"
+        and output["verification_status"] == "convincing_unverified"
+        and bool(output["solution_claim"].strip())
+        and bool(output["argument_summary"].strip())
+        and bool(output["proof_obligations"])
+        and not output["unresolved_objections"]
+        and not output["remaining_obligations"]
+        and not (
+            output["stop_reason"] == "decisive_counterexample"
+            and output["objections"]
+            and not _retracted_counterexample(output["response"])
+        )
+        and not any(
+            item.get("coordinator_decision") == "stop_decisive_counterexample"
+            and item.get("objections")
+            and not _retracted_counterexample(str(item.get("skeptic_response", "")))
+            for item in branch_artifacts
+        )
+    )
+    if (
+        objective_candidate
+        and not output["next_question"].strip()
+        and output["assessment"] in {"stop", "continue"}
+    ):
+        decision, next_question = coordinate_decision(
+            "stop",
+            "productive_conclusion",
+            "",
+            [],
+            cycle,
+            record.get("cycle_limit", 3),
+            record["calls_used"],
+            record.get("call_limit", CALL_LIMIT),
+        )
+    if output["stop_reason"] == "decisive_counterexample" and (
+        not output["objections"] or _retracted_counterexample(output["response"])
+    ):
+        fallback_reason = (
+            "productive_conclusion"
+            if objective_candidate
+            else "recoverable_objection"
+            if output["next_question"].strip() or output["remaining_obligations"]
+            else "no_progress"
+        )
+        decision, next_question = coordinate_decision(
+            output["assessment"],
+            fallback_reason,
+            output["next_question"],
+            output["remaining_obligations"],
+            cycle,
+            record.get("cycle_limit", 3),
+            record["calls_used"],
+            record.get("call_limit", CALL_LIMIT),
+        )
+        _event(
+            record,
+            "coordinator.assessment_conflict",
+            f"The Skeptic's decisive-counterexample stop for {branch['strategy_title']} conflicted with its evidence; the unsupported stop signal was not accepted.",
+        )
+
+    artifact_id = str(uuid4())
+    valid_cycles = {
+        item.get("strategy_cycle", item["sequence"]): item["id"] for item in branch_artifacts
+    }
+    valid_cycles[cycle] = artifact_id
+    referenced_cycles = list(
+        dict.fromkeys(
+            item
+            for review in all_reviews
+            for item in review.get("supporting_cycles", [])
+            if type(item) is int
+        )
+    )
+    if not referenced_cycles and isinstance(output.get("supporting_cycles"), list):
+        referenced_cycles = output["supporting_cycles"]
+    if any(type(item) is not int or item not in valid_cycles for item in referenced_cycles):
+        raise ProjectError("Research assessment referenced an unknown strategy artifact")
+    referenced_ids = [valid_cycles[item] for item in referenced_cycles]
+    objective_complete = objective_candidate and bool(referenced_ids)
+    resolved_review_notes = list(
+        dict.fromkeys(
+            str(note)
+            for review in all_reviews
+            for key in ("objections", "unresolved_objections", "remaining_obligations")
+            for note in review.get(key, [])
+            if str(note).strip()
+        )
+    )
+    artifact = {
+        "id": artifact_id,
+        "project_id": record["project_id"],
+        "session_id": session_id,
+        "strategy_id": branch["strategy_id"],
+        "strategy_title": branch["strategy_title"],
+        "sequence": len(record["artifacts"]) + 1,
+        "strategy_cycle": cycle,
+        "created_at": _now(),
+        "claim_or_question": investigation["claim"],
+        "method": investigation["method"],
+        "assumptions": investigation["assumptions"],
+        "evidence_status": investigation["evidence_status"],
+        "skeptic_response": output["response"],
+        "objections": output["objections"],
+        "open_obligations": list(
+            dict.fromkeys(investigation["open_obligations"] + output["remaining_obligations"])
+        ),
+        "investigator_output": investigation,
+        "skeptic_output": output,
+        "coordinator_decision": decision,
+        "next_question": next_question,
+        "note": "Unverified research note. No computational or formal tool was run.",
+    }
+    artifact["objective_review"] = {
+        "status": "achieved" if objective_complete else output["objective_status"],
+        "claim": output["solution_claim"],
+        "argument_summary": output["argument_summary"],
+        "assumptions": output["assumptions_reviewed"],
+        "proof_obligations": output["proof_obligations"],
+        "verification_status": output["verification_status"]
+        if objective_complete
+        else "incomplete",
+        "unresolved_objections": [] if objective_complete else output["unresolved_objections"],
+        "resolved_objections": resolved_review_notes if objective_complete else [],
+        "basis_artifact_ids": referenced_ids,
+    }
+    if not objective_complete and output["objective_status"] == "achieved":
+        artifact["objective_review"]["status"] = "partial"
+        artifact["objective_review"]["unresolved_objections"] = output["unresolved_objections"]
+    contribution = "solution" if objective_complete else output["strategy_contribution"]
+    if contribution == "solution" and not objective_complete:
+        contribution = "productive"
+    artifact["strategy_review"] = {
+        "assessment": contribution,
+        "rationale": output["contribution_rationale"],
+        "basis_artifact_ids": referenced_ids,
+    }
+    record["artifacts"].append(artifact)
+    branch["artifacts"].append(artifact_id)
+    branch["cycle"] = cycle
+    branch["current_question"] = next_question
+    branch["last_decision"] = decision
+    branch["reason"] = (
+        "Skeptic requested the next strategy-specific question."
+        if decision in {"continue", "revise"}
+        else decision.replace("_", " ").capitalize()
+    )
+    branch["status"] = "running" if decision in {"continue", "revise"} else "ended"
+    branch["current_action"] = "Investigator" if branch["status"] == "running" else "Completed"
+    record["strategy_assessments"] = _strategy_assessments(record)
+    _event(
+        record,
+        "artifact.saved",
+        f"Session evidence from {branch['strategy_title']} (cycle {cycle}) was committed.",
+    )
+    return artifact
+
+
+async def _portfolio_role_call(
+    session_id: str,
+    path: str,
+    strategy_id: str,
+    role: str,
+    cycle: int,
+    semaphore: asyncio.Semaphore,
+    state_lock: asyncio.Lock,
+) -> bool:
+    async with semaphore:
+        async with state_lock:
+            record = _read(path, session_id)
+            if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return False
+            branch = next(
+                item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
+            )
+            try:
+                context = _portfolio_context(record, branch, role, cycle)
+            except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
+                branch["status"] = "failed"
+                branch["current_action"] = "Failed · preparing work"
+                branch["reason"] = (
+                    str(exc).strip()[:1000] or "Strategy context could not be prepared."
+                )
+                _event(
+                    record,
+                    "strategy.failed",
+                    f"{branch['strategy_title']}: {branch['reason']}",
+                )
+                _save(path, record)
+                return False
+            view, guard = _snapshot(path)
+            if guard != record["guard_hash"] or view.project.id != record["project_id"]:
+                raise ProjectError("Project or strategy changed; session paused before a new call.")
+            credential = await auth_context()
+            if (
+                credential["mode"] != record["mode"]
+                or _digest(credential["identity"]) != record["identity_hash"]
+            ):
+                raise ProjectError(
+                    "AI account or billing identity changed; session paused before another call."
+                )
+            config = await configuration(view=view, context=credential)
+            if (
+                not config["available"]
+                or config["model"] != record["model"]
+                or config["reasoning_effort"] != record["reasoning_effort"]
+            ):
+                raise ProjectError(
+                    config.get(
+                        "message",
+                        "Selected model is no longer available; session paused before a new call.",
+                    )
+                )
+            if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
+                branch["status"] = "ended"
+                branch["reason"] = "Session duration limit reached before a call was dispatched."
+                branch["current_action"] = "Budget exhausted"
+                _save(path, record)
+                return False
+            if record["calls_used"] >= record.get("call_limit", CALL_LIMIT):
+                branch["status"] = "ended"
+                branch["reason"] = (
+                    "Shared model-call budget reached before this strategy's next step."
+                )
+                branch["current_action"] = "Budget exhausted"
+                _save(path, record)
+                return False
+            reserve = None
+            if (
+                record.get("mode") == "api_key"
+                and record.get("maximum_estimated_cost_usd") is not None
+            ):
+                reserve = _reserve_cost(record, context, role)
+                current_cost = record.get("estimated_cost_usd")
+                reserved_cost = float(record.get("estimated_cost_reserved_usd", 0.0))
+                if (
+                    reserve is None
+                    or record.get("cost_status") != "available"
+                    or not isinstance(current_cost, (int, float))
+                    or current_cost + reserved_cost + reserve > record["maximum_estimated_cost_usd"]
+                ):
+                    branch["status"] = "ended"
+                    branch["reason"] = (
+                        "A conservative cost reserve prevented another provider call."
+                    )
+                    branch["current_action"] = "Cost limit"
+                    _save(path, record)
+                    return False
+                record["estimated_cost_reserved_usd"] = reserved_cost + reserve
+            record["calls_used"] += 1
+            branch["calls_used"] += 1
+            branch["status"] = "running"
+            branch["current_action"] = role.title()
+            branch["cycle"] = cycle
+            record["current_step"] = str(uuid4())
+            record["current_steps"] = [
+                item["id"] for item in record.get("steps", []) if item.get("status") == "running"
+            ] + [record["current_step"]]
+            record["status"] = "running"
+            record["cycle"] = max(item["cycle"] for item in record["strategy_runs"])
+            record["current_action"] = f"{role.title()} · {branch['strategy_title']}"
+            record["current_question"] = branch["current_question"]
+            record["message"] = (
+                f"Cycle {cycle}: {role.title()} provider call "
+                f"{record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} in progress."
+                if len(record["strategy_runs"]) == 1
+                else f"{role.title()} call {record['calls_used']}/{record.get('call_limit', CALL_LIMIT)} is running for {branch['strategy_title']}."
+            )
+            step_id = record["current_step"]
+            _event(record, "call.started", record["message"], role)
+            step = {
+                "id": step_id,
+                "cycle": cycle,
+                "role": role,
+                "strategy_id": strategy_id,
+                "strategy_title": branch["strategy_title"],
+                "status": "running",
+                "started_at": _now(),
+                "call_number": record["calls_used"],
+                "context_artifact_ids": context["context_artifact_ids"],
+                "prior_session_artifact_ids": context["prior_session_artifact_ids"],
+                "peer_strategy_artifact_ids": [
+                    item["artifact_id"] for item in context["other_strategy_evidence"]
+                ],
+                "context_obligation_count": len(context["outstanding_obligations"]),
+                "cost_reserve": reserve,
+            }
+            record["steps"].append(step)
+            _save(path, record)
+            call_record = record
+        try:
+            output, usage = await _call(call_record, role, context)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if isinstance(exc, ProjectError) and _is_guard_failure(str(exc)):
+                raise
+            async with state_lock:
+                record = _read(path, session_id)
+                branch = next(
+                    item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
+                )
+                step = next(item for item in record["steps"] if item["id"] == step_id)
+                step.update({"status": "failed", "finished_at": _now()})
+                if step.get("cost_reserve") is not None:
+                    record["cost_status"] = "unavailable"
+                    record["estimated_cost_usd"] = None
+                branch["status"] = "failed"
+                branch["current_action"] = "Failed"
+                failure_message = str(exc).strip()[:1000]
+                if not failure_message:
+                    failure_message = (
+                        "AI provider timed out; saved research artifacts were retained."
+                        if isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                        else "Provider call failed; saved research artifacts were retained."
+                    )
+                branch["reason"] = failure_message
+                if (
+                    role == "skeptic"
+                    and len(record.get("strategy_runs", [])) == 1
+                    and record.get("artifacts")
+                ):
+                    record["assessment_error"] = failure_message
+                _event(
+                    record,
+                    "strategy.failed",
+                    f"{branch['strategy_title']}: {branch['reason']}",
+                    role,
+                )
+                record["current_steps"] = [
+                    item["id"] for item in record["steps"] if item.get("status") == "running"
+                ]
+                record["current_step"] = (
+                    record["current_steps"][-1] if record["current_steps"] else None
+                )
+                _save(path, record)
+            return False
+        async with state_lock:
+            record = _read(path, session_id)
+            branch = next(
+                item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
+            )
+            step = next(item for item in record["steps"] if item["id"] == step_id)
+            step.update({"status": "completed", "finished_at": _now(), "output": output})
+            if record.get("mode") == "api_key":
+                step["token_usage"] = usage
+                estimate = _estimate_cost(record["model"], usage) if usage is not None else None
+                if step.get("cost_reserve") is not None:
+                    record["estimated_cost_reserved_usd"] = max(
+                        0.0,
+                        float(record.get("estimated_cost_reserved_usd", 0.0))
+                        - float(step["cost_reserve"]),
+                    )
+                if estimate is None:
+                    record["cost_status"] = "unavailable"
+                    record["estimated_cost_usd"] = None
+                elif record.get("cost_status") == "available":
+                    record["estimated_cost_usd"] = round(
+                        record.get("estimated_cost_usd", 0.0) + estimate, 9
+                    )
+            record["current_steps"] = [
+                item["id"] for item in record["steps"] if item.get("status") == "running"
+            ]
+            record["current_step"] = (
+                record["current_steps"][-1] if record["current_steps"] else None
+            )
+            if role == "investigator":
+                branch["pending_investigation"] = output
+                branch["current_action"] = "Skeptic"
+            else:
+                branch["pending_skeptic"] = output
+                branch["current_action"] = "Coordinator"
+            _event(
+                record,
+                "call.completed",
+                f"{role.title()} output saved for {branch['strategy_title']}.",
+                role,
+            )
+            _save(path, record)
+        return True
+
+
+def _commit_portfolio_review_safely(
+    record: dict[str, Any], session_id: str, branch: dict[str, Any]
+) -> None:
+    try:
+        _commit_portfolio_review(record, session_id, branch, branch["cycle"])
+    except Exception as exc:  # noqa: BLE001 — malformed coordinator output must not strand peers
+        branch["status"] = "failed"
+        branch["current_action"] = "Failed · reviewing evidence"
+        branch["reason"] = str(exc).strip()[:1000] or "Coordinator could not review saved output."
+        branch["pending_skeptic"] = None
+        _event(
+            record,
+            "strategy.failed",
+            f"{branch['strategy_title']}: {branch['reason']}",
+        )
+
+
+async def _portfolio_worker(session_id: str, path: str) -> None:
+    state_lock = asyncio.Lock()
+    semaphore = asyncio.Semaphore(3)
+
+    async def run_wave(calls: list[Any]) -> list[Any]:
+        gates = await _acquire_gates()
+        try:
+            results = await asyncio.gather(*calls, return_exceptions=True)
+            guard_error = next(
+                (
+                    result
+                    for result in results
+                    if isinstance(result, ProjectError) and _is_guard_failure(str(result))
+                ),
+                None,
+            )
+            if guard_error is not None:
+                raise guard_error
+            return results
+        finally:
+            for gate in reversed(gates):
+                gate.release()
+
+    while True:
+        async with state_lock:
+            record = _read(path, session_id)
+            if record["status"] in {"paused", "stopped", "ended", "completed", "failed"}:
+                return
+            runs = record["strategy_runs"]
+            for branch in runs:
+                if branch.get("pending_skeptic") is not None:
+                    _commit_portfolio_review_safely(record, session_id, branch)
+                    if branch["status"] == "running":
+                        branch["status"] = "queued"
+                        branch["current_action"] = "Investigator"
+            for branch in runs:
+                if branch["status"] == "queued" and branch["cycle"] >= record["cycle_limit"]:
+                    branch["status"] = "ended"
+                    branch["current_action"] = "Round limit"
+                    branch["reason"] = "Configured research-round limit reached."
+            active = [branch for branch in runs if branch["status"] in {"queued", "running"}]
+            remaining = record["call_limit"] - record["calls_used"]
+            if not active or remaining < 1:
+                for branch in active:
+                    branch["status"] = "ended"
+                    branch["current_action"] = "Budget exhausted"
+                    branch["reason"] = (
+                        "Shared call budget cannot fund another complete Investigator/Skeptic pair."
+                    )
+                record["status"] = (
+                    "failed"
+                    if runs and all(item["status"] == "failed" for item in runs)
+                    else "ended"
+                )
+                record["current_action"] = "Completed" if record["status"] == "ended" else "Failed"
+                failures = [
+                    branch.get("reason", "A strategy branch failed.")
+                    for branch in runs
+                    if branch["status"] == "failed"
+                ]
+                record["message"] = (
+                    "; ".join(failures)
+                    if record["status"] == "failed"
+                    else "All strategy branches finished or the shared call budget was exhausted."
+                )
+                record["updated_at"] = _now()
+                record["outcome"] = _outcome(record)
+                record["strategy_assessments"] = _strategy_assessments(record)
+                if len(runs) == 1 and str(runs[0].get("last_decision", "")).startswith("stop_"):
+                    record["terminal_reason"] = runs[0]["last_decision"]
+                _event(record, "portfolio.completed", record["message"])
+                _save(path, record)
+                return
+            cursor = int(record.get("portfolio_cursor", 0)) % len(active)
+            rotated = active[cursor:] + active[:cursor]
+            selected = []
+            calls_allocated = 0
+            for branch in sorted(
+                rotated, key=lambda item: 0 if item.get("pending_investigation") else 1
+            ):
+                cost = 1 if branch.get("pending_investigation") else 2
+                if calls_allocated + cost <= remaining:
+                    selected.append(branch)
+                    calls_allocated += cost
+            if not selected:
+                for branch in active:
+                    branch["status"] = "ended"
+                    branch["current_action"] = "Budget exhausted"
+                    branch["reason"] = (
+                        "Shared call budget cannot fund a complete Investigator/Skeptic pair."
+                    )
+                record["status"] = "ended"
+                record["current_action"] = "Completed · budget exhausted"
+                record["message"] = (
+                    "Shared call budget cannot fund another complete strategy cycle."
+                )
+                record["cycle"] = max((branch["cycle"] for branch in runs), default=0)
+                record["outcome"] = _outcome(record)
+                record["strategy_assessments"] = _strategy_assessments(record)
+                record["updated_at"] = _now()
+                _event(record, "portfolio.completed", record["message"])
+                _save(path, record)
+                return
+            record["portfolio_cursor"] = (cursor + len(selected)) % len(active)
+            record["status"] = "running"
+            record["message"] = (
+                f"Coordinating {len(selected)} enabled strategy branches with shared budget."
+            )
+            record["current_action"] = f"{len(selected)} strategies active · shared budget"
+            _save(path, record)
+
+        needs_review = [branch for branch in selected if branch.get("pending_investigation")]
+        needs_investigation = [
+            branch for branch in selected if not branch.get("pending_investigation")
+        ]
+        await run_wave(
+            [
+                _portfolio_role_call(
+                    session_id,
+                    path,
+                    branch["strategy_id"],
+                    "skeptic",
+                    branch["cycle"],
+                    semaphore,
+                    state_lock,
+                )
+                for branch in needs_review
+            ]
+        )
+        investigators = await run_wave(
+            [
+                _portfolio_role_call(
+                    session_id,
+                    path,
+                    branch["strategy_id"],
+                    "investigator",
+                    branch["cycle"] + 1,
+                    semaphore,
+                    state_lock,
+                )
+                for branch in needs_investigation
+            ]
+        )
+        investigator_success = [
+            branch
+            for branch, result in zip(needs_investigation, investigators, strict=True)
+            if result is True
+        ]
+        await run_wave(
+            [
+                _portfolio_role_call(
+                    session_id,
+                    path,
+                    branch["strategy_id"],
+                    "skeptic",
+                    branch["cycle"] + 1,
+                    semaphore,
+                    state_lock,
+                )
+                for branch in investigator_success
+            ]
+        )
+        async with state_lock:
+            record = _read(path, session_id)
+            for branch in record["strategy_runs"]:
+                if branch.get("pending_skeptic") is not None:
+                    _commit_portfolio_review_safely(record, session_id, branch)
+            for branch in record["strategy_runs"]:
+                if branch["status"] == "running":
+                    if branch["cycle"] >= record["cycle_limit"]:
+                        branch["status"] = "ended"
+                        branch["current_action"] = "Round limit"
+                        branch["reason"] = "Configured research-round limit reached."
+                    elif record["calls_used"] >= record["call_limit"]:
+                        branch["status"] = "ended"
+                        branch["current_action"] = "Budget exhausted"
+                        branch["reason"] = "Shared model-call budget reached."
+                    else:
+                        branch["status"] = "queued"
+                        branch["current_action"] = "Investigator"
+                if branch["status"] == "queued" and record["calls_used"] >= record["call_limit"]:
+                    branch["status"] = "ended"
+                    branch["current_action"] = "Budget exhausted"
+                    branch["reason"] = (
+                        "Shared model-call budget reached; no incomplete pair was retried."
+                    )
+            record["cycle"] = max(
+                (branch["cycle"] for branch in record["strategy_runs"]), default=0
+            )
+            record["strategy_assessments"] = _strategy_assessments(record)
+            record["outcome"] = _outcome(record)
+            record["updated_at"] = _now()
+            record["status"] = "running"
+            record["current_action"] = "Comparing strategy evidence"
+            active_titles = [
+                branch["strategy_title"]
+                for branch in record["strategy_runs"]
+                if branch["status"] in {"queued", "running"}
+            ]
+            stopped = [
+                {
+                    "strategy_id": branch["strategy_id"],
+                    "strategy_title": branch["strategy_title"],
+                    "reason": branch.get("reason"),
+                    "artifact_ids": list(branch["artifacts"]),
+                }
+                for branch in record["strategy_runs"]
+                if branch["status"] in {"ended", "failed"}
+            ]
+            record["portfolio_decision"] = {
+                "active_strategies": active_titles,
+                "stopped_strategies": stopped,
+                "basis_artifact_ids": [item["id"] for item in record["artifacts"]],
+            }
+            record["message"] = (
+                "Coordinator compared saved strategy evidence. Continuing: "
+                + (", ".join(active_titles) if active_titles else "none")
+                + ". Stopped or failed: "
+                + (", ".join(item["strategy_title"] for item in stopped) if stopped else "none")
+                + ". Each branch retains its own next question and contribution record."
+            )
+            _event(record, "coordinator.portfolio_review", record["message"])
+            _save(path, record)
+
+
 def _bounded_note(value: Any, limit: int) -> str:
     if not isinstance(value, str):
         return ""
@@ -1312,6 +2081,13 @@ async def _worker(session_id: str, path: str) -> None:
         os.close(worker_fd)
         return
     try:
+        initial = _read(path, session_id)
+        # All newly started sessions use the branch-aware path, including a
+        # one-strategy session. The legacy worker below remains only for
+        # persisted records created before per-strategy state existed.
+        if initial.get("strategy_runs"):
+            await _portfolio_worker(session_id, path)
+            return
         while True:
             record = _read(path, session_id)
             if record["status"] in {"stopped", "ended", "completed"}:
@@ -1685,16 +2461,24 @@ async def _worker(session_id: str, path: str) -> None:
                 )
                 record["current_action"] = "Paused after interrupted step"
                 _event(record, "interrupted", record["message"])
-            if record.get("current_step") and record["steps"]:
-                record["steps"][-1]["status"] = "interrupted"
-                record["steps"][-1]["finished_at"] = _now()
-                record["current_step"] = None
+            running_steps = [
+                step for step in record.get("steps", []) if step.get("status") == "running"
+            ]
+            for step in running_steps:
+                step["status"] = "interrupted"
+                step["finished_at"] = _now()
                 _event(
                     record,
                     "call.interrupted",
-                    "The local request was cancelled; provider usage may still accrue.",
-                    record["steps"][-1]["role"],
+                    f"{step['role'].title()} request was cancelled; provider usage may still accrue.",
+                    step["role"],
                 )
+            record["current_step"] = None
+            record["current_steps"] = []
+            for branch in record.get("strategy_runs", []):
+                if branch.get("status") == "running":
+                    branch["status"] = "stopped" if record["status"] == "stopped" else "paused"
+                    branch["current_action"] = branch["status"].title()
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):
@@ -1712,15 +2496,13 @@ async def _worker(session_id: str, path: str) -> None:
                         if isinstance(exc, (TimeoutError, httpx.TimeoutException))
                         else "Research session failed unexpectedly; saved research artifacts were retained."
                     )
-                guard_failure = any(
-                    text in str(exc).lower()
-                    for text in (
-                        "identity changed",
-                        "account or billing",
-                        "project or strategy changed",
-                    )
-                )
+                guard_failure = _is_guard_failure(str(exc))
                 record["status"] = "paused" if storage_failure or guard_failure else "failed"
+                for branch in record.get("strategy_runs", []):
+                    if branch.get("status") in {"queued", "running"}:
+                        branch["status"] = "paused" if record["status"] == "paused" else "failed"
+                        branch["current_action"] = branch["status"].title()
+                        branch["reason"] = failure_message
                 if role == "skeptic" and not storage_failure and not guard_failure:
                     record["assessment_error"] = failure_message
                 record["message"] = (
@@ -1740,13 +2522,13 @@ async def _worker(session_id: str, path: str) -> None:
                     "paused" if record["status"] == "paused" else "failed",
                     record["message"],
                 )
-            if record.get("current_step") and record["steps"]:
-                record["steps"][-1]["status"] = (
-                    "interrupted" if record["status"] == "paused" else "failed"
-                )
-                record["steps"][-1]["finished_at"] = _now()
-                record["current_step"] = None
-                _event(record, "call.failed", record["message"], record["steps"][-1]["role"])
+            for step in record.get("steps", []):
+                if step.get("status") == "running":
+                    step["status"] = "interrupted" if record["status"] == "paused" else "failed"
+                    step["finished_at"] = _now()
+                    _event(record, "call.failed", record["message"], step["role"])
+            record["current_step"] = None
+            record["current_steps"] = []
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):

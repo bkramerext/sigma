@@ -90,6 +90,7 @@ class OpenRequest(BaseModel):
 
 class ResearchStartRequest(OpenRequest):
     strategy_id: str = Field(min_length=1, max_length=100)
+    strategy_ids: list[str] | None = Field(default=None, min_length=1, max_length=12)
     idempotency_key: str = Field(min_length=36, max_length=36)
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
@@ -151,6 +152,7 @@ async def research_start_view(body: ResearchStartRequest):
         body.expected_project_id,
         body.expected_binding,
         body.expected_limits,
+        body.strategy_ids,
     )
 
 

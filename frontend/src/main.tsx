@@ -75,9 +75,10 @@ type ResearchArtifact = { id: string; sequence: number; claim_or_question: strin
 type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?: string | null; message: string };
 type ResearchStep = { id: string; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; output?: Record<string, unknown> };
 type PriorSessionFinding = { id: string; sequence: number; claim_or_question: string; method: string; evidence_status: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; session_id: string; session_number: number; strategy_id: string; strategy_title: string };
+type ResearchStrategyRun = { strategy_id: string; strategy_title: string; status: string; current_action: string; current_question: string; cycle: number; calls_used: number; artifacts: string[]; reason?: string | null };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_runs?: ResearchStrategyRun[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_minutes: string; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
 function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchSession): string {
@@ -187,7 +188,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; strategyChoices?: Strategy[]; selectedStrategyIds?: string[]; selectionLimit?: number; onStrategySelectionChange?: (strategyId: string, selected: boolean) => void };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -215,6 +216,7 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
       {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(session.outcome.solution_review.basis_artifact_ids, session)}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}{!!session.outcome.solution_review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {session.outcome.solution_review.unresolved_objections.join(' · ')}</p>}<p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p></div>}
       {!!session.outcome.caveats.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
     </section>
+    {!!session.strategy_runs && session.strategy_runs.length > 1 && <section className="research-strategy-activity" aria-label="Live strategy activity"><h3>Strategy activity</h3><ul>{session.strategy_runs.map(branch => <li key={branch.strategy_id} className={`strategy-run-${branch.status}`}><p><strong>{branch.strategy_title}</strong> · {branch.status} · {branch.current_action}</p><p>Cycle {branch.cycle} · {branch.calls_used} calls · {branch.artifacts.length} saved findings</p>{!!branch.current_question && <p><strong>Current question:</strong> {branch.current_question}</p>}{!!branch.reason && <p><strong>Coordinator rationale:</strong> {branch.reason}</p>}</li>)}</ul></section>}
     {!!session.strategy_assessments?.length && <section className="strategy-assessments" aria-label="Strategy Assessments"><h3>Strategy Assessments</h3><p>Each assessment is this strategy’s contribution to the project objective in this session.</p><div className="strategy-assessments-scroll"><table><thead><tr><th scope="col">Strategy</th><th scope="col">Assessment</th><th scope="col">Rationale and evidence</th></tr></thead><tbody>{session.strategy_assessments.map((item, index) => {
       const label: Record<StrategyAssessment['assessment'], string> = { contributed_to_solution: 'Contributed to solution', productive: 'Productive', unproductive: 'Unproductive', not_used: 'Not used', disabled: 'Disabled', unknown: 'Unknown' };
       const references = item.basis_artifact_ids.map(id => session.artifacts.find(artifact => artifact.id === id)?.sequence).filter((sequence): sequence is number => sequence !== undefined);
@@ -257,7 +259,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
-  const [pendingStrategyId, setPendingStrategyId] = useState('');
+  const [pendingStrategyIds, setPendingStrategyIds] = useState<string[]>([]);
   const [config, setConfig] = useState<{ available: boolean; model: string; reasoning_effort: string; mode: string; binding: string; message: string } | null>(null);
   const [limits, setLimits] = useState<ResearchLimits | null>(null);
   const [confirmStart, setConfirmStart] = useState(false);
@@ -273,7 +275,6 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
   const idempotencyKey = useRef<string | null>(null);
   const submittingStart = useRef(false);
   const activeSession = sessions.find(item => item.status === 'queued' || item.status === 'running');
-  const nextStrategyId = eligible[0]?.id ?? '';
 
   const load = useCallback(async (preferredId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ path });
@@ -343,6 +344,11 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
       if (!validateLimitDraft(draftLimits(currentLimits)).value) {
         throw new Error('Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
       }
+      const selectionLimit = Math.min(12, Math.floor(currentLimits.model_calls / 2));
+      setPendingStrategyIds(current => {
+        const retained = current.filter(id => eligible.some(strategy => strategy.id === id)).slice(0, selectionLimit);
+        return retained.length ? retained : eligible.slice(0, 1).map(strategy => strategy.id);
+      });
       setConfig(current); setLimits(currentLimits);
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
       setConfirmStart(true);
@@ -351,13 +357,13 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
   }
 
   async function start() {
-    if (submittingStart.current || !config || !pendingStrategyId) return;
+    if (submittingStart.current || !config || !pendingStrategyIds.length) return;
     submittingStart.current = true;
     setBusy(true); setError('');
     try {
       idempotencyKey.current ??= crypto.randomUUID();
       selectedSessionId.current = '';
-      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyId, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current });
+      const next = await post<ResearchSession>('research-sessions/start', { path, strategy_id: pendingStrategyIds[0], strategy_ids: pendingStrategyIds, expected_project_id: projectId, expected_binding: config.binding, expected_limits: limits, idempotency_key: idempotencyKey.current });
       idempotencyKey.current = null;
       setConfirmStart(false); selectedSessionId.current = next.id;
       lastAnnouncement.current = `${next.id}:${next.status}:${next.current_action}`;
@@ -413,23 +419,30 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     if (busy || readError) return;
     setExpanded(true); window.localStorage.setItem(`sigma.sessionsPane:${path}`, 'true');
     if (activeSession || !eligible.length) return;
-    setPendingStrategyId(nextStrategyId);
     setConfirmStart(false);
     void begin();
-  }, [activeSession, busy, nextStrategyId, eligible.length, readError, path]);
+  }, [activeSession, busy, eligible.length, readError, path]);
   const stop = useCallback(() => {
     if (activeSession?.status === 'running' && !busy && !readError) void control('stop', activeSession);
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
+      strategyChoices: eligible,
+      selectedStrategyIds: pendingStrategyIds,
+      selectionLimit: Math.floor((limits?.model_calls ?? 0) / 2),
+      onStrategySelectionChange: (strategyId, selected) => setPendingStrategyIds(current => {
+        const maximum = Math.floor((limits?.model_calls ?? 0) / 2);
+        if (selected) return current.includes(strategyId) || current.length >= maximum ? current : [...current, strategyId];
+        return current.filter(id => id !== strategyId);
+      }),
       playDisabled: busy || !!readError || confirmStart || (activeSession
         ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions]);
+  }, [activeSession, busy, confirmStart, eligible, limits?.model_calls, onControlsChange, pendingStrategyIds, stop, play, playLabel, readError, sessions]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -1477,7 +1490,12 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
+        {!!controls.strategyChoices?.length && controls.strategyChoices.length > 1 && <details className="research-strategy-selection"><summary>Strategies ({controls.selectedStrategyIds?.length ?? 0} selected)</summary><p>Select up to {controls.selectionLimit} strategies. Each selected strategy gets an Investigator/Skeptic pair within the shared call limit.</p><fieldset><legend>Enabled strategies</legend>{controls.strategyChoices.map(strategy => {
+          const selected = controls.selectedStrategyIds?.includes(strategy.id) ?? false;
+          const atLimit = (controls.selectedStrategyIds?.length ?? 0) >= (controls.selectionLimit ?? 0);
+          return <label key={strategy.id}><input type="checkbox" checked={selected} disabled={disabled || !selected && atLimit} onChange={event => controls.onStrategySelectionChange?.(strategy.id, event.target.checked)}/><span>{strategy.title}</span></label>;
+        })}</fieldset></details>}
+        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled || !(controls.selectedStrategyIds?.length) || (controls.selectedStrategyIds?.length ?? 0) > (controls.selectionLimit ?? 0)} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
