@@ -237,7 +237,12 @@
 .workspace-page .project-back-label:hover:not(:disabled) { color: #f3cd9e; }
 .workspace-page .project-back-label:disabled { opacity: .5; cursor: default; }
 .workspace-page .project-header-title { display: block; width: 100%; min-width: 0; padding: 0; color: var(--workspace-copper); font: 400 clamp(18px, 1.7vw, 24px)/1.3 Georgia, serif; overflow-wrap: anywhere; }
+.workspace-page .project-header-title-row { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; }
+.workspace-page .project-header-title-row .research-type-icon { display: block; flex: 0 0 26px; width: 26px; height: 26px; color: var(--workspace-copper); }
+.workspace-page .project-header-title-row .project-header-title { width: auto; flex: 1 1 auto; }
 @media (max-width: 700px) {
   .workspace-page .project-art-header .project-title-line { max-width: 100%; gap: 8px; }
   .workspace-page .project-header-title { font-size: 18px; }
+  .workspace-page .project-header-title-row { gap: 5px; }
+  .workspace-page .project-header-title-row .research-type-icon { flex-basis: 22px; width: 22px; height: 22px; }
 }

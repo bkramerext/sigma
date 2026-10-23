@@ -109,6 +109,7 @@ def main() -> None:
     assert isinstance(plain, str)
     assert plain_type == "text/plain; charset=utf-8"
     for expected in (
+        "Research type: Mathematics",
         "Research problem: Can we prove 50%? A & B; x_1 < x_2.",
         "Session #3",
         "Execution status: ended",

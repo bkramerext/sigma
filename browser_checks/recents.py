@@ -57,46 +57,45 @@ with sync_playwright() as playwright:
 
     samples_panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
     expect(
-        page.get_by_role(
-            "heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy(?: \d+)?\)")
-        )
+        page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3, v1")
     ).to_be_visible()
     assert page.get_by_role("dialog").count() == 0
     expect(page.locator(".strategy-row")).to_have_count(3)
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
     assert Path(path, "project.json").read_bytes() != original
 
-    # Expansion shows the complete approach, not a clipped duplicate preview.
+    # The strategy disclosure shows and hides the complete approach.
     first_row = page.locator(".strategy-row").first
-    preview = first_row.locator(".strategy-preview")
-    disclosure = first_row.locator(".strategy-detail > summary")
-    expect(preview).to_be_visible()
+    expanded = first_row.locator(".strategy-expanded")
+    disclosure = first_row.locator(".strategy-row-disclosure")
+    expect(expanded).to_be_visible()
     disclosure.click()
-    expect(preview).to_be_hidden()
+    expect(expanded).to_be_hidden()
     source = json.loads(Path(path, "project.json").read_text())
     expect(first_row.locator(".strategy-expanded .strategy-approach")).to_have_text(
         source["strategies"][0]["approach"]
     )
     disclosure.click()
-    expect(preview).to_be_visible()
+    expect(expanded).to_be_visible()
     saved = page.request.post(
         "http://127.0.0.1:8001/api/projects/strategies",
         data={"path": path, "title": "Browser sample addition", "approach": "Keep this strategy"},
     )
     assert saved.status == 201
-    page.get_by_role("button", name="Close project").click()
+    page.get_by_role("button", name="Back to home", exact=True).click()
     # A Sample is copied into working projects; return to Recent automatically.
     expect(recent_tab).to_have_attribute("aria-selected", "true")
-    expect(
-        recent_panel.get_by_text(re.compile(r"Nonconsecutive Subset Sums Modulo 3 \(copy\)"))
-    ).to_be_visible()
+    first_copy = recent_panel.get_by_role(
+        "button", name="Nonconsecutive Subset Sums Modulo 3, v1", exact=True
+    )
+    expect(first_copy).to_be_visible()
 
     # Project navigation unmounts Home; tab state should survive that and reload.
     recent_panel.locator(".recent-open").first.click()
     expect(
         page.get_by_role("heading", name=re.compile(r"Nonconsecutive Subset Sums Modulo 3"))
     ).to_be_visible()
-    page.get_by_role("button", name="Close project").click()
+    page.get_by_role("button", name="Back to home", exact=True).click()
     expect(recent_tab).to_have_attribute("aria-selected", "true")
     page.reload()
     expect(recent_tab).to_have_attribute("aria-selected", "true")
@@ -105,8 +104,36 @@ with sync_playwright() as playwright:
 
     # A second successful Sample copy must select Recent again.
     samples_panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
-    page.get_by_role("button", name="Close project").click()
+    page.get_by_role("button", name="Back to home", exact=True).click()
     expect(recent_tab).to_have_attribute("aria-selected", "true")
+    second_copy = recent_panel.get_by_role(
+        "button", name="Nonconsecutive Subset Sums Modulo 3, v2", exact=True
+    )
+    expect(second_copy).to_be_visible()
+    second_project_path = second_copy.locator("xpath=../..")
+    project_path = second_project_path.locator(":scope > span").get_attribute("title")
+    assert project_path and Path(project_path, "project.json").is_file()
+    row = second_copy.locator("xpath=../../..")
+    row_before = row.bounding_box()
+    remove = row.get_by_role("button", name=re.compile("Remove .* from Recent Projects"))
+    remove.click()
+    confirmation = row.get_by_role(
+        "group", name="Confirm remove Nonconsecutive Subset Sums Modulo 3, v2"
+    )
+    expect(confirmation).to_be_visible()
+    row_after = row.bounding_box()
+    assert row_before and row_after and abs(row_before["height"] - row_after["height"]) < 1
+    confirmation.get_by_role("button", name="Cancel", exact=True).click()
+    expect(confirmation).to_have_count(0)
+    remove.click()
+    confirmation = row.get_by_role(
+        "group", name="Confirm remove Nonconsecutive Subset Sums Modulo 3, v2"
+    )
+    confirmation.get_by_role("button", name="Confirm", exact=True).click()
+    expect(second_copy).to_have_count(0)
+    assert Path(project_path, "project.json").is_file(), (
+        "Removing from Recent must keep research data"
+    )
     samples_tab.click()
 
     for width, height in ((1280, 720), (390, 844), (320, 700)):

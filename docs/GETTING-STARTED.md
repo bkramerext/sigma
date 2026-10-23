@@ -13,7 +13,7 @@ From the repository root:
 ./sigma start
 ```
 
-Open **http://127.0.0.1:5173**. Choose **Open Project**, enter `projects/rh.sigma` in the dialog, and open it. **New Project** asks for a name, multiline research problem, and research mode (Default or Mathematical), then opens the created workspace. Cancel or Escape returns Home. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
+Open **http://127.0.0.1:5173**. Choose **Open Project**, enter `projects/rh.sigma` in the dialog, and open it. **New Project** asks for a name, multiline research problem, and research category (Biology, Chemistry, Computer Science, Economics, Engineering, Law, Mathematics, Military, Philosophy, Physics, Religion, or Other), then opens the created workspace. Create and Cancel appear beside the dialog title. Cancel or Escape returns Home. On the project page, use **New strategy** to save a title and approach. Strategies persist after reload or reopen. **Close project** returns Home. Project details/history are collapsible.
 
 Use the three-dot menu beside a strategy, then **Actions → Edit** to change its
 name and description in a dialog. **Actions → Remove** asks for confirmation and
@@ -45,7 +45,7 @@ Scheduling, reports and forks are unavailable; the UI explains their status. Opt
 ```
 
 Successful commands print JSON to stdout (exit 0). Project errors print `{"error":"..."}` to stderr (exit 2); argparse syntax errors also exit 2. `close` is stateless. `strategies` lists the active pool; `inspect` retains removed
-records and all audit events. Edit/remove commands return the updated project. Only the canonical RH seed initializes implicitly; other projects require `create` (managed location) or `init` (explicit directory). Both accept `--research-mode default|mathematical`, defaulting to `default`.
+records and all audit events. Edit/remove commands return the updated project. Only the canonical RH seed initializes implicitly; other projects require `create` (managed location) or `init` (explicit directory). Both accept `--research-mode biology|chemistry|computer_science|economics|engineering|law|mathematical|military|philosophy|physics|religion|default`, defaulting to `default` (shown as Other in the UI).
 
 Agentic run evidence is saved under `agentic-runs/` inside the project directory.
 `agentic-runs PATH` lists retained run IDs and terminal states; adding a run ID
@@ -98,7 +98,7 @@ Canonical artwork lives in `assets/`; Vite copies its exact bytes into runtime p
 
 ## Data and limitations
 
-New projects use JSON schema v6 with persisted research mode, AI model and Thinking level. Existing v1–v5 documents open without rewriting; missing mode defaults to Default and missing AI settings use the documented legacy bootstrap; strategy writes retain their established lazy migration behavior. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
+New projects use JSON schema v6 with persisted research type, AI model and Thinking level. Existing v1–v5 documents open without rewriting; missing type defaults to Other and missing AI settings use the documented legacy bootstrap; strategy writes retain their established lazy migration behavior. Existing v1 projects open unchanged; their first strategy save preserves an exact `project.v1.json` backup before migration. First edit/removal upgrades v2 to v3, preserving an exact `project.v2.json` backup.
 V3–v6 retain removed records and edit/removal events; older clients cannot read newer schemas.
 Unchanged edits add no event or migration. Writes use POSIX advisory locks and atomic replacement. Use a local macOS/Linux filesystem; do not edit project JSON while a save is running. Generated RH project state is excluded from Git.
 
@@ -206,9 +206,15 @@ or key. There is no persistent draft store.
 
 ## Project settings and curated models (A8)
 
-**New Project** opens the **New Project** dialog. On the workspace, the pencil immediately
-beside the main project name opens **Edit Project**. Both use the same fields:
-name, research problem, research mode, AI model, Thinking level. Name/problem are
+**New Project** opens the **New Project** dialog, with underlined Create and
+Cancel actions beside its title. On the workspace, the pencil immediately
+beside the main project name opens **Settings**. Both use the same fields:
+name, research problem, research category (New Project; Settings retains its
+Research type label), AI model, Thinking level. The available categories are
+Biology, Chemistry, Computer Science, Economics, Engineering, Law, Mathematics,
+Military, Philosophy, Physics, Religion, and Other. Copper icons identify each
+category in the picker and alongside the project title. Other retains the
+existing `default` value in older project files. Name/problem are
 required; Low, Medium, High and Extra high map to `low`, `medium`, `high`, `xhigh`.
 High is the default. Edits save together on **Save Changes**; Cancel/Escape does
 not save, and a no-op save does not rewrite files or append an event. Errors keep

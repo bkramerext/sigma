@@ -70,7 +70,7 @@ def main() -> None:
                 )
                 assert (Path(created.path) / STATE).read_bytes() == snapshot
             print(
-                "PASS both modes serialized/reopened, destination preview, collision and strategy integrity"
+                "PASS all research types serialized/reopened, destination preview, collision and strategy integrity"
             )
 
             existing = set(managed.iterdir())
@@ -159,6 +159,16 @@ def main() -> None:
                 response = client.post("/api/projects/create", json=body)
                 assert response.status_code == 201, response.text
                 assert response.json()["project"]["investigation_type"] == "mathematical"
+                chemistry = client.post(
+                    "/api/projects/create",
+                    json={
+                        "title": "API chemistry",
+                        "problem": "A chemistry question",
+                        "research_mode": "chemistry",
+                    },
+                )
+                assert chemistry.status_code == 201, chemistry.text
+                assert chemistry.json()["project"]["investigation_type"] == "chemistry"
                 assert client.post("/api/projects/create", json=body).status_code == 400
                 assert (
                     client.post(

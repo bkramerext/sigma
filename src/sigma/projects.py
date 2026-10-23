@@ -26,14 +26,26 @@ class ProjectError(ValueError):
 
 class ResearchMode(str, Enum):
     DEFAULT = "default"
+    BIOLOGY = "biology"
+    CHEMISTRY = "chemistry"
+    COMPUTER_SCIENCE = "computer_science"
+    ECONOMICS = "economics"
+    ENGINEERING = "engineering"
+    LAW = "law"
     MATHEMATICAL = "mathematical"
+    MILITARY = "military"
+    PHILOSOPHY = "philosophy"
+    PHYSICS = "physics"
+    RELIGION = "religion"
 
 
 def _research_mode(value: str) -> ResearchMode:
     try:
         return ResearchMode(value)
     except (ValueError, TypeError) as exc:
-        raise ProjectError("Research mode must be default or mathematical") from exc
+        raise ProjectError(
+            "Research category must be Biology, Chemistry, Computer Science, Economics, Engineering, Law, Mathematics, Military, Philosophy, Physics, Religion, or Other"
+        ) from exc
 
 
 @dataclass(frozen=True)

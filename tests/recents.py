@@ -29,8 +29,19 @@ def check(root: Path, base: Path) -> None:
     assert {entry["title"] for entry in catalog} >= {
         "Nonconsecutive Subset Sums Modulo 3",
         "Did Jesus Use Cannabis?",
+        "Operation Narrow Passage",
+        "Warp Drive Feasibility",
     }
-    assert {entry["investigation_type"] for entry in catalog} >= {"default", "mathematical"}
+    sample_categories = {entry["title"]: entry["investigation_type"] for entry in catalog}
+    assert sample_categories["Did Jesus Use Cannabis?"] == "religion"
+    assert sample_categories["Operation Narrow Passage"] == "military"
+    assert sample_categories["Warp Drive Feasibility"] == "engineering"
+    assert {entry["investigation_type"] for entry in catalog} >= {
+        "mathematical",
+        "engineering",
+        "religion",
+        "military",
+    }
     assert catalog[-1]["title"] == "Did Jesus Use Cannabis?"
     assert home_projects()["projects"] == [] and not list(root.iterdir())
 

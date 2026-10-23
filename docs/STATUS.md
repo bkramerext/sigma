@@ -1,17 +1,29 @@
 # SIGMA status
 
-## Sample copy names and Home credit streak (2026-10-22)
+## Home, sample, and research-type refinements (2026-10-22)
 
-Opening a Sample now creates projects named `Foobar, v1`, then `Foobar, v2`,
-and so on. Version selection checks all occupied project titles and skips any
-already in use, while keeping the existing independent project-directory
-numbering. The Home credit's blue streak now brightens and sweeps on hover in
-the corrected direction; reduced-motion preferences disable the animation.
+Opening a Sample creates projects named `Foobar, v1`, then `Foobar, v2`, and so
+on, skipping titles already in use. New Project calls its field **Research
+category**; Settings retains **Research type**. The alphabetized choices are
+Biology, Chemistry, Computer Science, Economics, Engineering, Law, Mathematics,
+Military, Philosophy, Physics, Religion, and Other. Each category has a copper
+icon in the picker, project lists, and beside the project-page title. Existing
+`default` values remain compatible and display as Other. New Project's
+underlined Create and Cancel actions now follow the title. Project Audit and
+workspace details display the friendly category label.
+
+Recent-project removal now asks for underlined Confirm or Cancel in a floating
+confirmation card without changing the row layout. Its message says the project
+and research will be kept in storage. The Home credit's blue shooting-star
+streak stays invisible at rest and crosses the viewport from left to right on
+hover; it stays one shot while the pointer remains over the credit and sits
+through the first credit line. Reduced-motion preferences show it without
+animation.
 
 Verification: `./sigma test` passed all scenarios, Ruff check/format, Pyright
-(zero errors), frontend typecheck and production build. A real Chrome check
-confirmed the Home credit is visible and the streak animation activates on
-hover.
+(zero errors), frontend typecheck and production build. Real Chrome interaction
+checks are being rerun against the updated local UI; the previous run stopped
+because a connection overlay remained open.
 
 ## A17.7.1 and follow-up UI refinements (2026-10-22)
 
@@ -1785,3 +1797,22 @@ The direct lifecycle/context-continuation edits were included in the A17.7 local
 verification above. They were exercised by the full source-controlled scenario
 suite and the real-Chrome pause/stop/error workflow using the mock provider; no
 paid calls were made.
+
+Latest UI follow-up (2026-10-22): Project and strategy title editing now shares
+one Save/Cancel pair with the description editor. The Markdown control keeps a
+title-row slot in normal view and is hidden during Save/Cancel; title fields
+stay content-sized with a reduced gap before Save/Cancel.
+The Research Artifacts Markdown view now renders every artifact at once, with
+one control for the full collection. A session-remove confirmation opens
+rightward from its action to stay on screen, a single strategy no longer leaves
+an empty reorder-handle gutter, and disabled strategies show Enable instead of
+a separate status pill. Reorder previews use neighboring row centers and skip
+unchanged positions to prevent pointer jitter. Strategy removal has one anchored
+confirmation popup; Confirm calls removal directly without opening the retired
+dialog. Strategies and Sessions show their divider only while collapsed.
+Confirmation actions in Sessions, Strategies and Recent Projects share the
+regular underlined-link size. Full `./sigma test` passed, including Ruff,
+Pyright, frontend typecheck and production build; Ruff check/format also passed
+for the updated research browser scenario. A fresh browser run stopped at its
+existing stale “Open Counting Constrained Binary Strings” selector before
+reaching workspace assertions.

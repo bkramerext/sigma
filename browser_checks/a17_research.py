@@ -436,14 +436,17 @@ with sync_playwright() as playwright:
     page.locator(".project-intro").get_by_role("button", name="Cancel", exact=True).click()
 
     # The Strategies pane is independently collapsible and keeps its open draft mounted.
+    strategy_header = page.locator(".strategies-pane > .workspace-pane-heading")
     page.get_by_role("button", name="Strategies", exact=True).click()
     expect(page.locator("#strategies-pane-content")).to_be_hidden()
+    expect(strategy_header).to_have_css("border-bottom-width", "1px")
     page.locator(".strategy-heading-actions button:first-child").evaluate(
         "button => { button.click(); button.parentElement.querySelectorAll('button')[1].click(); }"
     )
     expect(page.locator("#strategy-composer form.strategy-form")).to_have_count(1)
     expect(page.locator(".inline-proposal")).to_have_count(0)
     expect(page.locator("#strategies-pane-content")).to_be_visible()
+    expect(strategy_header).to_have_css("border-bottom-width", "0px")
     new_form = page.locator("#strategy-composer form.strategy-form")
     expect(page.locator("#strategy-title")).to_be_focused()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
@@ -699,8 +702,14 @@ with sync_playwright() as playwright:
     expect(pause_row.locator(".session-row-content")).to_be_visible()
     page.get_by_role("button", name="Sessions", exact=True).click()
     expect(page.locator("#sessions-pane-content")).to_be_hidden()
+    expect(research.locator(":scope > .workspace-pane-heading")).to_have_css(
+        "border-bottom-width", "1px"
+    )
     expect(research.locator(".section-count")).to_contain_text("1 running")
     page.get_by_role("button", name="Sessions", exact=True).click()
+    expect(research.locator(":scope > .workspace-pane-heading")).to_have_css(
+        "border-bottom-width", "0px"
+    )
     expect(pause_row.locator(".session-status")).to_contain_text("running")
     dot = page.locator(".api-connection .connection-dot")
     expect(dot).to_have_class(re.compile("connection-active"), timeout=10000)
@@ -800,9 +809,19 @@ with sync_playwright() as playwright:
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
+    artifact_section = first_session.get_by_label("Research artifacts")
+    artifact_markdown_toggle = artifact_section.get_by_role(
+        "button", name="Render research artifacts as Markdown"
+    )
+    artifact_markdown_toggle.click()
     expect(
-        first_session.get_by_label("Research artifacts").locator(":scope > ol > li > details")
-    ).to_have_count(3)
+        artifact_section.get_by_role("button", name="Show plain research artifacts")
+    ).to_have_attribute("aria-pressed", "true")
+    expect(artifact_section.locator(".research-artifact-markdown")).to_have_count(3)
+    for cycle in range(1, 4):
+        expect(artifact_section).to_contain_text(f"Cycle {cycle}:")
+    artifact_section.get_by_role("button", name="Show plain research artifacts").click()
+    expect(artifact_section.locator(":scope > ol > li > details")).to_have_count(3)
     expect(page.locator("#strategies-pane-content")).to_be_visible()
     page.get_by_role("button", name="Strategies", exact=True).click()
     expect(page.locator("#strategies-pane-content")).to_be_hidden()

@@ -11,7 +11,7 @@
     }
   ],
   "strategies": [],
-  "research_mode": "default",
+  "research_mode": "military",
   "active_order": [],
   "ai_model": "gpt-6.1-sol",
   "reasoning_effort": "high"

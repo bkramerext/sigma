@@ -5,6 +5,7 @@ Requires the separate no-network provider_fixture API described in README.
 
 import json
 import os
+import re
 from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +13,13 @@ from uuid import uuid4
 from playwright.sync_api import expect, sync_playwright
 
 from sigma.projects import create_strategy, inspect_project, project_settings, update_project
+
+
+def choose_research_type(dialog, label, field_label="Research type"):
+    picker = dialog.get_by_role("combobox", name=re.compile(f"^{field_label}"))
+    picker.click()
+    dialog.get_by_role("option", name=label, exact=True).click()
+    return picker
 
 
 def status_handler(data):
@@ -58,21 +66,50 @@ with sync_playwright() as p:
     expect(
         page.get_by_text("API authentication/reachability verified only.", exact=False)
     ).to_be_visible()
-    page.get_by_role("button", name="New Project", exact=True).click()
+    page.keyboard.press("Escape")
+    page.get_by_role("button", name="New", exact=True).click()
     dialog = page.get_by_role("dialog")
     expect(dialog.get_by_role("heading", name="New Project", exact=True)).to_be_visible()
     expect(dialog.get_by_label("Project name", exact=True)).to_be_focused()
-    labels = ["Project name", "Research problem", "Research mode", "AI model", "Thinking level"]
+    labels = ["Project name", "Research problem", "Research category", "LLM Model", "Thinking level"]
     assert dialog.locator("label").all_text_contents() == labels
-    expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6.1-sol")
+    expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6.1-sol")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("high")
-    assert dialog.get_by_label("AI model", exact=True).locator("option").count() == 3
+    assert dialog.get_by_label("LLM Model", exact=True).locator("option").count() == 3
     title = "Settings browser " + uuid4().hex[:6]
     dialog.get_by_label("Project name", exact=True).fill(title)
     dialog.get_by_label("Research problem", exact=True).fill(
         "Preserve the complete research problem.\nTest assumptions critically."
     )
-    dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
+    research_type = dialog.get_by_role("combobox", name=re.compile("^Research category"))
+    research_type.click()
+    options = dialog.get_by_role("listbox", name="Research category").get_by_role("option")
+    assert options.locator("span").all_text_contents() == [
+        "Biology",
+        "Chemistry",
+        "Computer Science",
+        "Economics",
+        "Engineering",
+        "Law",
+        "Mathematics",
+        "Military",
+        "Philosophy",
+        "Physics",
+        "Religion",
+        "Other",
+    ]
+    assert dialog.locator(".research-type-icon").count() == 13
+    dialog.get_by_role("heading", name="New Project").evaluate(
+        "h => { const actions=h.parentElement.querySelector('.settings-actions'); if (!actions || !actions.textContent.includes('Create') || !actions.textContent.includes('Cancel') || !(h.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING) || actions.getBoundingClientRect().left < h.getBoundingClientRect().right) throw new Error('Create and Cancel must follow the title'); }"
+    )
+    expect(dialog.get_by_role("button", name="Create", exact=True)).to_have_css(
+        "text-decoration-line", "underline"
+    )
+    expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_have_css(
+        "text-decoration-line", "underline"
+    )
+    dialog.get_by_role("option", name="Mathematics", exact=True).click()
+    expect(research_type).to_contain_text("Mathematics")
     expect(dialog.get_by_role("button", name="Create", exact=True)).to_be_enabled()
     destination = Path(dialog.locator(".project-destination code").inner_text())
     assert not destination.exists()
@@ -97,7 +134,7 @@ with sync_playwright() as p:
     dialog.locator("form").evaluate(
         '(form) => { for (let i=0;i<2;i++) form.dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})); }'
     )
-    expect(dialog.get_by_role("button", name="Saving…", exact=True)).to_be_disabled()
+    expect(dialog.get_by_role("button", name="Creating…", exact=True)).to_be_disabled()
     expect(dialog.get_by_role("button", name="Cancel", exact=True)).to_be_disabled()
     dialog.press("Escape")
     expect(dialog).to_be_visible()
@@ -109,6 +146,18 @@ with sync_playwright() as p:
     )
     page.unroute("**/api/projects/create")
     expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
+    header_icon = page.locator(".project-header-title-row .research-type-icon")
+    title_row = page.locator(".project-header-title-row")
+    for width in (1672, 390, 320):
+        page.set_viewport_size({"width": width, "height": 941 if width == 1672 else 844})
+        expect(header_icon).to_have_class(re.compile("research-type-icon-mathematical"))
+        assert title_row.evaluate(
+            "e => e.firstElementChild.getBoundingClientRect().right <= e.lastElementChild.getBoundingClientRect().left"
+        )
+        assert float(title_row.evaluate("e => parseFloat(getComputedStyle(e).columnGap)")) <= 6
+        assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+        page.screenshot(path=f"/tmp/sigma-project-header-type-{width}.png", full_page=True)
+    page.set_viewport_size({"width": 1672, "height": 941})
     state = destination / "project.json"
     raw = json.loads(state.read_bytes())
     identity = raw["id"]
@@ -153,8 +202,8 @@ with sync_playwright() as p:
     settings_button.click()
     expect(dialog.get_by_role("heading", name="Project Settings", exact=True)).to_be_visible()
     assert dialog.locator("label").all_text_contents() == [
-        "Research mode",
-        "AI model",
+        "Research type",
+        "LLM Model",
         "Thinking level",
     ]
     dialog.press("Escape")
@@ -180,7 +229,7 @@ with sync_playwright() as p:
     }
     page.route("**/api/ai/models", status_handler(constrained))
     settings_button.click()
-    dialog.get_by_label("AI model", exact=True).select_option("gpt-6-luna")
+    dialog.get_by_label("LLM Model", exact=True).select_option("gpt-6-luna")
     expect(dialog.get_by_role("alert")).to_contain_text("Choose a supported level explicitly")
     expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_disabled()
     dialog.get_by_label("Thinking level", exact=True).select_option("low")
@@ -188,8 +237,8 @@ with sync_playwright() as p:
     dialog.press("Escape")
     page.unroute("**/api/ai/models")
     settings_button.click()
-    dialog.get_by_label("Research mode", exact=True).select_option("default")
-    dialog.get_by_label("AI model", exact=True).select_option("gpt-6-luna")
+    choose_research_type(dialog, "Other")
+    dialog.get_by_label("LLM Model", exact=True).select_option("gpt-6-luna")
     dialog.get_by_label("Thinking level", exact=True).select_option("xhigh")
     page.route(
         "**/api/projects/update",
@@ -216,7 +265,7 @@ with sync_playwright() as p:
     page.reload()
     settings_button = page.get_by_role("button", name="Project Settings", exact=True)
     settings_button.click()
-    expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6-luna")
+    expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("xhigh")
     dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(settings_button).to_be_focused()
@@ -227,7 +276,7 @@ with sync_playwright() as p:
     )
     dialog.press("Escape")
     settings_button.click()
-    dialog.get_by_label("Research mode", exact=True).select_option("mathematical")
+    research_type = choose_research_type(dialog, "Mathematics")
     latest = inspect_project(destination)
     prior = asdict(project_settings(latest.project))
     update_project(
@@ -236,7 +285,7 @@ with sync_playwright() as p:
     conflict_bytes = state.read_bytes()
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
     expect(dialog.get_by_role("alert")).to_contain_text("changed elsewhere")
-    expect(dialog.get_by_label("Research mode", exact=True)).to_have_value("mathematical")
+    expect(research_type).to_contain_text("Mathematics")
     assert state.read_bytes() == conflict_bytes
     dialog.press("Escape")
     page.reload()
@@ -250,7 +299,7 @@ with sync_playwright() as p:
     }
     page.route("**/api/ai/models", status_handler(no_models))
     settings_button.click()
-    expect(dialog.get_by_label("AI model", exact=True)).to_have_value("gpt-6-luna")
+    expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6-luna")
     expect(dialog.get_by_text("Provider is offline;", exact=False)).to_be_visible()
     expect(dialog.get_by_role("button", name="Save Changes", exact=True)).to_be_enabled()
     dialog.get_by_role("button", name="Save Changes", exact=True).click()
@@ -295,8 +344,8 @@ with sync_playwright() as p:
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-status-{status}-320.png", full_page=True)
         page.unroute("**/api/ai/connection?*")
-    page.get_by_role("button", name="Close project", exact=True).click()
-    expect(page.get_by_role("button", name="New Project", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Back to home", exact=True).click()
+    expect(page.get_by_role("button", name="New", exact=True)).to_be_visible()
     page.wait_for_timeout(150)
     page.go_back()
     expect(page.get_by_role("button", name="Project Settings", exact=True)).to_be_visible()

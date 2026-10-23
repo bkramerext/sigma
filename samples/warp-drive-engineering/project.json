@@ -1,0 +1,18 @@
+{
+  "schema_version": 6,
+  "id": "b446f53b-22bb-4931-87e6-8a9038625e01",
+  "title": "Warp Drive Feasibility",
+  "problem": "Develop a scientifically grounded engineering assessment of proposed warp-drive concepts. Distinguish mathematical spacetime metrics from physically realizable propulsion systems. Review the assumptions about stress-energy, energy density, stability, causality, control, materials, and navigation; trace claims to primary sources; and test quantitative estimates for dimensional and physical consistency. Identify which obstacles are established by current theory or evidence, which depend on unresolved physics, and what experiment or calculation could reduce the uncertainty. Set aside the assumption that a warp drive must violate the speed-of-light limit: assess how proposed spacetime geometries distinguish local motion from effective travel over distance. Do not treat a proposed metric by itself as a complete engineering design.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-22T21:00:00+00:00"
+    }
+  ],
+  "strategies": [],
+  "research_mode": "engineering",
+  "active_order": [],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high"
+}

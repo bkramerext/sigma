@@ -18,6 +18,23 @@ const ENABLE_WORKSPACE_SIDEBAR = false;
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
+type ResearchMode = 'biology' | 'chemistry' | 'computer_science' | 'economics' | 'engineering' | 'law' | 'mathematical' | 'military' | 'philosophy' | 'physics' | 'religion' | 'default';
+const researchTypes: { value: ResearchMode; label: string }[] = [
+  { value: 'biology', label: 'Biology' },
+  { value: 'chemistry', label: 'Chemistry' },
+  { value: 'computer_science', label: 'Computer Science' },
+  { value: 'economics', label: 'Economics' },
+  { value: 'engineering', label: 'Engineering' },
+  { value: 'law', label: 'Law' },
+  { value: 'mathematical', label: 'Mathematics' },
+  { value: 'military', label: 'Military' },
+  { value: 'philosophy', label: 'Philosophy' },
+  { value: 'physics', label: 'Physics' },
+  { value: 'religion', label: 'Religion' },
+  { value: 'default', label: 'Other' },
+];
+const researchTypeLabels = Object.fromEntries(researchTypes.map(item => [item.value, item.label])) as Record<ResearchMode, string>;
+const researchTypeLabel = (value: string | null | undefined) => value && value in researchTypeLabels ? researchTypeLabels[value as ResearchMode] : 'Unavailable';
 type Strategy = {
   id: string;
   title: string;
@@ -39,7 +56,7 @@ type ProjectView = {
     schema_version: number;
     ai_model: string;
     reasoning_effort: string;
-    investigation_type: 'default' | 'mathematical';
+    investigation_type: ResearchMode;
     events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
       project_change?: { previous: Settings; current: Settings } | null;
       order?: string[] | null; stage_change?: { previous: Stage; stage: Stage } | null;
@@ -63,7 +80,7 @@ function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchS
 
 function researchOutcomeMarkdown(session: ResearchSession): string {
   const outcome = session.outcome;
-  const lines = [`**Outcome:** ${outcome.label}${outcome.provisional ? ' · provisional' : ''}`, '', outcome.summary || 'No outcome summary was recorded.'];
+  const lines = [outcome.summary || 'No outcome summary was recorded.'];
   if (outcome.basis_artifact_ids.length) lines.push('', `**Outcome evidence:** ${outcomeArtifactReferences(outcome.basis_artifact_ids, session)}`);
   const review = outcome.solution_review;
   if (review) {
@@ -73,6 +90,55 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
     lines.push('', `**Verification:** ${review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}`);
   }
   if (outcome.caveats.length) lines.push('', '### Caveats', '', ...outcome.caveats.map(caveat => `- ${caveat}`));
+  return lines.join('\n');
+}
+
+function researchArtifactMarkdown(artifact: ResearchArtifact): string {
+  const lines = [
+    `# Cycle ${artifact.sequence}: ${artifact.claim_or_question}`,
+    '',
+    `**Evidence status:** ${artifact.evidence_status}`,
+    '',
+    '## Method',
+    '',
+    artifact.method,
+    '',
+    '## Assumptions',
+    '',
+    ...(artifact.assumptions.length ? artifact.assumptions.map(item => `- ${item}`) : ['None stated']),
+    '',
+    '## Skeptic response',
+    '',
+    artifact.skeptic_response,
+    '',
+    '## Objections',
+    '',
+    ...(artifact.objections.length ? artifact.objections.map(item => `- ${item}`) : ['No concrete objection recorded']),
+    '',
+    '## Open obligations',
+    '',
+    ...(artifact.open_obligations.length ? artifact.open_obligations.map(item => `- ${item}`) : ['None recorded']),
+    '',
+    '## Coordinator decision',
+    '',
+    artifact.coordinator_decision,
+    '',
+    '## Next question',
+    '',
+    artifact.next_question || 'No further question; the session ended.',
+    '',
+    '## Full validated role outputs',
+    '',
+    '### Investigator',
+    '',
+    ...Object.entries(artifact.investigator_output).map(([key, value]) => `- **${key.replaceAll('_', ' ')}:** ${Array.isArray(value) ? value.join(' · ') : String(value)}`),
+    '',
+    '### Skeptic',
+    '',
+    ...Object.entries(artifact.skeptic_output).map(([key, value]) => `- **${key.replaceAll('_', ' ')}:** ${Array.isArray(value) ? value.join(' · ') : String(value)}`),
+    '',
+    `**Note:** ${artifact.note}`,
+  ];
   return lines.join('\n');
 }
 const limitBounds = {
@@ -126,15 +192,17 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
   onViewStrategy: (id: string) => void;
 }) {
   const [outcomeMarkdown, setOutcomeMarkdown] = useState(false);
+  const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   useEffect(() => {
     setActivityExpanded(session.status === 'queued' || session.status === 'running');
   }, [session.status]);
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
+  const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
-      <div className="outcome-view-header"><p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p><button type="button" className="sigma-render-toggle workspace-icon-button" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div>
+      <div className="outcome-view-header"><p><strong>Outcome:</strong> <span>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></p>{outcomeFormatToggle}</div>
       {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-content"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>
       {session.outcome.solution_review && <div className="solution-review"><p><strong>Solution claim:</strong> {session.outcome.solution_review.claim}</p><p><strong>Argument:</strong> {session.outcome.solution_review.argument_summary}</p><p><strong>Assumptions:</strong> {session.outcome.solution_review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {session.outcome.solution_review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(session.outcome.solution_review.basis_artifact_ids, session)}</p>{!!session.outcome.solution_review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {session.outcome.solution_review.resolved_objections.join(' · ')}</p>}{!!session.outcome.solution_review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {session.outcome.solution_review.unresolved_objections.join(' · ')}</p>}<p><strong>Verification:</strong> {session.outcome.solution_review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}</p></div>}
       {!!session.outcome.caveats.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
@@ -157,15 +225,16 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy }: {
       <a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>
     </div>
     {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. {lastStep.status === 'running' ? 'No result has been committed yet.' : lastStep.status === 'interrupted' ? 'This attempt is not a completed research artifact. The provider may have completed it or charged usage; SIGMA will not repeat it automatically because completion is ambiguous.' : 'This attempt failed and is not a completed research artifact.'}</p></section>}
-    {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><h3>Research artifacts</h3><ol>{session.artifacts.map(artifact => <li key={artifact.id}><details>
+    {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h3>Research artifacts</h3><button type="button" className="sigma-render-toggle" aria-label={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} aria-pressed={artifactsMarkdown} data-tooltip={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} title={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} onClick={() => setArtifactsMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div><ol>{session.artifacts.map(artifact => <li key={artifact.id}>
+      {artifactsMarkdown ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(artifact)}/></Suspense></div> : <details>
       <summary>Cycle {artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
       <div className="research-artifact-content"><p><strong>Method:</strong> {artifact.method}</p><p><strong>Assumptions:</strong> {artifact.assumptions.join(' · ') || 'None stated'}</p><p><strong>Evidence status:</strong> {artifact.evidence_status}</p><p><strong>Skeptic response:</strong> {artifact.skeptic_response}</p>
         <p><strong>Objections:</strong> {artifact.objections.join(' · ') || 'No concrete objection recorded'}</p><p><strong>Open obligations:</strong> {artifact.open_obligations.join(' · ') || 'None recorded'}</p>
         <p><strong>Coordinator decision:</strong> {artifact.coordinator_decision}</p><p><strong>Next question:</strong> {artifact.next_question || 'No further question; the session ended.'}</p>
         <details><summary>Full validated role outputs</summary><h4>Investigator</h4>{Object.entries(artifact.investigator_output).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {Array.isArray(value) ? value.join(' · ') : String(value)}</p>)}<h4>Skeptic</h4>{Object.entries(artifact.skeptic_output).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {Array.isArray(value) ? value.join(' · ') : String(value)}</p>)}</details>
         <small>{artifact.note}</small>
-      </div>
-    </details></li>)}</ol></section>}
+      </div></details>}
+    </li>)}</ol></section>}
     {!!session.events.length && <section className="research-activity" aria-label="Recent session activity">
       <h3><button type="button" title={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h3>
       <ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol>
@@ -350,7 +419,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
   const runningCount = sessions.filter(item => item.status === 'running' || item.status === 'queued').length;
-  return <section className="sessions-pane workspace-pane" aria-labelledby="sessions-heading">
+  return <section className={`sessions-pane workspace-pane${expanded ? '' : ' is-collapsed'}`} aria-labelledby="sessions-heading">
     <header className="workspace-pane-heading sessions-pane-heading">
       <h2 id="sessions-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${expanded ? 'Collapse' : 'Expand'} Sessions section`} aria-expanded={expanded} aria-controls="sessions-pane-content" onClick={() => setExpanded(value => { window.localStorage.setItem(`sigma.sessionsPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={expanded}/>Sessions</button></h2>
       <p className="section-count">{sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}, {runningCount} running</p>
@@ -358,7 +427,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
 
     <div id="sessions-pane-content" hidden={!expanded}>
     <div className="session-table">
-      <div className="session-columns" aria-hidden="true"><span>Session</span><span>Details</span></div>
+      <div className="session-columns" aria-hidden="true"><span>Session</span><span>Outcome</span></div>
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
           const currentAction = readError && activeSession?.id === item.id ? `State unknown · ${item.current_action}` : item.current_action;
@@ -366,16 +435,16 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onCont
           return <li className="session-row" key={item.id} data-session-id={item.id}>
             <div className="session-row-heading">
               <div className="session-summary">
-                <button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
+                <div className="session-title-line"><button type="button" className="session-row-disclosure" title={`${sessionExpanded ? 'Collapse' : 'Expand'} Session ${item.session_number} details`} aria-expanded={sessionExpanded} aria-controls={`session-content-${item.id}`} onClick={() => setExpandedSessionIds(current => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}><DisclosureChevron expanded={sessionExpanded}/><span className="session-row-title">Session #{item.session_number}</span></button>
+                <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
+                  {(item.status === 'stopped' || item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}
+                  {['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
+                  {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
+                  {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
+                </div></div>
                 <span className={`session-status session-${item.status}`} aria-label={`Lifecycle status: ${item.status}`}><i aria-hidden="true"/>{item.status}</span>
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{item.outcome.label}{item.outcome.provisional ? ' · provisional' : ''}</span></small>
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
-              </div>
-              <div className="session-heading-actions" aria-label={`Session ${item.session_number} actions`}>
-                {(item.status === 'stopped' || item.status === 'paused' && item.steps.at(-1)?.status !== 'interrupted') && <button type="button" className="text-view-link session-remove-link" title={`Resume Session ${item.session_number}`} data-tooltip={`Resume Session ${item.session_number}`} disabled={busy || !!readError} onClick={() => void control('resume', item)}>Resume</button>}
-                {['queued', 'running', 'paused'].includes(item.status) && <button type="button" className="text-view-link session-remove-link" title={`Stop Session ${item.session_number}; it can be resumed later`} disabled={busy} onClick={() => void control('stop', item)}>Stop</button>}
-                {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && <button type="button" className="text-view-link destructive-action session-remove-link" title={`Remove Session ${item.session_number} and its saved research`} disabled={busy} onClick={() => setConfirmRemoveId(item.id)}>Remove</button>}
-                {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
               </div>
             </div>
             <ResearchSessionContents session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onViewStrategy={onViewStrategy}/>
@@ -637,9 +706,9 @@ function FloatingTooltip() {
   return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, document.body);
 }
 
-function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, modeDisabled = false, onEnterMode, onExitMode }: {
+function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
-  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; modeDisabled?: boolean; onEnterMode?: () => boolean; onExitMode?: () => void;
+  contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
 }) {
   const [data, setData] = useState<TextRepresentations | null>(null);
   const preferenceKey = `sigma.markdownView:${path}:${scope}:${strategyId ?? ''}`;
@@ -657,6 +726,11 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const bodyTrigger = useRef<HTMLElement>(null);
   const editorForm = useRef<HTMLFormElement>(null);
   const editorArea = useRef<HTMLDivElement>(null);
+  const [markdownPortalTarget, setMarkdownPortalTarget] = useState<HTMLElement | null>(null);
+  const handledEditSignal = useRef(0);
+  useLayoutEffect(() => {
+    setMarkdownPortalTarget(markdownSlotId ? document.getElementById(markdownSlotId) : null);
+  }, [markdownSlotId, modeDisabled, combinedEditMode, editSignal]);
   useEffect(() => {
     const controller = new AbortController();
     setData(null); setError(''); setEditing(false);
@@ -676,12 +750,22 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   }
   const version = data?.[format];
   const current = version?.current ?? false;
-  function beginBodyEdit(fromRendered = false) {
-    if (!version?.current || busy || modeDisabled || (onEnterMode && !onEnterMode())) return;
-    setDraft(version.body); setEditingFromRendered(fromRendered);
+  function beginBodyEdit(fromRendered = false, alreadyInMode = false) {
+    if (!version?.current || busy || (modeDisabled && !alreadyInMode) || (!alreadyInMode && onEnterMode && !onEnterMode())) return;
+    setDraft(version.body); onCombinedDraftChange?.(version.body); setEditingFromRendered(fromRendered);
     if (fromRendered) chooseView('rendered');
     setEditing(true); setError('');
   }
+  useEffect(() => {
+    if (!editSignal || handledEditSignal.current === editSignal || !version?.current) return;
+    handledEditSignal.current = editSignal;
+    beginBodyEdit(selected === 'rendered', combinedEditMode);
+  }, [editSignal, version?.current, combinedEditMode]);
+  const wasCombinedEditMode = useRef(false);
+  useEffect(() => {
+    if (wasCombinedEditMode.current && !combinedEditMode) setEditing(false);
+    wasCombinedEditMode.current = combinedEditMode;
+  }, [combinedEditMode]);
   function cancelBodyEdit(restoreFocus = true) {
     setEditing(false);
     onExitMode?.();
@@ -727,32 +811,35 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     setExportOpen(false);
     requestAnimationFrame(() => exportTrigger.current?.focus());
   }
-  const viewActions = <>
-    {<button type="button" className={`sigma-render-toggle workspace-icon-button${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
+  const markdownToggle = <button type="button" className={`sigma-render-toggle${markdownSlotId ? '' : ' workspace-icon-button'}${selected === 'rendered' || rendering ? ' sigma-render-active' : ''}${rendering ? ' sigma-render-pending' : ''}`}
       aria-label={selected === 'rendered' ? `Show plain ${name}` : plainRecovery ? `Convert ${name} to Plain` : `Render ${name} as Markdown`}
       aria-pressed={selected === 'rendered' || rendering} data-tooltip={renderTooltip}
-      disabled={editing || busy} onClick={() => {
+      aria-hidden={combinedEditMode || undefined} style={combinedEditMode ? { visibility: 'hidden' } : undefined}
+      disabled={editing || busy || combinedEditMode} onClick={() => {
         if (selected === 'rendered') { chooseView('plain'); setError(''); }
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
-      }} title={renderTooltip}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>}
+      }} title={renderTooltip}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+  const viewActions = <>
+    {!markdownSlotId && markdownToggle}
 
-    {editing ? <>
+    {editing ? combinedEditMode ? null : <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" title={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
       <button type="button" className="text-view-link" title={`Cancel editing ${name}`} disabled={busy} onClick={() => cancelBodyEdit()}>Cancel</button>
-      </> : data && version && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} title={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
+      </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} title={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
     {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
     {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
+    {markdownPortalTarget && createPortal(markdownToggle, markdownPortalTarget)}
     {scope === 'project' && exportOpen && <ProjectExportDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && !hideProjectHeading && <h2 className="investigation-heading">Project</h2>}
       {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
     </div>
     {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
-      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
+      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
     </form> : current && version ? selected === 'rendered'
       ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
@@ -766,7 +853,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   </div>;
 }
 
-function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, onExitMode }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean; modeDisabled: boolean; onEnterMode: () => boolean; onExitMode: () => void }) {
+function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDraft, onEnterMode, onExitMode, onEditDescription }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean; modeDisabled: boolean; descriptionDraft: string; onEnterMode: () => boolean; onExitMode: () => void; onEditDescription: () => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(view.project.title);
   const [busy, setBusy] = useState(false);
@@ -778,7 +865,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
   useEffect(() => {
     if (!editing) return;
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
+    const outside = (event: PointerEvent) => { if (event.target instanceof Element && event.target.closest('.text-views')) return; if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
     document.addEventListener('pointerdown', outside, true);
     return () => document.removeEventListener('pointerdown', outside, true);
   }, [editing]);
@@ -790,7 +877,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
     setBusy(true); setError('');
     try {
       const current = settingsOf(view);
-      const next = await post<ProjectView>('update', { path: view.path, ...current, title: draft, expected: current });
+      const next = await post<ProjectView>('update', { path: view.path, ...current, title: draft, problem: descriptionDraft, expected: current });
       setEditing(false); onExitMode(); onSaved(next); requestAnimationFrame(() => trigger.current?.focus());
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -798,22 +885,22 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, onEnterMode, 
   return <div className={`project-pane-title-line${editing ? ' is-renaming' : ''}`}>
     {editing ? <form ref={form} className="project-title-edit-form" onSubmit={save}>
       <label className="sr-only" htmlFor="project-pane-title-input">Project title</label>
-      <input ref={input} id="project-pane-title-input" aria-label="Project title" value={draft} maxLength={200} required disabled={busy} onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
+      <input ref={input} id="project-pane-title-input" aria-label="Project title" value={draft} size={Math.max(8, Math.min(50, draft.length + 1))} maxLength={200} required disabled={busy} onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
       <button type="submit" className="text-view-link" title="Save project title" disabled={busy}>Save</button><button type="button" className="text-view-link" title="Cancel editing the project title" disabled={busy} onClick={() => cancel()}>Cancel</button>
       {error && <p role="alert" className="project-title-error">{error}</p>}
     </form> : <><h3 className="current-project">{view.project.title}</h3>
-      <button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title: ${view.project.title}`} title="Edit project title" data-tooltip="Edit project title" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) setEditing(true); }}>
+      <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} title="Edit project title and description" data-tooltip="Edit project title and description" disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
-      </button></>}
+      </button> </>}
   </div>;
 }
 
-function Header({ goHome, close, projectTitle, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <span className="project-header-title" title={projectTitle}>{projectTitle}</span>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption">Back to home</button></div></div>
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}</span></div>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption">Back to home</button></div></div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
@@ -830,7 +917,7 @@ function WorkspaceIcon({ name }: { name: string }) {
     Analysis: 'M4 20h17 M6 16v-5 M11 16V4 M16 16V8 M21 16v-3',
     References: 'M12 5c-3-2-6-2-10-1v16c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1v16',
     Notes: 'M5 3h14v18H5z M8 8h8 M8 12h8 M8 16h5',
-    Settings: 'M12 3v3 M12 18v3 M3 12h3 M18 12h3 M6 6l2 2 M16 16l2 2 M6 18l2-2 M16 8l2-2 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+    Settings: 'M12 2.5v2.3 M12 19.2v2.3 M2.5 12h2.3 M19.2 12h2.3 M5.28 5.28l1.63 1.63 M17.09 17.09l1.63 1.63 M5.28 18.72l1.63-1.63 M17.09 6.91l1.63-1.63 M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0',
   };
   return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
     strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]}/></svg>;
@@ -841,9 +928,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, connectionDisabled = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, connectionDisabled = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; connectionDisabled?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; connectionDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -856,7 +943,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, connectionDisab
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectArtwork connectionDisabled={connectionDisabled}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectArtwork connectionDisabled={connectionDisabled}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -876,7 +963,6 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, connectionDisab
   </>;
 }
 
-type ResearchMode = 'default' | 'mathematical';
 type Destination = { root: string; path: string | null; exists: boolean };
 
 function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
@@ -906,6 +992,75 @@ type Settings = { title: string; problem: string; investigation_type: ResearchMo
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; availability: 'available' | 'unavailable' | 'unverified' };
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
 const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort });
+
+function ResearchTypeIcon({ type }: { type: ResearchMode }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  return <svg className={`research-type-icon research-type-icon-${type}`} viewBox="0 0 24 24" aria-hidden="true">
+    {type === 'mathematical' ? <text x="12" y="18" textAnchor="middle" fill="currentColor" fontFamily="Georgia,serif" fontSize="21">Σ</text>
+      : type === 'religion' ? <path {...common} d="M12 3v18M7 8h10M9 21h6M12 3 9.5 6M12 3l2.5 3"/>
+        : type === 'law' ? <path {...common} d="M12 4v15M7 20h10M5 7h14M12 7 7 15m0 0H3l2-4 2 4Zm5-8 5 8m0 0h-4l2-4 2 4Z"/>
+          : type === 'chemistry' ? <path {...common} d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7 16h10M9 13h6"/>
+            : type === 'biology' ? <g {...common}>
+              <path d="M5 2C5 7 19 7 19 12s-14 5-14 10"/>
+              <path d="M19 2c0 5-14 5-14 10s14 5 14 10"/>
+              <path d="M7 4.5h10M6 12h12M7 19.5h10"/>
+            </g>
+              : type === 'computer_science' ? <path {...common} d="m8 7-5 5 5 5m8-10 5 5-5 5m-1-14-6 18"/>
+                : type === 'economics' ? <text x="12" y="19" textAnchor="middle" fill="currentColor" fontFamily="Georgia,serif" fontSize="20">$</text>
+                  : type === 'engineering' ? <><circle {...common} cx="12" cy="12" r="6.7"/><circle {...common} cx="12" cy="12" r="3.1"/><path {...common} d="M12 1.8v3.5m0 13.4v3.5M1.8 12h3.5m13.4 0h3.5M4.8 4.8l2.5 2.5m9.4 9.4 2.5 2.5m0-14.4-2.5 2.5m-9.4 9.4-2.5 2.5"/></>
+            : type === 'physics' ? <><ellipse {...common} cx="12" cy="12" rx="9" ry="3.8"/><ellipse {...common} cx="12" cy="12" rx="9" ry="3.8" transform="rotate(60 12 12)"/><ellipse {...common} cx="12" cy="12" rx="9" ry="3.8" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></>
+              : type === 'military' ? <><path {...common} d="M12 3 20 6v5c0 5-3.3 8-8 10-4.7-2-8-5-8-10V6l8-3Z"/><path {...common} d="m8 13 4-4 4 4M12 9v6"/></>
+                : type === 'philosophy' ? <><path {...common} d="M4 6c3-1 5 0 8 2 3-2 5-3 8-2v12c-3-1-5 0-8 2-3-2-5-3-8-2V6Z"/><path {...common} d="M12 8v12M8 10h1M15 10h1"/></>
+                  : <><circle {...common} cx="12" cy="12" r="8.5"/><circle cx="7" cy="8" r="1.5" fill="currentColor"/><circle cx="16.5" cy="7" r="1.5" fill="currentColor"/><circle cx="9" cy="16.5" r="1.5" fill="currentColor"/><path {...common} d="m8.5 9 6.5-1m-6 7 1-5m1 6 4-7"/></>}
+  </svg>;
+}
+
+function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: { value: ResearchMode; onChange: (value: ResearchMode) => void; fieldLabel?: string }) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(Math.max(0, researchTypes.findIndex(type => type.value === value)));
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const options = useRef<Array<HTMLButtonElement | null>>([]);
+  const selectedIndex = Math.max(0, researchTypes.findIndex(type => type.value === value));
+  useEffect(() => {
+    if (open) options.current[activeIndex]?.focus();
+  }, [activeIndex, open]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [open]);
+  function choose(next: ResearchMode) {
+    onChange(next);
+    setOpen(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }
+  function move(index: number) {
+    setActiveIndex((index + researchTypes.length) % researchTypes.length);
+  }
+  const selected = researchTypes[selectedIndex];
+  return <div className="research-type-picker" ref={root}>
+    <button ref={trigger} id="project-mode" type="button" role="combobox" aria-labelledby="project-mode-label project-mode-value" aria-haspopup="listbox" aria-expanded={open} aria-controls="project-mode-options" onClick={() => { setActiveIndex(selectedIndex); setOpen(current => !current); }} onKeyDown={event => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); setActiveIndex(selectedIndex); setOpen(true); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); setActiveIndex(researchTypes.length - 1); setOpen(true); }
+    }}>
+      <ResearchTypeIcon type={selected.value}/><span id="project-mode-value">{selected.label}</span><svg className="research-type-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m2 4 4 4 4-4"/></svg>
+    </button>
+    {open && <div className="research-type-options" id="project-mode-options" role="listbox" aria-label={fieldLabel}>
+      {researchTypes.map((type, index) => <button ref={element => { options.current[index] = element; }} id={`project-mode-option-${type.value}`} key={type.value} type="button" role="option" aria-selected={value === type.value} tabIndex={activeIndex === index ? 0 : -1} onFocus={() => setActiveIndex(index)} onClick={() => choose(type.value)} onKeyDown={event => {
+        if (event.key === 'ArrowDown') { event.preventDefault(); move(index + 1); }
+        else if (event.key === 'ArrowUp') { event.preventDefault(); move(index - 1); }
+        else if (event.key === 'Home') { event.preventDefault(); move(0); }
+        else if (event.key === 'End') { event.preventDefault(); move(researchTypes.length - 1); }
+        else if (event.key === 'Escape') { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
+        else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(type.value); }
+      }}><ResearchTypeIcon type={type.value}/><span>{type.label}</span></button>)}
+    </div>}
+  </div>;
+}
 
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
@@ -978,16 +1133,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
-      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2>{initial && <div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div>}</header>
+      <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
       {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'main' : event.key === 'End' ? 'limits' : activeTab === 'main' ? 'limits' : 'main'; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
         <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Main</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => setActiveTab('limits')}>Limits</button>
       </div>}
-      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Choose how to explore this project. Edit its title and description directly on the project page.' : 'Name a project and choose how to explore it.'}</p>
+      <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Choose this project’s research type and AI settings. Edit its title and description directly on the project page.' : 'Name a project and choose its research category.'}</p>
       <fieldset disabled={busy}>
       {!initial && <><label htmlFor="project-name">Project name</label><input ref={first} id="project-name" required maxLength={200} value={values.title} onChange={event => change('title', event.target.value)}/>
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
-      <label htmlFor="project-mode">Research mode</label><select id="project-mode" value={values.investigation_type} onChange={event => change('investigation_type', event.target.value)}><option value="default">Default</option><option value="mathematical">Mathematical</option></select>
+      <label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/>
       <label htmlFor="project-model">LLM Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
@@ -1016,7 +1171,6 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
-    {!initial && <footer className="settings-footer"><div className="settings-actions"><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Saving…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></div></footer>}
     </form>
   </dialog>;
 }
@@ -1028,6 +1182,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState('');
+  const [confirmRemoveId, setConfirmRemoveId] = useState('');
   const [error, setError] = useState('');
   const pending = useRef(false);
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -1045,7 +1200,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }
   async function forget(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
-    try { await post('recent/forget', { project_id: entry.id }); await load(); }
+    try { await post('recent/forget', { project_id: entry.id }); setConfirmRemoveId(''); await load(); }
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
@@ -1056,8 +1211,9 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
         <div className="recent-title-row">
           <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className="is-current-project">{entry.title}</strong> : entry.title}</button>
         </div>
-        <div className="recent-meta-row"><small>{entry.investigation_type === 'mathematical' ? 'Mathematical' : entry.investigation_type === 'default' ? 'Default' : 'Unavailable'}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} title="Remove from Recent Projects; keep all research" onClick={() => void forget(entry)}>Remove</button></div>
+        <div className="recent-meta-row"><small>{entry.investigation_type && entry.investigation_type in researchTypeLabels && <ResearchTypeIcon type={entry.investigation_type as ResearchMode}/>}<span>{researchTypeLabel(entry.investigation_type)}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
         <span title={entry.path}>{entry.path}</span>
+        {confirmRemoveId === entry.id && <div className="recent-remove-actions"><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Recent Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
       </div>
       {entry.error && <p className="recent-unavailable">{entry.error}</p>}
     </li>)}</ul>
@@ -1093,7 +1249,7 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }
   return <div className="empty home-empty home-samples">
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
-    <ul>{projects.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small>{sample.investigation_type === 'mathematical' ? 'Mathematical' : 'Default'} · {strategyCount(sample.strategy_count)}</small></button></li>)}</ul>
+    <ul>{projects.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><ResearchTypeIcon type={sample.investigation_type as ResearchMode}/><span>{researchTypeLabel(sample.investigation_type)} · {strategyCount(sample.strategy_count)}</span></small></button></li>)}</ul>
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -1126,6 +1282,12 @@ function Home({ initialPath, onOpen }: {
   const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
   const shell = useRef<HTMLDivElement>(null);
+  const nextCreditStreak = useRef(0);
+  const nextCreditPlunk = useRef(0);
+  const turbulenceAnimation = useRef<SVGAnimateElement>(null);
+  const displacementAnimation = useRef<SVGAnimateElement>(null);
+  const [creditStreaks, setCreditStreaks] = useState<number[]>([]);
+  const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
   useEffect(() => {
     // CSS background-size: cover scales the source image by the larger of
@@ -1153,7 +1315,26 @@ function Home({ initialPath, onOpen }: {
     const trigger = entry === 'open' ? openButton : newButton;
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
   }
-  return <div ref={shell} className="home-shell">
+  function launchCreditStreak() {
+    const id = ++nextCreditStreak.current;
+    setCreditStreaks(current => [...current, id]);
+  }
+  function removeCreditStreak(id: number) {
+    setCreditStreaks(current => current.filter(streak => streak !== id));
+  }
+  function launchCreditPlunk() {
+    const id = ++nextCreditPlunk.current;
+    setCreditPlunk(id);
+    requestAnimationFrame(() => {
+      turbulenceAnimation.current?.beginElement();
+      displacementAnimation.current?.beginElement();
+    });
+  }
+  function finishCreditPlunk(id: number) {
+    setCreditPlunk(current => current === id ? null : current);
+  }
+  return <div ref={shell} className={`home-shell${creditPlunk !== null ? ' home-credit-plunk-active' : ''}`}>
+    <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
       <div className="home-topline"><ConnectionStatus/></div>
@@ -1166,16 +1347,16 @@ function Home({ initialPath, onOpen }: {
         <HomeCatalog onOpen={onOpen}/>
       </section>
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit"><span>By Brian Kramer, ChatGPT &amp; Codex</span><time dateTime="2026-10">October 2026</time></footer>
+      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={launchCreditStreak} onClick={launchCreditPlunk}><span>By Brian Kramer, ChatGPT &amp; Codex</span><time dateTime="2026-10">October 2026</time>{creditStreaks.map(id => <span key={id} className="home-credit-streak" aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
   </div>;
 }
 
-function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMode, onExitMode, expanded, onToggle, commands }: {
-  strategy: Strategy; path: string; onSaved: (view: ProjectView) => void; modeDisabled: boolean; onEnterMode: () => boolean; onExitMode: () => void;
-  expanded: boolean; onToggle: () => void; commands: ReactNode;
+function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptionDraft, onEnterMode, onExitMode, onEditDescription, expanded, onToggle, commands }: {
+  strategy: Strategy; path: string; onSaved: (view: ProjectView) => void; modeDisabled: boolean; descriptionDraft: string; onEnterMode: () => boolean; onExitMode: () => void;
+  onEditDescription: () => void; expanded: boolean; onToggle: () => void; commands: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const shownTitle = displayStrategyTitle(strategy);
@@ -1189,7 +1370,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
   useEffect(() => { if (editing) { input.current?.focus(); input.current?.select(); } }, [editing]);
   useEffect(() => {
     if (!editing) return;
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
+    const outside = (event: PointerEvent) => { if (event.target instanceof Element && event.target.closest('.text-views')) return; if (event.target instanceof Node && !form.current?.contains(event.target)) cancel(false); };
     document.addEventListener('pointerdown', outside, true);
     return () => document.removeEventListener('pointerdown', outside, true);
   }, [editing]);
@@ -1204,7 +1385,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
     setBusy(true); setError('');
     try {
       const next = await post<ProjectView>('strategies/edit', {
-        path, strategy_id: strategy.id, title: draft, approach: strategy.approach,
+        path, strategy_id: strategy.id, title: draft, approach: descriptionDraft,
       });
       setEditing(false); onExitMode(); onSaved(next);
       requestAnimationFrame(() => trigger.current?.focus());
@@ -1214,15 +1395,14 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
   return <div className={`strategy-title-editor${editing ? ' is-renaming' : ''}`}>
     {editing ? <form ref={form} onSubmit={save} className="strategy-rename-form">
       <label className="sr-only" htmlFor={`strategy-title-${strategy.id}`}>Strategy title</label>
-      <input ref={input} id={`strategy-title-${strategy.id}`} aria-label="Strategy title" value={draft} maxLength={200} disabled={busy}
+      <input ref={input} id={`strategy-title-${strategy.id}`} aria-label="Strategy title" value={draft} size={Math.max(8, Math.min(50, draft.length + 1))} maxLength={200} disabled={busy}
         required onChange={event => { setDraft(event.target.value); setError(''); }} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); cancel(); } }}/>
       <button type="submit" className="text-view-link" title="Save strategy title" disabled={busy}>Save</button>
       <button type="button" className="text-view-link" title="Cancel editing the strategy title" disabled={busy} onClick={() => cancel()}>Cancel</button>
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
-      <button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title: ${shownTitle}`} title={`Edit strategy title: ${shownTitle}`} data-tooltip="Edit strategy title" disabled={modeDisabled}
-        onClick={() => { if (onEnterMode()) setEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
-      {!strategy.enabled && <span className="strategy-disabled-label">Disabled</span>}
+      <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and description: ${shownTitle}`} title={`Edit strategy title and description: ${shownTitle}`} data-tooltip="Edit strategy title and description" disabled={modeDisabled}
+        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
       {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -1232,70 +1412,24 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, onEnterMod
 function StrategyCommands({ strategy, onCommand, disabled = false }: {
   strategy: Strategy; onCommand: (mode: 'remove' | 'fork' | 'toggle', strategy: Strategy) => void; disabled?: boolean;
 }) {
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   return <span className="strategy-inline-commands">
     <button type="button" className="text-view-link" disabled={disabled}
       title={`${strategy.enabled ? 'Disable' : 'Enable'} strategy`} onClick={() => onCommand('toggle', strategy)}>{strategy.enabled ? 'Disable' : 'Enable'}</button>
     <button type="button" className="text-view-link" disabled={disabled}
       title="Fork strategy" onClick={() => onCommand('fork', strategy)}>Fork</button>
-    <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
-      title="Remove strategy" onClick={() => onCommand('remove', strategy)}>Remove</button>
-  </span>;
-}
-
-function StrategyDialog({ mode, strategy, path, onSaved, onCancel }: {
-  mode: 'edit' | 'remove'; strategy: Strategy; path: string;
-  onSaved: (view: ProjectView, mode: 'edit' | 'remove', strategy: Strategy) => void;
-  onCancel: () => void;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const nameInput = useRef<HTMLInputElement>(null);
-  const cancelButton = useRef<HTMLButtonElement>(null);
-  const submitting = useRef(false);
-  const [title, setTitle] = useState(strategy.title);
-  const [approach, setApproach] = useState(strategy.approach);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    dialog.current?.showModal();
-    if (mode === 'edit') nameInput.current?.focus();
-    else cancelButton.current?.focus();
-  }, [mode]);
-  async function save(event: FormEvent) {
-    event.preventDefault(); if (submitting.current) return; submitting.current = true; setBusy(true); setError('');
-    try {
-      const next = await post<ProjectView>(`strategies/${mode}`, {
-        path, strategy_id: strategy.id, ...(mode === 'edit' ? { title, approach } : {}),
-      });
-      onSaved(next, mode, strategy);
-    } catch (error) { setError(errorMessage(error)); }
-    finally { submitting.current = false; setBusy(false); }
-  }
-  return <dialog className="strategy-dialog" ref={dialog} aria-labelledby="strategy-dialog-title"
-    aria-describedby="strategy-dialog-description" onCancel={event => {
-      event.preventDefault(); if (!busy) onCancel();
-    }}>
-    <h2 id="strategy-dialog-title">{mode === 'edit' ? 'Edit strategy' : `Remove “${strategy.title}”?`}</h2>
-    <p id="strategy-dialog-description" className="hint">{mode === 'edit'
-      ? 'Update the name and description. Earlier text remains in project history.'
-      : 'This strategy will leave Strategies. Its idea and history will be kept in the project.'}</p>
-    <form onSubmit={save}>
-      <fieldset disabled={busy}>
-        {mode === 'edit' && <>
-          <label htmlFor="edit-strategy-name">Name</label>
-          <input ref={nameInput} id="edit-strategy-name" value={title} required maxLength={200}
-            onChange={event => setTitle(event.target.value)}/>
-          <label htmlFor="edit-strategy-description">Description</label>
-          <textarea id="edit-strategy-description" value={approach} required maxLength={10000} rows={5}
-            onChange={event => setApproach(event.target.value)}/>
-        </>}
-        {error && <p role="alert" className="error">{error}</p>}
-        <div className="form-actions">
-          <button type="submit" className="secondary" title={mode === 'remove' ? `Remove strategy ${strategy.title}` : 'Save strategy changes'}>{busy ? 'Saving…' : mode === 'remove' ? 'Remove strategy' : 'Save changes'}</button>
-          <button type="button" className="text-button" title="Cancel and close this dialog" ref={cancelButton} onClick={onCancel}>Cancel</button>
+    <span className="strategy-remove-anchor">
+      <button type="button" id={`commands-${strategy.id}`} className="text-view-link" disabled={disabled}
+        title="Remove strategy" onClick={() => setConfirmingRemove(true)}>Remove</button>
+      {confirmingRemove && <div className="strategy-remove-popover"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove strategy ${strategy.title}`}>
+        <p>Remove “{strategy.title}” from Strategies? Its research and history will be kept in the project.</p>
+        <div className="session-remove-confirm-actions">
+          <button type="button" className="text-view-link destructive-action" disabled={disabled} onClick={() => { setConfirmingRemove(false); onCommand('remove', strategy); }}>Confirm</button>
+          <button type="button" className="text-view-link" disabled={disabled} onClick={() => setConfirmingRemove(false)}>Cancel</button>
         </div>
-      </fieldset>
-    </form>
-  </dialog>;
+      </div></div>}
+    </span>
+  </span>;
 }
 
 function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
@@ -1553,10 +1687,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [dragId, setDragId] = useState<string | null>(null);
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
-  const [command, setCommand] = useState<{ mode: 'edit' | 'remove'; strategy: Strategy } | null>(null);
   const [focusStrategy, setFocusStrategy] = useState('');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
+  const [textEditSignals, setTextEditSignals] = useState<Record<string, number>>({});
+  const [combinedTextDrafts, setCombinedTextDrafts] = useState<Record<string, string>>({});
+  const requestTextEdit = (key: string) => setTextEditSignals(current => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
+  const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, pause: () => {}, playDisabled: true, pauseDisabled: true, playLabel: 'Start research session' });
   const heading = useRef<HTMLHeadingElement>(null);
@@ -1592,9 +1729,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     function pointerMove(event: PointerEvent) {
       if (drag.current?.pointer !== event.pointerId) return;
       event.preventDefault();
-      const rows = Array.from(document.querySelectorAll<HTMLElement>('.strategy-row'));
-      const index = rows.findIndex(row => { const r = row.getBoundingClientRect(); return event.clientY >= r.top && event.clientY <= r.bottom; });
-      if (index >= 0) moveTo(index);
+      const activeId = drag.current.id;
+      const rows = Array.from(document.querySelectorAll<HTMLElement>('.strategy-row'))
+        .filter(row => row.dataset.strategyId !== activeId);
+      const before = rows.find(row => {
+        const rect = row.getBoundingClientRect();
+        return event.clientY < rect.top + rect.height / 2;
+      });
+      moveBefore(before?.dataset.strategyId ?? null);
       if (event.clientY > window.innerHeight - 60) window.scrollBy(0, 16);
       if (event.clientY < 60) window.scrollBy(0, -16);
     }
@@ -1657,8 +1799,18 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     const order = [...active.order]; const old = order.indexOf(active.id);
     const target = Math.max(0, Math.min(order.length - 1, index));
     order.splice(old, 1); order.splice(target, 0, active.id);
+    if (order.every((id, position) => id === active.order[position])) return;
     active.order = order; setPreviewOrder(order);
     setAnnouncement(`Position ${target + 1} of ${order.length}.`);
+  }
+  function moveBefore(targetId: string | null) {
+    const active = drag.current; if (!active) return;
+    const order = active.order.filter(id => id !== active.id);
+    const target = targetId ? order.indexOf(targetId) : order.length;
+    order.splice(Math.max(0, target), 0, active.id);
+    if (order.every((id, position) => id === active.order[position])) return;
+    active.order = order; setPreviewOrder(order);
+    setAnnouncement(`Position ${order.indexOf(active.id) + 1} of ${order.length}.`);
   }
   function cancelDrag() {
     drag.current = null; setDragId(null); setPreviewOrder(null); setAnnouncement('Reorder cancelled.');
@@ -1674,14 +1826,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
-  return <WorkspaceFrame {...frame} projectTitle={project.title}>
+  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
       <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
-      <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')}/>
+      <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">
         <div className="project-intro" id="project-intro-pane" ref={introPane} style={introHeight === null ? undefined : { height: introHeight, maxHeight: 'min(75dvh, 800px)' }}>
-          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} hideProjectActions hideProjectHeading modeDisabled={activeMode !== null && activeMode !== 'text-project'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
+          <TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="project" source={project.problem} projectTitle={project.title} contentClass="objective" onSaved={setView} hideProjectActions hideProjectHeading hideEditAction markdownSlotId="project-markdown-slot" editSignal={textEditSignals.project ?? 0} combinedEditMode={activeMode === 'project-title'} onCombinedDraftChange={draft => updateCombinedTextDraft('project', draft)} modeDisabled={activeMode !== null && activeMode !== 'text-project' && activeMode !== 'project-title'} onEnterMode={() => enterMode('text-project')} onExitMode={() => exitMode('text-project')}/>
         </div>
         <div className="project-pane-resizer" role="separator" tabIndex={0} aria-label="Resize project description" aria-controls="project-intro-pane" aria-orientation="horizontal" aria-valuemin={120} aria-valuemax={introMaximum} aria-valuenow={introHeight ?? undefined} title="Drag or use arrow keys to resize the project description"
       onPointerDown={event => { if (event.button !== 0) return; const height = introPane.current?.getBoundingClientRect().height ?? 120; resizeStart.current = { pointer: event.pointerId, y: event.clientY, height }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault(); }}
@@ -1693,7 +1845,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       </div>
     </section>
     {error && <p role="alert" className="error">{error}</p>}
-    <section className="pool workspace-pane strategies-pane" aria-labelledby="pool-heading">
+    <section className={`pool workspace-pane strategies-pane${strategiesExpanded ? '' : ' is-collapsed'}`} aria-labelledby="pool-heading">
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
@@ -1715,9 +1867,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       {strategies.length ? <div className="strategies-table">
         <div className="strategy-columns" aria-hidden="true"><span>Strategy</span></div>
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
-        {strategies.map(strategy => <li className={`strategy-row${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
+        {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => {
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => {
               if (ordering || dragId || activeMode !== null) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
@@ -1732,18 +1884,28 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
                 if (!enterMode('new-strategy')) return;
                 expandStrategies(); setManualDraft({ title: `${strategy.title} (forked)`, approach: strategy.approach, summary: strategy.summary }); setEditing(true);
                 requestAnimationFrame(() => document.getElementById('strategy-composer')?.scrollIntoView({ block: 'nearest' }));
-              } else setCommand({ mode, strategy });
+                return;
+              }
+              const owner = `strategy-remove-${strategy.id}`;
+              if (!enterMode(owner)) return;
+              void post<ProjectView>('strategies/remove', { path: view.path, strategy_id: strategy.id })
+                .then(next => {
+                  setView(next); setAnnouncement(`Removed ${strategy.title} from Strategies. History retained.`);
+                  requestAnimationFrame(() => document.getElementById('pool-heading')?.focus());
+                })
+                .catch(cause => { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); })
+                .finally(() => exitMode(owner));
             }}/>} />
-            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
+            <div id={`strategy-content-${strategy.id}`} className="strategy-expanded" hidden={collapsedStrategies.has(strategy.id)}><TextViews mathematical={project.investigation_type === 'mathematical'} path={view.path} scope="strategy" strategyId={strategy.id} source={strategy.approach} contentClass="strategy-approach" onSaved={setView} hideEditAction markdownSlotId={`strategy-markdown-slot-${strategy.id}`} editSignal={textEditSignals[`strategy:${strategy.id}`] ?? 0} combinedEditMode={activeMode === `strategy-title-${strategy.id}`} onCombinedDraftChange={draft => updateCombinedTextDraft(`strategy:${strategy.id}`, draft)} modeDisabled={activeMode !== null && activeMode !== `text-strategy-${strategy.id}` && activeMode !== `strategy-title-${strategy.id}`} onEnterMode={() => enterMode(`text-strategy-${strategy.id}`)} onExitMode={() => exitMode(`text-strategy-${strategy.id}`)}/></div>
           </div>
-          <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
+          {strategies.length > 1 && <button id={`grip-${strategy.id}`} className="drag-grip" disabled={ordering || closing}
             aria-label={`Reorder ${strategy.title}`} title={`Drag to reorder ${strategy.title}`} aria-describedby="reorder-help" aria-pressed={dragId === strategy.id}
             onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.focus(); pickup(strategy.id, event.pointerId); event.currentTarget.setPointerCapture(event.pointerId); }}
             onKeyDown={event => { if (event.key === 'Escape' && drag.current) { event.preventDefault(); cancelDrag(); }
               else if (event.key === ' ' && !drag.current) { event.preventDefault(); pickup(strategy.id, null); }
               else if (drag.current?.id === strategy.id && ['ArrowUp', 'ArrowDown', 'Enter', ' '].includes(event.key)) { event.preventDefault();
                 if (event.key === 'ArrowUp' || event.key === 'ArrowDown') moveTo(drag.current.order.indexOf(strategy.id) + (event.key === 'ArrowUp' ? -1 : 1)); else void drop();
-              } }}><svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" aria-hidden="true">{[3,7,11].flatMap(y => [3,7].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1"/>))}</svg></button>
+              } }}><svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor" aria-hidden="true">{[3,7,11].flatMap(y => [3,7].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1"/>))}</svg></button>}
         </li>)}
       </ol></div> : !editing && <p className="pool-empty">No strategies yet.</p>}
       {(dragId || ordering) && <p className="reorder-feedback">{ordering ? 'Saving order…' : 'Moving strategy · Release or press Enter to save · Escape cancels'}</p>}
@@ -1753,25 +1915,14 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>}
-    {command && <StrategyDialog mode={command.mode} strategy={command.strategy} path={view.path}
-      onCancel={() => {
-        const id = command.strategy.id;
-        setCommand(null);
-        requestAnimationFrame(() => document.getElementById(`commands-${id}`)?.focus());
-      }} onSaved={(next, mode, strategy) => {
-        setView(next); setCommand(null);
-        setAnnouncement(mode !== 'remove' ? 'Strategy updated.' : `Removed ${strategy.title} from Strategies. History retained.`);
-        requestAnimationFrame(() => document.getElementById(
-          mode !== 'remove' ? `strategy-${strategy.id}` : 'pool-heading')?.focus());
-      }}/>}
     <details className="project-details">
       <summary>Project details &amp; history</summary>
-      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research mode</dt><dd>{project.investigation_type === 'mathematical' ? 'Mathematical' : 'Default'}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
+      <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
       <h3>Event history</h3>
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
-          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', investigation_type: 'Research mode', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {event.project_change!.previous[key]}<br/>After: {event.project_change!.current[key]}</dd></div>)}</dl></details>}
+          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', investigation_type: 'Research type', ai_model: 'AI model', reasoning_effort: 'Thinking level' })[key]}</dt><dd>Before: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.previous[key])) : event.project_change!.previous[key]}<br/>After: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.current[key])) : event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
           {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>

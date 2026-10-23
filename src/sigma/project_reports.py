@@ -46,12 +46,25 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
         "Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.",
         "",
     ]
-    for label, key in (
-        ("Research problem", "problem"),
-        ("Project ID", "id"),
-        ("Research mode", "investigation_type"),
-    ):
+    for label, key in (("Research problem", "problem"), ("Project ID", "id")):
         lines += [f"{label}: {_value(project.get(key))}", ""]
+    research_type_labels = {
+        "biology": "Biology",
+        "chemistry": "Chemistry",
+        "computer_science": "Computer Science",
+        "economics": "Economics",
+        "engineering": "Engineering",
+        "law": "Law",
+        "mathematical": "Mathematics",
+        "military": "Military",
+        "philosophy": "Philosophy",
+        "physics": "Physics",
+        "religion": "Religion",
+        "default": "Other",
+    }
+    mode = project.get("investigation_type")
+    mode_label = research_type_labels.get(mode, mode) if isinstance(mode, str) else mode
+    lines += [f"Research type: {_value(mode_label)}", ""]
 
     lines += ["Strategies", "----------"]
     strategies = _rows(project.get("strategies"))

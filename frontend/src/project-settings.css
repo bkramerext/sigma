@@ -14,6 +14,17 @@
 .project-settings-dialog label { display: block; color: #e2c49e; font-size: 12px; margin: 16px 0 8px; }
 .project-settings-dialog label:first-child { margin-top: 0; }
 .project-settings-dialog input, .project-settings-dialog textarea, .project-settings-dialog select { display: block; width: 100%; padding: 10px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; margin-bottom: 0; }
+.project-settings-dialog .research-type-picker { position: relative; z-index: 3; }
+.project-settings-dialog .research-type-picker [role="combobox"] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 43px; padding: 9px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; }
+.project-settings-dialog .research-type-icon { display: block; flex: 0 0 20px; width: 20px; height: 20px; color: #d6a36f; }
+.project-settings-dialog .research-type-picker [role="combobox"] > span { flex: 1 1 auto; }
+.project-settings-dialog .research-type-picker .research-type-chevron { width: 12px; height: 12px; flex: 0 0 12px; fill: none; stroke: #bd9a75; stroke-width: 1.5; transition: transform 120ms ease; }
+.project-settings-dialog .research-type-picker [aria-expanded="true"] .research-type-chevron { transform: rotate(180deg); }
+.project-settings-dialog .research-type-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: min(256px, 36dvh); overflow: auto; padding: 4px; border: 1px solid #806247; border-radius: 6px; background: #091522; box-shadow: 0 14px 35px #000b; }
+.project-settings-dialog .research-type-options [role="option"] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 6px 9px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #dce7f0; font: 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; }
+.project-settings-dialog .research-type-options [role="option"]:hover,
+.project-settings-dialog .research-type-options [role="option"]:focus-visible,
+.project-settings-dialog .research-type-options [role="option"][aria-selected="true"] { border-color: #a87950; background: #241a16; color: #f0c59a; outline-offset: -2px; }
 .project-settings-dialog textarea { resize: vertical; }
 .project-settings-dialog .settings-hint { font-size: 11px; line-height: 1.6; color: #aab9c7; margin: 8px 0 0; }
 .project-settings-dialog .project-destination { font-size: 11px; line-height: 1.6; color: #aab9c7; margin: 20px 0 0; padding-top: 14px; border-top: 1px solid #35404a; }
@@ -90,6 +101,9 @@
   .project-settings-dialog.edit-project-dialog .settings-header { flex-wrap: wrap; gap: 8px 16px; }
   .project-settings-dialog.edit-project-dialog .settings-header h2 { width: auto; }
   .project-settings-dialog.edit-project-dialog .settings-header .settings-actions { width: auto; flex: 0 1 auto; justify-content: flex-start; flex-wrap: nowrap; }
+  .project-settings-dialog.new-project-dialog .settings-header { flex-wrap: nowrap; gap: 10px; }
+  .project-settings-dialog.new-project-dialog .settings-header h2 { width: auto; font-size: 24px; }
+  .project-settings-dialog.new-project-dialog .settings-header .settings-actions { width: auto; flex: 0 1 auto; justify-content: flex-start; flex-wrap: nowrap; gap: 12px; }
 }
 
 /* New Project Create is a plain underlined action, never a copper-filled button. */
