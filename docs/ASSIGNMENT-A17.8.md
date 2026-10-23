@@ -46,6 +46,25 @@ After A17.7 is merged, verify the **integrated A17.6 + A17.7** application end t
 5. Stop/resume, provider interruption/timeouts, budget limits, partial/failed assessment generation, toast visibility, and safe recovery without loss of committed artifacts.
 6. Browser behavior after A17.7: session lifecycle and outcome summary, action placement, dialogs, export, tooltips and scroll containment. Reuse A17.7's visual checks rather than duplicating implementation work.
 
+## Explicit exit criteria (human acceptance gate)
+
+**SIGMA demonstrates that it can independently solve a tractable research problem, critically assess its own work, and accurately communicate the result.** Passing deterministic tests alone is insufficient. Codex must provide evidence for each criterion, and the human makes the final acceptance decision.
+
+1. **Solution quality:** In at least one genuine end-to-end real-provider run of Maximum Regions, the agents produce a mathematically complete argument, not just the correct formula. The upper bound and attaining construction must both be supported.
+2. **Meaningful criticism:** The Skeptic identifies material gaps when present, recognizes adequately supported reasoning, and does not invent objections merely to prolong research. Show adversarial complete and flawed cases.
+3. **Sound coordination:** SIGMA recognizes when the research objective is achieved and terminates appropriately even if no further path is proposed; it does not confuse absence of next steps with failure.
+4. **Calibrated conclusions:** Complete, incomplete, incorrect, and unverified claims are distinguished in saved evidence, outcome and UI. Multiple agents agreeing does **not** establish independent verification.
+5. **Evidence-based attribution:** Each Strategy Assessment is justified by saved strategy-linked artifacts; unused/disabled/noncontributing strategies are not credited as solution contributors.
+6. **Generalization:** Apply the same mechanism to at least one different, comparably tractable solvable sample with a different reasoning mechanism. Do not insert problem-specific shortcuts or the reference solution into agent prompts. Show deterministic adversarial coverage for both classes; if a second live run is not authorized, clearly limit the empirical generalization claim.
+7. **Operational reliability:** Session lifecycle, resume/stop, persistence, history, export, error recovery, budgets and UI consistently preserve and communicate what happened. No data loss or misleading success on provider failure.
+8. **Reproducible evidence:** Codex provides actual session/artifact references, exact test commands and results, screenshots where relevant, baseline versus corrected behavior, and an independent critical assessment of successes, failures and uncertainties.
+
+**Stochastic qualification:** Do not require every nondeterministic model run to succeed. However, acceptance **does** require at least one authentic end-to-end Maximum Regions solution, plus adversarial evidence that plausible-looking incomplete or incorrect work is not automatically accepted. A failed or unavailable real-provider run leaves that criterion open; deterministic green tests cannot waive it. Avoid unbounded reruns to manufacture a pass; obtain human authorization if the bounded provider budget is exhausted.
+
+**Decision question:** Could a user give SIGMA a different problem of comparable difficulty and reasonably trust it to investigate, challenge and assess its findings without intervention? Trust here means **reliable calibration of claims and evidence**, not assuming every generated answer is correct.
+
+Codex must explicitly mark each criterion **met / unmet / unverified**, cite supporting artifacts, recommend acceptance or further bounded work, and present that assessment for human sign-off. **Do not declare A17 complete without that sign-off.**
+
 ## Evidence and exit criteria
 
 - Run `./sigma test`, focused API/unit checks and real Chrome Playwright checks using isolated mock providers; inspect screenshots and recorded data. Add tests for any uncovered regression.
