@@ -273,7 +273,6 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .project-art-header .project-latex-button {
   flex: 0 0 auto;
   align-self: center;
-  justify-self: end;
   padding: 5px 10px 7px;
   border: 1px solid #8b6745;
   border-radius: 6px;
