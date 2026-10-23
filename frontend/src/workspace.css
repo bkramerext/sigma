@@ -41,7 +41,7 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model identity" ". thinking chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model google" ". thinking chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; max-width: min(54vw, 760px); padding-top: 12px; }
 .workspace-page .project-art-back-row { position: absolute; z-index: 2; top: -6px; left: clamp(140px, calc(min(34vw, 390px) - 172px), 218px); }
@@ -187,7 +187,7 @@
   .workspace-page .project-art-back-row { left: auto; right: 40px; }
   .workspace-page .project-back-label { display: none; }
   .workspace-page .current-project { padding-top: 0; }
-  .workspace-page .project-art-header .header-controls { width: 100%; align-self: stretch; justify-content: flex-start; flex-wrap: wrap; margin-left: 0; gap: 10px; }
+  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "difficulty difficulty" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
   .workspace-page .expansion { font-size: 8px; letter-spacing: .06em; max-width: 240px; }
   .workspace-page .header-controls { align-self: flex-start; gap: 0; }
@@ -250,7 +250,9 @@
 .workspace-page .project-model-pill { grid-area: model; justify-content: center; align-items: center; text-align: center; }
 .workspace-page .project-model-pill > span { margin: 0; }
 .workspace-page .project-thinking-pill { grid-area: thinking; }
-.workspace-page .cloud-home-controls.compact { grid-area: identity; }
+.workspace-page .cloud-home-controls.compact { grid-area: google; }
+.workspace-page .project-google-signin { grid-area: google; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 27px; padding: 4px 9px; border: 1px solid #5b5148; border-radius: 999px; background: #091824ed; color: #a8b3bb; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
+.workspace-page .project-google-signin small { color: #82909a; font: inherit; font-size: 9px; }
 .workspace-page .project-chatgpt-signin { min-width: 0; max-width: none; }
 .workspace-page .project-chatgpt-signin > summary { margin-left: 0; padding-inline: 9px; font-size: 10px; }
 button.project-control-pill { cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
@@ -272,6 +274,11 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-header-title-row { gap: 5px; }
   .workspace-page .project-header-title-row .research-type-icon { flex-basis: 22px; width: 22px; height: 22px; }
   .workspace-page .project-control-pill { min-height: 26px; padding-inline: 8px; font-size: 9px; }
+  .workspace-page .project-google-signin { min-height: 26px; padding-inline: 8px; gap: 5px; font-size: 9px; }
+  .workspace-page .project-google-signin small { font-size: 8px; }
+  .workspace-page .cloud-home-controls.compact { min-width: 0; max-width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: center; }
+  .workspace-page .cloud-home-controls.compact .cloud-user-email { max-width: 100%; }
+  .workspace-page .cloud-home-controls.compact > * { max-width: 100%; white-space: normal; }
   .workspace-page .project-art-header .api-connection.project-chatgpt-signin { width: 100%; max-width: none; }
   .workspace-page .project-chatgpt-signin > summary { width: 100%; min-width: 0; justify-content: center; padding-inline: 4px; font-size: 9px; white-space: normal; }
   .workspace-page .project-chatgpt-signin > summary [role="status"] { min-width: 0; white-space: normal; text-align: center; }
