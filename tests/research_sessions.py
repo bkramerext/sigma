@@ -2651,17 +2651,34 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
 
 
 async def test_answer_free_maximum_regions_prompt(path: Path):
+    # Keep the shipped acceptance task answer-free end to end. This goes
+    # through normal session creation and request assembly, rather than only
+    # checking the source fixture strings.
+    title = "Maximum regions formed by straight lines"
+    problem = (
+        "For each nonnegative integer n, determine the greatest possible number of regions into "
+        "which n distinct straight lines divide the Euclidean plane. Establish an exact answer "
+        "for all n with a rigorous upper bound and a construction that attains it. State any "
+        "geometric assumptions required for the argument."
+    )
+    strategy_title = "Incremental line insertion"
+    strategy_text = (
+        "Examine how adding one line changes the connected regions of an arrangement of earlier "
+        "lines. Identify what would need to be proved for an upper bound and what separate "
+        "evidence would demonstrate attainability. Do not assume that a particular arrangement "
+        "or formula is optimal."
+    )
     view = initialize_project(
         path,
-        "Maximum Regions · answer-free regression",
-        "Determine the greatest number of regions formed by n distinct straight lines in the plane. State assumptions, derive an upper bound, and give a construction if you can.",
+        title,
+        problem,
         research_mode="mathematical",
         difficulty="easy",
     )
     strategy = create_strategy(
         path,
-        "Incremental line insertion",
-        "Study what one newly inserted line can add. Bound its segments by its intersections with the earlier lines, and seek a configuration attaining the bound.",
+        strategy_title,
+        strategy_text,
     ).project.strategies[0]
     credential = {
         "identity": "fixture-account",
@@ -2671,11 +2688,17 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
     }
     config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
     outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
-    inputs = []
+    requests = []
 
     async def handler(request):
         payload = json.loads(request.content)
-        inputs.append(json.loads(payload["input"]))
+        requests.append(
+            {
+                "role": payload["text"]["format"]["name"],
+                "instructions": payload["instructions"],
+                "context": json.loads(payload["input"]),
+            }
+        )
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -2694,13 +2717,41 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
         finished = await wait_for(path, started["id"])
 
     assert finished["status"] == "ended" and finished["artifacts"]
-    assert len(inputs) == 2
-    for context in inputs:
-        assert context["problem"] == view.project.problem
-        assert context["strategy"]["approach"] == strategy.approach
-        prompt = json.dumps(context)
-        assert "1 + n(n+1)/2" not in prompt
-        assert "y=kx+k^2" not in prompt
+    assert len(requests) == 2
+    initial = requests[0]
+    assert initial["role"] == "research_investigator"
+    context = initial["context"]
+    assert context["problem"] == problem == view.project.problem
+    assert context["strategy"]["title"] == strategy_title == strategy.title
+    assert context["strategy"]["approach"] == strategy_text == strategy.approach
+    assert context["prior_artifacts"] == []
+    assert context["prior_session_findings"] == []
+    assert context["obligation_ledger"] == []
+    assert context["prior_session_obligations_omitted"] == 0
+    assert context["prior_session_failures"] == []
+    manifest_sources = context["context_manifest"]["sources"]
+    assert manifest_sources == [
+        {
+            "category": "project_strategy_snapshot",
+            "source_ids": [strategy.id],
+            "reason": "bounded portfolio overview for strategy and domain context",
+            "representation": "bounded_snapshot",
+            "status": "selected",
+        }
+    ]
+
+    # Normalize whitespace and superscript so harmless formatting changes do
+    # not let a known formula or attaining family slip through the audit.
+    initial_request = json.dumps(initial, ensure_ascii=False).casefold()
+    normalized = "".join(initial_request.split()).replace("²", "^2")
+    forbidden = (
+        "1+n(n+1)/2",
+        "n(n+1)/2",
+        "y=kx+k^2",
+        "x=-(i+k)",
+        "linesl_k",
+    )
+    assert not any(leak in normalized for leak in forbidden)
     # This is an answer-leakage regression fixture, not evidence that a model
     # can independently solve the problem; the provider is mocked above.
 

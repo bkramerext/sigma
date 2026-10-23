@@ -4316,3 +4316,94 @@ reproducible, and deterministic contract behavior is now covered; this does
 not demonstrate empirical model reasoning quality or establish any research
 claim as mathematically verified. T17.8 remains its separate research-quality
 gate. T37 introduces no T17.8 scope changes or migration requirement.
+
+## T17.8 answer-free acceptance preparation (2026-10-23)
+
+The prior 2026-10-22 A17.8 evidence and its limitations above are preserved.
+In particular, the live Maximum Regions result used the answer-bearing Sample
+strategy and does not establish independent discovery. This follow-up prepared
+the acceptance packet's fresh inputs, hardened its deterministic leak audit,
+and rechecked the integrated A17.6/A17.7 workflows without calling a provider.
+
+### Fresh answer-free project and prompt audit
+
+Prepared `projects/maximum-regions-answer-free-t17-8.sigma` through the shared
+project/strategy services. It has project ID
+`9018b1fe-83a9-4027-a755-8f997b4f46b5`, one human strategy ID
+`8dda06ce-c931-42a8-a2b8-a68f1220e848`, and no saved research-session files.
+The `project.json` SHA-256 is
+`62e3a34afe9f9710124a2c945688e89083ea88a2f21b42de69123a6cba256aad`. Its
+title, question, and sole strategy match the participant-facing answer-free
+task in `docs/evaluations/a17-8-independent-acceptance-packet.md`; no Sample
+project or Sample history was copied. The project research limits are set to
+3 cycles, 6 model calls, 10 minutes and 4,000 output tokens per call. No Recent
+index entry was written during preparation. The exact project export and saved
+limits are preserved in `docs/evaluations/fixtures/t17-8-answer-free/`; the
+export's SHA-256 matches the local project byte-for-byte.
+
+The Investigator and Skeptic contexts were assembled using the production
+`_agent_context` and `_role_instructions` paths. Their preflight inputs were
+3,284 and 3,313 UTF-8 context bytes. Both contained only the exact problem,
+the one generic line-insertion strategy, and its own bounded portfolio
+snapshot: no prior artifacts, session findings, obligations, failures, or
+Sample identifiers. Neither role context nor instructions contained the
+answer formula or the known attaining family. This is an input-leak audit,
+not a claim that the model does not know the problem from training.
+
+`tests/research_sessions.py::test_answer_free_maximum_regions_prompt` now uses
+the exact acceptance-packet inputs, starts a normal session with a deterministic
+mock transport, captures the full Investigator request, and checks exact input
+identity, source-manifest/history bounds, and normalized formula/construction
+leak patterns. The mock output is explicitly not scored as a research attempt.
+The first test edit incorrectly expected the manifest to contain no source at
+all; inspection showed it correctly contains the fresh project's own strategy
+snapshot. The test now asserts that exact snapshot and no historical evidence.
+No product-code correction was indicated by this audit.
+
+### Deterministic and browser verification
+
+- `uv run --locked --no-sync python tests/research_sessions.py` — passed after
+  the new answer-free request regression; this includes complete, incomplete,
+  material-objection, false-candidate/counterexample, productive no-next-step,
+  binary-string generalization, attribution, recovery, concurrency, and the
+  T37 history/context regressions.
+- `uv run --locked --no-sync python tests/project_reports.py` — passed; report
+  and Project Audit evidence remains consistent.
+- `./sigma test` — passed after the test change, including all scenarios,
+  Ruff, format check (72 files), Pyright (0 diagnostics), frontend typecheck
+  and production build. The existing Starlette/httpx deprecation warning is
+  non-failing.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5174 SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8003 uv run --with playwright --locked python browser_checks/a17_research.py`
+  — passed in real Chrome at 1440/1280/390/320 CSS-pixel widths against the
+  isolated provider fixture. Screenshots
+  `/tmp/sigma-a18-coordinator-review-desktop.png` and
+  `/tmp/sigma-a18-coordinator-review-mobile.png` were inspected. This verifies
+  the integrated workspace/export UI, not a live run of the prepared project.
+
+No provider request or model call was made in this follow-up. During a local
+connection-discovery command, a stored OAuth credential was inadvertently
+printed into tool output. Provider work was stopped immediately, and the user
+was advised to revoke that session and reconnect before any live experiment.
+No credential was put in the project, source changes, or this record. The
+answer-free live trial is therefore still not run; it must use the connected
+ChatGPT plan only, after the connection is safe and explicitly available.
+
+### A17.8 criteria after this follow-up
+
+| Criterion | Status | Evidence and limit |
+|---|---|---|
+| 1. Genuine independent solution | **Unverified** | The prior positive session is contaminated by its answer-bearing strategy. The prepared project is answer-free and the exact role-input audit passes, but no live model session was run. |
+| 2. Meaningful criticism | **Met, scoped to prior run** | The prior Skeptic identified a real gap in small-case evidence and later accepted the completed argument. The false-candidate, material-objection, and supported-conclusion adversarial cases pass deterministically. No new live criticism result exists. |
+| 3. Sound coordination | **Met** | The prior session ended productively with an empty next path; no-next-step and unresolved-objection cases pass. This does not establish answer-free discovery. |
+| 4. Calibrated conclusions | **Met** | Prior result remained `convincing_unverified`; deterministic incomplete/false-proof cases do not become success. No independent verification claim is made. |
+| 5. Evidence-based attribution | **Met** | Existing deterministic session tests bind assessment to strategy-linked artifact references and preserve historical eligibility. The prior live run's assessment remains model-reported, not independent evidence. |
+| 6. Generalization | **Met, deterministic only** | The distinct binary-string partition scenario passes in the research-session suite. It is not a second live model trial. |
+| 7. Operational reliability | **Met, deterministic/browser evidence** | Full suite and fixture-backed Chrome checks pass; prior stop/resume, persistence, exports, outcome, and attribution evidence is preserved. No new live provider failure/recovery behavior was exercised. |
+| 8. Reproducible evidence | **Met for offline work** | Exact fresh project/strategy IDs, project hash, limits, prompt-audit path, commands, test results, and screenshots are recorded. The required fresh live session/artifacts do not exist yet. |
+
+**Decision: hold A17.8 and do not declare A17 complete.** The next valid
+quality result requires revocation/reconnection after the credential exposure,
+then one bounded normal-flow ChatGPT-plan run on this fresh project and an
+external human review of its proof. If no safe connected-plan session is
+available, keep criterion 1 unverified; do not substitute fixtures or the
+contaminated October 22 run.

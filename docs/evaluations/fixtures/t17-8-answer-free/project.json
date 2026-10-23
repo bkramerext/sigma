@@ -1,0 +1,40 @@
+{
+  "schema_version": 8,
+  "id": "9018b1fe-83a9-4027-a755-8f997b4f46b5",
+  "title": "Maximum regions formed by straight lines",
+  "problem": "For each nonnegative integer n, determine the greatest possible number of regions into which n distinct straight lines divide the Euclidean plane. Establish an exact answer for all n with a rigorous upper bound and a construction that attains it. State any geometric assumptions required for the argument.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T23:19:23.616636+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T23:19:23.617709+00:00",
+      "strategy_id": "8dda06ce-c931-42a8-a2b8-a68f1220e848"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "8dda06ce-c931-42a8-a2b8-a68f1220e848",
+      "title": "Incremental line insertion",
+      "approach": "Examine how adding one line changes the connected regions of an arrangement of earlier lines. Identify what would need to be proved for an upper bound and what separate evidence would demonstrate attainability. Do not assume that a particular arrangement or formula is optimal.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T23:19:23.617709+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "8dda06ce-c931-42a8-a2b8-a68f1220e848"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "easy"
+}
