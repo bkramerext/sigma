@@ -106,6 +106,25 @@ with sync_playwright() as playwright:
     back_caption = page.get_by_role("button", name="Back to home caption", exact=True)
     expect(back_caption).to_be_visible()
     expect(back_caption).to_have_css("text-decoration-line", "underline")
+    expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
+    expect(back_caption).to_have_css("font-size", "13px")
+    expect(back_caption).to_have_css("font-weight", "600")
+    reference_action = page.locator(".strategy-inline-commands .text-view-link").first
+    action_style = reference_action.evaluate(
+        "e => {const s=getComputedStyle(e); return [s.color,s.font,s.letterSpacing,s.textDecorationLine,s.textUnderlineOffset]}"
+    )
+    for selector in (
+        ".project-back-label",
+        ".strategy-heading-actions .text-view-link",
+        ".strategy-remove-anchor > .text-view-link",
+    ):
+        for action in page.locator(selector).all():
+            assert (
+                action.evaluate(
+                    "e => {const s=getComputedStyle(e); return [s.color,s.font,s.letterSpacing,s.textDecorationLine,s.textUnderlineOffset]}"
+                )
+                == action_style
+            ), selector
     back_label_box = back_caption.bounding_box()
     assert back_button_box and back_label_box
     assert (
@@ -116,6 +135,7 @@ with sync_playwright() as playwright:
         < 2
     )
     back_caption.hover()
+    expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
     expect(page.get_by_role("tooltip")).to_have_text("Back to home caption")
     back_caption.click()
     page.wait_for_url("http://127.0.0.1:5173/")
@@ -169,10 +189,19 @@ with sync_playwright() as playwright:
     project_header.get_by_role("button", name="Export project", exact=True).click()
     first_export = page.get_by_role("dialog", name="Export Project")
     expect(first_export).to_be_visible()
+    assert (
+        page.get_by_role("button", name="Export project").evaluate("e => getComputedStyle(e).color")
+        == "rgb(224, 196, 160)"
+    )
+    assert (
+        page.get_by_role("button", name="Project settings").evaluate(
+            "e => getComputedStyle(e).color"
+        )
+        == "rgb(224, 196, 160)"
+    )
     expect(first_export.get_by_role("radio", name="Project Audit")).to_be_checked()
-    expect(first_export.get_by_label("Format")).to_be_disabled()
-    expect(first_export.get_by_label("Format")).to_have_value("json")
-    expect(first_export.get_by_label("Format").locator("option")).to_have_count(1)
+    expect(first_export.get_by_role("radio")).to_have_count(4)
+    expect(first_export.locator("select")).to_have_count(0)
     expect(first_export.get_by_label("Open in browser tab")).not_to_be_checked()
     export_title_box = first_export.locator("#export-project-heading").bounding_box()
     export_cancel_box = first_export.get_by_role("button", name="Cancel", exact=True).bounding_box()
@@ -327,7 +356,9 @@ with sync_playwright() as playwright:
         )
         != "none"
     )
-    project_title_button = page.get_by_role("button", name=re.compile("Edit project title and description:"))
+    project_title_button = page.get_by_role(
+        "button", name=re.compile("Edit project title and description:")
+    )
     box = project_title_button.bounding_box()
     assert box
     page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
@@ -431,7 +462,9 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Edit research problem").click()
     description = page.locator("#text-editor-project-project")
     description.fill("unsaved project description draft")
-    expect(page.get_by_role("button", name=re.compile("Edit project title and description:")).first).to_be_disabled()
+    expect(
+        page.get_by_role("button", name=re.compile("Edit project title and description:")).first
+    ).to_be_disabled()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
     first_title_button = page.locator("li[data-strategy-id]").first.get_by_role(
         "button", name=re.compile("Edit strategy title:")
@@ -459,7 +492,9 @@ with sync_playwright() as playwright:
     new_form = page.locator("#strategy-composer form.strategy-form")
     expect(page.locator("#strategy-title")).to_be_focused()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_disabled()
-    expect(page.get_by_role("button", name=re.compile("Edit project title and description:")).first).to_be_disabled()
+    expect(
+        page.get_by_role("button", name=re.compile("Edit project title and description:")).first
+    ).to_be_disabled()
     expect(connection.locator("summary")).to_have_attribute("aria-disabled", "true")
     connection.locator("summary").evaluate("node => node.click()")
     expect(connection.locator(".connection-details")).to_have_count(0)
@@ -480,7 +515,9 @@ with sync_playwright() as playwright:
     expect(
         page.locator(".strategies-pane-heading").get_by_role("button", name="New", exact=True)
     ).to_have_count(0)
-    expect(page.get_by_role("button", name=re.compile("Edit project title and description:")).first).to_be_enabled()
+    expect(
+        page.get_by_role("button", name=re.compile("Edit project title and description:")).first
+    ).to_be_enabled()
     page.locator(".inline-proposal").get_by_role("button", name="Cancel", exact=True).click()
     expect(page.get_by_role("button", name="Generate", exact=True)).to_be_enabled()
 
@@ -731,7 +768,9 @@ with sync_playwright() as playwright:
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
     expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_be_visible()
     pause_row.get_by_role("button", name="Resume", exact=True).click()
-    expect(pause_row.locator(".session-status")).to_contain_text(re.compile("queued|running"), timeout=5000)
+    expect(pause_row.locator(".session-status")).to_contain_text(
+        re.compile("queued|running"), timeout=5000
+    )
     expect(page.get_by_role("group", name="Confirm resume Session 2")).to_have_count(0)
     pause_row.get_by_role("button", name="Stop", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
@@ -910,26 +949,18 @@ with sync_playwright() as playwright:
     filename_field = export_dialog.get_by_label("Filename")
     filename_field.fill("a17 unsafe/report.html")
     expect(filename_field).to_have_value("a17 unsafe-report")
-    export_dialog.get_by_role("radio", name="Research Report").check()
-    format_select = export_dialog.get_by_label("Format")
-    expect(format_select).to_be_enabled()
-    expect(format_select).to_have_value("txt")
+    export_dialog.get_by_role("radio", name="Text file").check()
     expect(filename_field).to_have_value("a17 unsafe-report")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".txt")
-    format_select.select_option("html")
+    export_dialog.get_by_role("radio", name="HTML report").check()
     expect(filename_field).to_have_value("a17 unsafe-report")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".html")
     export_dialog.get_by_role("radio", name="Project Audit").check()
-    expect(format_select).to_be_disabled()
-    expect(format_select).to_have_value("json")
-    expect(format_select.locator("option")).to_have_count(1)
     expect(filename_field).to_have_value("a17 unsafe-report")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".json")
-    export_dialog.get_by_role("radio", name="Research Report").check()
-    expect(format_select).to_be_enabled()
-    expect(format_select).to_have_value("html")
+    export_dialog.get_by_role("radio", name="HTML report").check()
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".html")
-    format_select.select_option("txt")
+    export_dialog.get_by_role("radio", name="Text file").check()
     expect(export_dialog.get_by_label("Open in browser tab")).not_to_be_checked()
     with page.expect_download() as report_download:
         export_dialog.get_by_role("button", name="Download", exact=True).click()
@@ -940,9 +971,8 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    export_dialog.get_by_role("radio", name="Research Report").check()
+    export_dialog.get_by_role("radio", name="HTML report").check()
     export_dialog.get_by_label("Filename").fill("a17-html")
-    export_dialog.get_by_label("Format").select_option("html")
     export_dialog.get_by_label("Open in browser tab").check()
     with page.expect_popup() as report_tab, page.expect_download() as html_download:
         export_dialog.get_by_role("button", name="Download", exact=True).click()
@@ -965,10 +995,8 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    export_dialog.get_by_role("radio", name="Research Report").check()
-    expect(export_dialog.get_by_label("Format").locator("option")).to_have_text(
-        ["Text", "HTML", "LaTeX"]
-    )
+    expect(export_dialog.get_by_role("radio")).to_have_count(4)
+    export_dialog.get_by_role("radio", name="Text file").check()
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".txt")
     export_dialog.get_by_label("Filename").fill("a17-blocked-tab")
     export_dialog.get_by_label("Open in browser tab").check()
@@ -986,12 +1014,9 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
     export_dialog.get_by_role("radio", name="Project Audit").check()
-    expect(export_dialog.get_by_label("Format")).to_have_value("json")
-    expect(export_dialog.get_by_label("Format").locator("option")).to_have_text("JSON")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".json")
-    export_dialog.get_by_role("radio", name="Research Report").check()
+    export_dialog.get_by_role("radio", name="Academic paper using LaTeX").check()
     export_dialog.get_by_label("Filename").fill("a17-latex")
-    export_dialog.get_by_label("Format").select_option("pdf")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".pdf")
     export_dialog.get_by_label("Open in browser tab").check()
     with page.expect_popup() as pdf_tab, page.expect_download() as pdf_download:
@@ -1142,8 +1167,7 @@ with sync_playwright() as playwright:
     )
     page.get_by_role("button", name="Export project", exact=True).click()
     max_export = page.get_by_role("dialog", name="Export Project")
-    max_export.get_by_role("radio", name="Research Report").check()
-    max_format = max_export.get_by_label("Format")
+    max_export.get_by_role("radio", name="HTML report").check()
     max_filename = max_export.get_by_label("Filename")
     max_report_title = page.locator(".project-header-title").inner_text()
     max_filename_stem = "sigma-" + re.sub(
@@ -1153,7 +1177,6 @@ with sync_playwright() as playwright:
     assert max_filename.evaluate("e => e.clientWidth") > 300
     max_filename.press("End")
     assert max_filename.evaluate("e => e.scrollLeft > 0") is False
-    max_format.select_option("html")
     expect(max_export.locator(".export-filename-field span")).to_have_text(".html")
     max_export.get_by_label("Open in browser tab").check()
     with page.expect_popup() as max_html_tab, page.expect_download() as max_html_download:
@@ -1177,11 +1200,9 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     max_export = page.get_by_role("dialog", name="Export Project")
-    max_export.get_by_role("radio", name="Research Report").check()
+    max_export.get_by_role("radio", name="Academic paper using LaTeX").check()
     max_filename = max_export.get_by_label("Filename")
     expect(max_filename).to_have_value(max_filename_stem)
-    max_format = max_export.get_by_label("Format")
-    max_format.select_option("pdf")
     expect(max_export.locator(".export-filename-field span")).to_have_text(".pdf")
     max_export.get_by_label("Open in browser tab").check()
     with page.expect_popup() as max_pdf_tab, page.expect_download() as max_pdf_download:

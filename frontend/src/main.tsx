@@ -516,8 +516,9 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'audit' | 'report'>('audit');
-  const [reportFormat, setReportFormat] = useState<'txt' | 'html' | 'pdf'>('txt');
+  const [exportType, setExportType] = useState<'audit' | 'text' | 'html' | 'latex'>('audit');
+  const isReport = exportType !== 'audit';
+  const reportFormat = exportType === 'text' ? 'txt' : exportType === 'html' ? 'html' : 'pdf';
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -540,7 +541,7 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
     submitting.current = true; setBusy(true); setError('');
     try {
       const route = exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report';
-      const query = new URLSearchParams({ path, ...(exportType === 'report' ? { format: reportFormat } : {}) });
+      const query = new URLSearchParams({ path, ...(isReport ? { format: reportFormat } : {}) });
       const response = await fetch(`${route}?${query}`, { cache: 'no-store' });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
@@ -551,15 +552,15 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
         const result = await response.json() as { export_version: number; project: { title: string }; agentic_runs: unknown[]; research_sessions: ResearchSession[] };
         if (result.export_version !== 2 || !result.project || !Array.isArray(result.agentic_runs) || !Array.isArray(result.research_sessions)) throw new Error('Invalid project export response');
         content = `${JSON.stringify(result, null, 2)}\n`;
-      } else if (reportFormat === 'pdf') {
+      } else if (exportType === 'latex') {
         const pdf = await response.blob();
         const signature = new TextDecoder().decode(await pdf.slice(0, 5).arrayBuffer());
         if (response.headers.get('content-type')?.includes('application/pdf') !== true || signature !== '%PDF-') throw new Error('The server did not return a valid PDF. Nothing was downloaded.');
         content = pdf;
       } else content = await response.text();
       if (opened && !opened.closed) {
-        if (exportType === 'report' && reportFormat === 'html' && typeof content === 'string') opened.document.open(), opened.document.write(content), opened.document.close();
-        else if (exportType === 'report' && reportFormat === 'pdf' && content instanceof Blob) {
+        if (exportType === 'html' && typeof content === 'string') opened.document.open(), opened.document.write(content), opened.document.close();
+        else if (exportType === 'latex' && content instanceof Blob) {
           const pdfUrl = URL.createObjectURL(content);
           opened.location.replace(pdfUrl);
           window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
@@ -572,7 +573,7 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
           opened.document.body.replaceChildren(pre);
         }
       }
-      const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type: exportType === 'audit' ? 'application/json;charset=utf-8' : reportFormat === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' }));
+      const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type: exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8' }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
       document.body.appendChild(link); link.click(); link.remove();
@@ -594,14 +595,12 @@ function ProjectExportDialog({ path, title, onCancel }: { path: string; title: s
       </header>
       <div className="settings-body">
         <fieldset className="export-type-options" disabled={busy}>
-          <legend>Export type</legend>
+          <legend>Report type</legend>
           <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
-          <label><input type="radio" name="export-type" value="report" checked={exportType === 'report'} onChange={() => setExportType('report')}/> Research Report</label>
+          <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
+          <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
+          <label><input type="radio" name="export-type" value="latex" checked={exportType === 'latex'} onChange={() => setExportType('latex')}/> Academic paper using LaTeX</label>
         </fieldset>
-        <label htmlFor="export-project-format">Format</label>
-        <select id="export-project-format" className="export-format-select" value={exportType === 'audit' ? 'json' : reportFormat} disabled={busy || exportType === 'audit'} onChange={event => setReportFormat(event.target.value as 'txt' | 'html' | 'pdf')}>
-          {exportType === 'audit' ? <option value="json">JSON</option> : <><option value="txt">Text</option><option value="html">HTML</option><option value="pdf">LaTeX</option></>}
-        </select>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
           onChange={event => { setFilename(event.target.value.replace(/[\/\\<>:"|?*\x00-\x1f]/g, '-').replace(/\.(json|txt|html|tex|pdf)$/i, '')); setError(''); }}/>
@@ -710,6 +709,10 @@ function FloatingTooltip() {
   useLayoutEffect(() => { if (active) position(); }, [active, position]);
   if (!active) return null;
   return createPortal(<div ref={tooltip} id="sigma-ui-tooltip" role="tooltip" className="sigma-ui-tooltip">{active.text}</div>, document.body);
+}
+
+function SettingsGearIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 1.72l-.08.54a2 2 0 0 1-1 1.44l-.47.27a2 2 0 0 1-1.74 0l-.44-.22a2 2 0 0 0-2.72.73l-.22.38a2 2 0 0 0 .73 2.73l.44.25a2 2 0 0 1 1 1.73v.54a2 2 0 0 1-1 1.73l-.44.25a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.72.73l.44-.22a2 2 0 0 1 1.74 0l.47.27a2 2 0 0 1 1 1.44l.08.54a2 2 0 0 0 2 1.72h.44a2 2 0 0 0 2-1.72l.08-.54a2 2 0 0 1 1-1.44l.47-.27a2 2 0 0 1 1.74 0l.44.22a2 2 0 0 0 2.72-.73l.22-.38a2 2 0 0 0-.73-2.73l-.44-.25a2 2 0 0 1-1-1.73v-.54a2 2 0 0 1 1-1.73l.44-.25a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.72-.73l-.44.22a2 2 0 0 1-1.74 0l-.47-.27a2 2 0 0 1-1-1.44l-.08-.54A2 2 0 0 0 12.22 2z"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
 function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
@@ -829,7 +832,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       </> : data && version && !hideEditAction && <button type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label={`Edit ${name}`} title={`Edit ${name}`} data-tooltip={`Edit ${name}`} disabled={modeDisabled} onClick={() => beginBodyEdit(selected === 'rendered')}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>}
 
     {!hideProjectActions && scope === 'project' && !editing && <button ref={exportTrigger} type="button" className="copper-button project-export-trigger workspace-icon-button" aria-label="Export project" title="Export project" data-tooltip="Export project" onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
-    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button>}
+    {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SettingsGearIcon /></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {markdownPortalTarget && createPortal(markdownToggle, markdownPortalTarget)}
@@ -1816,7 +1819,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   }
   return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2h4l.6 2.3 1.4.8 2.3-.7 2.8 2.8-.7 2.3.8 1.4L23 11v4l-2.3.6-.8-1.4.7 2.3-2.8 2.8-2.3-.7-1.4.8L14 24h-4l-.6-2.3-1.4-.8-2.3.7-2.8-2.8.7-2.3-.8-1.4L1 15v-4l2.3-.6.8-1.4-.7-2.3 2.8-2.8 2.3.7 1.4-.8L10 2Z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg></button></div></header>
+      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">

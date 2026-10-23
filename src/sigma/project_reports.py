@@ -278,11 +278,59 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
     index = 2
     list_items: list[str] = []
     section_open = False
+    session_open = False
+    session_header_open = False
+    session_facts: list[tuple[str, str]] = []
 
     def flush_list() -> None:
         if list_items:
             blocks.append("<ul>" + "".join(f"<li>{item}</li>" for item in list_items) + "</ul>")
             list_items.clear()
+
+    def flush_session_header() -> None:
+        nonlocal session_header_open
+        if not session_header_open:
+            return
+        facts: list[str] = []
+        for label, value in session_facts:
+            fact_class = ""
+            if label == "Execution status":
+                normalized = value.casefold()
+                fact_class = (
+                    " report-status-ended"
+                    if normalized in {"ended", "completed"}
+                    else " report-status-active"
+                    if normalized in {"running", "queued", "paused"}
+                    else ""
+                )
+            elif label == "Outcome":
+                normalized = value.casefold()
+                fact_class = (
+                    " report-outcome-positive"
+                    if normalized.startswith(("positive", "successful"))
+                    else " report-outcome-negative"
+                    if normalized.startswith(("negative", "failed"))
+                    else " report-outcome-mixed"
+                    if normalized.startswith("mixed")
+                    else ""
+                )
+            wide_class = " report-session-fact-wide" if label == "Strategy" else ""
+            facts.append(
+                f'<div class="report-session-fact{wide_class}"><dt>{html.escape(label)}</dt>'
+                f'<dd class="report-session-value{fact_class}">{_html_inline(value)}</dd></div>'
+            )
+        if facts:
+            blocks.append('<dl class="report-session-meta">' + "".join(facts) + "</dl>")
+        blocks.append("</header>")
+        session_facts.clear()
+        session_header_open = False
+
+    def close_session() -> None:
+        nonlocal session_open
+        if session_open:
+            flush_session_header()
+            blocks.append("</article>")
+            session_open = False
 
     while index < len(lines):
         line = lines[index].strip()
@@ -293,13 +341,17 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
         if index + 1 < len(lines) and _HEADING_MARK.fullmatch(lines[index + 1].strip()):
             flush_list()
             level = {"=": 1, "-": 2, "~": 3}[lines[index + 1].strip()[0]]
+            if line == "Strategy Assessments":
+                level = 4
             if not (level == 1 and line == title):
                 if level == 2:
+                    close_session()
                     if section_open:
                         blocks.append("</section>")
                     blocks.append('<section class="report-section">')
                     section_open = True
-                blocks.append(f'<h{level} class="report-heading">{_html_inline(line)}</h{level}>')
+                heading_class = "report-subheading" if level == 4 else "report-heading"
+                blocks.append(f'<h{level} class="{heading_class}">{_html_inline(line)}</h{level}>')
             index += 2
             if line == "Strategy Assessments":
                 rows: list[tuple[str, str, str, str]] = []
@@ -325,8 +377,31 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
                         + "</tbody></table></div>"
                     )
             continue
-        if re.match(r"^(?:Session #\S+|Artifact \d+ ·|Run \S+)", line):
+        if re.match(r"^Session #\S+", line):
             flush_list()
+            close_session()
+            blocks.append('<article class="report-session">')
+            session_open = True
+            session_header_open = True
+            blocks.append('<header class="report-session-header">')
+            blocks.append(f'<h3 class="report-record-heading">{_html_inline(line)}</h3>')
+            index += 1
+            continue
+        if session_header_open:
+            label, separator, value = line.partition(": ")
+            if separator and label in {"Execution status", "Outcome", "Strategy", "Started"}:
+                session_facts.append((label, value))
+                index += 1
+                continue
+            flush_session_header()
+        if re.match(r"^Artifact \d+ ·", line):
+            flush_list()
+            blocks.append(f'<h4 class="report-artifact-heading">{_html_inline(line)}</h4>')
+            index += 1
+            continue
+        if re.match(r"^Run \S+", line):
+            flush_list()
+            close_session()
             blocks.append(f'<h3 class="report-record-heading">{_html_inline(line)}</h3>')
             index += 1
             continue
@@ -347,6 +422,7 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
             blocks.append(f'<p class="report-paragraph">{_html_inline(line)}</p>')
         index += 1
     flush_list()
+    close_session()
     if section_open:
         blocks.append("</section>")
     body = "\n".join(blocks)
@@ -368,7 +444,21 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
       h2.report-heading:before{display:block;width:34px;height:3px;margin:0 0 13px;background:var(--copper);content:""}
       h3.report-heading,.report-record-heading{margin:28px 0 10px;color:var(--blue);font:600 1.08rem/1.4 system-ui,sans-serif;overflow-wrap:anywhere}
       h3.report-heading{padding-bottom:8px;border-bottom:1px solid #e7ecee}
-      .report-record-heading{margin:30px 0 9px;padding:12px 16px;border-left:3px solid var(--copper);background:#f4f6f6;color:var(--navy);font-size:1rem}
+      .report-session{margin:26px 0 34px;padding:0 22px 20px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,#fbfcfc,#fff);box-shadow:0 3px 12px #18304008}
+      .report-session-header{display:block;margin:0 -22px 20px;padding:16px 20px 17px;border-bottom:1px solid var(--line);border-left:3px solid var(--copper);border-radius:9px 9px 0 0;background:#f4f6f6}
+      .report-session .report-record-heading{margin:0 0 14px;color:var(--navy);font:600 1.18rem/1.3 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 24px;margin:0}
+      .report-session-fact{min-width:0}
+      .report-session-fact-wide{grid-column:1/-1}
+      .report-session-fact dt{margin:0 0 3px;color:var(--muted);font:700 10px/1.4 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+      .report-session-value{margin:0;color:var(--ink);font:500 13px/1.5 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-value.report-status-ended{color:#426d5a}
+      .report-session-value.report-status-active{color:#825b28}
+      .report-session-value.report-outcome-positive{color:#286447;font-weight:700}
+      .report-session-value.report-outcome-negative{color:#9b403c;font-weight:700}
+      .report-session-value.report-outcome-mixed{color:#825b28;font-weight:700}
+      .report-subheading{margin:25px 0 9px;padding-top:14px;border-top:1px solid #e7ecee;color:#775532;font:700 .74rem/1.4 system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+      .report-artifact-heading{margin:28px 0 8px;padding-top:12px;border-top:1px solid var(--line);color:var(--blue);font:600 .95rem/1.45 system-ui,sans-serif;overflow-wrap:anywhere}
       .report-paragraph,.report-field{margin:10px 0;overflow-wrap:anywhere}
       .report-field strong{display:inline-block;margin-right:.35em;color:#5b4937;font:700 .76em/1.5 system-ui,sans-serif;letter-spacing:.06em}
       .report-note{margin:0 0 24px;padding:14px 18px;border-left:3px solid #6d94a5;background:#f1f6f7;color:#455762;font:13px/1.6 system-ui,sans-serif}
@@ -389,8 +479,8 @@ def _html_document(data: dict[str, Any], lines: list[str]) -> str:
       th{background:var(--navy);color:#f1c58d;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
       tbody tr:nth-child(even){background:#f6f8f8}
       tbody tr:last-child td{border-bottom:0}
-      @media(max-width:640px){.report{width:100%;margin:0;border:0;border-radius:0;box-shadow:none}.report-header{padding:36px 25px 32px}.report-header:after{right:25px}.report-content{padding:8px 25px 40px}.report-section{padding-top:20px}h2.report-heading{font-size:1.45rem}}
-      @media print{body{background:#fff;color:#111;font-size:10.5pt}.report{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;overflow:visible}.report-header{padding:0 0 20pt;background:#fff;color:#111;border-bottom:2pt solid #a76d3d;print-color-adjust:exact;-webkit-print-color-adjust:exact}.report-header:after{display:none}.report-kicker{color:#76502f}.report-header h1{color:#111;font-size:25pt}.report-subtitle{color:#555}.report-content{padding:0}.report-section{padding:18pt 0 8pt;break-inside:auto}.report-heading,.report-record-heading{break-after:avoid}.report-note,.report-record-heading,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.table-scroll{overflow:visible;border:0}table{font-size:9pt}th{background:#e8edf0;color:#162d3b}.report-record-heading{break-after:avoid}}
+      @media(max-width:640px){.report{width:100%;margin:0;border:0;border-radius:0;box-shadow:none}.report-header{padding:36px 25px 32px}.report-header:after{right:25px}.report-content{padding:8px 25px 40px}.report-section{padding-top:20px}.report-session{padding:0 16px 14px}.report-session-header{margin-inline:-16px;padding-inline:16px}.report-session-meta{gap:10px 14px}.report-session-fact-wide{grid-column:1/-1}h2.report-heading{font-size:1.45rem}}
+      @media print{body{background:#fff;color:#111;font-size:10.5pt}.report{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;overflow:visible}.report-header{padding:0 0 20pt;background:#fff;color:#111;border-bottom:2pt solid #a76d3d;print-color-adjust:exact;-webkit-print-color-adjust:exact}.report-header:after{display:none}.report-kicker{color:#76502f}.report-header h1{color:#111;font-size:25pt}.report-subtitle{color:#555}.report-content{padding:0}.report-section{padding:18pt 0 8pt;break-inside:auto}.report-session{break-inside:auto;border-color:#aaa;background:#fff}.report-heading,.report-record-heading,.report-subheading,.report-artifact-heading{break-after:avoid}.report-note,.report-record-heading,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.table-scroll{overflow:visible;border:0}table{font-size:9pt}th{background:#e8edf0;color:#162d3b}.report-record-heading{break-after:avoid}}
     """
     return (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'
@@ -474,19 +564,28 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage[margin=1in]{geometry}",
         r"\usepackage{amsmath,amssymb,booktabs,longtable}",
+        r"\usepackage{array}",
         r"\usepackage{enumitem}",
         r"\setlist{nosep,leftmargin=*}",
         r"\usepackage{microtype}",
+        r"\usepackage{titlesec}",
+        r"\usepackage{xcolor}",
+        r"\definecolor{blue}{HTML}{24485E}",
+        r"\titleformat{\section}{\Large\bfseries\sffamily\color{blue}}{\thesection}{0.8em}{}",
+        r"\titleformat{\subsection}{\large\bfseries\sffamily}{\thesubsection}{0.7em}{}",
+        r"\titleformat{\subsubsection}{\normalsize\bfseries\sffamily\color{blue}}{\thesubsubsection}{0.6em}{}",
         r"\setlength{\parskip}{0.55em}",
         r"\setlength{\parindent}{0pt}",
         r"\title{" + _latex(title) + r"}",
+        r"\author{SIGMA Research Record}",
         r"\date{\today}",
         r"\begin{document}",
         r"\maketitle",
-        r"\begin{quote}\small We hope to turn this into an academic-style report in the future.\end{quote}",
+        r"\begin{quote}\small In the future we plan on using AI to produce a typical academic paper based on the results of the research.\end{quote}",
     ]
     index = 2
     items: list[str] = []
+    session_metadata_open = False
 
     def flush_list() -> None:
         if items:
@@ -501,11 +600,37 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
             flush_list()
             index += 1
             continue
+        if re.match(r"^Session #\S+", line):
+            flush_list()
+            if session_metadata_open:
+                output.append(r"\end{description}")
+            output.append(r"\subsection{" + _latex_inline(line) + "}")
+            output.append(
+                r"\begin{description}[style=nextline,font=\normalfont\bfseries,leftmargin=0pt,labelsep=0pt]"
+            )
+            session_metadata_open = True
+            index += 1
+            continue
+        if session_metadata_open:
+            label, separator, value = line.partition(": ")
+            if separator and label in {"Execution status", "Outcome", "Strategy", "Started"}:
+                output.append(r"\item[" + _latex(label) + "] " + _latex_inline(value))
+                index += 1
+                continue
+            output.append(r"\end{description}")
+            session_metadata_open = False
+        if re.match(r"^Artifact \d+ ·", line):
+            flush_list()
+            output.append(r"\paragraph{" + _latex_inline(line) + "}")
+            index += 1
+            continue
         if index + 1 < len(lines) and _HEADING_MARK.fullmatch(lines[index + 1].strip()):
             flush_list()
             marker = lines[index + 1].strip()[0]
             command = {"=": r"\section", "-": r"\section", "~": r"\subsection"}[marker]
-            if not (marker == "=" and line == title):
+            if line == "Strategy Assessments":
+                output.append(r"\subsubsection*{Strategy assessments}")
+            elif not (marker == "=" and line == title):
                 output.append(command + "{" + _latex_inline(line) + "}")
             index += 2
             if line == "Strategy Assessments":
@@ -522,7 +647,7 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
                 if rows:
                     output.extend(
                         [
-                            r"\begin{longtable}{p{.19\linewidth}p{.19\linewidth}p{.40\linewidth}p{.14\linewidth}}",
+                            r"\begin{longtable}{>{\raggedright\arraybackslash}p{.16\linewidth}>{\raggedright\arraybackslash}p{.15\linewidth}>{\raggedright\arraybackslash}p{.40\linewidth}>{\raggedright\arraybackslash}p{.17\linewidth}}",
                             r"\toprule Strategy & Assessment & Rationale & Evidence " + r"\\",
                             r"\midrule\endhead",
                         ]
@@ -544,6 +669,8 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
             output.append(_latex_inline(line) + r"\par")
         index += 1
     flush_list()
+    if session_metadata_open:
+        output.append(r"\end{description}")
     output.append(r"\end{document}")
     return "\n".join(output) + "\n"
 

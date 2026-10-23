@@ -10,19 +10,35 @@ Paused sessions may coexist with a new session, while queued and running
 sessions still enforce single-session execution. The adjacent toolbar control
 is Stop, with matching accessible and hover text and a stop-square icon.
 
-Research Report HTML now has a structured, responsive layout with a compact
-strategy/assessment table and more room for rationale and evidence. Project and
-strategy title/description editing remains active until Save or Cancel, and the
-title pencils have no hover text. Opening a Sample appends `v1`, `v2`, and so on
-without a comma.
+Research Report HTML now has a structured, responsive layout with each research
+session presented as a distinct unit: status and outcome are summarized first,
+then the outcome evidence, session-specific strategy assessments, and artifacts
+follow beneath. The LaTeX report uses nested paper-style sections, compact
+session metadata, a typeset assessment table, and explicitly distinguishes the
+current record from a future AI-produced academic paper. Export now offers four
+direct choices—Project Audit, Text file, HTML report, and Academic paper using
+LaTeX—with extensions displayed next to the filename and no format dropdown.
+Project export and settings icons, Back to home, and the New/Generate links use
+the same color and semibold 13px type as Disable/Fork/Remove. Strategy Remove
+uses the same neutral action color; confirmation remains destructive. The
+settings control uses a standard gear outline, and the Project and Strategy
+Markdown controls are optically lowered 2px for vertical centering. Existing
+high-contrast hover treatment is retained.
+Project and strategy title/description editing remains active until Save or
+Cancel, and the title pencils have no hover text. Opening a Sample appends `v1`,
+`v2`, and so on without a comma.
 
 Verification: `./sigma test` passed all executable scenarios, Ruff, Pyright
 (zero errors), frontend typecheck, and Vite production build. The focused
-research-session scenario passed, including stopped elapsed-time stability and
-resuming an interrupted provider call. The real-Chrome A17 browser check was
-attempted but currently stops at outdated project-editor assertions; its UI
-checks need updating to the combined title/description editor before it can
-serve as a passing browser regression.
+report scenario passed for the nested HTML and LaTeX structure, escaping, report
+API, and unchanged Project Audit export. Tectonic compiled the fixture report to
+PDF without layout warnings. A focused real-Chrome check verified all four
+export choices, their filename extensions, the absence of a format dropdown,
+and the copper export/settings icons. The research-session scenario passed, including
+stopped elapsed-time stability and resuming an interrupted provider call. The
+real-Chrome A17 browser check was attempted but currently stops at outdated
+project-editor assertions; its UI checks need updating to the combined
+title/description editor before it can serve as a passing browser regression.
 
 ## Home, sample, and research-type refinements (2026-10-22)
 
