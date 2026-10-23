@@ -72,10 +72,10 @@ not a physical device.
 ### T22.5 — Per-user cloud research spending limits (2026-10-23)
 
 Implemented on `feature/t22-5-per-user-spending`, based on current `main`
-`703442c`. Cloud inference now requires valid per-user and global ceilings
-configured through `SIGMA_CLOUD_USER_SPEND_CEILING_USD` and
-`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` (both fail closed; values above the
-pilot maxima of `$2.00` and `$15.00` are rejected). SQLite `BEGIN IMMEDIATE`
+`703442c`. Cloud inference now requires valid default per-user and global
+ceilings configured through `SIGMA_CLOUD_USER_SPEND_CEILING_USD` and
+`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` (both fail closed; each is bounded by
+`$15.00`). `$2.00` is the initial per-user default. SQLite `BEGIN IMMEDIATE`
 reservations atomically include all usage for the verified workspace across
 projects and reserve against both ceilings. Unknown charges remain held across
 a fresh process; no monthly reset or administrator exception was added.
@@ -86,8 +86,17 @@ change local-mode limits.
 
 Added an authenticated owner-only, no-store budget endpoint and compact Home
 summary for allowance, estimated use, held use, unknown charges, and remaining
-allowance. Exhaustion and invalid configuration do not block project or saved
-research reads. Research Limits explains the cloud caps. Updated
+allowance. Access Management now lets admins set/reset USD allowances per email
+or exact domain. Email rules override domain allowances; a domain amount is
+applied independently to each verified identity. Per-rule allowances may
+exceed `$2.00` up to the `$15.00` global ceiling. A durable subject-to-current-
+email index lets Access Management display effective allowances plus estimated,
+held, and remaining balances for identities that have signed in, including
+after logout or revocation. A revoked identity has no effective allowance or
+remaining amount, but its recorded estimated spend and unknown holds remain
+visible. Reductions below prior spend preserve ledger evidence and holds and
+deny new reservations. Exhaustion and invalid configuration do not block
+project or saved research reads. Research Limits explains the cloud caps. Updated
 `docs/CLOUD-AUTH.md` with configuration, durable accounting, and initial pilot
 allocation (five accounts including admin: `$10` combined per-user allowances
 and `$5` global reserve under the `$15` ceiling).
@@ -96,16 +105,25 @@ Verification on the implementation tree: deterministic same-user concurrent
 spending race across two projects admitted exactly one of two `$0.10`
 reservations after `$0.15` persisted use; a separate Python process observed
 the same `$0.15` estimate, `$0.10` unknown held charge, and zero remaining.
-Tests also cover missing/malformed/over-policy configs, cross-workspace forged
+Added policy regressions verify a `$5` domain allowance, an `$8` email override,
+another user's independent effective domain policy, lowering an allowance
+below held spending without releasing the unknown reservation, and owner-only
+admin summary fields. Tests also cover missing/malformed/over-policy configs, cross-workspace forged
 reservations and query parameters, cloud session-cap clamping, exhausted-budget
-read access, and local-mode compatibility. `tests/cloud_research.py` and
-`tests/cloud_research_api.py` passed. `./sigma test` passed all backend
-regressions, Ruff/format, Pyright (zero diagnostics), frontend typecheck, and
-production build. Real Chrome `browser_checks/t23_1_google_signin.py` passed
-against an isolated local SIGMA backend and Vite server; its cloud status and
-budget were deterministic browser fixtures, and it opened a saved project
-while showing an exhausted allowance. No live or paid provider calls were
-made. Remaining operational verification: deploy with five authorized pilot
+read access, and local-mode compatibility. The first combined test run exposed
+a test-only identity shim missing OIDC policy configuration; its fixture now
+supplies valid deterministic cloud-auth configuration. The browser scenario's
+Recent selector now targets its uniquely generated project, so existing Recent
+entries cannot make it ambiguous. `tests/cloud_auth.py` (11 tests),
+`tests/cloud_research.py`, and `tests/cloud_research_api.py` passed.
+`./sigma test` passed all backend regressions, Ruff/format, Pyright (zero
+diagnostics), frontend typecheck, and production build. Real Chrome
+`browser_checks/t23_1_google_signin.py` passed against an isolated local SIGMA
+backend and Vite server; cloud identity, budget, and access-rule responses were
+deterministic browser fixtures. It verified the Access Management allowance
+editor and per-user balance display, exhausted owner budget, and opening a
+saved project. No live or paid provider calls were made. Remaining operational
+verification: deploy with five authorized pilot
 accounts and explicitly configure the approved `$2`/`$15` values before
 enabling cloud inference; hosted deployment and real provider billing were
 intentionally not exercised.

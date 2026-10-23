@@ -109,13 +109,18 @@ Cloud research inference is enabled only when an operator explicitly supplies
 `SIGMA_CLOUD_OPENAI_API_KEY`, `SIGMA_CLOUD_USER_SPEND_CEILING_USD`, and
 `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Initial pilot values are `$2.00` per
 verified Google subject and `$15.00` globally. The five initial invited
-accounts (including the administrator) therefore have at most `$10.00` of
-combined user allowances, leaving `$5.00` under the global ceiling for
-operator-directed testing and unresolved charges. Operators may configure
-lower ceilings, but values above the pilot policy are rejected. The user
-allowance is cumulative, does not reset automatically, and follows the stable
-verified subject across changed email addresses, sign-out, revocation, and
-new projects. The administrator has no spending exception. Cloud
+accounts (including the administrator) start with `$2.00` each, leaving `$5.00`
+under the global ceiling for operator-directed testing and unresolved charges.
+The default allowance is configurable from `$0.01` through `$15.00`; an
+administrator can set a per-entry USD allowance in Access Management up to the
+global ceiling. An exact email rule overrides its matching domain rule. Domain
+allowances apply independently to each verified user's subject-backed
+workspace, never as a shared pool. The user's allowance is cumulative, does not
+reset automatically, and follows the stable verified subject across changed
+email addresses, sign-out, revocation, and new projects. The administrator has
+no spending exception. Lowering an allowance below recorded spend preserves
+all estimated and unknown charges and blocks further inference until the
+effective allowance again exceeds recorded spend. Cloud
 mode never falls back to a checkout's `OPENAI_API_KEY` or a locally connected
 ChatGPT plan. The service credential stays in the backend environment; the
 cloud UI cannot read, replace, or select it. Keep the deployment's secret
@@ -147,8 +152,8 @@ The service ledger also enforces these environment-configurable limits:
 | `SIGMA_CLOUD_USER_TOKEN_BUDGET` | `2000000` | Reserved or observed model tokens per workspace |
 
 Malformed or missing user or global spend configuration disables cloud
-research; configured user allowance is limited to `$2.00` and global ceiling
-to `$15.00`. Spend totals include completed estimates, live reservations, and
+research; configured default user allowance and individual entries are limited
+to `$15.00`, as is the global ceiling. Spend totals include completed estimates, live reservations, and
 unknown provider outcomes. A reservation is released only when the provider
 call is proven not to have been dispatched; age, restart, timeout, cancellation,
 and account revocation do not release uncertain charges. Accounting is shared

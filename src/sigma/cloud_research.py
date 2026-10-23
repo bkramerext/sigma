@@ -22,7 +22,7 @@ from sigma.projects import ProjectError, inspect_project
 
 _PROCESS_EPOCH = uuid4().hex
 USD_UNITS = 1_000_000_000
-MAX_USER_SPEND_USD = Decimal("2.00")
+MAX_USER_SPEND_USD = Decimal("15.00")
 MAX_GLOBAL_SPEND_USD = Decimal("15.00")
 MAX_SESSION_SPEND_USD = 0.25
 MAX_SESSION_CALLS = 6
@@ -76,8 +76,24 @@ def _user_spend_ceiling_decimal() -> Decimal:
     return _money_ceiling(
         "SIGMA_CLOUD_USER_SPEND_CEILING_USD",
         maximum=MAX_USER_SPEND_USD,
-        message="Cloud research is disabled until a valid per-user inference allowance of at most $2 is configured.",
+        message="Cloud research is disabled until a valid default per-user inference allowance of at most $15 is configured.",
     )
+
+
+def _effective_user_spend_ceiling_decimal() -> Decimal:
+    default = _user_spend_ceiling_decimal()
+    workspace = cloud_workspaces.current()
+    if workspace is None or not workspace.email:
+        return default
+    try:
+        from sigma.cloud_auth import effective_spending_allowance
+
+        value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
+    except Exception as exc:
+        raise CloudResearchUnavailable("Cloud access spending policy is unavailable.") from exc
+    if not value.is_finite() or not Decimal("0.01") <= value <= MAX_GLOBAL_SPEND_USD:
+        raise CloudResearchUnavailable("Cloud access spending policy is invalid.")
+    return value
 
 
 def _spend_ceiling() -> float:
@@ -567,7 +583,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
     """Write a conservative cost reservation before making provider I/O."""
     owner = _workspace_id()
     global_ceiling = _spend_ceiling_decimal()
-    user_ceiling = _user_spend_ceiling_decimal()
+    user_ceiling = _effective_user_spend_ceiling_decimal()
     global_ceiling_units = _ceiling_units(global_ceiling)
     user_ceiling_units = _ceiling_units(user_ceiling)
     amount_units = _usd_units(amount_usd)
@@ -712,7 +728,7 @@ def mark_call_not_dispatched(session_id: str, call_id: str) -> None:
 def snapshot() -> dict[str, Any]:
     """Return only the current principal's job, token, and spending summary."""
     owner = _workspace_id()
-    allowance = _user_spend_ceiling_decimal()
+    allowance = _effective_user_spend_ceiling_decimal()
     allowance_units = _ceiling_units(allowance)
     try:
         with _connect() as db:
@@ -746,6 +762,34 @@ def snapshot() -> dict[str, Any]:
                 "user_reserved_and_estimated_usd": to_usd(total_units),
                 "user_reserved_or_observed_tokens": int(tokens),
                 "unknown_provider_attempts": unknown,
+            }
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def admin_workspace_spending(
+    workspace_id: str, allowance: float | None
+) -> dict[str, float | int | None]:
+    """Admin-only aggregate for an identity resolved from a verified session."""
+    if not isinstance(workspace_id, str) or len(workspace_id) != 32:
+        raise CloudResearchUnavailable("Workspace spending identity is invalid.")
+    allowance_units = _ceiling_units(Decimal(str(allowance))) if allowance is not None else None
+    try:
+        with _connect() as db:
+            total = _call_amount_units(db, "WHERE workspace_id=?", (workspace_id,))
+            estimated = _call_amount_units(
+                db, "WHERE workspace_id=? AND status='usage_estimated'", (workspace_id,)
+            )
+            held = _call_amount_units(
+                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (workspace_id,)
+            )
+            return {
+                "estimated_usage_usd": round(estimated / USD_UNITS, 9),
+                "held_usd": round(held / USD_UNITS, 9),
+                "remaining_usd": round(max(0, allowance_units - total) / USD_UNITS, 9)
+                if allowance_units is not None
+                else None,
+                "reserved_and_estimated_usd": round(total / USD_UNITS, 9),
             }
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc

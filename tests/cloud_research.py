@@ -71,10 +71,10 @@ def job(workspace: str, *, session: str | None = None, key: str | None = None) -
     }
 
 
-def workspace(root: Path, identifier: str) -> cloud_workspaces.Workspace:
+def workspace(root: Path, identifier: str, email: str | None = None) -> cloud_workspaces.Workspace:
     path = root / identifier
     path.mkdir(mode=0o700, exist_ok=True)
-    return cloud_workspaces.Workspace(identifier, identifier, path)
+    return cloud_workspaces.Workspace(identifier, identifier, path, email)
 
 
 def global_reserved_spend() -> float:
@@ -490,7 +490,7 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
     with patch.object(cloud_workspaces, "storage_root", return_value=ledger_root):
         binding = cloud_workspaces._CURRENT.set(owner)
         try:
-            for invalid in (None, "nan", "-1", "2.01", "garbage"):
+            for invalid in (None, "nan", "-1", "15.01", "garbage"):
                 overrides = (
                     {} if invalid is None else {"SIGMA_CLOUD_USER_SPEND_CEILING_USD": invalid}
                 )
@@ -526,6 +526,51 @@ def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
                         )
                     except cloud_research.CloudResearchUnavailable:
                         pass
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
+    root: Path, ledger_root: Path
+) -> None:
+    owner = workspace(root, "9" * 32, "researcher@example.org")
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch("sigma.cloud_auth.effective_spending_allowance", return_value=5.0),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            candidate = job(owner.workspace_id)
+            cloud_research.prepare_job(candidate)
+            assert cloud_research.claim_job(candidate["id"])
+            cloud_research.reserve_call(candidate["id"], "above-default", 0.30, 10)
+            cloud_research.mark_call_unknown(candidate["id"], "above-default")
+            assert cloud_research.snapshot()["allowance_usd"] == 5.0
+            with patch("sigma.cloud_auth.effective_spending_allowance", return_value=0.20):
+                summary = cloud_research.snapshot()
+                assert summary["allowance_usd"] == 0.20
+                assert summary["remaining_usd"] == 0
+                try:
+                    cloud_research.reserve_call(candidate["id"], "after-reduction", 0.01, 1)
+                    raise AssertionError("lowered allowance admitted another reservation")
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "allowance" in str(exc)
+            db = cloud_research._connect()
+            try:
+                row = db.execute(
+                    "SELECT amount_usd,status FROM calls WHERE call_id='above-default'"
+                ).fetchone()
+                assert row["amount_usd"] == 0.30
+                assert row["status"] == "unknown"
+            finally:
+                db.close()
         finally:
             cloud_workspaces._CURRENT.reset(binding)
 
@@ -1042,6 +1087,11 @@ def main() -> None:
         budget_ledger = root / "user-budget-ledger"
         budget_ledger.mkdir(mode=0o700)
         test_workspace_spend_budget(root, budget_ledger)
+        allowance_ledger = root / "allowance-ledger"
+        allowance_ledger.mkdir(mode=0o700)
+        test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
+            root, allowance_ledger
+        )
         test_local_limits_remain_unmodified(root)
 
     print(

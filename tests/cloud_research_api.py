@@ -18,6 +18,12 @@ def main() -> None:
             (root / name).mkdir(mode=0o700)
         environment = {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
+            "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
+            "GOOGLE_OIDC_CLIENT_SECRET": "fixture-secret",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.test",
+            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.test",
+            "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.test",
+            "SIGMA_CLOUD_AUTH_HOME": str(root / "auth"),
             "SIGMA_CLOUD_WORKSPACES_ROOT": str(root / "workspaces"),
             "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
             "SIGMA_STATE_DIR": str(root / "local-state"),
