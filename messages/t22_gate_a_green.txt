@@ -45,4 +45,3 @@ Proposal generation, session start, paper generation and text conversion need
 per-user provider authorization and budgets before a cloud pilot. This was not
 implemented in Gate A, and no provider calls were made. Public Demo and cloud
 deployment are also outside Gate A.
-
