@@ -3446,3 +3446,78 @@ Verification after these review changes passed on 2026-10-23: focused
 `tests/research_sessions.py` and `./sigma test`, including all backend scenarios,
 the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
 frontend typecheck, and production build. No live provider calls were made.
+
+## T28: Computational evidence and artifact comprehension (2026-10-23)
+
+T28 extends the existing Python and SageMath execution evidence. Agents now
+receive bounded content inspections beside the persisted execution record:
+PNG/JPEG artifacts receive a low-resolution grayscale rendering and recognized
+text/CSV artifacts receive an escaped, bounded text preview. Each representation
+states what it cannot show; oversized, corrupt, unsupported, missing or
+integrity-mismatched files produce explicit notices. Inspection uses the
+existing hash-checked artifact store and never changes the saved execution
+status. At most two artifacts and 4 MB per file are inspected; image decoding
+is limited to 2 million pixels, text to 1,400 characters, and raster previews
+to 64 by 20 cells. Pillow is pinned at 13.0.0. This does not transcribe plot
+labels or exact pixels, inspect arbitrary binary formats, or constitute visual
+or mathematical verification.
+
+Investigator and Skeptic contexts receive source, captured output/error,
+runtime, status, originating step/session, limitations and bounded artifact
+inspections from earlier Python and SageMath executions. Structured citations
+must refer to supplied execution evidence. Failed computations cannot be cited
+as results; artifact claims require an available inspection. Reuse keeps the
+original execution ID and provenance, and the prior session's bytes remain
+unchanged. Inspected previews are separately stored in the role step for audit.
+Python and SageMath status metrics are separately aggregated from persisted
+execution records (deduplicated by runtime and execution ID), including all
+recorded statuses; artifact storage totals remain independently deduplicated.
+A proposal without a recorded run is not counted as an execution.
+
+Deterministic regressions cover a plotted image, CSV/text, corrupt and
+oversized images/files, unsupported PDF, sidecar integrity failure, separate
+Python/SageMath completed/failed/timeout/cancelled/other status counts, duplicate
+references, artifact storage, proposal-only evidence, and cross-session
+successful and failed Python/SageMath citations. The multi-session tests verify
+that the later Investigator and Skeptic receive the earlier source, result,
+inspection, status and provenance, and that no new execution is claimed.
+
+Actual Docker workflow checks on 2026-10-23 used the locally available pinned
+Python 3.12.8 and SageMath 10.8 images. Each wrote a Matplotlib/Sage PNG to the
+existing `/artifacts` mount; execution completed and the persisted, integrity-
+checked file was inspected successfully. A first Python container attempt
+wrote to the read-only working directory and failed as expected; using the
+supported `/artifacts` path succeeded. A first Sage plot omitted `var('x')` and
+failed with `NameError`; explicitly declaring the variable succeeded. These
+failures confirmed ordinary execution errors remain visible and do not produce
+fabricated preview evidence.
+
+`./sigma test` passed on 2026-10-23: backend regressions, the 10-strategy
+20/20-call concurrency fixture, Python and Sage service tests, T28 regressions,
+Ruff, Pyright (0 errors/warnings/informations), frontend typecheck, and Vite
+production build. Direct `ruff check src tests sigma`, format check, and
+Pyright also passed. An exploratory whole-repository Ruff command found three
+pre-existing findings under `browser_checks/` and `sandbox-poc/`; the supported
+suite scopes lint to `src`, `tests`, and `sigma` and passed. No browser run was
+needed because no UI files changed. No live model calls were made, so live agent
+interpretation quality remains unverified. Blue's T27 PR #18 was reviewed for
+its evidence contract; commit 102ca15 is an ancestor of current `main`, and the
+full suite was rerun with the merged T27 changes present.
+
+### T28 rebase against Gray PR #35 (2026-10-23)
+
+Rebased T28 onto current `main` at 9cb487e. The only conflict was the final
+return in `_call`: Gray's commit requires usage to be read through `_usage(raw)`
+for its provider response/token guard, while T28 needs citation validation
+before returning. The resolved path performs `_validate_computation_citations`
+and then returns `validated, _usage(raw)`. Gray's `MAX_SESSION_DURATION_MINUTES`,
+1 MB response bound, per-call output-token check, current session defaults, and
+T28's 32 KB prior-session evidence context are all retained. No Gray UI or
+recents changes were edited.
+
+After resolution, `tests/computational_evidence.py` passed, including separate
+Python/SageMath run-status counts, and `tests/research_sessions.py` passed,
+including its 10-strategy concurrent workload and Gray's provider/limit paths.
+The full `./sigma test` then passed on the rebased tree, including backend
+regressions, Ruff, Pyright (0 errors/warnings/informations), frontend typecheck
+and the Vite production build. No live provider calls were made.
