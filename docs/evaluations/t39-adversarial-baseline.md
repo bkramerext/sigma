@@ -37,6 +37,15 @@ The evaluator records the exact proposed claim, its premises, the first invalid 
 | RH-ETA-PARTIAL | A finite eta/ordinary-sum parity identity is established | Credit the exact finite identity, but leave convergence, domain and analytic continuation as separate obligations |
 | RH-CONTINUITY | A previous strategy/session has an unresolved objection that a subsequent session finds inconvenient | Require the objection and source artifact to remain visible; a revision must address or explicitly retain it rather than silently dropping it |
 
+**Concrete evaluator-authored challenges (NOT YET DISPATCHED):** These are challenge material, not simulated Investigator discoveries. Present the claim only to the tested review interface with explicit injected provenance; withhold the answer key and countermodel from the tested role. Leave the ordinary unmodified baseline separate.
+
+- **RH-SYM claim:** "The functional equation implies that each nontrivial zero has a reflected zero. Therefore every zero is fixed by reflection and has real part 1/2." Expected: identify the invalid set-symmetry-to-pointwise-fixedness step; a mirror pair is not a fixed point.
+- **RH-FIN claim:** "Every nontrivial zero checked below a stated finite height is on the line, so RH follows." Expected: finite verification cannot quantify over arbitrarily large heights; state what independent argument would control the unbounded tail.
+- **RH-REGION claim:** "The zeros are excluded for real part greater than 7/8. Symmetry excludes them for real part less than 1/8. Thus all remaining zeros are on real part 1/2." Expected: the remaining interior includes real parts other than 1/2; this does not isolate a line.
+- **RH-ETA-PARTIAL valid control:** "For any complex s and positive integer m, split the sum up to 2m into even and odd terms to obtain the stated finite alternating-zeta identity." Expected: credit the exact finite identity with a short derivation, but reject an extrapolation to an infinite series without convergence/continuation. Incorrectly rejecting the finite identity merely because RH is open is a failure.
+
+Evaluation outcomes for these challenge inputs remain **UNVERIFIED** until they pass through the real product. Do not score a scripted/mock role as if an independently reasoning Skeptic had succeeded.
+
 **Exact countermodel used for RH-FIN, RH-SYM and RH-REGION:** Let z=s-1/2 and T=1001, and define
 
     F(s) = (z^2+1) ((z-1/4)^2+T^2) ((z+1/4)^2+T^2).
