@@ -27,7 +27,7 @@ CALL_LIMIT = 6
 MAX_RECORD = 512_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 16_000
-CALL_TIMEOUT = 60
+CALL_TIMEOUT = 120
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
     "research_rounds": 3,
@@ -2057,18 +2057,27 @@ async def _portfolio_role_call(
                     item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
                 )
                 step = next(item for item in record["steps"] if item["id"] == step_id)
+                timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
                 step.update({"status": "failed", "finished_at": _now()})
+                if timeout_failure:
+                    step["failure_kind"] = "timeout"
+                    step["timeout_seconds"] = CALL_TIMEOUT
                 if step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
                 branch["status"] = "failed"
                 branch["current_action"] = "Failed"
                 failure_message = str(exc).strip()[:1000]
-                if not failure_message:
+                if timeout_failure:
                     failure_message = (
-                        "AI provider timed out; saved research artifacts were retained."
-                        if isinstance(exc, (TimeoutError, httpx.TimeoutException))
-                        else "Provider call failed; saved research artifacts were retained."
+                        f"AI provider call timed out after {CALL_TIMEOUT:g} seconds. "
+                        "Remote processing may still complete and consume plan usage; "
+                        "saved research artifacts were retained."
+                    )
+                    step["failure_message"] = failure_message
+                elif not failure_message:
+                    failure_message = (
+                        "Provider call failed; saved research artifacts were retained."
                     )
                 branch["reason"] = failure_message
                 if (

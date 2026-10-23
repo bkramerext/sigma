@@ -2186,6 +2186,9 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
     assert branches[first.id]["status"] == "failed"
     assert "timed out" in branches[first.id]["reason"]
     assert failed_steps[0]["status"] == "failed"
+    assert failed_steps[0]["failure_kind"] == "timeout"
+    assert failed_steps[0]["timeout_seconds"] == 0.01
+    assert "remote processing may still complete" in failed_steps[0]["failure_message"].lower()
     assert failed_steps[0].get("output") is None
     assert branches[second.id]["status"] == "ended"
     assert branches[second.id]["artifacts"]

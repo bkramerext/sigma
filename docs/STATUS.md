@@ -1,6 +1,6 @@
 # SIGMA status
 
-## A18 continuation: live research and portfolio coordination (2026-10-22)
+## A18 continuation: live research and portfolio coordination (2026-10-22–23)
 
 This continues the A18 work on PR #8; it does not replace the earlier baseline
 and implementation record below. I added an Easy-to-Hard research ladder, a
@@ -91,15 +91,23 @@ locally available under `projects/` and are not committed as source fixtures:
 |---|---|---:|---|
 | Easy: Counting Pairwise Handshakes | `projects/a18-live-easy-20261022-232853.sigma`; session `1935da6d-5ad6-4d64-9982-06fe5f802300`; artifact `5f2e756e-f7ae-4780-9424-763195af2e7f` | 2 / 39 s | Completed. The Investigator derived `n(n−1)/2`, checked `n=1,2,3`, and supplied an incidence-count argument. The Skeptic raised a specific objection: the distinct-person convention was assumed rather than tied to the wording. It asked for the alternative convention to be handled. The saved outcome is **Mixed · partial progress, unresolved**, with verification `incomplete`; it did not label the result verified. |
 | Medium: Prime Factorization and the Euler Product | `projects/a18-live-medium-20261022-233002.sigma`; session `16316d1d-fdca-4042-85dd-79e03828920f` | 2 dispatched / 40 s | Both concurrent Investigator calls timed out before producing an artifact. The session records both branches as failed, with `hold_after_failure`; strategy assessments are `not_used`, and the outcome is `Pending · execution failed`. No inference about either mathematical approach was made. The configured cap was four calls; no Skeptic calls were dispatched. |
+| Medium: A18 Cross-Strategy Transfer Trial | `projects/a18-live-cross-transfer-20261023.sigma`; session `31cc2a95-5981-4b31-b4e7-1d11625c1180` | 2 dispatched / 60 s | Both concurrent Investigator calls timed out exactly at SIGMA's 60-second client ceiling. No artifacts or Skeptic calls; both branches were `hold_after_failure`; outcome `Pending · execution failed`. No handoff or research-quality observation was possible. The session call cap was 10; live work stopped after these two calls. |
 
-Together these account for four dispatched plan calls: two completed and two
+Together these account for six dispatched plan calls: two completed and four
 timed out. The session records contain no token-usage metadata, so token use
 and remaining plan allowance cannot be quantified here. A timed-out remote
 request may still consume plan allowance. There was no reported HTTP 429,
 quota-limit response, or automatic billing fallback, but I stopped live
-experiments after the two timeouts because further calls would add uncertain
-usage without resolving whether the provider was simply slow or limited. No
-Hard or RH live session was run.
+experiments after a second Medium trial also timed out at the raised 60-second
+ceiling. Repeating the request would add uncertain usage without new
+diagnostic information. No Hard or RH live session was run.
+
+The cross-strategy trial protocol and oracle criteria were recorded before the
+second Medium trial in
+[the A18 transfer evaluation](evaluations/a18-cross-strategy-transfer.md).
+The active connection was checked as `chatgpt / connected`; the trial used
+`gpt-6.1-sol` at Medium reasoning. It did not reach the Skeptic or coordinator
+stages.
 
 ### Research-quality assessment
 
@@ -123,19 +131,25 @@ Hard or RH live session was run.
   peer findings, and revised questions flow into later cycles and that failed
   strategies remain distinct from mathematically unproductive ones. There is
   no live evidence yet that agents improved a strategy over a previous attempt.
-- **Cross-strategy reasoning:** The software validates exact peer citations and
-  only suggests a combination for reciprocal complement judgments. The live
-  Medium run failed before peer evidence existed; model ability to make useful
-  cross-strategy decisions is therefore unverified.
+- **Cross-strategy reasoning:** Deterministic integration now shows a cited
+  finding from A alters B's scheduled next Investigator question and survives
+  stop/resume with source/target artifact attribution. The live transfer trial
+  timed out before artifacts existed; real-model transfer precision, Skeptic
+  quality, and whether the prompted change improves the result remain
+  unverified.
 
-At the time of the Medium run, the provider timeout was 40 seconds; both
-concurrent High-reasoning requests reached that bound. I have raised the
-per-request bound to 60 seconds, while retaining the separate configured
-session-duration ceiling, and added a deterministic test that exercises SIGMA's
-own timeout cancellation path. This change has not been re-evaluated live
-because the timed-out calls may have consumed plan allowance and no usage
-metadata is available. The system still has no external reference search,
-computation tool, or formal proof checker; model statements cannot certify
+The earlier Medium run used a 40-second request timeout and both concurrent
+High-reasoning calls reached it. The new trial used the raised 60-second
+request timeout at Medium reasoning; both initial calls again reached the
+client ceiling. After that evidence, the per-call timeout was raised to 120
+seconds to allow longer reasoning calls. This is not live-validated because
+allowance consumption from the four timed-out requests is unknown. Timeout
+steps now persist `failure_kind=timeout`, the configured seconds, and a clear
+note that remote processing may continue and consume plan usage. A separate
+30-second preflight timeout protects model/account checks without charging a
+provider call. Deterministic tests exercise fail-fast preflight recovery and
+both timeout classification paths. No live request was retried. SIGMA still lacks external reference search,
+computation tools, or a formal proof checker; model statements cannot certify
 mathematical truth.
 
 ### Verification
@@ -147,7 +161,7 @@ mathematical truth.
   answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
   checks; its printed note explicitly limits those checks to finite examples.
 - Adversarial lifecycle and peer-handoff regressions passed in the final full
-  `./sigma test` on 2026-10-22, including preflight failure/timeout recovery,
+  `./sigma test` on 2026-10-23, including preflight failure/timeout recovery,
   queued-branch stop, duration/call-limit resume, and the A-to-B finding that
   changes B's scheduled next question and survives stop/resume. Ruff check and
   format, Pyright (zero errors), frontend typecheck, and production Vite build
