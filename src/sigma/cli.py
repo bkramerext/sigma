@@ -110,6 +110,11 @@ def main() -> None:
     execute.add_argument("--runtime", choices=["python", "sagemath"], default="python")
     execute.add_argument("--source-file", required=True)
     commands.add_parser("sandbox-capabilities", help="Inspect locally available research runtimes")
+    sample = commands.add_parser(
+        "make_sample", help="Create a Samples catalog entry from a project export JSON file"
+    )
+    sample.add_argument("exported_project")
+    sample.add_argument("--name", required=True)
     commands.add_parser("setup", help="Install locked Python and frontend dependencies")
     commands.add_parser("test", help="Run tests, API/CLI checks, lint, types and build")
     ui_command = commands.add_parser(
@@ -120,6 +125,16 @@ def main() -> None:
     )
     commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
     args = parser.parse_args()
+    if args.command == "make_sample":
+        from sigma.samples import make_sample
+
+        try:
+            destination = make_sample(args.exported_project, args.name)
+            print(json.dumps({"sample": args.name, "path": str(destination)}, indent=2))
+        except ProjectError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(2)
+        sys.exit(0)
     if args.command == "sandbox-build":
         from sigma.tooling import build_sandbox
 

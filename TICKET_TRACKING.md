@@ -54,6 +54,8 @@
 | T28 | Rich computational artifact inspection and cross-session evidence | Merged, engineering done | Green · ChatGPT authored ticket · [PR #36](https://github.com/bkramerext/sigma/pull/36) |
 | T29 | Human intervention during active concurrent research | Implementation open for review | Blue · ChatGPT authored ticket · [PR #39](https://github.com/bkramerext/sigma/pull/39) |
 
+| T30 | Create Samples entries from exported projects | Implemented; PR open for review | Green · ChatGPT assignment |
+
 ### T23.1 scope
 
 Exactly four separate pills in the **upper-right**: top row **Model | Google sign-in**; bottom row **Thinking | ChatGPT sign-in**. Model and Thinking cycle actual supported selections, persist for future calls, and display relative model dollar-sign pricing. **Google sign-in is a clearly unavailable placeholder for T22 cloud work; ChatGPT sign-in reuses the existing implemented functional account control.** Preserve Difficulty where it is. No billing fallback. See [T23.1](tickets/t23.1.md).

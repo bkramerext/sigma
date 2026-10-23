@@ -3640,3 +3640,59 @@ during an in-flight call made no extra call, subsequent target-role acknowledgme
 and audit provenance persisted, and the mobile layout had no horizontal overflow.
 The real Chrome check passed again after the latest main merge, at desktop and
 390px mobile. No live provider calls were made.
+
+## T30: Create Samples from exported projects (2026-10-23)
+
+Added the curator command `sigma make_sample exported_project.json --name
+sample_name`. It accepts the current SIGMA project export v2 JSON, validates the
+project through the existing strict project decoder, and writes the validated
+project definition plus a sanitized evidence sidecar into `samples/<name>/`.
+Names are lowercase alphanumeric/hyphen slugs, the 32 MB export/storage bound is
+explicit, and existing catalog entries are never overwritten.
+
+The existing Samples browser continues to discover generated entries through
+`project.json`. Opening a generated sample still goes through
+`open_sample_project`, creates a new project UUID/location/title, preserves
+strategy IDs/history, and installs public research-session and agentic-run
+records into the existing project evidence stores. Copied session/run records
+are rebound to the new project identity and canonical path; computation/finding,
+step, strategy and session IDs remain stable. Sensitive fields (credentials,
+identity hashes and private config), recognized bearer/provider key patterns,
+user home paths and path-valued metadata are removed or replaced. Opening and
+editing the copy does not mutate the source project or sample template.
+
+The mandatory acceptance regression creates a two-strategy project, runs a
+successful Investigator/Skeptic cycle with captured Python code and output, and
+saves a failed provider session plus an agentic run. It exports through the
+existing `export_project_view`, invokes the actual CLI parser with the requested
+`make_sample` command, loads the resulting entry through `sample_projects` and
+`open_sample_project`, then checks research outcomes, failure status, strategy
+and execution provenance, computational code/output, agentic-run history,
+independent strategy edits, and byte-for-byte source immutability. It also
+checks that injected credentials and home paths are absent from both generated
+JSON files. A discovered export-shape issue was fixed: API dataclass exports
+contain null optional event fields, while `_decode` accepts canonical persisted
+events only. Import removes only those known null optional event keys before
+strict validation. Session exports omit `project_path`; the copy loader binds
+that field to the new project path so the standard session store can read it.
+
+Known export limitation: export v2 contains computational execution metadata,
+code/output/errors and T28 previews within research-session evidence, but does
+not contain raw execution-store binary artifacts. The converter retains the
+available records and previews and does not invent binary files; links needing
+the original raw bytes remain unavailable in a generated sample. The sanitizer
+handles the current export's known private fields and common credential/path
+forms; arbitrary unlabelled secret-like text cannot be classified reliably.
+No UI or active research execution code was changed. No live or paid provider
+calls were used. Final verification on the T30 branch passed:
+
+- `uv run --locked --no-sync python tests/make_sample.py` — exported project to
+  CLI sample creation to existing sample loader passed, including successful
+  Python evidence, failed session, provenance, independent edit, redaction and
+  source immutability.
+- `./sigma test` — all backend scenarios, sample acceptance test, Ruff,
+  formatting, Pyright (0 errors/warnings/informations), frontend typecheck, and
+  production build passed.
+
+The suite emitted existing Starlette/httpx deprecation warnings; they did not
+fail tests. No live or paid provider calls were made.
