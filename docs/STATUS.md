@@ -4176,3 +4176,13 @@ branch integrated that commit without conflicts. On the updated head,
 diagnostics), frontend typecheck, and production build. The real Chrome sample
 check passed again at 1440px, 390px, and 320px, verifying all five outcomes,
 report content, and no page errors or horizontal overflow.
+
+Review correction: Session #1's coordinator decision is now
+`stop_budget_exhausted` for its one-cycle limit rather than treating the
+disproved candidate recurrence as a decisive counterexample to the project.
+Its derived outcome is `Mixed · partial progress, unresolved`; its objective
+review remains partial, with the general recurrence and asymptotic limit open.
+Investigator/Skeptic findings and the exact n=2 counterexample are preserved.
+A regression in `tests/make_sample.py` and the real Chrome check cover this
+distinction. `./sigma test` and the focused browser check passed after the
+correction.

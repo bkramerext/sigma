@@ -56,7 +56,11 @@ with sync_playwright() as playwright:
         expect(row.locator(".session-row-content")).to_be_visible()
         expect(row.locator(".session-outcome-inline")).to_be_visible()
         summary = row.locator(".session-row-content").inner_text()
-        assert "deterministic" in summary.lower(), (index + 1, summary[:500])
+        if index == 0:
+            expect(row.locator(".session-outcome-inline")).to_contain_text(
+                "Mixed · partial progress, unresolved"
+            )
+            assert "Negative · counterexample reported" not in summary
         for subsection in row.locator(".outcome-subsection").all():
             label = subsection.locator(":scope > summary").inner_text().strip()
             if label in ("Status", "Strategy Assessments", "Metrics", "Provenance"):
@@ -68,13 +72,19 @@ with sync_playwright() as playwright:
             if evidence.get_attribute("open") is None:
                 evidence.locator(":scope > summary").click()
             expect(evidence).to_be_visible()
-            if index == 4:
+            if index in (0, 4):
                 artifact = evidence.locator(".research-artifacts > ol > li > details")
                 expect(artifact).to_have_count(1)
                 artifact.locator(":scope > summary").click()
                 artifact_text = artifact.inner_text()
-                assert "k(k+1)/2" in artifact_text
-                assert "earlier explanation" in artifact_text
+                if index == 0:
+                    assert "deterministic" in artifact_text.lower()
+                    assert "a_(n+3)=a_(n+2)+a_n" in artifact_text
+                    assert "a_5=5" in artifact_text
+                    assert "a_4+a_2=3+1=4" in artifact_text
+                else:
+                    assert "k(k+1)/2" in artifact_text
+                    assert "earlier explanation" in artifact_text
         expect(row).to_contain_text("Python runs by status")
         expect(row).to_contain_text("completed")
         results.append(
@@ -95,6 +105,7 @@ with sync_playwright() as playwright:
         assert strategy in report, strategy
     assert "Deterministic fixture result (not live-model output)" in report
     assert "Open proof obligations" in report
+    assert "Negative · counterexample reported" not in report
     assert len(report) > 30000, len(report)
 
     mobile_dimensions = []

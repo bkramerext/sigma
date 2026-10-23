@@ -10,8 +10,11 @@ The existing `samples/nonconsecutive-subset-sums` sample now carries a sanitized
 `sample-evidence.json` sidecar with five saved sessions. Its `project.json`, math
 problem, and three strategies are unchanged. The history contains:
 
-1. Negative: a deterministic exact enumeration refutes the tentative
-   a_(n+3)=a_(n+2)+a_n recurrence at n=2 (a_5=5, while a_4+a_2=4).
+1. Mixed, partial progress: a deterministic exact enumeration refutes the
+   tentative a_(n+3)=a_(n+2)+a_n recurrence at n=2 (a_5=5, while
+   a_4+a_2=4). This is a failed strategy hypothesis, not a negative result
+   for the project objective. The general recurrence and asymptotic limit
+   remain open.
 2. Mixed: roots-of-unity recurrence candidate and a_12=128, supported by finite
    exact DP, with matrix and asymptotic obligations open.
 3. Mixed/productive: gap-removal and the q-binomial polynomial formula, with
@@ -35,10 +38,12 @@ citation absent from that single-strategy call; the fixture was corrected to
 refer to prior-session notes as notes, and the successful session remains
 inconclusive. No failed attempt was copied into the sample.
 
-The new browser check is documented in `browser_checks/README.md` and verifies
-all five saved outcomes, their collapsible detail areas, session metrics and
+The browser check is documented in `browser_checks/README.md` and verifies all
+five saved outcomes, their collapsible detail areas, session metrics and
 provenance, the corrected q-binomial artifact, the exported report, and no
-horizontal overflow at 390px/320px. The report is about 35.3K characters.
+horizontal overflow at 390px/320px. It explicitly guards Session #1's mixed
+objective assessment and preserves its counterexample in the evidence.
+The report is about 35K characters.
 
 Load and review instructions
 
@@ -76,6 +81,10 @@ Verification
   390px, and 320px. No page errors or horizontal overflow. Screenshots:
   `/tmp/sigma-nonconsecutive-desktop.png` and
   `/tmp/sigma-nonconsecutive-mobile.png`.
+- Session #1 regression verifies its derived outcome is
+  `Mixed · partial progress, unresolved`, its objective review is partial,
+  both general proof obligations remain open, and the Skeptic's exact n=2
+  counterexample remains visible and unchanged.
 - Export/import round-trip retained five sessions, five linked artifacts,
   strategy IDs, five completed Python evidence records, and report content.
   The source project JSON SHA-256 stayed

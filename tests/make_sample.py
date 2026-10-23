@@ -159,6 +159,29 @@ async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
 
 
 async def main() -> None:
+    sample_evidence = json.loads(
+        Path("samples/nonconsecutive-subset-sums/sample-evidence.json").read_text(encoding="utf-8")
+    )
+    first_session = next(
+        item for item in sample_evidence["research_sessions"] if item["session_number"] == 1
+    )
+    first_artifact = first_session["artifacts"][0]
+    first_outcome = research_sessions._public(first_session)["outcome"]
+    assert first_artifact["coordinator_decision"] == "stop_budget_exhausted"
+    assert first_artifact["skeptic_output"]["stop_reason"] == "decisive_counterexample"
+    assert first_session["outcome"]["label"] == "Mixed · partial progress, unresolved"
+    assert first_outcome["assessment"] == "mixed"
+    assert first_outcome["label"] == "Mixed · partial progress, unresolved"
+    assert first_outcome["solution_review"]["status"] == "partial"
+    assert "general recurrence" in " ".join(first_outcome["solution_review"]["proof_obligations"])
+    assert "asymptotic limit" in " ".join(first_outcome["solution_review"]["proof_obligations"])
+    assert "a_(n+3)=a_(n+2)+a_n" in first_artifact["claim_or_question"]
+    assert "a_5=5" in first_artifact["skeptic_response"]
+    assert "a_4+a_2=3+1=4" in first_artifact["skeptic_response"]
+    assert first_artifact["skeptic_output"]["objections"] == [
+        "The proposed three-step recurrence has the explicit n=2 counterexample a_5=5 != a_4+a_2=4."
+    ]
+
     with TemporaryDirectory(prefix="sigma-make-sample-") as temporary:
         root = Path(temporary)
         projects_root = root / "projects"

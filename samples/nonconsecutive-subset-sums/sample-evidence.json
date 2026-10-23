@@ -26,8 +26,8 @@
           "artifacts": [
             "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e"
           ],
-          "reason": "Stop decisive counterexample",
-          "last_decision": "stop_decisive_counterexample",
+          "reason": "Stop budget exhausted",
+          "last_decision": "stop_budget_exhausted",
           "pending_peer_handoffs": []
         }
       ],
@@ -424,7 +424,7 @@
           },
           "peer_handoffs_prompted": [],
           "prior_session_failure_attempt_ids": [],
-          "coordinator_decision": "stop_decisive_counterexample",
+          "coordinator_decision": "stop_budget_exhausted",
           "next_question": "",
           "note": "Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.",
           "objective_review": {
@@ -564,9 +564,9 @@
         }
       ],
       "outcome": {
-        "assessment": "negative",
-        "label": "Negative · counterexample reported",
-        "summary": "The Skeptic reported a decisive counterexample: Deterministic fixture result (not live-model output). This Skeptic response is a deterministic local fixture, not a live-model review. The computed values are [1,1,1,2,3,5,8,12,19]. The candidate relation holds for n=0,1 but fails at n=2: a_5=5 whereas a_4+a_2=3+1=4. This refutes only the tentative recurrence, not the original counting problem.",
+        "assessment": "mixed",
+        "label": "Mixed · partial progress, unresolved",
+        "summary": "The tentative recurrence a_(n+3)=a_(n+2)+a_n is false; the original problem remains open.",
         "caveats": [
           "Agent-reported evidence is unverified; agreement is not independent verification.",
           "The saved argument remains incomplete; no solution is claimed.",
@@ -708,7 +708,7 @@
           {
             "strategy_id": "5c8ce76f-4965-434b-8862-841c92de89e4",
             "strategy_title": "Periodic transfer matrix",
-            "reason": "Stop decisive counterexample",
+            "reason": "Stop budget exhausted",
             "artifact_ids": [
               "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e"
             ]
@@ -742,7 +742,7 @@
           "A provider failure is not treated as evidence against an approach."
         ]
       },
-      "terminal_reason": "stop_decisive_counterexample",
+      "terminal_reason": "stop_budget_exhausted",
       "elapsed_seconds": 0
     },
     {
