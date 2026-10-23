@@ -1,0 +1,111 @@
+{
+  "schema_version": 5,
+  "id": "c4a1c064-6d18-48e3-97e3-832fa85a8d42",
+  "title": "Can Catalysis Be Predicted from First Principles?",
+  "problem": "Investigate the fundamental unresolved challenge of predicting heterogeneous catalytic activity, selectivity, and stability from atomic structure and operating conditions without fitting directly to measured catalyst performance. Use ambient-condition electrochemical nitrogen reduction to ammonia as a stringent case study, including the competing hydrogen evolution reaction and pervasive risk of false-positive ammonia measurements. Evaluate dynamic active sites, reaction pathways, solvent and electrolyte effects, electrochemical potential, uncertainty in electronic-structure approximations, and long-term catalyst reconstruction. Separate established evidence from hypothetical mechanisms, computational predictions, and proposed experiments. Do not assume a viable ambient electrochemical nitrogen-to-ammonia catalyst has been demonstrated by a given study; require rigorous isotope and contamination controls. Seek narrow falsifiable predictions, prospective validation, and explicit failure criteria rather than claiming the general catalytic prediction problem solved.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T20:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T20:00:00+00:00",
+      "strategy_id": "c4a1c001-7a62-4b61-912a-4560b0000001"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T20:00:00+00:00",
+      "strategy_id": "c4a1c001-7a62-4b61-912a-4560b0000002"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T20:00:00+00:00",
+      "strategy_id": "c4a1c001-7a62-4b61-912a-4560b0000003"
+    },
+    {
+      "sequence": 5,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T20:00:00+00:00",
+      "strategy_id": "c4a1c001-7a62-4b61-912a-4560b0000004"
+    },
+    {
+      "sequence": 6,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T20:00:00+00:00",
+      "strategy_id": "c4a1c001-7a62-4b61-912a-4560b0000005"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "c4a1c001-7a62-4b61-912a-4560b0000001",
+      "title": "Active-site identity under operating conditions",
+      "approach": "Compare candidate catalytic surface motifs under realistic electrochemical potentials, solvent environments, and adsorbate coverages. Explicitly distinguish idealized pristine surfaces from dynamic active structures and propose in situ tests.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T20:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A ranked set of site hypotheses and falsifiable spectroscopic signatures.",
+      "provenance": null
+    },
+    {
+      "id": "c4a1c001-7a62-4b61-912a-4560b0000002",
+      "title": "Reaction pathways and selectivity",
+      "approach": "Compare associative and dissociative nitrogen reduction pathways against competing hydrogen evolution using uncertainty-aware free-energy profiles. Identify rate-limiting steps and conditions where rankings reverse.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T20:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A microkinetic comparison with a decisive discriminating observable.",
+      "provenance": null
+    },
+    {
+      "id": "c4a1c001-7a62-4b61-912a-4560b0000003",
+      "title": "Solvent, electrolyte, and potential effects",
+      "approach": "Test whether explicit solvent, ionic environment, double-layer effects, and applied potential materially alter predicted barriers and selectivity. Separate approximations from controlled calculations.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T20:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A sensitivity analysis showing which environmental terms change conclusions.",
+      "provenance": null
+    },
+    {
+      "id": "c4a1c001-7a62-4b61-912a-4560b0000004",
+      "title": "Ammonia contamination and measurement validity",
+      "approach": "Design stringent isotope-labeling and blank-control protocols to distinguish genuine N2-derived ammonia from ambient, feedstock, membrane, electrolyte, and laboratory contamination. Include analytical limits and false-positive mechanisms.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T20:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A measurement and controls plan capable of rejecting spurious ammonia production.",
+      "provenance": null
+    },
+    {
+      "id": "c4a1c001-7a62-4b61-912a-4560b0000005",
+      "title": "Catalyst stability and predictive transfer",
+      "approach": "Study catalyst reconstruction, dissolution, poisoning, and long-term activity; design out-of-sample comparisons between predicted and measured catalyst performance. Avoid inferring durability from short simulations or isolated energetics.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T20:00:00+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "A prospective validation protocol for activity, selectivity, and stability.",
+      "provenance": null
+    }
+  ],
+  "research_mode": "chemistry",
+  "active_order": [
+    "c4a1c001-7a62-4b61-912a-4560b0000001",
+    "c4a1c001-7a62-4b61-912a-4560b0000002",
+    "c4a1c001-7a62-4b61-912a-4560b0000003",
+    "c4a1c001-7a62-4b61-912a-4560b0000004",
+    "c4a1c001-7a62-4b61-912a-4560b0000005"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}
