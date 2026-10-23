@@ -238,6 +238,17 @@ def _image_identity(runtime_name: str = "python") -> str | None:
     return image_id
 
 
+def research_tool_capabilities() -> dict[str, Any]:
+    """Return the bounded computation tools SIGMA can actually dispatch now."""
+    image_id = _image_identity()
+    return {
+        "python": {
+            "available": image_id is not None,
+            "image": IMAGE if image_id is not None else None,
+        }
+    }
+
+
 def _run(
     source: str, image_id: str, runtime_name: str = "python"
 ) -> tuple[int | None, bytes, bytes, str, tuple[tuple[str, str, bytes], ...], str | None]:

@@ -30,6 +30,10 @@ CALL_LIMIT = 6
 MAX_RECORD = 512_000
 MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 16_000
+MAX_PRIOR_FAILURES = 12
+MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
+MAX_DEFERRED_PEER_HANDOFFS = 24
+MAX_RECORDED_HANDOFF_OVERFLOW = 8
 MAX_AGENT_CONTEXT_BYTES = 256_000
 CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
@@ -63,6 +67,7 @@ class Investigator(BaseModel):
     open_obligations: list[str] = Field(max_length=12)
     python_code: str | None = Field(max_length=4_000)
     sage_code: str | None = Field(default=None, min_length=1, max_length=4_000)
+    prior_session_failure_attempt_ids: list[str] = Field(max_length=12)
 
     @model_validator(mode="after")
     def one_runtime(self):
@@ -76,6 +81,14 @@ class CrossStrategyRelation(BaseModel):
     strategy_id: str = Field(min_length=1, max_length=100)
     artifact_id: str = Field(min_length=1, max_length=100)
     relation: str = Field(pattern="^(supports|contradicts|complements|overlaps|unrelated)$")
+    rationale: str = Field(min_length=10, max_length=600)
+
+
+class PeerHandoffReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    handoff_id: str = Field(min_length=1, max_length=100)
+    disposition: str = Field(pattern="^(accept_for_local_testing|reject|narrow|unresolved)$")
+    assumption_comparison: str = Field(min_length=10, max_length=800)
     rationale: str = Field(min_length=10, max_length=600)
 
 
@@ -101,6 +114,7 @@ class Skeptic(BaseModel):
     contribution_rationale: str = Field(max_length=1000)
     cross_strategy_relations: list[CrossStrategyRelation] = Field(max_length=12)
     retracted_cross_strategy_source_artifact_ids: list[str] = Field(max_length=12)
+    peer_handoff_reviews: list[PeerHandoffReview] = Field(max_length=12)
 
 
 def _now() -> str:
@@ -1051,12 +1065,13 @@ INVESTIGATOR_GUIDANCE = (
     "Examine the exact project objective and the selected strategy as a proposed approach. "
     "Advance the current question with a specific claim and enough public reasoning for a reviewer "
     "to assess it. State assumptions and evidence status honestly. Distinguish a proved step from "
-    "a conjecture, example, or assertion; identify every unresolved proof obligation. When a finite, "
-    "reproducible Python computation would help, you may provide one self-contained program in python_code; "
-    "otherwise use null. The program runs in a resource-limited container with NumPy, SciPy, pandas, "
-    "SymPy, and Matplotlib, without network access. It has no project-file access. Keep it deterministic, "
-    "finite, and within 4,000 characters / 16,000 UTF-8 bytes. The limits are 15 seconds, 512 MiB RAM, "
-    "one CPU, and 32,000 combined stdout/stderr bytes. Each run starts fresh: embed small inputs or "
+    "a conjecture, example, or assertion; identify every unresolved proof obligation. When "
+    "Scientific Python is available, provide one self-contained program in python_code; "
+    "otherwise set python_code to null. SageMath, when available, uses sage_code as described "
+    "by the execution-tool guidance. Python runs without network or project-file access; its "
+    "limits are 15 seconds and 512 MiB RAM. Use the exact per-tool limits supplied in "
+    "execution_tools, and do not transfer limits between runtimes. Keep programs deterministic, "
+    "finite, and within 4,000 characters / 16,000 UTF-8 bytes. Each run starts fresh: embed small inputs or "
     "generate synthetic data; previous files are not mounted. Write up to eight flat output files "
     "under /artifacts (4 MB combined), e.g. /artifacts/results.csv or /artifacts/plot.png. Print "
     "a concise numerical summary because the Skeptic receives file metadata, not image pixels or "
@@ -1066,7 +1081,17 @@ INVESTIGATOR_GUIDANCE = (
     "After a failed experiment, diagnose it and change the program or approach; an unchanged "
     "failed proposal reuses its recorded failure without running again in this session. "
     "Prior proposals were written before their runs; use attached execution status to learn "
-    "what happened. Reuse existing successful evidence when only synthesis remains. "
+    "what happened. Reuse existing successful evidence when only synthesis remains. When "
+    "prior_session_findings are supplied, inspect their assumptions, limitations, evidence status, "
+    "and computational results before deciding whether they apply; cite artifact IDs and never "
+    "transfer results across incompatible domains without checking them. "
+    "Prior operational failures are not evidence that a mathematical approach is false. "
+    "When prior_session_failures are supplied, identify the relevant attempt IDs in "
+    "prior_session_failure_attempt_ids, avoid repeating an unchanged failed request, and "
+    "make the bounded next action respond to the recorded failure. Do not claim that an "
+    "attempt is a mathematical counterexample or failed proof unless its saved research "
+    "evidence establishes that separately. An omitted-history count means older attempts "
+    "were not supplied; do not assume they do not exist. "
     "Do not install packages or spawn processes. Treat its output "
     "as evidence to be reviewed, not as proof. Do not claim external checking or formal verification. "
     "When other_strategy_evidence is supplied, treat "
@@ -1082,7 +1107,8 @@ INVESTIGATOR_GUIDANCE = (
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
-    "the compact findings from prior sessions, and the entire ordered set of current-session "
+    "the compact findings from prior sessions, including assumptions, limitations and computation "
+    "status, and the entire ordered set of current-session "
     "saved artifacts together, not only the latest write-up. Treat prior-session notes as "
     "unverified unless their recorded evidence status says otherwise; cite their artifact IDs "
     "when relying on them and request the original artifact when a truncated note matters. The "
@@ -1101,6 +1127,9 @@ SKEPTIC_GUIDANCE = (
     "the contents of a plot or CSV. A timeout, resource failure or exception is not mathematical "
     "refutation. Give a concrete revised experiment after an operational failure or numerical "
     "contradiction, and use prior execution evidence to avoid unchanged failed retries. Do not "
+    "treat prior_session_failures as mathematical evidence; they describe operationally failed "
+    "provider attempts only. Check whether the current Investigator action changes in response "
+    "to a cited failure, and distinguish that recovery from progress on the theorem. "
     "require a complete argument to be rewritten in every cycle. Earlier artifact evidence "
     "can satisfy a requirement omitted or shortened later; cite the supporting cycle for each "
     "proof obligation. Identify whether each objection is material and recoverable, a decisive "
@@ -1114,7 +1143,14 @@ SKEPTIC_GUIDANCE = (
     "list the exact earlier source artifact ID in retracted_cross_strategy_source_artifact_ids; "
     "omission alone does not retract history. Retract only relations from this strategy's own "
     "saved artifacts, and state the reason in response. These are unverified review claims, not coordinator facts; "
-    "a single-strategy session must return an empty list. Request another cycle only for a genuinely "
+    "a single-strategy session must return an empty list. For each supplied peer_handoff, return exactly "
+    "one peer_handoff_reviews entry using its handoff_id. Compare the actual assumptions and domains in "
+    "the cited artifacts. Use reject for a demonstrated transfer mismatch, narrow for a restricted but "
+    "useful transfer, unresolved when evidence is insufficient, and accept_for_local_testing only to "
+    "justify a local test, never as proof. A rejected transfer does not refute this branch; identify the "
+    "mismatch explicitly and preserve uncertainty. If a supplied handoff is marked retracted, record "
+    "the withdrawal in your comparison and do not use the withdrawn claim to support or contradict "
+    "this branch. Request another cycle only for a genuinely "
     "unresolved objective requirement or material objection. Choose stop only with an actual "
     "decisive contradiction, a useful completed conclusion, or no concrete next step. A decisive "
     "counterexample must be stated in objections and tied to supporting cycle numbers; if you "
@@ -1666,6 +1702,9 @@ async def start_session(
             }
             record["outcome"] = _outcome(record)
             record["prior_session_findings"] = _prior_session_findings(view.path, record["id"])
+            record["prior_session_failures"], record["prior_session_failures_omitted"] = (
+                _prior_session_failures(view.path, record["id"])
+            )
             _event(record, "queued", record["message"])
             _save(view.path, record)
             event = asyncio.Event()
@@ -2046,6 +2085,28 @@ async def _call(
                     "Skeptic returned a cross-strategy retraction not linked to this strategy's saved evidence"
                 )
             seen_retractions.add(artifact_id)
+        supplied_handoffs = {
+            item.get("handoff_id")
+            for item in context.get("peer_handoffs", [])
+            if isinstance(item, dict)
+        }
+        reviews = validated["peer_handoff_reviews"]
+        reviewed_handoffs = [item["handoff_id"] for item in reviews]
+        if (
+            len(reviewed_handoffs) != len(set(reviewed_handoffs))
+            or set(reviewed_handoffs) != supplied_handoffs
+        ):
+            raise ProjectError("Skeptic must review each supplied peer handoff exactly once")
+    else:
+        supplied_failures = set(context.get("prior_session_failure_attempt_ids", []))
+        referenced_failures = validated["prior_session_failure_attempt_ids"]
+        if (
+            len(referenced_failures) != len(set(referenced_failures))
+            or not set(referenced_failures) <= supplied_failures
+        ):
+            raise ProjectError(
+                "Investigator returned a prior failure reference not present in the supplied history"
+            )
     return validated, _usage(raw)
 
 
@@ -2062,6 +2123,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         for item in prior_session_findings
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     ]
+    prior_session_failures = record.get("prior_session_failures", [])
+    if not isinstance(prior_session_failures, list):
+        prior_session_failures, _ = _prior_session_failures(
+            record.get("project_path"), record.get("id")
+        )
     # All outstanding objections/obligations are carried forward, even when older
     # full artifacts must be excluded from the bounded model input.
     obligations: list[str] = []
@@ -2084,6 +2150,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "prior_artifacts": artifacts,
         "prior_session_findings": prior_session_findings,
         "prior_session_artifact_ids": prior_session_artifact_ids,
+        "prior_session_failures": prior_session_failures,
+        "prior_session_failures_omitted": record.get("prior_session_failures_omitted", 0),
+        "prior_session_failure_attempt_ids": [
+            item["attempt_id"] for item in prior_session_failures
+        ],
         "outstanding_obligations": obligations,
         "context_artifact_ids": [a["id"] for a in artifacts],
         "project_strategy_snapshot": record.get("strategy_snapshot", []),
@@ -2189,8 +2260,18 @@ def _portfolio_context(
         }
         for artifact in peer_artifacts
     ]
-    if role == "investigator" and branch.get("pending_peer_handoffs"):
-        context["peer_handoffs"] = list(branch["pending_peer_handoffs"])
+    handoffs = branch.get("pending_peer_handoffs") if role == "investigator" else None
+    if role == "skeptic":
+        handoffs = branch.get("active_peer_handoffs")
+    if handoffs:
+        withdrawn = {
+            item.get("handoff_id")
+            for item in record.get("retracted_peer_handoffs", [])
+            if isinstance(item, dict)
+        }
+        context["peer_handoffs"] = [
+            {**item, "retracted": item.get("handoff_id") in withdrawn} for item in handoffs
+        ]
     if len(json.dumps(context, ensure_ascii=False)) > MAX_AGENT_CONTEXT_BYTES:
         raise ProjectError("Research context exceeds the safe input limit")
     return context
@@ -2242,18 +2323,41 @@ def _queue_peer_handoffs(
             "rationale": _bounded_note(relation["rationale"], 500),
         }
         pending = target.setdefault("pending_peer_handoffs", [])
+        deferred = target.setdefault("deferred_peer_handoffs", [])
+        existing = pending + deferred + target.get("active_peer_handoffs", [])
         if not any(
             item.get("source_artifact_id") == handoff["source_artifact_id"]
             and item.get("target_artifact_id") == handoff["target_artifact_id"]
-            for item in pending
+            for item in existing
         ):
             if not pending:
                 target["peer_handoff_base_question"] = (
                     target.get("pending_skeptic", {}).get("next_question")
                     or target["current_question"]
                 )
-            pending.append(handoff)
-            del pending[:-4]
+            if len(pending) < 4:
+                pending.append(handoff)
+            elif len(deferred) < MAX_DEFERRED_PEER_HANDOFFS:
+                deferred.append(handoff)
+            else:
+                target["deferred_peer_handoff_overflow_count"] = (
+                    target.get("deferred_peer_handoff_overflow_count", 0) + 1
+                )
+                overflow = target.setdefault("deferred_peer_handoff_overflow", [])
+                overflow.append(
+                    {
+                        "handoff_id": handoff["handoff_id"],
+                        "source_artifact_id": handoff["source_artifact_id"],
+                        "target_artifact_id": handoff["target_artifact_id"],
+                        "relation": handoff["relation"],
+                    }
+                )
+                if len(overflow) > MAX_RECORDED_HANDOFF_OVERFLOW:
+                    overflow.pop(0)
+                    target["deferred_peer_handoff_overflow_omitted_count"] = (
+                        target.get("deferred_peer_handoff_overflow_omitted_count", 0) + 1
+                    )
+                continue
             target["current_question"] = target[
                 "peer_handoff_base_question"
             ] + _peer_handoff_question(pending)
@@ -2278,27 +2382,37 @@ def _retract_peer_handoffs(
         known.add(handoff.get("handoff_id"))
 
     for target in record.get("strategy_runs", []):
-        pending = target.get("pending_peer_handoffs", [])
-        retained = []
-        for handoff in pending:
+        for queue_name in ("pending_peer_handoffs", "deferred_peer_handoffs"):
+            queue = target.get(queue_name, [])
+            retained = []
+            for handoff in queue:
+                if (
+                    handoff.get("source_strategy_id") == source_branch["strategy_id"]
+                    and handoff.get("source_artifact_id") in retracted_ids
+                ):
+                    record_retraction(handoff)
+                else:
+                    retained.append(handoff)
+            if len(retained) != len(queue):
+                if retained:
+                    target[queue_name] = retained
+                else:
+                    target.pop(queue_name, None)
+                if queue_name == "pending_peer_handoffs":
+                    if retained:
+                        target["current_question"] = target.get(
+                            "peer_handoff_base_question", target["current_question"]
+                        ) + _peer_handoff_question(retained)
+                    else:
+                        base_question = target.pop("peer_handoff_base_question", None)
+                        if isinstance(base_question, str):
+                            target["current_question"] = base_question
+        for handoff in target.get("active_peer_handoffs", []):
             if (
                 handoff.get("source_strategy_id") == source_branch["strategy_id"]
                 and handoff.get("source_artifact_id") in retracted_ids
             ):
                 record_retraction(handoff)
-            else:
-                retained.append(handoff)
-        if len(retained) != len(pending):
-            if retained:
-                target["pending_peer_handoffs"] = retained
-                target["current_question"] = target.get(
-                    "peer_handoff_base_question", target["current_question"]
-                ) + _peer_handoff_question(retained)
-            else:
-                target.pop("pending_peer_handoffs", None)
-                base_question = target.pop("peer_handoff_base_question", None)
-                if isinstance(base_question, str):
-                    target["current_question"] = base_question
 
     for target_artifact in record.get("artifacts", []):
         for handoff in target_artifact.get("peer_handoffs_prompted", []):
@@ -2325,6 +2439,21 @@ def _apply_pending_peer_handoffs(record: dict[str, Any]) -> None:
             branch["current_question"] = base_question + _peer_handoff_question(pending)
 
 
+def _promote_deferred_peer_handoffs(record: dict[str, Any]) -> None:
+    for branch in record.get("strategy_runs", []):
+        pending = branch.setdefault("pending_peer_handoffs", [])
+        deferred = branch.get("deferred_peer_handoffs", [])
+        if len(pending) >= 4 or not deferred:
+            continue
+        promoted = deferred[: 4 - len(pending)]
+        pending.extend(promoted)
+        branch["deferred_peer_handoffs"] = deferred[len(promoted) :]
+        base_question = branch.setdefault(
+            "peer_handoff_base_question", branch.get("current_question", "")
+        )
+        branch["current_question"] = base_question + _peer_handoff_question(pending)
+
+
 def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
     """Turn cited peer reviews into bounded, reviewable coordination suggestions."""
     artifacts = record.get("artifacts", [])
@@ -2339,6 +2468,35 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
         if isinstance(artifact_id, str)
     }
     relationships: list[dict[str, Any]] = []
+    handoff_reviews: list[dict[str, Any]] = []
+    rejected_transfers: list[dict[str, Any]] = []
+    for target_artifact in artifacts:
+        skeptic_output = target_artifact.get("skeptic_output", {})
+        reviews = (
+            {
+                item.get("handoff_id"): item
+                for item in skeptic_output.get("peer_handoff_reviews", [])
+                if isinstance(item, dict)
+            }
+            if isinstance(skeptic_output, dict)
+            else {}
+        )
+        for handoff in target_artifact.get("peer_handoffs_prompted", []):
+            if not isinstance(handoff, dict):
+                continue
+            review = reviews.get(handoff.get("handoff_id"))
+            if not isinstance(review, dict):
+                continue
+            row = {
+                **handoff,
+                "review_artifact_id": target_artifact.get("id"),
+                "disposition": review.get("disposition"),
+                "assumption_comparison": review.get("assumption_comparison"),
+                "review_rationale": review.get("rationale"),
+            }
+            handoff_reviews.append(row)
+            if review.get("disposition") == "reject":
+                rejected_transfers.append(row)
     for source in artifacts:
         if source.get("id") in retracted_source_artifact_ids:
             continue
@@ -2353,6 +2511,15 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
                 or target.get("strategy_id") == source.get("strategy_id")
             ):
                 continue
+            transfer_review = next(
+                (
+                    item
+                    for item in handoff_reviews
+                    if item.get("source_artifact_id") == source["id"]
+                    and item.get("target_artifact_id") == target["id"]
+                ),
+                None,
+            )
             relationships.append(
                 {
                     "source_strategy_id": source["strategy_id"],
@@ -2361,14 +2528,23 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
                     "target_artifact_id": target["id"],
                     "relation": relation["relation"],
                     "rationale": relation["rationale"],
+                    "transfer_review": transfer_review,
                 }
             )
 
+    actionable_relationships = [
+        item
+        for item in relationships
+        if not isinstance(item.get("transfer_review"), dict)
+        or item["transfer_review"].get("disposition") != "reject"
+    ]
     combination_candidates: list[dict[str, Any]] = []
-    conflict_candidates = [item for item in relationships if item["relation"] == "contradicts"]
-    overlap_warnings = [item for item in relationships if item["relation"] == "overlaps"]
+    conflict_candidates = [
+        item for item in actionable_relationships if item["relation"] == "contradicts"
+    ]
+    overlap_warnings = [item for item in actionable_relationships if item["relation"] == "overlaps"]
     seen_pairs: set[tuple[str, str]] = set()
-    for relation in relationships:
+    for relation in actionable_relationships:
         if relation["relation"] != "complements":
             continue
         left, right = sorted((relation["source_strategy_id"], relation["target_strategy_id"]))
@@ -2378,7 +2554,7 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
         reciprocal = next(
             (
                 candidate
-                for candidate in relationships
+                for candidate in actionable_relationships
                 if candidate["relation"] == "complements"
                 and candidate["source_strategy_id"] == relation["target_strategy_id"]
                 and candidate["target_strategy_id"] == relation["source_strategy_id"]
@@ -2478,6 +2654,8 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
         )
 
     return {
+        "peer_transfer_reviews": handoff_reviews,
+        "rejected_transfers": rejected_transfers,
         "active_strategies": [
             branch["strategy_title"]
             for branch in record.get("strategy_runs", [])
@@ -2500,6 +2678,19 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
         "overlap_warnings": overlap_warnings,
         "cross_strategy_reviews": relationships,
         "retracted_peer_handoffs": list(record.get("retracted_peer_handoffs", [])),
+        "deferred_handoff_overflows": [
+            {
+                "strategy_id": branch["strategy_id"],
+                "strategy_title": branch["strategy_title"],
+                "overflow_count": branch.get("deferred_peer_handoff_overflow_count", 0),
+                "omitted_overflow_records": branch.get(
+                    "deferred_peer_handoff_overflow_omitted_count", 0
+                ),
+                "recent_omissions": list(branch.get("deferred_peer_handoff_overflow", [])),
+            }
+            for branch in record.get("strategy_runs", [])
+            if branch.get("deferred_peer_handoff_overflow_count", 0)
+        ],
         "status": "model_reported_unverified",
         "limitations": [
             "Cross-strategy relations are model-reported and require human review.",
@@ -2647,6 +2838,9 @@ def _commit_portfolio_review(
         "investigator_output": investigation,
         "skeptic_output": output,
         "peer_handoffs_prompted": list(branch.get("active_peer_handoffs", [])),
+        "prior_session_failure_attempt_ids": list(
+            investigation.get("prior_session_failure_attempt_ids", [])
+        ),
         "coordinator_decision": decision,
         "next_question": next_question,
         "note": "Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.",
@@ -2690,6 +2884,7 @@ def _commit_portfolio_review(
     branch.pop("active_peer_handoffs", None)
     _retract_peer_handoffs(record, branch, artifact)
     _queue_peer_handoffs(record, branch, artifact)
+    _promote_deferred_peer_handoffs(record)
     record["strategy_assessments"] = _strategy_assessments(record)
     _event(
         record,
@@ -2844,6 +3039,9 @@ async def _portfolio_role_call(
                 "execution_tools": context.get("execution_tools", []),
                 "context_artifact_ids": context["context_artifact_ids"],
                 "prior_session_artifact_ids": context["prior_session_artifact_ids"],
+                "prior_session_failure_attempt_ids": context.get(
+                    "prior_session_failure_attempt_ids", []
+                ),
                 "peer_strategy_artifact_ids": list(
                     dict.fromkeys(
                         [item["artifact_id"] for item in context["other_strategy_evidence"]]
@@ -3462,14 +3660,36 @@ def _prior_session_findings(project_path: Any, current_session_id: Any) -> list[
         for artifact in reversed(session.get("artifacts", [])):
             if not isinstance(artifact, dict):
                 continue
+            objective_review = artifact.get("objective_review")
+            objective_review = objective_review if isinstance(objective_review, dict) else {}
+            skeptic_output = artifact.get("skeptic_output")
+            skeptic_output = skeptic_output if isinstance(skeptic_output, dict) else {}
+            limitation_notes = []
+            for notes in (
+                artifact.get("objections"),
+                artifact.get("open_obligations"),
+                objective_review.get("unresolved_objections"),
+                skeptic_output.get("proof_obligations"),
+            ):
+                if isinstance(notes, list):
+                    limitation_notes.extend(notes)
             finding = {
                 "id": artifact.get("id"),
                 "sequence": artifact.get("sequence"),
                 "claim_or_question": _bounded_note(artifact.get("claim_or_question"), 1200),
                 "method": _bounded_note(artifact.get("method"), 1000),
+                "assumptions": _bounded_notes(artifact.get("assumptions"), 6, 250),
                 "evidence_status": _bounded_note(artifact.get("evidence_status"), 300),
                 "objections": _bounded_notes(artifact.get("objections"), 4, 350),
                 "open_obligations": _bounded_notes(artifact.get("open_obligations"), 6, 350),
+                "limitations": _bounded_notes(
+                    list(dict.fromkeys(item for item in limitation_notes if isinstance(item, str))),
+                    8,
+                    350,
+                ),
+                "assumptions_reviewed": _bounded_notes(
+                    skeptic_output.get("assumptions_reviewed", []), 6, 250
+                ),
                 "coordinator_decision": artifact.get("coordinator_decision"),
                 "next_question": _bounded_note(artifact.get("next_question"), 500),
                 "session_id": session.get("id"),
@@ -3491,6 +3711,73 @@ def _prior_session_findings(project_path: Any, current_session_id: Any) -> list[
             if len(findings) >= 12:
                 return findings
     return findings
+
+
+def _prior_session_failures(
+    project_path: Any, current_session_id: Any
+) -> tuple[list[dict[str, Any]], int]:
+    """Return a bounded, metadata-only index of earlier failed model attempts."""
+    if not isinstance(project_path, str) or not isinstance(current_session_id, str):
+        return [], 0
+    failures: list[dict[str, Any]] = []
+    all_failures: list[dict[str, Any]] = []
+    for session in _all(project_path):
+        if session.get("id") == current_session_id or session.get("status") in {
+            "queued",
+            "running",
+            "paused",
+        }:
+            continue
+        runs = {item.get("strategy_id"): item for item in session.get("strategy_runs", [])}
+        for step in reversed(session.get("steps", [])):
+            if step.get("status") not in {"failed", "interrupted"}:
+                continue
+            branch = runs.get(step.get("strategy_id"), {})
+            # Error strings can contain provider or user data; carry only stable
+            # classification metadata, never raw exception text.
+            entry = {
+                "attempt_id": step.get("id"),
+                "attempted_at": step.get("finished_at")
+                or step.get("started_at")
+                or session.get("updated_at")
+                or session.get("created_at"),
+                "session_id": session.get("id"),
+                "session_number": session.get("session_number"),
+                "strategy_id": step.get("strategy_id"),
+                "strategy_title": step.get("strategy_title") or branch.get("strategy_title"),
+                "cycle": step.get("cycle"),
+                "role": step.get("role"),
+                "failure_kind": step.get("failure_kind", "provider_or_validation_failure"),
+                "attempt_status": step.get("status"),
+                "provider_status": step.get("provider_status"),
+                "error_code": step.get("error_code"),
+            }
+            if isinstance(entry["attempt_id"], str):
+                all_failures.append(entry)
+
+    def recency(entry: dict[str, Any]) -> float:
+        value = entry.get("attempted_at")
+        if not isinstance(value, str):
+            return float("-inf")
+        try:
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.timestamp()
+        except ValueError:
+            return float("-inf")
+
+    all_failures.sort(key=recency, reverse=True)
+    for entry in all_failures:
+        candidate = [*failures, entry]
+        if (
+            len(failures) >= MAX_PRIOR_FAILURES
+            or len(json.dumps(candidate, ensure_ascii=False).encode("utf-8"))
+            > MAX_PRIOR_FAILURE_CONTEXT_BYTES
+        ):
+            break
+        failures = candidate
+    return failures, max(0, len(all_failures) - len(failures))
 
 
 async def _worker(session_id: str, path: str) -> None:

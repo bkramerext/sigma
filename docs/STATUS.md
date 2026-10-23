@@ -3247,3 +3247,97 @@ is created and ready to read. Final `./sigma test` passed after the profile
 recovery and command-default checks; the worktree contains no test project
 data. Owned browser fixture/dev servers were stopped, and no research
 containers remained running.
+
+## T27: Research intelligence and agent guidance (2026-10-23)
+
+T27 addresses gaps found in the existing handoff and history paths. Before this
+change, a peer relation could enter a target Investigator's question, but the
+Skeptic did not receive that active handoff as a structured review obligation;
+the coordinator then used the source relation directly. Prior sessions exposed
+saved artifacts, but a provider attempt that failed before producing an artifact
+was absent from subsequent investigations. The Investigator prompt also
+advertised the Python environment without checking whether its sandbox image
+was actually available, and the handoff queue silently discarded items beyond
+four.
+
+The implementation makes these paths evidence-linked and bounded. A new
+session snapshots up to 12 prior failed or interrupted attempts using only
+safe classification metadata, with an explicit omitted count and an 8 KB bound.
+Prior saved findings now also retain bounded assumptions, assumptions reviewed,
+limitations/proof obligations, and Python execution observations, with their
+artifact IDs and unverified evidence status.
+The Investigator must cite only supplied attempt IDs; the exact consumed IDs
+are persisted on provider steps and resulting artifacts. Operational failures
+are explicitly distinguished from mathematical counterexamples. The Skeptic
+receives pending handoffs after the target Investigator uses them and must
+return exactly one structured review per handoff. It compares assumptions and
+domains, records accept-for-local-testing, reject, narrow, or unresolved, and
+marks withdrawn evidence. Rejected transfers remain in the audit record but no
+longer generate coordinator conflict/overlap/combination actions. Handoffs past
+the four-item prompt limit are retained in a deferred queue and promoted as
+capacity becomes available. The runtime prompt now receives the sandbox's
+actual Python availability snapshot; unavailable Python must not be proposed.
+
+Deterministic evidence:
+
+- The multi-strategy regression `test_peer_finding_changes_target_investigator_after_stop_and_resume`
+  sends a contradictory finding into the target branch, checks the changed
+  Investigator method and exact source/target IDs after stop/resume, then checks
+  that the target Skeptic reviews the same handoff. Its fixture identifies an
+  integer-only source assumption versus a target over all real arrangements;
+  the Skeptic rejects the transfer, the coordinator retains the rejection with
+  both evidence IDs, and the target is not marked refuted. Baseline inspection
+  and the earlier regression showed that the old flow checked only Investigator
+  prompt uptake and had no Skeptic handoff decision.
+- `test_failed_attempt_guides_next_session_with_provenance` starts with a
+  provider failure and no artifact, verifies the next Investigator receives the
+  failed attempt ID and changes to a bounded symbolic action, then verifies the
+  exact reference is saved on the step and artifact. The earlier failed session
+  file remains byte-for-byte unchanged.
+- `test_peer_handoff_queue_defers_without_silent_loss` checks that six findings
+  are retained as four prompted and two deferred, then promoted without loss.
+  The domain-mismatch control also checks a withdrawal surfaced to a Skeptic
+  after dispatch.
+- Python guidance regressions exercise both runtime-present and unavailable
+  snapshots. The Skeptic prompt calls finite computation evidence rather than
+  theorem verification; existing sandbox scenarios continue checking execution
+  capture, timeout, errors, restart recovery, and exact source provenance.
+
+These are deterministic mocked orchestration scenarios. They demonstrate that
+SIGMA now carries, validates, and acts on the intended evidence paths; they do
+not establish that a live Investigator will reason correctly, that a live
+Skeptic will notice a subtle mismatch, or that research quality improved on a
+mathematical problem. No provider calls or paid/live evaluations were made for
+T27. No browser checks were run because T27 changes no UI. The full test suite
+passed on 2026-10-23: `./sigma test` completed all backend scenarios, the
+10-strategy 20/20-call concurrency fixture, Ruff check/format, Pyright with
+zero errors/warnings/informations, frontend typecheck, and the Vite production
+build. The focused `tests/research_sessions.py` run also passed after the final
+stale-handoff and prior-assumption changes. Live model behavior remains
+unverified as required by the no-live-call constraint.
+
+The response to the question about work continuing after browser closure is in
+`messages/t27_browser_closed_research.txt`: session work is server-side and
+continues while the backend remains running; backend restart interrupts an
+in-flight call for explicit recovery rather than retrying it automatically.
+
+### T27 PR #18 review follow-up (2026-10-23)
+
+Prior-session failed/interrupted attempts are now globally sorted by attempt
+recency, using finished/started/session timestamps, before the 12-attempt and
+8 KB context limits are applied. `test_prior_session_failure_history_prioritizes_newest_attempts`
+intentionally makes session creation order differ from attempt recency and
+confirms the newest attempt is presented first.
+
+Deferred peer handoffs now have an explicit per-strategy limit of 24. At
+capacity, SIGMA keeps an overflow count and at most eight compact recent
+omission records; older omission records increment a separate counter. The
+coordinator decision exposes this bounded overflow summary. The regression
+`test_peer_handoff_deferred_storage_is_bounded_and_reports_overflow` drives ten
+handoffs past capacity and checks the deferred cap, recent-record cap, omitted
+count, visible coordinator summary, and serialized branch size.
+
+Verification after these review changes passed on 2026-10-23: focused
+`tests/research_sessions.py` and `./sigma test`, including all backend scenarios,
+the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
+frontend typecheck, and production build. No live provider calls were made.
