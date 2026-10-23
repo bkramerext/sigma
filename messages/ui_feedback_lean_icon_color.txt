@@ -1,0 +1,24 @@
+Lean toolbar color feedback
+
+Implemented on branch gray/ui-feedback-2026-10-23.
+
+Changed the Lean logo paths to #e0c4a0, matching the neighboring Project
+toolbar icons, and removed the special dark-copper CSS filter. Updated the A20
+Chrome check's logo assertion for the unfiltered light-copper SVG.
+
+Validation:
+- ./sigma test: passed (including Python checks, Ruff checks, Pyright,
+  frontend typecheck, and production build).
+- Focused real Chrome check against an isolated local provider fixture: passed.
+  Confirmed the mathematics-project Lean logo is visible, disabled, has no
+  image filter, and loads the SVG with #e0c4a0 paths. Screenshot:
+  /tmp/sigma-lean-light-copper.png.
+- Full browser_checks/a20_paper.py scenario: did not complete. It currently
+  expects the obsolete .project-google-placeholder element and fails before
+  reaching paper export. No paid provider calls were made.
+- Ruff on browser_checks/a20_paper.py reports two existing RUF007 findings in
+  adjacent-gap loops; they are unrelated to the color assertion and were left
+  untouched.
+
+Files changed: frontend/public/lean-logo.svg, frontend/src/workspace.css,
+browser_checks/a20_paper.py, docs/STATUS.md.

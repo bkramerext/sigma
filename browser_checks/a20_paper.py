@@ -92,11 +92,11 @@ with sync_playwright() as playwright:
         logo = actions.locator(".project-lean-button img")
         expect(logo).to_have_attribute("src", "/lean-logo.svg")
         assert logo.evaluate("e => [e.naturalWidth, e.naturalHeight]") == [300, 150]
-        logo_filter = logo.evaluate("e => getComputedStyle(e).filter")
-        assert all(token in logo_filter for token in ("invert(0.68)", "sepia(0.21)", "hue-rotate(337deg)")), logo_filter
+        assert logo.evaluate("e => getComputedStyle(e).filter") == "none"
         assert logo.evaluate("e => [getComputedStyle(e).width, getComputedStyle(e).height]") == ["42px", "21px"]
         svg = page.evaluate("async () => await (await fetch('/lean-logo.svg')).text()")
         assert 'id="path188"' in svg and 'stroke-width:18' in svg
+        assert 'fill:#e0c4a0' in svg
         assert 'id="path75"' in svg and 'stroke-width:6' in svg
         action_boxes = actions.evaluate("e => [...e.children].map(b => { const r = b.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })")
         assert [box["width"] for box in action_boxes] == [34, 50, 34, 34], action_boxes

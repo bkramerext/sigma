@@ -1,0 +1,199 @@
+{
+  "export_version": 2,
+  "project": {
+    "schema_version": 8,
+    "id": "e2210000-0000-4000-8000-000000000001",
+    "title": "Counting Pairwise Handshakes",
+    "problem": "A group has n people, and each pair shakes hands exactly once. Determine the total number of handshakes for general positive integer n. Justify the counting argument and state clearly whether a person may shake their own hand.",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "project.initialized",
+        "timestamp": "2026-01-01T12:00:00+00:00"
+      },
+      {
+        "sequence": 2,
+        "kind": "strategy.created",
+        "timestamp": "2026-01-01T12:05:00+00:00",
+        "strategy_id": "e2210000-0000-4000-8000-000000000002"
+      },
+      {
+        "sequence": 3,
+        "kind": "strategy.created",
+        "timestamp": "2026-01-01T12:10:00+00:00",
+        "strategy_id": "e2210000-0000-4000-8000-000000000003"
+      }
+    ],
+    "strategies": [
+      {
+        "id": "e2210000-0000-4000-8000-000000000002",
+        "title": "Direct counting",
+        "approach": "Count each unordered pair exactly once. Verify the pattern for n = 1, 2, 3, and 4, then explain why the count is the sum 1 + 2 + … + (n − 1).",
+        "author_kind": "human",
+        "created_at": "2026-01-01T12:05:00+00:00",
+        "removed_at": null,
+        "stage": "draft",
+        "summary": "A direct bijection between handshakes and two-person subsets.",
+        "provenance": null,
+        "enabled": true
+      },
+      {
+        "id": "e2210000-0000-4000-8000-000000000003",
+        "title": "Double count incidences",
+        "approach": "Count person-handshake incidences in two ways. Each of n people participates in n − 1 handshakes, and each handshake contributes two incidences. Equate the totals and check edge cases.",
+        "author_kind": "human",
+        "created_at": "2026-01-01T12:10:00+00:00",
+        "removed_at": null,
+        "stage": "draft",
+        "summary": "An independent derivation by counting endpoints.",
+        "provenance": null,
+        "enabled": true
+      }
+    ],
+    "investigation_type": "mathematical",
+    "active_order": [
+      "e2210000-0000-4000-8000-000000000002",
+      "e2210000-0000-4000-8000-000000000003"
+    ],
+    "ai_model": "gpt-6.1-sol",
+    "reasoning_effort": "high",
+    "difficulty": "easy"
+  },
+  "agentic_runs": [
+    {
+      "schema_version": 1,
+      "run_id": "e2210000-0000-4000-8000-000000000004",
+      "project_id": "e2210000-0000-4000-8000-000000000001",
+      "started_at": "2026-01-01T12:20:00+00:00",
+      "finished_at": "2026-01-01T12:20:10+00:00",
+      "status": "completed",
+      "timeline": [
+        {
+          "type": "decision",
+          "message": "Both counting arguments agree; boundary cases n = 1 and n = 2 match the stated assumptions."
+        }
+      ],
+      "steps": [
+        {
+          "output": {
+            "title": "Independent derivation check",
+            "approach": "The handshake count is the number of 2-element subsets of the group.",
+            "evidence_boundary": "The finite checks illustrate the formula; the subset-counting argument establishes the general result."
+          }
+        }
+      ]
+    }
+  ],
+  "research_sessions": [
+    {
+      "id": "e2210000-0000-4000-8000-000000000005",
+      "session_number": 1,
+      "project_id": "e2210000-0000-4000-8000-000000000001",
+      "strategy_id": "e2210000-0000-4000-8000-000000000002",
+      "strategy_title": "Direct counting",
+      "status": "ended",
+      "started_at": "2026-01-01T12:30:00+00:00",
+      "finished_at": "2026-01-01T12:31:00+00:00",
+      "terminal_reason": "completed",
+      "outcome": {
+        "assessment": "productive",
+        "provisional": false,
+        "metrics": {
+          "operational": [
+            {
+              "label": "Research steps",
+              "value": "2 completed"
+            }
+          ],
+          "research_quality": [
+            {
+              "label": "Verification",
+              "value": "General counting argument; independently derived below"
+            }
+          ]
+        },
+        "solution_review": {
+          "claim": "The number of handshakes is n(n − 1)/2.",
+          "argument_summary": "Each handshake corresponds to one unordered pair of distinct people, so the total is the binomial coefficient C(n, 2).",
+          "assumptions": [
+            "People are distinct.",
+            "Each pair shakes hands once.",
+            "Nobody shakes their own hand."
+          ],
+          "proof_obligations": [],
+          "verification_status": "argument_complete",
+          "basis_artifact_ids": [
+            "e2210000-0000-4000-8000-000000000006"
+          ],
+          "unresolved_objections": []
+        }
+      },
+      "strategy_assessments": [
+        {
+          "strategy_id": "e2210000-0000-4000-8000-000000000002",
+          "strategy_title": "Direct counting",
+          "assessment": "productive",
+          "rationale": "The pair-to-handshake correspondence covers every handshake exactly once.",
+          "basis_artifact_ids": [
+            "e2210000-0000-4000-8000-000000000006"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "step_number": 1,
+          "status": "completed",
+          "output": {
+            "claim": "For n people, there are n(n − 1)/2 handshakes.",
+            "method": "Choose the first participant in n ways and the second in n − 1 ways. Each pair is counted twice, once in each order, so divide by two.",
+            "assumptions": [
+              "No self-handshakes."
+            ],
+            "evidence_status": "Derived by finite combinatorial counting.",
+            "python_code": "",
+            "computational_citations": [],
+            "skeptic_response": "The ordered-pair count must be divided by two because order does not distinguish a handshake.",
+            "objections": [
+              "The formula gives zero at n = 1; confirm this matches the setup."
+            ],
+            "coordinator_decision": "continue",
+            "open_obligations": [],
+            "next_question": "Check small cases and provide an independent derivation."
+          }
+        }
+      ],
+      "artifacts": [
+        {
+          "id": "e2210000-0000-4000-8000-000000000006",
+          "claim": "The handshake total equals the number of two-person subsets, C(n, 2).",
+          "method": "Bijection: map each handshake to the unordered pair of participants.",
+          "assumptions": [
+            "Distinct people; no self-handshakes."
+          ],
+          "evidence_status": "General combinatorial argument; no external model or execution required.",
+          "skeptic_response": "Each unordered pair participates in exactly one handshake by the problem statement.",
+          "objections": [],
+          "coordinator_decision": "accepted",
+          "open_obligations": [],
+          "next_question": "Compare with the endpoint double count.",
+          "computational_evidence": {
+            "status": "completed",
+            "runtime": "Python",
+            "source": "print([n * (n - 1) // 2 for n in range(1, 6)])",
+            "stdout": "[0, 1, 3, 6, 10]\n",
+            "exit_code": 0,
+            "interpretation": "Saved finite check of the formula for n = 1 through 5; this illustrates the result and is not the general proof.",
+            "files": [
+              {
+                "filename": "handshake-counts.csv",
+                "content_type": "text/csv",
+                "content": "n,handshakes\n1,0\n2,1\n3,3\n4,6\n5,10\n",
+                "sha256": "1f525b9d3343408f60b0c086673e9678f280d71ae2e8155cbf9312976b4838ec"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
