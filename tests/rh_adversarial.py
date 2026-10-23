@@ -46,6 +46,11 @@ def toy_function(value: ComplexQ) -> ComplexQ:
 
 
 def main() -> None:
+    # Nonzero witness rules out an identically-zero function, which would
+    # otherwise pass every hard-coded root and reflection assertion.
+    expected_center = (Fraction(HIGH_ZERO**2) + QUARTER**2) ** 2
+    assert toy_function(q(HALF)) == q(expected_center)
+
     on_line = (q(HALF, 1), q(HALF, -1))
     off_line = tuple(
         q(real, sign * HIGH_ZERO)
@@ -55,6 +60,7 @@ def main() -> None:
     roots = on_line + off_line
     assert len(set(roots)) == 6  # Degree six: no additional complex roots.
     assert all(toy_function(root) == q(0) for root in roots)
+    assert all(0 < root[0] < 1 for root in roots)
 
     for point in (q(0), q(HALF, 3), q(Fraction(7, 6), -5), q(3, 100)):
         reflected = add(q(1), q(-point[0], -point[1]))
