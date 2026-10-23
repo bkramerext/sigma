@@ -218,6 +218,7 @@ async def handler(request):
                     "python_code": None,
                     "sage_code": None,
                     "prior_session_failure_attempt_ids": [],
+                    "human_guidance_reviews": [],
                 }
                 if maximum_regions
                 else {
@@ -229,6 +230,7 @@ async def handler(request):
                     "python_code": None,
                     "sage_code": None,
                     "prior_session_failure_attempt_ids": [],
+                    "human_guidance_reviews": [],
                 }
             )
         else:
@@ -266,6 +268,7 @@ async def handler(request):
                     "cross_strategy_relations": [],
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
+                    "human_guidance_reviews": [],
                 }
                 if maximum_regions
                 else {
@@ -288,8 +291,17 @@ async def handler(request):
                     "cross_strategy_relations": [],
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
+                    "human_guidance_reviews": [],
                 }
             )
+        result["human_guidance_reviews"] = [
+            {
+                "intervention_id": item["intervention_id"],
+                "uptake": "considered",
+                "rationale": "I considered this guidance while preparing the next bounded step.",
+            }
+            for item in context.get("human_guidance", [])
+        ]
         return httpx.Response(
             200,
             json={

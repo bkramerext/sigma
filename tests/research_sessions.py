@@ -28,6 +28,11 @@ REAL_CLIENT = httpx.AsyncClient
 
 
 def provider_response(value):
+    value = dict(value)
+    if "claim" in value:
+        value.setdefault("human_guidance_reviews", [])
+    if "assessment" in value:
+        value.setdefault("human_guidance_reviews", [])
     return {
         "status": "completed",
         "usage": {
@@ -51,6 +56,7 @@ def investigation(n):
         "python_code": None,
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
+        "human_guidance_reviews": [],
     }
 
 
@@ -75,6 +81,7 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "cross_strategy_relations": [],
         "retracted_cross_strategy_source_artifact_ids": [],
         "peer_handoff_reviews": [],
+        "human_guidance_reviews": [],
     }
 
 
@@ -4038,6 +4045,345 @@ def test_outcome_metrics_from_persisted_evidence(path: Path):
     ] == "— (execution record without ID)"
 
 
+async def test_concurrent_human_guidance_is_delivered_and_attributed(path: Path):
+    view, first, credential, config = await setup(path)
+    research_sessions.save_limits(str(path), {**research_sessions.DEFAULT_LIMITS, "model_calls": 6})
+    second = create_strategy(
+        path, "Second saved approach", "Test the independent boundary case."
+    ).project.strategies[-1]
+    entered = asyncio.Event()
+    release_initial = asyncio.Event()
+    initial_investigators = 0
+    calls: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def fake_call(record, role, context, timeout):
+        nonlocal initial_investigators
+        strategy_id = context["strategy"]["id"]
+        calls.append((role, strategy_id, json.loads(json.dumps(context))))
+        if role == "investigator" and context["cycle"] == 1:
+            initial_investigators += 1
+            if initial_investigators == 2:
+                entered.set()
+            await release_initial.wait()
+            return investigation(1), None
+        if role == "investigator":
+            return investigation(context["cycle"]), None
+        output = skeptic(context["cycle"])
+        guidance = context.get("human_guidance", [])
+        if guidance:
+            assert strategy_id == second.id
+            output["next_question"] = (
+                "Prioritize the requested boundary case against the saved counterexample."
+            )
+            output["human_guidance_reviews"] = [
+                {
+                    "intervention_id": item["intervention_id"],
+                    "uptake": "applied",
+                    "rationale": "I changed the next check to test the specified boundary case.",
+                }
+                for item in guidance
+            ]
+        return output, None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=fake_call),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        before = research_sessions.get_session(str(path), started["id"])
+        assert before["calls_used"] == 2 and len(before["steps"]) == 2
+        queued = await research_sessions.submit_intervention(
+            str(path),
+            started["id"],
+            "objection",
+            "Check whether the boundary case invalidates the claimed induction step.",
+            [second.id],
+            ["skeptic"],
+        )
+        intervention = queued["interventions"][-1]
+        assert queued["calls_used"] == 2
+        assert intervention["status"] == "queued"
+        assert intervention["target_strategy_ids"] == [second.id]
+        assert intervention["deliveries"][0]["status"] == "queued"
+        release_initial.set()
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "ended"
+    assert finished["calls_used"] == 6
+    assert len(finished["artifacts"]) == 3
+    assert all(
+        not context.get("human_guidance") for role, _, context in calls if role == "investigator"
+    )
+    target_skeptic_calls = [
+        context
+        for role, strategy_id, context in calls
+        if role == "skeptic" and strategy_id == second.id
+    ]
+    guided = next(context for context in target_skeptic_calls if context.get("human_guidance"))
+    assert guided["human_guidance"] == [
+        {
+            "intervention_id": intervention["id"],
+            "kind": "objection",
+            "text": "Check whether the boundary case invalidates the claimed induction step.",
+            "submitted_at": intervention["submitted_at"],
+        }
+    ]
+    target_artifact = next(
+        artifact for artifact in finished["artifacts"] if artifact["strategy_id"] == second.id
+    )
+    assert (
+        target_artifact["next_question"]
+        == "Prioritize the requested boundary case against the saved counterexample."
+    )
+    assert (
+        target_artifact["skeptic_output"]["human_guidance_reviews"][0]["intervention_id"]
+        == intervention["id"]
+    )
+    delivery = finished["interventions"][-1]["deliveries"][0]
+    assert delivery["status"] == "acknowledged" and delivery["uptake"] == "applied"
+    step = next(
+        item for item in finished["steps"] if item["id"] == delivery["attempts"][0]["step_id"]
+    )
+    assert step["strategy_id"] == second.id and step["role"] == "skeptic"
+    assert delivery["target_cycle"] == delivery["attempts"][0]["cycle"] == step["cycle"]
+    assert step["human_intervention_ids"] == [intervention["id"]]
+    assert [
+        event["kind"] for event in finished["events"] if event["kind"].startswith("intervention.")
+    ] == ["intervention.accepted", "intervention.delivered", "intervention.acknowledged"]
+
+
+async def test_intervention_delivery_pause_resume_keeps_attempt_provenance(path: Path):
+    view, strategy, credential, config = await setup(path)
+    research_sessions.save_limits(str(path), {**research_sessions.DEFAULT_LIMITS, "model_calls": 6})
+    skeptic_entered = asyncio.Event()
+    release_skeptic = asyncio.Event()
+    guided_skeptic_calls = 0
+    contexts = []
+
+    async def fake_call(record, role, context, timeout):
+        nonlocal guided_skeptic_calls
+        contexts.append((role, json.loads(json.dumps(context))))
+        guidance = context.get("human_guidance", [])
+        if role == "investigator":
+            return investigation(context["cycle"]), None
+        output = skeptic(context["cycle"])
+        if guidance:
+            guided_skeptic_calls += 1
+            output["human_guidance_reviews"] = [
+                {
+                    "intervention_id": item["intervention_id"],
+                    "uptake": "considered",
+                    "rationale": "I considered the instruction and recorded its limitation.",
+                }
+                for item in guidance
+            ]
+            if guided_skeptic_calls == 1:
+                skeptic_entered.set()
+                await release_skeptic.wait()
+        return output, None
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=fake_call),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        for _ in range(200):
+            if research_sessions.get_session(str(path), started["id"])["calls_used"]:
+                break
+            await asyncio.sleep(0.01)
+        queued = await research_sessions.submit_intervention(
+            str(path),
+            started["id"],
+            "priority",
+            "Prioritize the missing boundary case.",
+            [strategy.id],
+            ["skeptic"],
+        )
+        intervention_id = queued["interventions"][-1]["id"]
+        await asyncio.wait_for(skeptic_entered.wait(), timeout=2)
+        interrupted = await research_sessions.control_session(str(path), started["id"], "pause")
+        assert interrupted["status"] == "paused" and interrupted["calls_used"] == 2
+        delivery = interrupted["interventions"][-1]["deliveries"][0]
+        assert delivery["status"] == "queued"
+        assert delivery["attempts"][0]["status"] == "interrupted"
+        assert not interrupted["artifacts"]
+
+        release_skeptic.set()
+        resumed = await research_sessions.control_session(str(path), started["id"], "resume")
+        assert resumed["status"] == "queued"
+        finished = await wait_for(path, started["id"])
+
+    assert finished["calls_used"] == 5
+    item = next(entry for entry in finished["interventions"] if entry["id"] == intervention_id)
+    assert item["status"] == "acknowledged"
+    attempts = item["deliveries"][0]["attempts"]
+    assert [attempt["status"] for attempt in attempts] == ["interrupted", "acknowledged"]
+    guided_contexts = [
+        context for role, context in contexts if role == "skeptic" and context.get("human_guidance")
+    ]
+    assert len(guided_contexts) == 2
+    assert all(
+        context["human_guidance"][0]["intervention_id"] == intervention_id
+        for context in guided_contexts
+    )
+    assert len(finished["artifacts"]) == 2
+    assert finished["artifacts"][0]["investigator_output"]["claim"] == investigation(1)["claim"]
+
+
+def test_intervention_recovery_supersession_and_rejection(path: Path):
+    view, strategy, _, _ = asyncio.run(setup(path))
+    session_id = str(uuid4())
+    step_id = str(uuid4())
+    intervention_id = str(uuid4())
+    now = research_sessions._now()
+    record = {
+        "id": session_id,
+        "project_path": str(project_path(path)),
+        "project_id": view.project.id,
+        "strategy_id": strategy.id,
+        "strategy_ids": [strategy.id],
+        "status": "running",
+        "updated_at": now,
+        "message": "In progress",
+        "current_action": "Investigator",
+        "current_step": step_id,
+        "current_steps": [step_id],
+        "calls_used": 1,
+        "steps": [
+            {"id": step_id, "role": "investigator", "strategy_id": strategy.id, "status": "running"}
+        ],
+        "strategy_runs": [
+            {
+                "strategy_id": strategy.id,
+                "strategy_title": strategy.title,
+                "status": "running",
+                "current_action": "Investigator",
+            }
+        ],
+        "events": [],
+        "interventions": [
+            {
+                "id": intervention_id,
+                "kind": "evidence",
+                "text": "Inspect the supplied exact computation.",
+                "target_strategy_ids": [strategy.id],
+                "target_roles": ["investigator"],
+                "status": "delivered",
+                "submitted_at": now,
+                "deliveries": [
+                    {
+                        "strategy_id": strategy.id,
+                        "role": "investigator",
+                        "status": "delivered",
+                        "attempts": [
+                            {"step_id": step_id, "status": "delivered", "delivered_at": now}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    research_sessions._save(str(path), record)
+    recovered = research_sessions.get_session(str(path), session_id)
+    assert recovered["status"] == "paused"
+    assert recovered["steps"][0]["status"] == "interrupted"
+    delivery = recovered["interventions"][0]["deliveries"][0]
+    assert delivery["status"] == "queued" and delivery["attempts"][0]["status"] == "interrupted"
+    assert recovered["calls_used"] == 1
+    assert "intervention.delivery_interrupted" in [event["kind"] for event in recovered["events"]]
+
+    first = asyncio.run(
+        research_sessions.submit_intervention(
+            str(path),
+            session_id,
+            "priority",
+            "Try the finite exceptional case first.",
+            [strategy.id],
+            ["investigator"],
+        )
+    )["interventions"][-1]
+    second = asyncio.run(
+        research_sessions.submit_intervention(
+            str(path),
+            session_id,
+            "priority",
+            "Instead test the boundary case first.",
+            [strategy.id],
+            ["investigator"],
+            first["id"],
+        )
+    )["interventions"][-1]
+    current = research_sessions.get_session(str(path), session_id)
+    assert (
+        next(item for item in current["interventions"] if item["id"] == first["id"])["status"]
+        == "superseded"
+    )
+    assert second["status"] == "queued"
+    for index in range(21):
+        asyncio.run(
+            research_sessions.submit_intervention(
+                str(path),
+                session_id,
+                "priority",
+                f"Bounded repeat guidance {index}.",
+                [strategy.id],
+                ["investigator"],
+            )
+        )
+    try:
+        asyncio.run(
+            research_sessions.submit_intervention(
+                str(path),
+                session_id,
+                "priority",
+                "This request exceeds the accepted guidance bound.",
+                [strategy.id],
+                ["investigator"],
+            )
+        )
+    except ProjectError as exc:
+        assert "24-intervention limit" in str(exc)
+    else:
+        raise AssertionError("A session must reject guidance past its explicit bound")
+    bounded = research_sessions.get_session(str(path), session_id)
+    assert sum(item["status"] != "rejected" for item in bounded["interventions"]) == 24
+    assert bounded["interventions"][-1]["status"] == "rejected"
+
+    record = research_sessions._read(str(path), session_id)
+    record["status"] = "ended"
+    research_sessions._save(str(path), record)
+    try:
+        asyncio.run(
+            research_sessions.submit_intervention(
+                str(path),
+                session_id,
+                "objection",
+                "This arrives after termination.",
+                [strategy.id],
+                ["skeptic"],
+            )
+        )
+    except ProjectError as exc:
+        assert "rejected and recorded" in str(exc)
+    else:
+        raise AssertionError("A terminal-session intervention must be rejected")
+    final = research_sessions.get_session(str(path), session_id)
+    assert final["interventions"][-1]["status"] == "rejected"
+    assert "intervention.rejected" in [event["kind"] for event in final["events"]]
+
+
 def main():
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -4151,6 +4497,19 @@ def main():
         test_peer_handoff_noop_and_domain_mismatch_controls()
         test_peer_handoff_queue_defers_without_silent_loss()
         test_peer_handoff_deferred_storage_is_bounded_and_reports_overflow()
+        asyncio.run(
+            test_concurrent_human_guidance_is_delivered_and_attributed(
+                root / "human-intervention-concurrent.sigma"
+            )
+        )
+        asyncio.run(
+            test_intervention_delivery_pause_resume_keeps_attempt_provenance(
+                root / "human-intervention-resume.sigma"
+            )
+        )
+        test_intervention_recovery_supersession_and_rejection(
+            root / "human-intervention-recovery.sigma"
+        )
         asyncio.run(
             test_portfolio_budget_too_small_for_next_pair_is_finalized(
                 root / "portfolio-tight-budget.sigma"

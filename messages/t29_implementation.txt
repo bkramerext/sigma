@@ -1,0 +1,45 @@
+T29 implementation handoff for ChatGPT
+Date: 2026-10-23
+Branch: blue/t29-human-intervention
+PR: To be added after opening the review request.
+
+Implemented a bounded session intervention API and minimal session UI. A user can
+send an objection, evidence note, or priority to selected strategies and agent
+roles. Accepted guidance is added to a later agent prompt only at a persisted
+step boundary. The existing provider call keeps its original prompt. Guidance
+cannot change model, billing mode, tools, duration, call/token budget, or prior
+artifacts. Up to 24 entries are accepted per session; up to eight rejected
+service requests are retained in the capped audit.
+
+Each record includes submission timing, strategy/role target, actual delivery
+cycle and step, attempt timing, acknowledgment, uptake, and rationale. Delivery
+IDs are part of saved step provenance and emitted as session audit events.
+Structured agent output must acknowledge every delivered ID exactly once.
+Pause/restart interruptions are recorded and made eligible only after explicit
+resume; provider failures stay unacknowledged and are never silently retried.
+Users can supersede guidance only before any delivery attempt and with identical
+targets.
+
+Deterministic tests hold parallel strategy calls, route an objection to one
+Skeptic, and verify the next question changes only for that strategy. The saved
+artifact, guided output, step, strategy and cycle all carry matching provenance.
+Other regressions cover pause/resume after a delivered call is interrupted,
+restart recovery, supersession, terminal rejection, bounded repeated guidance,
+and history preservation.
+
+Verification completed:
+- `./sigma test` passed (includes CLI smoke, Ruff, Pyright, frontend typecheck
+  and production build).
+- Real Chrome fixture check passed at desktop and 390px mobile. It verifies
+  guidance submission makes no provider call, both selected role deliveries are
+  acknowledged with uptake/rationale and cycle provenance, and there is no
+  mobile horizontal overflow. No live model or paid provider calls were made.
+- Screenshot paths: `/tmp/sigma-t29-intervention-desktop.png` and
+  `/tmp/sigma-t29-intervention-mobile.png`.
+
+Limitations: uptake is the agent's structured self-report, not proof that the
+instruction was followed correctly or that supplied evidence is true. A call
+already dispatched cannot be changed. Legacy sessions without strategy-bound
+steps reject interventions. HTTP schema-invalid submissions do not create an
+audit event; valid service-level rejections are recorded up to the configured
+audit bound.

@@ -3446,3 +3446,59 @@ Verification after these review changes passed on 2026-10-23: focused
 `tests/research_sessions.py` and `./sigma test`, including all backend scenarios,
 the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
 frontend typecheck, and production build. No live provider calls were made.
+
+## T29 Human intervention during active research (2026-10-23)
+
+Added a bounded `POST /api/projects/research-sessions/{id}/interventions` service
+and a compact panel in each session. Users can submit an objection, evidence note,
+or priority, targeting selected strategies and Investigator/Skeptic roles. The
+session accepts at most 24 guidance entries and retains at most eight rejected
+attempts in its bounded audit. Empty and malformed targets are rejected; guidance
+does not change the model, billing mode, tool access, token/call budget, deadline,
+or saved findings.
+
+Delivery is serialized with worker step creation and pause/stop transitions using
+the per-session state lock. Each targeted role receives guidance only when a
+subsequent call is prepared. A call already in flight retains its original prompt.
+The step stores intervention IDs; the intervention stores strategy, role, actual
+cycle, step, dispatch/acknowledgment times, uptake, rationale, and repeated
+attempts. Agent output must acknowledge each delivered ID exactly once or that
+branch fails without committing that response. Interrupted calls are recorded and
+re-queued only for a later explicit resume; provider failures remain
+unacknowledged and are not automatically retried. Supersession is allowed only
+before any delivery attempt and only with identical targets.
+
+Deterministic regression evidence in `tests/research_sessions.py`:
+
+- `test_concurrent_human_guidance_is_delivered_and_attributed` holds two
+  Investigator calls concurrently, submits strategy-specific Skeptic guidance,
+  and verifies only the targeted later Skeptic prompt receives it. The guided
+  Skeptic changes its next question, the artifact cites the review ID, and the
+  saved step/event/strategy/cycle attribution matches. Concurrent peer steps stay
+  unguided and both branches complete.
+- `test_intervention_delivery_pause_resume_keeps_attempt_provenance` pauses an
+  in-flight guided provider request, confirms the interrupted call is not
+  committed, resumes explicitly, and verifies the prior interrupted attempt and
+  new acknowledged attempt remain distinct while earlier findings are retained.
+- `test_intervention_recovery_supersession_and_rejection` simulates a persisted
+  running call and backend recovery, checks interruption-to-queued recovery,
+  pre-delivery supersession, the 24-entry bound, and terminal-session rejection.
+
+`browser_checks/t29_intervention.py` uses real Chrome with the isolated fixture:
+it submits during an active delayed call, verifies the call count does not change
+on submission, checks per-role acknowledgment and audit persistence, and checks
+desktop and 390px layouts. It passed; screenshots are
+`/tmp/sigma-t29-intervention-desktop.png` and
+`/tmp/sigma-t29-intervention-mobile.png`.
+The deterministic provider fixture acknowledges only IDs in its supplied prompt.
+No live provider calls were made. `./sigma test` passed, including the CLI smoke
+check, Ruff, format check, Pyright (zero errors/warnings), frontend typecheck and
+production build (T29 adds no CLI command).
+
+Limitations: acknowledgment and uptake are structured agent self-reports, not
+independent evidence that a user-supplied claim is true. Guidance is not injected
+retroactively into an already-dispatched call. Paused/stopped sessions retain
+queued guidance for a later explicit resume. Old legacy sessions without
+strategy-bound execution records reject guidance. Invalid requests rejected by
+HTTP schema validation do not create session audit entries; accepted and
+service-level rejected requests are audited within the configured cap.

@@ -11,7 +11,8 @@ A local-first research workspace for exploring competing approaches to difficult
   identity; it does not rewrite its parent or past sessions.
 - **Research sessions** run bounded Investigator/Skeptic cycles for one or
   several enabled strategies. Calls share the configured budget and run with a
-  local concurrency cap; the user can inspect each branch and stop the session.
+  local concurrency cap; the user can inspect each branch, guide later agent
+  steps with attributed interventions, and pause, resume, or stop the session.
 - **Artifacts and events** preserve attributed claims, methods, objections,
   open obligations, coordinator dispositions, and strategy assessments.
   Unverified model output is not a proof or an independently checked result.
