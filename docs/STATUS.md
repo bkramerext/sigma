@@ -2451,6 +2451,10 @@ Actual container verification used Colima/Docker and the built ARM64 image:
   1 MB output was stopped and capped at 32,000 bytes; an infinite loop was
   killed by the 15-second timeout; and a real execution record was persisted
   and retrieved from a temporary project.
+- `uv run --locked --no-sync python sandbox-poc/agent-workflow-check.py` passed
+  the actual fixture-backed Investigator→Docker sandbox→Skeptic workflow. The
+  Skeptic inspected the source, completed status, output, and execution ID; the
+  test then retrieved and validated the saved 17,141-byte PNG artifact.
 - The research workload answered its own question: enumerating line
   arrangements through `n=12` gave 79 regions and matched
   `1 + n(n+1)/2` at every finite case. It exercised NumPy linear algebra, SciPy

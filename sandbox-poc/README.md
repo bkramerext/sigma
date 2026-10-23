@@ -6,7 +6,12 @@ Build the image with network access available for the one-time dependency instal
 docker build -t sigma-research-python:0.1 sandbox-poc
 printf 'import numpy, scipy, pandas, sympy, matplotlib\nprint("ready")\n' | python sandbox-poc/run.py
 uv run --locked --no-sync python sandbox-poc/runtime-check.py
+uv run --locked --no-sync python sandbox-poc/agent-workflow-check.py
 ```
+
+The runtime check exercises isolation, dependencies, limits, and artifact
+storage directly. The agent workflow check runs the actual Docker sandbox
+through a deterministic Investigator/Skeptic session and retrieves its plot.
 
 Every execution starts a fresh container with no network, a non-root UID, a
 read-only root filesystem, a small writable `/tmp`, no Linux capabilities,

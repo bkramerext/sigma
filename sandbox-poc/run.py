@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import os
-import selectors
 import secrets
+import selectors
 import signal
 import subprocess
 import sys

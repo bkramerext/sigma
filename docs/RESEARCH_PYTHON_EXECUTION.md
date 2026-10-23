@@ -61,6 +61,8 @@ verification. The standalone `sandbox-poc/runtime-check.py` demonstrates the
 service on the line-arrangement question: enumerate the insertion recurrence
 through 12 lines, compare it to the formula (79 regions), run exact/numeric and
 linear-algebra checks, and save a Matplotlib plot for later retrieval.
+`sandbox-poc/agent-workflow-check.py` runs that production service through a
+fixture-backed Investigator/Skeptic session and retrieves the resulting PNG.
 
 The boundary assumes a trusted host kernel, Docker daemon, and image-build
 process. Build-time dependency download requires network access; research
