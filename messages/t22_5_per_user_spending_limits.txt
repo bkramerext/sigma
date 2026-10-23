@@ -3,7 +3,7 @@ T22.5 — Per-User Cloud Research Spending Limits
 Branch: feature/t22-5-per-user-spending
 Base: 703442cfef6be004e8ed28e46f211ecf151e3f6e (current main at branch creation)
 PR: #55 — https://github.com/bkramerext/sigma/pull/55
-Implementation commit: pending (follow-up for configurable allowance controls and durable account balance visibility)
+Implementation commit: f023fc7d21b7944cd4bfb8d1c5949feadcee64c9 (follow-up for configurable allowance controls and durable account balance visibility)
 
 MET
 - Durable cloud accounting now requires SIGMA_CLOUD_USER_SPEND_CEILING_USD and SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD. Missing, malformed, non-finite, under-cent, and above-policy values fail closed. The configured default is initially $2.00; default and individual allowances cannot exceed the $15.00 global policy ceiling.
