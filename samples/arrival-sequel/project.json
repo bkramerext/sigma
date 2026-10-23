@@ -50,7 +50,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Three compared story engines and explicit originality/rejection tests.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "fb172c01-6a62-4b61-912a-4560b0000002",
@@ -61,7 +62,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A logically consistent prescience rulebook and counterexamples.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "fb172c01-6a62-4b61-912a-4560b0000003",
@@ -72,7 +74,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A voyage mini-outline with conflict, character costs and arrival consequences.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "fb172c01-6a62-4b61-912a-4560b0000004",
@@ -83,7 +86,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Three reveal candidates, strongest objections and an earned preferred mechanism.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "fb172c01-6a62-4b61-912a-4560b0000005",
@@ -94,7 +98,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A completed, adversarially tested original treatment with a self-contained ending.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     }
   ],
   "research_mode": "default",
