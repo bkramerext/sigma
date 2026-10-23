@@ -106,22 +106,33 @@ review workspace; its autonomous discovery quality remains unestablished.
 
 ### What would improve research-trustworthiness evaluation
 
-The next step needs an answer-free live task whose result can be checked
-independently. The most useful input from the team would be:
+**Preparation request for ChatGPT:** assemble a reviewable evaluation packet for
+one answer-free live research run. Do not place the reference answer or proof
+in SIGMA's project, sample, repository, or prompt context. Keep it in a separate
+sealed evaluator file for comparison after the run. The packet should contain:
 
-- A research question with a precise success criterion, plus domain constraints
-  and permitted sources or tools.
-- Confirmation that the answer, proof outline, or equivalent solution is not
-  already present in the project, samples, repository history, or supplied
-  context. A known answer can be held back for evaluation.
-- An independent reference check: a proof sketch or expected result for a
-  mathematics task, or a domain reviewer and source set for an empirical task.
-  SIGMA's own agents should not be the sole judges of correctness.
-- An agreed evaluation rubric covering correctness, novelty or independent
-  discovery, evidence quality, treatment of counterevidence, calibration, and
-  reproducibility, including what counts as a pass or a failure.
-- A live-run budget and authorization. We can report model, effort, calls,
-  elapsed time, and available usage data; plan-mode records may not expose cost.
+- The research question SIGMA will receive, precise success criteria, domain
+  constraints, and permitted sources or tools.
+- A leakage review confirming that the answer and proof outline are absent from
+  the project, samples, repository history, and supplied context; include any
+  likely leakage paths that should be checked before the run.
+- The sealed expected result and independent validation material: for
+  mathematics, a proof sketch or mechanically checkable result where feasible;
+  for empirical work, authoritative sources and a qualified domain reviewer.
+  SIGMA's agents must not be the sole judges of correctness.
+- A scoring rubric with explicit pass/fail anchors for correctness, independent
+  discovery, evidence quality, counterevidence handling, calibration, and
+  reproducibility. Mark which items require human judgment.
+- A proposed bounded configuration: model/effort, call and time limits, and
+  usage constraints. Running it requires explicit authorization; plan-mode
+  records may not expose monetary cost.
+
+ChatGPT should return the participant-facing task separately from the sealed
+answer/reference, plus the leakage checklist, rubric, and proposed run bounds.
+This lets the task be reviewed before execution without accidentally giving
+SIGMA the answer. Once approved and run, preserve the prompts and ordered
+artifacts, compare the result against the sealed reference, and have the
+reviewer assess the reasoning.
 
 With those conditions, we can preserve the prompts, ordered artifacts, and
 decision trail, compare SIGMA's answer with the held-back reference, and have a
