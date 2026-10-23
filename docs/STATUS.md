@@ -115,13 +115,12 @@ ticket are absent in this checkout; the historical implementation and
 verification records remain in this file. T29's human-intervention branch is
 not part of this main snapshot and is outside this acceptance scope.
 
-Before publication, `main` advanced to `e58eccd` with documentation-only
-software-factory commits. That base was merged into this branch; the
-application and test tree used for validation did not change. GitHub compare
-reports the branch ahead by two commits and behind by zero, and the local
-three-dot diff is clean. PR metadata still reports `mergeable: false`; this
-does not match the clean local merge/compare result and is noted for coordinator
-inspection.
+At initial PR publication, `main` had advanced to `e58eccd` with
+documentation-only software-factory commits. That base was merged into the
+branch; the application and test tree used for that initial validation did not
+change. GitHub metadata at that earlier PR head reported `mergeable: false`
+despite a clean local merge/compare. The subsequent T29 integration and fresh
+PR state are recorded below.
 
 ### Workflow trace and falsifiable rubric
 
@@ -218,6 +217,30 @@ passed. Recommendation: accept the deterministic/evidence-contract portion
 for human review, keep T17.8 open, and leave genuine real-agent solution
 quality **UNVERIFIED** until a separately authorized bounded real-provider
 trial can be run. This restriction does not authorize such a trial.
+
+### T29 integration recheck (2026-10-23)
+
+After T29 PR #39 merged as `aaf0995`, I merged current `main` into the T17.8
+branch at `29d5d53`. Git merged the overlapping ticket tracker, STATUS, and
+research-session test files automatically; there were no content conflicts or
+manual resolutions. The T17.8 false-candidate regression remains at
+`tests/research_sessions.py::test_maximum_regions_false_candidate_is_rejected`.
+
+On this integrated source tree, focused `tests/research_sessions.py`,
+`tests/project_reports.py`, `tests/computational_evidence.py`, and
+`tests/agentic_evidence.py` passed. Real Chrome also passed
+`browser_checks/a17_research.py` against a fresh isolated fixture and
+`browser_checks/t29_intervention.py` against another fresh fixture. The latter
+confirmed an objection can be submitted during fixture-backed research without
+spending a provider call, and that acknowledgement/provenance and mobile layout
+remain intact. Full `./sigma test` passed after the merge, including T29's
+service, export-sample, lint, Pyright, frontend typecheck, and production-build
+checks. No live or paid provider calls were made. Screenshots include
+`/tmp/sigma-t29-intervention-mobile.png` and the A17 outcome/report captures
+listed above.
+
+No T17.8/T29 conflict or acceptance blocker was found. T17.8 remains open for
+human sign-off; real-model solution quality remains **UNVERIFIED**.
 
 ## PR #35 review follow-up (2026-10-23)
 

@@ -1,14 +1,10 @@
 T17.8 acceptance handoff — Gray
 
-Base: current main `ef3aadc` (T21 PR #38), on branch
-`gray/t17-8-agentic-solution-quality`. No paid provider or live model calls were
+Tested integration base: current main `aaf0995` (T29 PR #39), merged into
+`gray/t17-8-agentic-solution-quality` at `29d5d53`. The merge completed without
+conflicts, including shared changes to `TICKET_TRACKING.md`, `docs/STATUS.md`,
+and `tests/research_sessions.py`. No paid provider or live model calls were
 made. No direct worker coordination occurred.
-
-Main advanced to `e58eccd` with documentation-only software-factory commits
-before publication. I merged that base into the branch; application and test
-files did not change. GitHub compare says ahead by two commits, behind by zero,
-and the local three-dot diff is clean. PR metadata still says `mergeable: false`,
-which conflicts with that comparison and is flagged for coordinator inspection.
 
 The current workflow was traced through project/strategy snapshot, Investigator
 request and validated response, Skeptic review of ordered saved evidence,
@@ -16,8 +12,8 @@ coordinator decision, objective/verification projection, strategy attribution,
 session persistence, workspace UI and report export. A17.6/A17.7, T27 and T28
 are present on main. The assignment's referenced `docs/ASSIGNMENT-A17.6.md` and
 `.7.md` do not exist in this checkout; history is preserved in `docs/STATUS.md`.
-The T29 human-intervention branch is not on this main snapshot and is outside
-this acceptance scope.
+T29 was not in the initial acceptance base; its merged behavior is covered by
+the integration recheck below.
 
 I added `test_maximum_regions_false_candidate_is_rejected` in
 `tests/research_sessions.py`. It feeds a false `R(n)=n^2+1` candidate and a
@@ -76,3 +72,26 @@ criterion 1 remains UNVERIFIED until a separately authorized bounded real-model
 trial. Do not interpret this handoff or PR as authorizing provider calls.
 
 R4R for deterministic and local browser acceptance.
+
+T29 integration recheck:
+- Focused `tests/research_sessions.py`, `tests/project_reports.py`,
+  `tests/computational_evidence.py`, and `tests/agentic_evidence.py` passed on
+  the integrated tree. The T17.8 regression
+  `test_maximum_regions_false_candidate_is_rejected` remains in the research
+  session run.
+- Real Chrome `browser_checks/a17_research.py` passed with the local mock
+  fixture at port 8023. The script prints a legacy “A18” pass label, but this
+  is the A17 research/workspace journey.
+- Real Chrome `browser_checks/t29_intervention.py` passed with a fresh local
+  mock fixture at port 8024: guidance submission triggered no additional
+  provider call, acknowledgement/provenance appeared, and mobile layout passed.
+- `./sigma test` passed after the T29 merge, including sample-export,
+  intervention service cases, Ruff, Pyright, frontend typecheck and production
+  build. The sole output warnings were existing Starlette/httpx TestClient
+  deprecation notices.
+- T29 mobile screenshot: `/tmp/sigma-t29-intervention-mobile.png`. Existing
+  A17 screenshots are listed above.
+
+No conflict or new acceptance blocker was found. T17.8 remains open for human
+sign-off; live-model solution quality remains UNVERIFIED. R4R again for review
+of the integrated branch.
