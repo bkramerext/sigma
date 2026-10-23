@@ -55,6 +55,10 @@ The Lean proof control is shown only for mathematical projects. A focused real
 Chrome check confirmed it is absent from Engineering and remains copper and
 disabled (coming soon) for Mathematics.
 
+Request-failure toasts now match the dark workspace: compact navy surfaces,
+copper error accents, muted light text, and an understated underlined Dismiss
+action. Real Chrome confirmed the styling and keyboard activation of Dismiss.
+
 Real Chrome checks passed for `browser_checks/recents.py` (1280×720, 390×844,
 320×700; screenshots in `/tmp/sigma-samples-*.png`), `browser_checks/header.py`,
 `browser_checks/settings.py`, and `browser_checks/a20_paper.py`. The A17

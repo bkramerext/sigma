@@ -20,6 +20,9 @@ and hide-until-rehover behavior were also refined.
 The Lean proof control is shown only for mathematical projects; it remains a
 copper disabled (coming soon) action there and is hidden for other project
 types.
+Request-failure toasts now use compact dark/copper styling that matches the
+workspace; the underlined Dismiss action remains visible and keyboard
+accessible.
 
 Validation:
 - `./sigma test` passed, including Python checks, Ruff, Pyright, frontend
@@ -33,6 +36,8 @@ Validation:
   Inter 13px; standard rows are weight 400 and newest Recent is weight 700.
 - A focused real Chrome check confirmed Lean is hidden for Engineering and
   remains copper and disabled for Mathematics.
+- Real Chrome confirmed request-toast colors, compact width, understated
+  Dismiss styling, and keyboard dismissal.
 - `browser_checks/a17_research.py` was attempted but its isolated session ended
   at 0/30 provider calls, so its research-result assertions could not run.
 - No paid provider calls were made.
