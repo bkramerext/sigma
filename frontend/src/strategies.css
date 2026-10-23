@@ -534,13 +534,6 @@
 .workspace-page .session-row-content { grid-column: 2; grid-row: 1; }
 .workspace-page .session-row-content[hidden] { display: none !important; }
 .workspace-page .session-outcome { margin: 0 0 14px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #d7e0e8; }
-.workspace-page .session-outcome .outcome-view-header { display: flex; align-items: center; gap: 8px; }
-.workspace-page .session-outcome .outcome-format-control { display: flex; align-items: center; justify-content: flex-start; margin-top: 5px; }
-.workspace-page .session-outcome .outcome-format-control > .sigma-render-toggle { display: inline-flex; flex: 0 0 32px; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #aab4ba; cursor: pointer; }
-.workspace-page .session-outcome .outcome-format-control > .sigma-render-toggle:hover:not(:disabled),
-.workspace-page .session-outcome .outcome-format-control > .sigma-render-toggle[aria-pressed="true"] { border-color: #8f6842; background: #1b2832; color: #f1c58d; }
-.workspace-page .session-outcome .outcome-format-control > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
-.workspace-page .session-outcome .outcome-view-header .markdown-logo { display: block; width: 24px; height: 20px; }
 .workspace-page .session-outcome .outcome-summary-text { min-width: 0; }
 .workspace-page .session-outcome .outcome-summary-text > p { margin: 3px 0; }
 .workspace-page .session-outcome .outcome-summary-text .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
@@ -551,12 +544,6 @@
 .workspace-page .session-outcome .outcome-markdown p { margin: 5px 0; }
 .workspace-page .session-outcome .outcome-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .workspace-page .session-outcome p { margin: 3px 0; }
-.workspace-page .session-outcome .outcome-view-header > p { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; color: #f0d1a8; font-size: 15px; }
-.workspace-page .session-outcome .outcome-view-header > p strong { color: #e7be8d; }
-.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle { display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
-.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle:hover:not(:disabled),
-.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle[aria-pressed="true"] { border: 0; background: transparent; color: #f1c58d; box-shadow: none; }
-.workspace-page .session-outcome .outcome-view-header > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 .workspace-page .session-outcome ul { margin: 7px 0 0; padding-left: 20px; font-size: 12px; color: #b8c7d3; }
 .workspace-page .session-outcome .outcome-caveats ul { margin-top: 3px; }
 .workspace-page .solution-review { margin-top: 10px; padding-top: 8px; border-top: 1px solid #33404a; }
@@ -584,9 +571,14 @@
 .workspace-page .session-row-content { padding: 12px 0 4px; border-left: 0; border-top: 1px solid #243441; }
 .workspace-page .session-row-content[hidden] { display: none !important; }
 .workspace-page .session-outcome { min-width: 0; padding: 14px 16px; border: 1px solid #6e583f; border-radius: 7px; background: linear-gradient(120deg,#17212a,#0b1620); }
-.workspace-page .outcome-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
-.workspace-page .outcome-heading-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; min-width: 0; }
+.workspace-page .outcome-heading { display: flex; align-items: center; min-width: 0; }
+.workspace-page .outcome-heading-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 .workspace-page .outcome-heading h3 { margin: 0; color: #f0d0a4; font: 400 19px/1.35 Georgia,serif; }
+.workspace-page .outcome-heading-title > .sigma-render-toggle { display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
+.workspace-page .outcome-heading-title > .sigma-render-toggle:hover:not(:disabled),
+.workspace-page .outcome-heading-title > .sigma-render-toggle[aria-pressed="true"] { border: 0; background: transparent; color: #f1c58d; box-shadow: none; }
+.workspace-page .outcome-heading-title > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.workspace-page .outcome-heading-title .markdown-logo { display: block; width: 24px; height: 20px; }
 .workspace-page .outcome-label { color: #e2be91; font-size: 13px; overflow-wrap: anywhere; }
 .workspace-page .outcome-label.outcome-positive { color: #a5d1b3; }
 .workspace-page .outcome-label.outcome-negative { color: #e6a69a; }

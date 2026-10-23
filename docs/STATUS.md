@@ -26,6 +26,16 @@ assertions, T24 metrics/provenance, historical and interrupted records,
 multi-strategy live activity, and desktop/mobile widths (1440, 1280, 390, and
 320 px). No paid/live provider call was made.
 
+### Outcome Markdown control follow-up
+
+Moved the Render as Markdown control into the Outcome heading flow, directly
+after the title and before the outcome label. Scoped its compact icon, hover,
+active, and focus styling to the current heading markup; removed obsolete
+selectors left over from the prior layout. Real Chrome verifies the control's
+order and 28 px size at 1440, 1280, 390, and 320 px, keyboard activation and
+focus visibility, unchanged provider-call count, and responsive overflow.
+`./sigma test` and `browser_checks/a17_research.py` passed.
+
 ## A18 continuation: live research and portfolio coordination (2026-10-22–23)
 
 This continues the A18 work on PR #8; it does not replace the earlier baseline
