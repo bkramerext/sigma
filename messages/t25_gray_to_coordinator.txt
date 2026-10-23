@@ -3,7 +3,7 @@ SIGMA T25 coordinator handoff
 Ticket: T25 — Outcome visual hierarchy and collapsible subsections
 Owner: Gray
 Branch: codex/t25-outcome-hierarchy
-Base: main at 6f5979f (includes merged T24 and T25 tickets)
+Base: current main, including merged T24/T25 dependencies and PR #17 ticket tracking
 
 Completed implementation
 
@@ -37,4 +37,4 @@ Validation
   historical/interrupted sessions, multi-strategy activity, disclosure keyboard
   operation, T24 metrics/provenance, and absence of Outcome tables/columns.
 
-PR: pending publication.
+PR: https://github.com/bkramerext/sigma/pull/19 (open; not merged)
