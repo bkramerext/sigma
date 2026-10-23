@@ -6,6 +6,7 @@ Branch: feature/t22-private-workspaces
 PR #37 merge: 24ca812f8502c594a673e7233bd7962e9b8c907b
 Latest base integrated: origin/main a486833368156c8a2c0e941bcc43868f808185f0
 Integrated branch head: a21074d (T38/T39 docs-only delta merged without conflicts)
+Review PR: https://github.com/bkramerext/sigma/pull/43 (head 100de79; GitHub compare is 4 ahead / 0 behind and reports mergeable)
 
 Implementation
 
@@ -45,4 +46,3 @@ per-user provider authorization and budgets before a cloud pilot. This was not
 implemented in Gate A, and no provider calls were made. Public Demo and cloud
 deployment are also outside Gate A.
 
-PR: to be added after branch push.
