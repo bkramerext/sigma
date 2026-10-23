@@ -1,8 +1,8 @@
 {
-  "schema_version": 6,
+  "schema_version": 8,
   "id": "e03f7c91-5f0c-4c13-bce0-6e3d825ff5d2",
   "title": "Design and Verify an Incremental Dependency Scheduler",
-  "problem": "Difficulty: Medium.\n\nDesign an algorithm for a build system that maintains a directed dependency graph under edge additions and removals, answers whether the graph contains a cycle, and, when acyclic, produces a valid build order. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
+  "problem": "Design an algorithm for a build system that maintains a directed dependency graph under edge additions and removals, answers whether the graph contains a cycle, and, when acyclic, produces a valid build order. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
   "events": [
     {
       "sequence": 1,
@@ -14,5 +14,6 @@
   "research_mode": "computer_science",
   "active_order": [],
   "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high"
+  "reasoning_effort": "high",
+  "difficulty": "medium"
 }
