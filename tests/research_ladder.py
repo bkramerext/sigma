@@ -114,8 +114,11 @@ def main() -> None:
         transformed = value**-0.5 * theta_partial(1 / value)
         assert abs(theta_partial(value) - transformed) < 2e-14
 
-    assert "no external-source" in samples._load("riemann-hypothesis-research")[1].problem
-    assert "never claim to have searched" in samples._load("riemann-hypothesis-research")[1].problem
+    rh_problem = samples._load("riemann-hypothesis-research")[1].problem
+    assert "no external-source" in rh_problem
+    assert "never claim to have searched" in rh_problem
+    assert "session execution_tools" in rh_problem
+    assert "saved execution evidence" in rh_problem
     print(
         "PASS five staged sample projects, independent copies, exact finite Euler/eta identities, and theta-transform spot checks"
     )
