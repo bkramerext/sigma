@@ -125,6 +125,15 @@ def cloud_demo_report_view(format: str = "txt"):
     return Response(body, media_type=media_type, headers={"Cache-Control": "no-store"})
 
 
+def require_cloud_research_inference() -> None:
+    """Keep the shared cloud credential inside the bounded research engine."""
+    if cloud_workspaces.enabled():
+        raise HTTPException(
+            status_code=403,
+            detail="Cloud inference is available only through bounded research sessions.",
+        )
+
+
 @app.get("/api/ui-instance")
 def ui_instance() -> dict[str, str | None]:
     """Readiness identity only; grants no control or access to configuration."""
@@ -249,6 +258,8 @@ def paper_pdf_view(paper_id: str, path: str):
 
 @app.post("/api/projects/papers")
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
+    require_cloud_research_inference()
+
     async def disconnected():
         while (await request.receive())["type"] != "http.disconnect":
             pass
@@ -291,12 +302,14 @@ def research_limits_update(body: ResearchLimitsRequest):
 
 
 @app.get("/api/projects/research-sessions")
-def research_sessions_view(path: str):
+async def research_sessions_view(path: str):
+    await research_sessions.ensure_queued_workers(path)
     return {"sessions": research_sessions.list_sessions(path)}
 
 
 @app.get("/api/projects/research-sessions/{session_id}")
-def research_session_view(session_id: str, path: str):
+async def research_session_view(session_id: str, path: str):
+    await research_sessions.ensure_queued_workers(path)
     return research_sessions.get_session(path, session_id)
 
 
@@ -578,6 +591,8 @@ async def proposal_config(path: str | None = None):
 
 @app.post("/api/projects/proposals")
 async def proposal_view(body: ProposalRequest, request: Request):
+    require_cloud_research_inference()
+
     async def disconnected():
         # Await the ASGI event directly. is_disconnected() polling can miss events
         # behind BaseHTTPMiddleware's receive channel.
@@ -625,6 +640,8 @@ async def cancel_proposal(body: ProposalCancelRequest):
 
 @app.post("/api/projects/proposals/agentic")
 async def agentic_proposal_view(body: ProposalRequest):
+    require_cloud_research_inference()
+
     async def stream():
         async for event in agentic_events(
             body.path, body.seed, body.expected_binding, body.expected_project_id
@@ -676,6 +693,8 @@ class TextConversionRequest(OpenRequest):
 
 @app.post("/api/projects/text/convert")
 async def text_conversion_view(body: TextConversionRequest, request: Request):
+    require_cloud_research_inference()
+
     async def disconnected():
         while (await request.receive())["type"] != "http.disconnect":
             pass

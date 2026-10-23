@@ -4171,3 +4171,69 @@ answer-free run remain **UNVERIFIED**. Criterion 6 is deterministic-only.
 No new provider calls or model fees were incurred. The coordinator has GitHub
 repository access but not access to the running local SIGMA session/provider.
 Do not treat protocol creation or T39 tooling closure as live-agent acceptance.
+
+
+## T22 Gate B durable bounded research (2026-10-23)
+
+Started `feature/t22-gate-b-durable-execution` from merged Gate A main at
+`1134361`. Gate B keeps the existing Research Session/project JSON as the
+source of truth for session transitions, events, model outputs, computational
+evidence and outcomes. Added a private SQLite admission/accounting ledger beside
+cloud workspace storage for owner-bound jobs and provider-call reservations.
+SQLite immediate transactions serialize queue admission, concurrent worker
+claims, global inference-spend reservations and per-user token reservations.
+The cloud path requires an explicitly configured server API key, a reviewed
+model price, a per-session cost ceiling and a global spend ceiling; it never
+uses the local checkout's provider key or ChatGPT account. Standalone cloud
+proposal, agentic-proposal, paper-generation and text-conversion routes are
+blocked until they have bounded accounting of their own. Local mode retains
+the existing provider and worker behavior.
+
+Every model call writes a project-record `preparing` step, then a durable
+ledger reservation and a project-record `reserved` state before provider I/O.
+Known usage reconciles the held estimate. Timeout, cancellation, or restart
+records an unknown attempt and retains the spend/token hold; start idempotency
+and call IDs prevent replaying the same reservation. A queued job with no
+provider attempt can be scheduled after an owner reconnects. A running job is
+reconciled as interrupted and is not automatically replayed. Per-user/global
+worker and queue ceilings are environment-configurable and fail closed.
+
+Deterministic regressions exercise duplicate start/attempt IDs, concurrent
+two-workspace claims and spend races, token/spend exhaustion, owner denial,
+known/unknown/not-dispatched accounting, cancellation and timeout, queued
+reconnection, interrupted session recovery, and the authenticated HTTP
+start/status/idempotency/cross-owner workflow with a fake provider. Cloud
+workspace regressions also confirm standalone inference routes return 403.
+`tests/cloud_research_api.py` uses the production FastAPI route/services and a
+deterministic principal fixture; it does not contact a provider. The real
+Chrome `browser_checks/t22_private_workspaces.py` continues to pass A/B
+workspace isolation through the production API fixture.
+
+Final verification on this branch: `./sigma test` passed all backend scenarios,
+including cloud-auth/workspace/research regressions, Ruff, format check, Pyright
+(zero diagnostics), frontend typecheck and Vite production build. The command
+`uv run --with playwright python browser_checks/t22_private_workspaces.py`
+passed in real Chrome. No provider or Google calls were made. The first local
+Playwright invocation without `--with playwright` could not import the optional
+browser dependency; rerunning with the documented ephemeral dependency
+provisioning passed. Existing Starlette/httpx deprecation warnings remain
+informational.
+
+Added `browser_checks/t22_durable_research.py` and ran
+`uv run --with playwright python browser_checks/t22_durable_research.py` in
+real Chrome. Two authenticated browser contexts start/reconnect around a
+blocked fake provider call; both contexts disconnect, the backend process is
+hard-killed, and a fresh backend reads the same persistent workspace. The
+owner sees a paused session with an unknown attempt, a second owner receives
+404, and repeating the same start key returns the original job without a
+second fake dispatch. This exercises actual process restart and browser
+disconnect without live Google or provider calls.
+
+No cloud deployment/restart or paid provider smoke test was run. The global
+spend ceiling accounts conservatively for ambiguous calls; operator-visible
+cost is an estimate, not a provider invoice. The SQLite queue and project-file
+writes are separate durable stores: a process crash between queue reservation
+and initial project-session publication can leave an orphan queue row that
+consumes a queue slot until manual ledger repair. These remain deployment and
+availability limitations; Gate C, public Demo, Cloudflare deployment, and
+public release remain out of scope.

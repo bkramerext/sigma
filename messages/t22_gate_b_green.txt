@@ -1,0 +1,67 @@
+T22 Gate B — Green handoff
+Date: 2026-10-23
+Branch: feature/t22-gate-b-durable-execution
+Base: main at 1134361 (PR #43, Gate A)
+
+IMPLEMENTED
+
+- Preserved SIGMA's existing Investigator/Skeptic research-session and project
+  persistence model. The existing project session records remain authoritative
+  for lifecycle events, checkpoints, model outputs, Python/Sage evidence and
+  outcomes.
+- Added a workspace-owned SQLite ledger beside private workspace storage for
+  durable job state, concurrency/queue admission, provider-call reservations,
+  token reservations and estimated/unknown spend.
+- Reserved the call ID, conservative spend and tokens in a transaction before
+  provider dispatch. Duplicate attempt IDs cannot dispatch again. Confirmed
+  usage reconciles the reservation; ambiguous timeouts, cancellation and
+  process recovery retain a nonzero reservation and become visibly unknown.
+- Added atomic per-workspace/global running and queue limits, per-workspace
+  token budget, existing session call/time bounds, and an operator-configured
+  global inference-spend ceiling. Cloud inference requires the explicit
+  SIGMA_CLOUD_OPENAI_API_KEY; no local key or ChatGPT account fallback occurs.
+- Queued sessions without a provider attempt can be scheduled when an owner
+  reconnects. A recovered running call is marked interrupted/unknown and is
+  never automatically replayed. Existing explicit pause/resume/stop controls
+  remain in use.
+- Blocked cloud proposal, agentic-proposal, paper-generation and text-conversion
+  inference routes until they have their own durable budget accounting. Local
+  mode remains unrestricted and unchanged.
+- Documented configuration and recovery semantics in docs/CLOUD-AUTH.md and
+  recorded actual verification and limitations in docs/STATUS.md.
+
+VERIFICATION — MET
+
+- `./sigma test` — passed all backend regressions, cloud auth/workspace/research
+  tests, Ruff, format check, Pyright (0 diagnostics), frontend typecheck and
+  Vite production build.
+- `uv run --with playwright python browser_checks/t22_private_workspaces.py` —
+  passed in real Chrome with separate A/B contexts and production API/storage
+  fixture.
+- `uv run --with playwright python browser_checks/t22_durable_research.py` —
+  passed in real Chrome. Two browser contexts disconnected during a blocked
+  fake call, backend was hard-killed and restarted, owner recovered the
+  interrupted/unknown attempt, the other owner got 404, and duplicate start
+  returned the same job without a second provider dispatch.
+- `tests/cloud_research.py` — deterministic accounting, two-owner concurrency
+  and spend races, duplicate reservation, budget exhaustion, cancellation,
+  timeout, queued reconnect and simulated restart recovery.
+- `tests/cloud_research_api.py` — production FastAPI start/status/idempotency
+  and cross-workspace status/control denial with deterministic fake provider.
+- No live Google or model-provider calls; no paid calls.
+
+LIMITATIONS / UNVERIFIED
+
+- No deployed cloud restart or paid provider smoke test was run. Browser
+  disconnect and hard local backend restart were tested with a fake provider.
+- Job ledger and project-session JSON are separate files/stores. A hard crash
+  between queue-row reservation and initial session publication can leave an
+  orphan queued row that occupies capacity until manual ledger repair.
+- Cost is a conservative reservation and post-response estimate, not provider
+  invoice data. Unknown outcomes retain the full reserved amount.
+- Cloudflare deployment, Gate C read-only Demo and integrated public-release
+  gate are outside this Gate B implementation.
+
+R4R: Implementation and deterministic acceptance checks are ready for review.
+Do not merge without reviewing the listed operational limitations against the
+deployment plan. Green has not self-merged this branch.
