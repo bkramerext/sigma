@@ -8,7 +8,6 @@ import hashlib
 import json
 import math
 import os
-import re
 import threading
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -224,186 +223,6 @@ def _retracted_counterexample(response: str) -> bool:
     )
 
 
-def _maximum_regions_proof_obligations(
-    problem: str,
-    investigations: list[dict[str, Any]] | dict[str, Any],
-    reviews: list[dict[str, Any]] | dict[str, Any],
-) -> list[str] | None:
-    """Recognize the explicitly assigned line-arrangement proof checklist.
-
-    This records coverage in saved arguments, not mathematical verification.
-    Other objectives must supply their own structured obligations.
-    """
-    objective = problem.lower()
-    if "maximum number of regions" not in objective or "lines" not in objective:
-        return None
-    if isinstance(investigations, dict):
-        investigations = [investigations]
-    if isinstance(reviews, dict):
-        reviews = [reviews]
-    evidence = " ".join(
-        str(value)
-        for item in (
-            *investigations,
-            *reviews,
-        )
-        for value in (
-            item.get("claim", ""),
-            item.get("method", ""),
-            item.get("evidence_status", ""),
-            item.get("solution_claim", ""),
-            item.get("argument_summary", ""),
-            item.get("response", ""),
-            item.get("proof_obligations", []),
-        )
-    ).lower()
-    normalized = (
-        evidence.replace("−", "-").replace("≥", ">=").replace("²", "^2").replace("∑", "sum")
-    )
-    formula = bool(re.search(r"1\s*\+\s*n\s*\(\s*n\s*\+\s*1\s*\)\s*/\s*2", normalized))
-    upper_bound = (
-        "at most k regions" in normalized
-        or ("at most k" in normalized and "upper bound" in normalized)
-        or ("at most k - 1" in normalized and "adds at most k regions" in normalized)
-    ) and (
-        "small disk" in normalized
-        or "open disk" in normalized
-        or ("open" in normalized and "both sides" in normalized)
-    )
-    compact_evidence = normalized.replace(" ", "")
-    construction = (
-        ("y=kx+k²" in compact_evidence or "y=kx+k^2" in compact_evidence)
-        and "distinct" in evidence
-        and ("intersection" in evidence or "meet each earlier line" in evidence)
-        and "attain" in evidence
-    )
-    region_cells = (
-        (
-            "same side choices" in evidence
-            and "open half-plane" in evidence
-            and "convex" in evidence
-            and "connected" in evidence
-        )
-        or ("side-sign cell" in evidence and "convex" in evidence and "connected" in evidence)
-        or (
-            "fixed choice of sides" in evidence
-            and "nonempty intersection" in evidence
-            and "open" in evidence
-            and "convex" in evidence
-        )
-        or (
-            "fixed choice of side" in evidence
-            and "open half-plane" in evidence
-            and "convex" in evidence
-            and "different side choices" in evidence
-        )
-        or (
-            any(term in evidence for term in ("sign-pattern", "sign pattern", "fixed sign"))
-            and "constant sign" in evidence
-            and "convex" in evidence
-            and "connected" in evidence
-        )
-    ) and (
-        (
-            "different pieces" in evidence
-            and ("different regions" in evidence or "different old regions" in evidence)
-        )
-        or ("different pieces" in evidence and "same old component" in evidence)
-        or "different pieces cannot lie in the same region" in evidence
-        or ("two different pieces" in evidence and "same region" in evidence)
-    )
-    base_case = (
-        ("r(0) = 1" in normalized or "r(0)=1" in normalized)
-        or ("empty arrangement" in normalized and "one region" in normalized)
-    ) and ("empty arrangement" in normalized or "n = 0" in normalized or "n=0" in normalized)
-    small_values = (
-        "small-value" in normalized
-        or "small values" in normalized
-        or "listed values" in normalized
-        or all(
-            f"r({n}) = {value}" in normalized or f"r({n})={value}" in normalized
-            for n, value in enumerate((1, 2, 4, 7, 11))
-        )
-    )
-    review_notes = [
-        str(note).lower()
-        for review in reviews
-        for key in (
-            "objections",
-            "unresolved_objections",
-            "remaining_obligations",
-            "open_obligations",
-        )
-        for note in (review.get(key, []) if isinstance(review.get(key, []), list) else [])
-        if str(note).strip()
-    ]
-    investigation_notes = [
-        str(note).lower()
-        for investigation in investigations
-        for note in investigation.get("open_obligations", [])
-        if str(note).strip()
-    ]
-    material_terms = (
-        "counterexample",
-        "contradiction",
-        "false claim",
-        "invalid argument",
-        "incorrect proof",
-        "mathematical gap",
-    )
-    material_notes = [
-        note
-        for note in [*review_notes, *investigation_notes]
-        if (
-            any(term in note for term in material_terms)
-            and not any(
-                withdrawal in note
-                for withdrawal in (
-                    "not a counterexample",
-                    "no counterexample",
-                    "not a contradiction",
-                )
-            )
-        )
-        or (
-            any(
-                term in note for term in ("insertion lemma", "region characterization", "side-sign")
-            )
-            and not region_cells
-        )
-    ]
-    no_material_objection = not material_notes and any(
-        phrase in " ".join(str(review.get("response", "")).lower() for review in reviews)
-        for phrase in (
-            "no mathematical objection",
-            "no mathematical gap",
-            "no objection",
-            "no counterexample",
-            "no mathematical counterexample",
-            "no substantive gap",
-            "no substantive objection",
-            "no substantive mathematical objection",
-        )
-    )
-    if not all(
-        (
-            formula,
-            upper_bound,
-            construction,
-            base_case,
-            small_values,
-            no_material_objection,
-        )
-    ):
-        return None
-    return [
-        "Insertion lemma: establish that each encountered region is split into two nonempty parts and distinct line pieces meet distinct regions.",
-        "Upper bound: show insertion k adds at most k regions, supported by the saved line-splitting argument.",
-        "Attainment: give a general-position line family with k distinct intersections at insertion k, supported by the saved construction.",
-        "Boundary and checks: establish R(0)=1 and check small values against the formula.",
-    ]
-
-
 def _outcome(record: dict[str, Any]) -> dict[str, Any]:
     artifacts = record.get("artifacts", [])
     status = record.get("status")
@@ -504,7 +323,9 @@ def _outcome(record: dict[str, Any]) -> dict[str, Any]:
         caveats.append(
             "The latest assessment failed; saved research was retained and no completed assessment was inferred from the failed attempt."
         )
-    if any(a.get("open_obligations") for a in artifacts):
+    if (not objective_review or objective_review.get("status") != "achieved") and any(
+        a.get("open_obligations") for a in artifacts
+    ):
         caveats.append(
             "Open obligations remain; inspect the saved artifacts before relying on this result."
         )
@@ -604,6 +425,36 @@ def _strategy_assessments(record: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+INVESTIGATOR_GUIDANCE = (
+    "Examine the exact project objective and the selected strategy as a proposed approach. "
+    "Advance the current question with a specific claim and enough public reasoning for a reviewer "
+    "to assess it. State assumptions and evidence status honestly. Distinguish a proved step from "
+    "a conjecture, example, or assertion; identify every unresolved proof obligation. Do not claim "
+    "external checking or formal verification."
+)
+SKEPTIC_GUIDANCE = (
+    "Independently examine the exact objective, selected strategy, current Investigator output, "
+    "and the entire ordered set of saved artifacts together, not only the latest write-up. The "
+    "strategy is a proposed approach, not automatic proof; inspect any reasoning it supplies and "
+    "do not require a complete argument to be rewritten in every cycle. Earlier artifact evidence "
+    "can satisfy a requirement omitted or shortened later; cite the supporting cycle for each "
+    "proof obligation. Identify whether each objection is material and recoverable, a decisive "
+    "counterexample, or merely a request for clearer exposition. Criticism alone never ends "
+    "research; approval is never verification. Request another cycle only for a genuinely "
+    "unresolved objective requirement or material objection. Choose stop only with an actual "
+    "decisive contradiction, a useful completed conclusion, or no concrete next step. A decisive "
+    "counterexample must be stated in objections and tied to supporting cycle numbers; if you "
+    "retract or reject a purported counterexample, do not choose that stop reason. Explicitly "
+    "assess objective status, exact claim, argument, assumptions, distinct proof obligations, "
+    "supporting cycles, unresolved objections, and selected-strategy contribution. For achieved, "
+    "enumerate each distinct obligation and say which cited evidence establishes it; include the "
+    "cycle reference with each obligation. If you cannot support an obligation or a material "
+    "objection remains, use partial/not_achieved. A complete argument without an independent "
+    "proof checker is convincing_unverified; never claim verified. An empty next-step list is not "
+    "evidence of failure."
+)
+
+
 def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
     directory = _directory(path)
     counter = directory / "sequence.json"
@@ -672,11 +523,7 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
     if prices is None:
         return None
     schema_model = Investigator if role == "investigator" else Skeptic
-    role_guidance = (
-        "Advance the current question with one specific claim, mechanism, assumptions, and honest evidence status."
-        if role == "investigator"
-        else "Independently examine the project's entire ordered set of saved artifacts together against the exact objective, not only the latest cycle's write-up. Earlier evidence can satisfy a requirement omitted or truncated in a later artifact; cite the cycle that supplies it. Identify whether any material objection is recoverable or a decisive counterexample, whether the objective is achieved, or whether no progress is possible. Skeptic criticism alone never ends research; approval is never verification. Request another cycle only for a genuinely unresolved objective requirement or material objection; do not require rewriting a complete proof already present across saved artifacts. Choose stop only with a decisive counterexample, a useful completed conclusion, or no concrete next step. A decisive counterexample must be an actual contradiction, be listed in objections, and be tied to supporting cycle numbers; if you retract or reject a purported counterexample, do not choose decisive_counterexample. Explicitly assess objective status, exact solution claim, argument, assumptions, proof obligations and supporting cycle numbers. For achieved, enumerate the objective's distinct proof obligations and briefly say which cited evidence establishes each; do not leave proof_obligations empty. If you cannot do this or a material objection remains, use partial/not_achieved. A complete argument without an independent proof checker is convincing_unverified; never claim verified. Assess the selected strategy's contribution to the objective with evidence-based rationale. An empty next-step list is not evidence of failure."
-    )
+    role_guidance = INVESTIGATOR_GUIDANCE if role == "investigator" else SKEPTIC_GUIDANCE
     payload = {
         "model": record["model"],
         "store": False,
@@ -1238,11 +1085,7 @@ async def _call(
     input_text = json.dumps(context, ensure_ascii=False)
     if len(input_text) > 48000:
         raise ProjectError("Research context exceeded its safe size limit")
-    role_guidance = (
-        "Advance the current question with one specific claim, mechanism, assumptions, and honest evidence status."
-        if role == "investigator"
-        else "Independently examine the investigator's public claim and stated evidence. Identify whether any objection is recoverable or a decisive counterexample, whether a useful conclusion is reached, or whether no progress is possible. Skeptic criticism alone never ends research; approval is never verification. Return a concrete next question when an objection can be tested. Choose stop only with a decisive counterexample, a useful completed conclusion, or no concrete next step."
-    )
+    role_guidance = INVESTIGATOR_GUIDANCE if role == "investigator" else SKEPTIC_GUIDANCE
     payload: dict[str, Any] = {
         "model": record["model"],
         "store": False,
@@ -1358,7 +1201,10 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         },
         "cycle": cycle,
         "question": record["current_question"],
-        "prior_artifacts": artifacts[-2:],
+        # The prompt below asks the Skeptic to review the ordered evidence set.
+        # Keep that contract true here; silently dropping older evidence can
+        # manufacture open obligations or cause already-resolved flaws to recur.
+        "prior_artifacts": artifacts,
         "outstanding_obligations": obligations,
         "context_artifact_ids": [a["id"] for a in artifacts],
         "project_strategy_snapshot": record.get("strategy_snapshot", []),
@@ -1553,46 +1399,43 @@ async def _worker(session_id: str, path: str) -> None:
                 record.get("call_limit", CALL_LIMIT),
             )
             prior_artifacts = record["artifacts"]
-            all_investigations = [
-                item["investigator_output"]
-                for item in prior_artifacts
-                if isinstance(item.get("investigator_output"), dict)
-            ] + [investigation]
             all_reviews = [
                 item["skeptic_output"]
                 for item in prior_artifacts
                 if isinstance(item.get("skeptic_output"), dict)
             ] + [output]
-            derived_obligations = _maximum_regions_proof_obligations(
-                record["problem"], all_investigations, all_reviews
-            )
-            prior_decisive_counterexample = any(
-                item.get("coordinator_decision") == "stop_decisive_counterexample"
-                and bool(item.get("objections"))
-                and not _retracted_counterexample(str(item.get("skeptic_response", "")))
-                for item in prior_artifacts
-            )
-            aggregate_candidate = bool(derived_obligations) and not prior_decisive_counterexample
-            proof_obligations: list[str] = derived_obligations or output["proof_obligations"]
-            verification_status = (
-                "convincing_unverified" if aggregate_candidate else output["verification_status"]
-            )
-            if aggregate_candidate and (
-                output["objective_status"] != "achieved"
-                or output["verification_status"] != "convincing_unverified"
-                or not output["proof_obligations"]
-                or output["next_question"].strip()
-                or output["remaining_obligations"]
-            ):
-                record["events"].append(
-                    {
-                        "sequence": len(record["events"]) + 1,
-                        "timestamp": _now(),
-                        "kind": "coordinator.assessment_reconciled",
-                        "role": "coordinator",
-                        "message": "The ordered session artifacts jointly satisfy the assigned Maximum Regions proof checklist. Presentation-only requests already covered by saved evidence were resolved; the result remains an unverified candidate, not a verified proof.",
-                    }
+            proof_obligations: list[str] = output["proof_obligations"]
+            verification_status = output["verification_status"]
+            objective_candidate = (
+                output["objective_status"] == "achieved"
+                and verification_status == "convincing_unverified"
+                and bool(output["solution_claim"].strip())
+                and bool(output["argument_summary"].strip())
+                and bool(proof_obligations)
+                and not output["unresolved_objections"]
+                and not output["remaining_obligations"]
+                and not (
+                    output["stop_reason"] == "decisive_counterexample"
+                    and output["objections"]
+                    and not _retracted_counterexample(output["response"])
                 )
+                and not any(
+                    item.get("coordinator_decision") == "stop_decisive_counterexample"
+                    and bool(item.get("objections"))
+                    and not _retracted_counterexample(str(item.get("skeptic_response", "")))
+                    for item in prior_artifacts
+                )
+            )
+            # A completed review may resolve an Investigator's open note by
+            # checking it against the full ordered record. Treat an explicit,
+            # evidence-linked achieved review with no remaining question as a
+            # productive conclusion even when the provider uses an imprecise
+            # stop-reason label.
+            if (
+                objective_candidate
+                and not output["next_question"].strip()
+                and output["assessment"] in {"stop", "continue"}
+            ):
                 decision, next_question = coordinate_decision(
                     "stop",
                     "productive_conclusion",
@@ -1603,17 +1446,6 @@ async def _worker(session_id: str, path: str) -> None:
                     record["calls_used"],
                     record.get("call_limit", CALL_LIMIT),
                 )
-            expected_status = "achieved" if aggregate_candidate else output["objective_status"]
-            objective_candidate = aggregate_candidate or (
-                expected_status == "achieved"
-                and verification_status == "convincing_unverified"
-                and bool(output["solution_claim"].strip())
-                and bool(output["argument_summary"].strip())
-                and bool(proof_obligations)
-                and not output["unresolved_objections"]
-                and not output["remaining_obligations"]
-                and not investigation["open_obligations"]
-            )
             if output["stop_reason"] == "decisive_counterexample" and (
                 not output["objections"] or _retracted_counterexample(output["response"])
             ):
@@ -1677,8 +1509,6 @@ async def _worker(session_id: str, path: str) -> None:
                     if type(cycle) is int
                 )
             )
-            if aggregate_candidate:
-                referenced_cycles = list(valid_cycles)
             if not referenced_cycles and type(output["supporting_cycles"]) is list:
                 referenced_cycles = output["supporting_cycles"]
             if any(type(item) is not int or item not in valid_cycles for item in referenced_cycles):
@@ -1696,36 +1526,8 @@ async def _worker(session_id: str, path: str) -> None:
                     if str(note).strip()
                 )
             )
-            if aggregate_candidate:
-                proof_obligations = [
-                    obligation
-                    + " Evidence: "
-                    + ", ".join(f"Artifact {sequence}" for sequence in referenced_cycles)
-                    for obligation in proof_obligations
-                ]
-                all_assumptions = list(
-                    dict.fromkeys(
-                        str(assumption)
-                        for item in all_investigations
-                        for assumption in item.get("assumptions", [])
-                    )
-                )
-                all_assumptions.extend(
-                    assumption
-                    for assumption in dict.fromkeys(
-                        str(assumption)
-                        for item in all_reviews
-                        for assumption in item.get("assumptions_reviewed", [])
-                    )
-                    if assumption not in all_assumptions
-                )
-                argument_summary = (
-                    "The ordered session artifacts collectively satisfy the objective checklist: "
-                    + " ".join(proof_obligations)
-                )
-            else:
-                all_assumptions = output["assumptions_reviewed"]
-                argument_summary = output["argument_summary"]
+            all_assumptions = output["assumptions_reviewed"]
+            argument_summary = output["argument_summary"]
             artifact["objective_review"] = {
                 "status": "achieved" if objective_complete else output["objective_status"],
                 "claim": output["solution_claim"],
