@@ -765,79 +765,51 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "solution_claim": "R(n) = 1 + n(n+1)/2 for all n >= 0.",
         "argument_summary": "At most k regions are added at step k, and the explicit family y=kx+k^2 attains every increment; sum the increments, the empty arrangement gives R(0)=1, and verify the small values.",
         "assumptions_reviewed": ["Distinct straight lines in the Euclidean plane."],
-        "proof_obligations": [],
-        "verification_status": "incomplete",
+        "proof_obligations": [
+            "Insertion lemma splits each affected region into two [cycle 1].",
+            "The insertion bound proves the upper bound [cycle 1].",
+            "The explicit family attains each bound [cycle 1].",
+            "The empty arrangement and small values are covered [cycle 1].",
+        ],
+        "verification_status": "convincing_unverified",
         "unresolved_objections": [],
         "supporting_cycles": [1],
         "strategy_contribution": "solution",
         "contribution_rationale": "The linked argument supplies both the matching upper bound and an explicit attaining construction.",
     }
     outputs = [proof, review]
-    assert research_sessions._maximum_regions_proof_obligations(problem, proof, review)
+    history = [
+        {"id": f"artifact-{index}", "sequence": index, "method": f"Evidence {index}"}
+        for index in range(1, 5)
+    ]
+    context_record = {
+        "problem": problem,
+        "strategy_id": strategy.id,
+        "strategy_title": strategy.title,
+        "strategy_text": strategy.approach,
+        "current_question": "review the complete record",
+        "artifacts": history,
+        "pending_investigation": proof,
+    }
+    history_context = research_sessions._agent_context(context_record, "skeptic", 5)
+    assert [item["id"] for item in history_context["prior_artifacts"]] == [
+        "artifact-1",
+        "artifact-2",
+        "artifact-3",
+        "artifact-4",
+    ]
+    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 50000}]}
+    try:
+        research_sessions._agent_context(oversized_context, "skeptic", 2)
+    except ProjectError as exc:
+        assert "safe input limit" in str(exc)
+    else:
+        raise AssertionError("oversized complete history was silently truncated")
 
-    # This mirrors a real Maximum Regions run: the initial artifact contains a
-    # complete candidate argument, then later cycles clarify the small-disk
-    # lemma and restate the upper bound while each individual skeptic review
-    # flags the current draft as truncated. Assessment must aggregate history.
-    historical_investigations = [
-        {
-            **proof,
-            "method": (
-                "The kth line has at most k − 1 distinct intersection points, hence adds at most k regions. "
-                "The empty arrangement has one region. Attainment: choose L_k: y = kx + k²; "
-                "the intersection coordinates −(i + k) are distinct, so each insertion adds k. "
-                "Small-value checks: R(0) = 1, R(1) = 2, R(2) = 4, R(3) = 7, R(4) = 11."
-            ),
-        },
-        {
-            **proof,
-            "method": "Each region is a nonempty intersection of open half-planes with one of the same side choices for every point, so it is convex and connected. Different pieces lie in different regions. Since a region is open, a small disk around an intersection contains points on both sides of the new line.",
-        },
-        {
-            **proof,
-            "method": "The complete upper-bound argument sums increments from the initial single region.",
-        },
-    ]
-    historical_reviews = [
-        {
-            **review,
-            "response": "No mathematical counterexample is apparent in the supplied argument.",
-            "objective_status": "not_achieved",
-            "objections": ["The current complete draft could state the checks more prominently."],
-        },
-        {
-            **review,
-            "response": "No mathematical counterexample is apparent; the current draft is truncated before the construction.",
-            "objections": ["Current write-up is truncated before attainment."],
-            "remaining_obligations": ["Repeat the construction in the current write-up."],
-            "objective_status": "not_achieved",
-        },
-        {
-            **review,
-            "response": "No mathematical counterexample is apparent; earlier artifact contains the construction.",
-            "objections": ["Current write-up is truncated before the construction."],
-            "remaining_obligations": ["Repeat the construction in the current write-up."],
-            "objective_status": "not_achieved",
-        },
-    ]
-    assert research_sessions._maximum_regions_proof_obligations(
-        problem, historical_investigations, historical_reviews
-    )
-    assert (
-        research_sessions._maximum_regions_proof_obligations(
-            problem,
-            [historical_investigations[0]],
-            [
-                {
-                    **historical_reviews[0],
-                    "objections": ["The formula is contradicted by a counterexample."],
-                }
-            ],
-        )
-        is None
-    )
+    provider_requests = []
 
     async def handler(request):
+        provider_requests.append(json.loads(request.content))
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -854,6 +826,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
         )
         finished = await wait_for(path, started["id"])
+        assert "entire ordered set of saved artifacts" in provider_requests[1]["instructions"]
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
@@ -861,7 +834,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert any(
             event["kind"] == "coordinator.assessment_conflict" for event in finished["events"]
         )
-        assert any(
+        assert not any(
             event["kind"] == "coordinator.assessment_reconciled" for event in finished["events"]
         )
         assert len(finished["outcome"]["solution_review"]["proof_obligations"]) == 4
@@ -877,8 +850,47 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert rows[0]["basis_artifact_ids"] == [finished["artifacts"][0]["id"]]
         assert rows[1]["basis_artifact_ids"] == []
 
-        # Three cycles can distribute a complete proof across saved artifacts
-        # while the final skeptic asks for a cleaner, self-contained restatement.
+        # The same candidate language must not override a Skeptic's material,
+        # unresolved objection. Before the evidence-contract fix this passed
+        # the special-case keyword checklist and was incorrectly promoted.
+        incomplete_review = {
+            **review,
+            "assessment": "continue",
+            "stop_reason": "recoverable_objection",
+            "response": "No mathematical counterexample is apparent, but the central component-identification step remains asserted.",
+            "objections": ["The region/sign-set identification remains asserted."],
+            "remaining_obligations": ["Justify that each sign set is exactly one component."],
+            "next_question": "Review the component-identification step.",
+            "objective_status": "not_achieved",
+            "proof_obligations": ["Review the insertion argument."],
+            "verification_status": "incomplete",
+            "unresolved_objections": ["The region/sign-set identification remains asserted."],
+            "strategy_contribution": "productive",
+        }
+        research_sessions.save_limits(
+            str(path),
+            {
+                "research_rounds": 1,
+                "model_calls": 2,
+                "session_duration_minutes": 10,
+                "output_tokens_per_call": 4000,
+                "maximum_estimated_cost_usd": None,
+            },
+        )
+        outputs.extend([proof, incomplete_review])
+        incomplete_started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        incomplete = await wait_for(path, incomplete_started["id"])
+        assert incomplete["outcome"]["assessment"] == "mixed"
+        assert incomplete["outcome"]["solution_review"]["status"] == "not_achieved"
+        assert "region/sign-set" in " ".join(
+            incomplete["outcome"]["solution_review"]["unresolved_objections"]
+        )
+        research_sessions.save_limits(str(path), research_sessions.DEFAULT_LIMITS)
+
+        # Three cycles can distribute the proof across saved artifacts. The
+        # final Skeptic explicitly cites them and closes the review.
         outputs.extend(
             [
                 {
@@ -925,20 +937,27 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
                 {
                     **proof,
                     "method": "The empty arrangement has one region. Small-value checks: R(0) = 1, R(1) = 2, R(2) = 4, R(3) = 7, R(4) = 11.",
+                    "open_obligations": [
+                        "Connect the saved insertion argument and construction to the complete objective."
+                    ],
                 },
                 {
                     **review,
-                    "assessment": "continue",
-                    "stop_reason": "recoverable_objection",
-                    "response": "No mathematical counterexample is apparent; the boundary case and small values are now checked.",
+                    "assessment": "stop",
+                    "stop_reason": "unresolved",
+                    "response": "The ordered saved evidence closes the upper bound, attainment, and boundary obligations. No material objection remains; this is convincing but unverified.",
                     "argument_summary": "The empty arrangement and small values match the formula.",
-                    "objections": [
-                        "The current response ends before restating small-value checks."
+                    "objections": [],
+                    "remaining_obligations": [],
+                    "next_question": "",
+                    "objective_status": "achieved",
+                    "proof_obligations": [
+                        "Upper bound via line insertion [cycle 1].",
+                        "Attainment via distinct intersections [cycle 2].",
+                        "Base case and small values [cycle 3].",
                     ],
-                    "remaining_obligations": ["Repeat small-value checks in the current response."],
-                    "next_question": "None; review the ordered saved evidence.",
-                    "objective_status": "not_achieved",
-                    "verification_status": "incomplete",
+                    "verification_status": "convincing_unverified",
+                    "unresolved_objections": [],
                     "supporting_cycles": [1, 2, 3],
                 },
             ]
@@ -953,8 +972,13 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             aggregate["steps"][-1],
         )
         assert aggregate["terminal_reason"] == "stop_productive_conclusion"
+        assert aggregate["artifacts"][-1]["coordinator_decision"] == ("stop_productive_conclusion")
         assert aggregate["outcome"]["assessment"] == "positive"
         assert aggregate["outcome"]["solution_review"]["status"] == "achieved"
+        assert (
+            "Open obligations remain; inspect the saved artifacts before relying on this result."
+            not in aggregate["outcome"]["caveats"]
+        )
         assert aggregate["outcome"]["solution_review"]["verification_status"] == (
             "convincing_unverified"
         )
@@ -962,6 +986,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert len(aggregate["outcome"]["solution_review"]["basis_artifact_ids"]) == 3, aggregate[
             "outcome"
         ]["solution_review"]
+        aggregate_skeptic_context = json.loads(provider_requests[-1]["input"])
+        assert [item["id"] for item in aggregate_skeptic_context["prior_artifacts"]] == [
+            item["id"] for item in aggregate["artifacts"][:2]
+        ]
         assert aggregate["outcome"]["solution_review"]["resolved_objections"]
         assert (
             research_sessions.get_session(str(path), aggregate_started["id"])[
@@ -975,6 +1003,114 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         reopened = research_sessions.get_session(str(path), started["id"])
         assert reopened["strategy_assessments"] == rows
         assert reopened["strategy_assessments"][0]["strategy_title"] == strategy.title
+
+
+async def test_generic_objective_review_on_binary_strings(path: Path):
+    problem = (
+        "For each integer n >= 0, count binary strings of length n containing no two "
+        "consecutive 1s. The empty string counts for n = 0. Derive and justify a general "
+        "formula or recurrence for the count, including the necessary initial values. "
+        "Check the result on small n. Do not assume a particular proof method."
+    )
+    view = initialize_project(path, "Counting Constrained Binary Strings", problem)
+    strategy = create_strategy(
+        path,
+        "Partition by final symbol",
+        "Split valid strings by whether the last bit is 0 or 1, prove the recurrence, and check initial values.",
+    ).project.strategies[0]
+    credential = {
+        "identity": "fixture-account",
+        "mode": "api_key",
+        "token": "fixture-token",
+        "status": "connected",
+    }
+    config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+    candidate = {
+        "claim": "The count is a_n = F_(n+2), equivalently a_0=1, a_1=2, and a_n=a_(n-1)+a_(n-2).",
+        "method": (
+            "For n>=2, partition valid strings by their last bit. Appending 0 gives a bijection "
+            "with valid strings of length n-1. A string ending in 1 has penultimate bit 0, and "
+            "removing that final 01 gives a bijection with valid strings of length n-2. The two "
+            "classes are disjoint and exhaustive, so a_n=a_(n-1)+a_(n-2). There is one empty "
+            "string and two valid strings of length one. This proves the Fibonacci formula by induction."
+        ),
+        "assumptions": ["The two classes are defined by the final symbol."],
+        "evidence_status": "Complete inductive argument; no formal checker was run.",
+        "open_obligations": [],
+    }
+    accepted = {
+        **skeptic(1, "stop", "productive_conclusion"),
+        "response": "The final-symbol classes are disjoint and exhaustive; the recurrence and base cases support the claim for every n.",
+        "objections": [],
+        "remaining_obligations": [],
+        "next_question": "",
+        "objective_status": "achieved",
+        "solution_claim": "a_n=F_(n+2), with a_0=1, a_1=2, and a_n=a_(n-1)+a_(n-2).",
+        "argument_summary": "The final-bit partition gives a disjoint recurrence; induction identifies the sequence with F_(n+2).",
+        "proof_obligations": [
+            "The final-bit classes are disjoint and exhaustive [cycle 1].",
+            "The recurrence and initial values imply the general Fibonacci formula [cycle 1].",
+        ],
+        "verification_status": "convincing_unverified",
+        "unresolved_objections": [],
+        "supporting_cycles": [1],
+        "strategy_contribution": "solution",
+        "contribution_rationale": "The linked final-symbol argument derives and proves the recurrence.",
+    }
+    incomplete = {
+        **accepted,
+        "assessment": "continue",
+        "stop_reason": "recoverable_objection",
+        "response": "The small values fit Fibonacci, but the recurrence is asserted rather than proved for every n.",
+        "objections": ["No argument establishes the recurrence for arbitrary n."],
+        "remaining_obligations": ["Prove the disjoint exhaustive final-symbol partition."],
+        "next_question": "Prove the recurrence from the final-symbol cases.",
+        "objective_status": "partial",
+        "proof_obligations": ["Derive the recurrence."],
+        "verification_status": "incomplete",
+        "unresolved_objections": ["The recurrence remains unsupported."],
+        "strategy_contribution": "productive",
+    }
+    outputs = [candidate, accepted]
+
+    async def handler(request):
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        complete_start = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        complete = await wait_for(path, complete_start["id"])
+        assert complete["outcome"]["assessment"] == "positive"
+        assert complete["strategy_assessments"][0]["assessment"] == "contributed_to_solution"
+
+        research_sessions.save_limits(
+            str(path),
+            {
+                "research_rounds": 1,
+                "model_calls": 2,
+                "session_duration_minutes": 10,
+                "output_tokens_per_call": 4000,
+                "maximum_estimated_cost_usd": None,
+            },
+        )
+        outputs.extend([candidate, incomplete])
+        partial_start = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        partial = await wait_for(path, partial_start["id"])
+        assert partial["outcome"]["assessment"] == "mixed"
+        assert partial["outcome"]["solution_review"]["status"] == "partial"
+        assert "recurrence remains unsupported" in " ".join(partial["outcome"]["caveats"])
 
 
 async def test_remove_terminal_and_monotonic_number(path: Path):
@@ -1249,6 +1385,7 @@ def main():
         asyncio.run(
             test_maximum_regions_solution_and_frozen_attribution(root / "maximum-regions.sigma")
         )
+        asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()
         assert research_sessions.coordinate_decision(
             "stop", "recoverable_objection", "Test the omitted boundary case", [], 1, 3, 2, 6
