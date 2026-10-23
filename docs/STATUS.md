@@ -4188,7 +4188,16 @@ gates.
 ## T37 PR #45 coordinator review revision (2026-10-23)
 
 This focused revision reproduced each requested defect before changing the
-policy. No live or paid provider calls were made. It integrates current `origin/main` at `c4b18d36349170b07e48c4cdf0c38aeb532fc958`, including Gray PR #46 and PR #42. The #46 workspace CSS conflict was resolved by retaining the responsive two-column Model/Google and Thinking/ChatGPT layout and removing T37's conflicting narrow three-column rule. PR #42's Lean-logo changes are inherited from main and were not edited. The only conflict in this latest merge was `docs/STATUS.md`; both T37 review evidence and T22 Gate C evidence were preserved.
+policy. No live or paid provider calls were made. It integrates current
+`origin/main` at `b9844ed3301793601a3ba5adee1eabcda0c50dab`, including Gray PR
+#46 and PR #42. The #46 workspace CSS conflict was resolved by retaining the
+responsive two-column Model/Google and Thinking/ChatGPT layout and removing
+T37's conflicting narrow three-column rule. PR #42's Lean-logo changes are
+inherited from main and were not edited. The only content conflict during
+integration was `docs/STATUS.md`; both T37 review evidence and T22 Gate C
+evidence were preserved. The final main advancement after the Chrome run only
+changed T22 ticket/status documentation, with no application code, CSS, or
+artwork changes.
 
 | Review issue | Result | Reproducer and correction |
 | --- | --- | --- |
@@ -4197,7 +4206,7 @@ policy. No live or paid provider calls were made. It integrates current `origin/
 | Prior-session obligation continuity | **MET** | The fixture places an ordinary-language unresolved obligation before 13 routine findings. The frozen later-session index selects its original source ahead of routine findings, reports the two omitted findings, preserves strategy/assumption and source provenance, and excludes a different strategy's obligation. The persisted paused-record reload is assembled through `_agent_context`; the actual `start_session` continuation scenario also asserts the prior obligation reaches the provider context and remains frozen in saved session state. |
 | Evidentiary extract availability | **MET** | A current mandatory source with a 2,401-character method and an unresolved obligation now fails before auth/provider preflight rather than silently passing a method whose decisive tail was truncated. A prior-session source with a truncated method remains bounded but is labeled `incomplete_extract_original_not_supplied`; its obligation remains unresolved. Complete bounded extracts and pointer-only references are distinct. No summarization call is introduced. |
 | Current-main responsive header integration | **MET** | The merged main CSS retains the approved two-column compact header on narrow screens and inherits PR #42’s Lean-logo work unchanged. Fixture-backed real Chrome passed `browser_checks/a17_research.py` at 1440, 1280, 390, and 320 CSS pixels, with no unrelated UI or artwork edits. |
-| Tests, handoff, and PR update | **IN PROGRESS** | The full suite, focused research-session/report suites, and fixture-backed Chrome checks passed on current main. The final merge commit and updated handoff still need pushing to PR #45; no self-merge. |
+| Tests, handoff, and PR update | **MET** | Full `./sigma test`, focused research-session/report suites, fixture-backed real Chrome checks at 1440/1280/390/320px, updated handoff, push to PR #45, and GitHub PR metadata check completed. The PR remains open for review; no self-merge. |
 
 The previous implementation had collapsed same-text obligations despite
 different assumptions, allowed an older addressed disposition to dominate a
@@ -4228,10 +4237,10 @@ case runs through `_agent_context`, not only the selection helper. The existing
 continuation integration test starts real local fixture sessions and checks
 that an earlier unresolved obligation reaches the subsequent Investigator.
 
-Verification on tested code head: `f0c742fab487f80ce2db693d70025d3e9f793fdc`.
-Base integrated: `c4b18d36349170b07e48c4cdf0c38aeb532fc958` (includes requested #46 at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
+Verification on tested integrated head: `f8ee8571ad87a22c2d0acdbc2fcb6a53abfaebd2`.
+Base integrated: `b9844ed3301793601a3ba5adee1eabcda0c50dab` (includes #42 and requested #46 at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
 
-- `./sigma test` on merged `origin/main` `c4b18d36349170b07e48c4cdf0c38aeb532fc958` — **passed** all steps, including T37 research session/concurrency scenarios, T22 Gate C tests, computational evidence, project reports, Ruff, format check (69 files), Pyright (0 diagnostics), frontend typecheck, and production build.
+- `./sigma test` — **passed** on the final integrated head, including T37 research session/concurrency scenarios, T22 Gate C tests, computational evidence, project reports, Ruff, format check (69 files), Pyright (0 diagnostics), frontend typecheck, and production build.
 - `uv run --locked --no-sync python tests/research_sessions.py` — **passed**
   after the review changes, including 10-strategy concurrency and continuation.
 - `uv run --locked --no-sync python tests/project_reports.py` — **passed** report
@@ -4247,10 +4256,10 @@ Base integrated: `c4b18d36349170b07e48c4cdf0c38aeb532fc958` (includes requested 
 - No live model/provider calls were made. Fixture tests verify deterministic
   context plumbing and billing/call boundaries, not empirical research quality.
 
-The branch is integrated locally with the latest `main` at the tested head
-above. PR #42's `frontend/public/lean-logo.svg` and its CSS change are inherited
-from main; T37 made no additional Lean-logo edits. The updated PR push and
-GitHub mergeability response are pending final handoff verification.
+The branch is integrated with the latest `main` and pushed to PR #45. PR #42's
+`frontend/public/lean-logo.svg` and its CSS change are inherited from main; T37
+made no additional Lean-logo edits. GitHub PR metadata and mergeability are
+recorded in the final handoff.
 
 Remaining limits: model-reported addressed/superseded/retracted statuses are
 still unverified judgments; bounded extracts cannot replace original source

@@ -1,10 +1,10 @@
 T37 PR #45 — coordinator review revision
-Status: R4R pending final GitHub metadata refresh
+Status: R4R; pushed for coordinator review
 
 Branch: blue/t37-trustworthy-research-memory
-Integrated base: origin/main c4b18d36349170b07e48c4cdf0c38aeb532fc958
-  (includes requested PR #46 at c4ef4f0af5c795657f0c55579bfef051c9e78f45)
-Tested integrated code head: f0c742fab487f80ce2db693d70025d3e9f793fdc
+Integrated base: origin/main b9844ed3301793601a3ba5adee1eabcda0c50dab
+  (includes PR #42 and requested PR #46 at c4ef4f0af5c795657f0c55579bfef051c9e78f45)
+Tested integrated head before this handoff-only commit: f8ee8571ad87a22c2d0acdbc2fcb6a53abfaebd2
 PR: https://github.com/bkramerext/sigma/pull/45
 
 Review findings reproduced and corrected
@@ -44,15 +44,16 @@ Review findings reproduced and corrected
    verified. No model summary call was added.
 
 5. Current-main integration — MET.
-   Integrated latest main at c4b18d3, including PR #46's responsive two-column
+   Integrated latest main at b9844ed, including PR #46's responsive two-column
    Model/Google and Thinking/ChatGPT header and PR #42's Lean-logo work. The
-   only integration conflict was `docs/STATUS.md`; T37 and T22 Gate C evidence
-   were both retained. The #46 `workspace.css` resolution kept the approved
+   only content conflict was `docs/STATUS.md`; T37 and T22 Gate C evidence were
+   both retained. The #46 `workspace.css` resolution kept the approved
    two-column narrow layout and removed T37's conflicting narrow three-column
-   rule. PR #42's Lean-logo files were inherited, not edited by T37.
+   rule. PR #42's Lean-logo files are inherited, not edited by T37. Main's last
+   update after Chrome verification changed only ticket/status documentation.
 
 6. Verification — MET.
-   - `./sigma test` — passed all steps on current main: research
+   - `./sigma test` — passed on the final integrated head: research
      session/concurrency, T22 Gate C, computation, reports, Ruff, format check
      (69 files), Pyright (0 diagnostics), frontend typecheck and production
      build.
@@ -64,11 +65,11 @@ Review findings reproduced and corrected
      real Google Chrome at 1440/1280 desktop and 390/320 widths. The existing
      check was updated from 3 to 4 report-type choices to match current main;
      no product UI change was made for that correction.
-   - Desktop and mobile captures inspected:
+   - Desktop/mobile screenshots inspected:
      `/tmp/sigma-a18-coordinator-review-desktop.png`,
      `/tmp/sigma-a18-coordinator-review-mobile.png`.
 
 No live provider calls or paid API calls were made. Deterministic evidence
 handling and fixture plumbing are verified; empirical live-model research
 quality is UNVERIFIED. Model-reported dispositions remain unverified. T17.8
-remains separate. PR #45 remains open; do not self-merge.
+remains separate. PR #45 is open and pushed; do not self-merge.
