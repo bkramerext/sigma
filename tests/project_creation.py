@@ -52,6 +52,7 @@ def main() -> None:
                 created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
                 assert created.project.schema_version == 8
+                assert created.project.difficulty is not None
                 assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
                 raw = json.loads((Path(created.path) / STATE).read_bytes())

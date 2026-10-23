@@ -45,7 +45,9 @@ class Difficulty(str, Enum):
     HARD = "hard"
 
 
-def _difficulty(value: str) -> Difficulty:
+def _difficulty(value: str | None) -> Difficulty | None:
+    if value is None:
+        return None
     try:
         return Difficulty(value)
     except (ValueError, TypeError) as exc:
@@ -102,7 +104,7 @@ class ProjectSettings:
     investigation_type: ResearchMode
     ai_model: str
     reasoning_effort: str
-    difficulty: Difficulty = Difficulty.MEDIUM
+    difficulty: Difficulty | None = None
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -143,7 +145,7 @@ def _settings(raw: Any) -> ProjectSettings:
         _research_mode(raw["investigation_type"]),
         raw["ai_model"],
         raw["reasoning_effort"],
-        _difficulty(raw.get("difficulty", "medium")),
+        _difficulty(raw.get("difficulty")),
     )
 
 
@@ -186,7 +188,7 @@ class Project:
     active_order: tuple[str, ...] = ()
     ai_model: str = "gpt-6.1-sol"
     reasoning_effort: str = "high"
-    difficulty: Difficulty = Difficulty.MEDIUM
+    difficulty: Difficulty | None = None
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -254,6 +256,8 @@ def _decode(raw: Any) -> Project:
         fields.add("difficulty")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
+    if version >= 8 and raw["difficulty"] is None:
+        raise ProjectError("Schema v8 projects must have an Easy, Medium, or Hard difficulty")
     for key in ("id", "title", "problem"):
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise ProjectError(f"Project {key} must be a nonempty string")
@@ -267,13 +271,11 @@ def _decode(raw: Any) -> Project:
                 "investigation_type": mode,
                 "ai_model": raw.get("ai_model", legacy_model()),
                 "reasoning_effort": raw.get("reasoning_effort", "high"),
-                "difficulty": raw.get("difficulty", "medium"),
+                "difficulty": raw.get("difficulty"),
             }
         )
         if version >= 6
-        else ProjectSettings(
-            raw["title"], raw["problem"], mode, legacy_model(), "high", Difficulty.MEDIUM
-        )
+        else ProjectSettings(raw["title"], raw["problem"], mode, legacy_model(), "high", None)
     )
     if version >= 6 and (raw["title"] != settings.title or raw["problem"] != settings.problem):
         raise ProjectError("Project settings text must be canonical")
@@ -483,7 +485,7 @@ def _decode(raw: Any) -> Project:
                     ("investigation_type" if field == "research_mode" else field): val
                     for field, val in value.items()
                 }
-                normalized.setdefault("difficulty", "medium")
+                normalized.setdefault("difficulty", None)
                 normalized_change[key] = normalized
             if asdict(next_change) != normalized_change:
                 raise ProjectError("Project change text must be canonical")
@@ -617,6 +619,8 @@ def initialize_project(
 ) -> ProjectView:
     mode = _research_mode(research_mode)
     selected_difficulty = _difficulty(difficulty)
+    if selected_difficulty is None:
+        raise ProjectError("New projects must have a difficulty")
     resolved_model = legacy_model() if ai_model is None else ai_model
     try:
         validate_pair(resolved_model, reasoning_effort)
@@ -1161,9 +1165,7 @@ def update_project(
             "investigation_type": research_mode,
             "ai_model": ai_model,
             "reasoning_effort": reasoning_effort,
-            "difficulty": difficulty
-            if difficulty is not None
-            else expected.get("difficulty", "medium"),
+            "difficulty": difficulty if difficulty is not None else expected.get("difficulty"),
         }
     )
     prior = _settings(expected)
@@ -1188,7 +1190,7 @@ def update_project(
                 raise ProjectError(str(exc)) from exc
         return replace(
             project,
-            schema_version=max(8, project.schema_version),
+            schema_version=max(8 if wanted.difficulty is not None else 7, project.schema_version),
             title=wanted.title,
             problem=wanted.problem,
             investigation_type=wanted.investigation_type,

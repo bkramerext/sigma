@@ -4,20 +4,25 @@
 
 Added descriptive project difficulty with stable values `easy`, `medium`, and
 `hard`, displayed as Easy, Medium, and Hard. New projects default to Medium;
-legacy schema v1–v7 projects read as Medium without a write. Their first
-explicit Project Settings save upgrades to schema v8 and creates the existing
-exact `project.vN.json` backup. Difficulty participates in the settings audit
-chain, is validated when read, and appears in JSON audit exports and human
-reports. The Maximum Regions sample is explicitly Easy, and sample copies
-retain that value. Difficulty does not affect generation, agents, budgets, or
-research outcomes.
+legacy schema v1–v7 projects retain unknown difficulty (`null`) without a
+write. Unknown difficulty is not shown in the project header or details and is
+omitted from reports. The Settings selector shows “Not set” and preserves that
+state until a difficulty is chosen. Settings edits that leave a legacy
+difficulty unknown preserve the old schema. The first edit that chooses a
+difficulty upgrades to schema v8 and creates the existing exact
+`project.vN.json` backup. Difficulty participates in the settings audit chain, is validated
+when read, and appears in JSON audit exports and human reports only when set.
+The Maximum Regions sample is explicitly Easy, and sample copies retain that
+value. Difficulty does not affect generation, agents, budgets, or research
+outcomes.
 
-The New Project and Settings forms each have one labeled three-option selector.
-The project header shows a compact “Difficulty · …” badge beside the project
-identity, with an accessible “Project difficulty: …” name. No other product UI
-was changed. The existing settings browser scenario now verifies the new field
-and follows the current combined project-title/description and project-settings
-controls.
+The New Project form has a labeled selector defaulting to Medium. In Settings,
+the research category and difficulty controls sit side by side; Difficulty can
+remain unset for legacy projects. The project header shows a compact “Difficulty
+· …” badge only when a value exists, with an accessible “Project difficulty:
+…” name. No other product UI was changed. The existing settings browser
+scenario verifies the field and follows the current combined project-title/
+description and project-settings controls.
 
 Verification passed:
 
@@ -26,13 +31,17 @@ Verification passed:
 - `uv run --locked --no-sync --with playwright python browser_checks/settings.py`:
   real Chrome with the isolated HTTP fixture passed default Medium, saving Hard,
   failed-save draft retention, reload persistence, project-header metadata, and
-  responsive overflow checks. Viewports: 1672×941, 768×844, 390×844 and
-  320×844. The fixture makes no provider inference calls. Captures inspected:
-  `/tmp/sigma-project-header-type-320.png` and `/tmp/sigma-a8-create-390.png`.
+  responsive overflow checks. It also verifies the Settings controls are
+  side-by-side and that a schema-v7 project renders no difficulty badge and
+  retains an unset selector. Viewports: 1672×941, 768×844, 390×844 and 320×844.
+  The fixture makes no provider inference calls. Captures inspected:
+  `/tmp/sigma-project-header-type-320.png`, `/tmp/sigma-a8-create-390.png`, and
+  `/tmp/sigma-settings-classification-side-by-side.png`.
 - `git diff --check` and Ruff checks for the updated browser scenario passed.
 
-The captured new-project dialog shows the Difficulty selector between Research
-category and LLM Model. At 320px wide, the project name wraps cleanly while the
+The captured Settings dialog places Research type and Difficulty in balanced
+side-by-side controls. The captured new-project dialog shows Difficulty beside
+Research category. At 320px wide, the project name wraps cleanly while a set
 difficulty badge remains visible and the page has no horizontal overflow.
 
 ## A17.8 Evaluation (2026-10-22)

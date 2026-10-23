@@ -77,7 +77,7 @@ class SampleCopyTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in recent], [second.project.id, first.project.id])
         self.assertEqual([item["path"] for item in recent], [second.path, first.path])
         self.assertTrue(all(item["available"] for item in recent))
-        self.assertEqual(first.project.difficulty.value, "medium")
+        self.assertIsNone(first.project.difficulty)
 
     def test_easy_sample_difficulty_survives_sample_copy(self):
         source = self.projects / "sample-source.sigma"
@@ -90,8 +90,11 @@ class SampleCopyTests(unittest.TestCase):
 
         copied = samples.open_sample_project("easy")
 
+        assert copied.project.difficulty is not None
         self.assertEqual(copied.project.difficulty.value, "easy")
-        self.assertEqual(inspect_project(copied.path).project.difficulty.value, "easy")
+        reopened = inspect_project(copied.path).project
+        assert reopened.difficulty is not None
+        self.assertEqual(reopened.difficulty.value, "easy")
         catalog = {item["id"]: item for item in samples.sample_projects()["projects"]}
         self.assertEqual(catalog["easy"]["difficulty"], "easy")
         self.assertEqual(json.loads((easy_sample / STATE).read_bytes())["difficulty"], "easy")

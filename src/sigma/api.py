@@ -206,6 +206,8 @@ def inspect_view(path: str):
 def export_project_view(path: str):
     """Export project, agentic evidence, and reconstructable research sessions."""
     project = asdict(inspect_project(path).project)
+    if project["difficulty"] is None:
+        project.pop("difficulty")
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
     sessions = list(reversed(research_sessions.list_sessions(path)))
     return {
@@ -496,7 +498,7 @@ class ProjectSettingsRequest(BaseModel):
     )
     ai_model: str
     reasoning_effort: str
-    difficulty: str
+    difficulty: str | None
 
 
 class UpdateProjectRequest(ProjectSettingsRequest):

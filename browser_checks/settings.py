@@ -14,6 +14,9 @@ from playwright.sync_api import expect, sync_playwright
 
 from sigma.projects import create_strategy, inspect_project, project_settings, update_project
 
+UI_URL = os.environ.get("SIGMA_UI_URL", "http://127.0.0.1:5173")
+API_URL = os.environ.get("SIGMA_API_URL", "http://127.0.0.1:8001")
+
 
 def choose_research_type(dialog, label, field_label="Research type"):
     picker = dialog.get_by_role("combobox", name=re.compile(f"^{field_label}"))
@@ -29,6 +32,12 @@ def status_handler(data):
     return handle
 
 
+def fetch_fixture(route):
+    headers = dict(route.request.headers)
+    headers["origin"] = "http://127.0.0.1:5173"
+    return route.fetch(url=route.request.url.replace(UI_URL, API_URL), headers=headers)
+
+
 with sync_playwright() as p:
     browser = p.chromium.launch(
         executable_path=os.environ.get(
@@ -42,20 +51,14 @@ with sync_playwright() as p:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.route(
         "**/api/**",
-        lambda route: route.fulfill(
-            response=route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8001"))
-        ),
+        lambda route: route.fulfill(response=fetch_fixture(route)),
     )
     held_connection = []
     page.route("**/api/ai/connection?*", lambda route: held_connection.append(route))
-    page.goto("http://127.0.0.1:5173/")
+    page.goto(UI_URL + "/")
     expect(page.get_by_text("Checking AI…", exact=True)).to_be_visible()
     assert not page.locator(".connection-connected").count()
-    held_connection[0].fulfill(
-        response=held_connection[0].fetch(
-            url=held_connection[0].request.url.replace("127.0.0.1:5173", "127.0.0.1:8001")
-        )
-    )
+    held_connection[0].fulfill(response=fetch_fixture(held_connection[0]))
     page.unroute("**/api/ai/connection?*")
     expect(page.get_by_text("OpenAI API · key billing", exact=True)).to_be_visible()
     assert (
@@ -147,11 +150,7 @@ with sync_playwright() as p:
     dialog.press("Escape")
     expect(dialog).to_be_visible()
     assert len(creates) == 1 and not destination.exists()
-    creates[0].fulfill(
-        response=creates[0].fetch(
-            url=creates[0].request.url.replace("127.0.0.1:5173", "127.0.0.1:8001")
-        )
-    )
+    creates[0].fulfill(response=fetch_fixture(creates[0]))
     page.unroute("**/api/projects/create")
     expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
     difficulty_badge = page.get_by_label("Project difficulty: Medium", exact=True)
@@ -192,6 +191,12 @@ with sync_playwright() as p:
         "LLM Model",
         "Thinking level",
     ]
+    category_box = dialog.get_by_role("combobox", name=re.compile("^Research type")).bounding_box()
+    difficulty_box = dialog.get_by_label("Difficulty", exact=True).bounding_box()
+    assert category_box and difficulty_box
+    assert category_box["x"] < difficulty_box["x"]
+    assert category_box["x"] + category_box["width"] <= difficulty_box["x"]
+    page.screenshot(path="/tmp/sigma-settings-classification-side-by-side.png", full_page=True)
     dialog.press("Escape")
     expect(settings_button).to_be_focused()
     constrained = {
@@ -338,6 +343,26 @@ with sync_playwright() as p:
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-status-{status}-320.png", full_page=True)
         page.unroute("**/api/ai/connection?*")
+    # A legacy document has no evidence for difficulty. It must remain unset and
+    # the project header must not render a guessed difficulty badge.
+    legacy = json.loads(state.read_bytes())
+    legacy["schema_version"] = 7
+    legacy.pop("difficulty", None)
+    for event in legacy["events"]:
+        change = event.get("project_change")
+        if change:
+            for settings in change.values():
+                settings.pop("difficulty", None)
+    state.write_text(json.dumps(legacy, indent=2) + "\n", encoding="utf-8")
+    page.reload()
+    expect(
+        page.get_by_role("heading", name="Another editor changed this name", exact=True)
+    ).to_be_visible()
+    assert page.locator(".project-difficulty-badge").count() == 0
+    settings_button = page.get_by_role("button", name="Project settings", exact=True)
+    settings_button.click()
+    expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("")
+    dialog.press("Escape")
     page.get_by_role("button", name="Back to home", exact=True).click()
     expect(page.get_by_role("button", name="New", exact=True)).to_be_visible()
     page.wait_for_timeout(150)
