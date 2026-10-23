@@ -15,6 +15,7 @@ const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 
 // Prospective navigation rail; keep implementation available for later activation.
 const ENABLE_WORKSPACE_SIDEBAR = false;
+const SHOW_PROJECT_DETAILS_AND_HISTORY = false;
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
@@ -1915,7 +1916,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     {exportOpen && <ProjectExportDialog path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>}
-    <details className="project-details">
+    {SHOW_PROJECT_DETAILS_AND_HISTORY && <details className="project-details">
       <summary>Project details &amp; history</summary>
       <dl><dt>Identity</dt><dd>{project.id}</dd><dt>Directory</dt><dd>{view.path}</dd><dt>Format version</dt><dd>{project.schema_version}</dd><dt>Research type</dt><dd>{researchTypeLabel(project.investigation_type)}</dd><dt>AI model</dt><dd>{project.ai_model}</dd><dt>Thinking level</dt><dd>{thinkingLabels[project.reasoning_effort] ?? project.reasoning_effort}</dd></dl>
       <h3>Event history</h3>
@@ -1934,7 +1935,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         </div>
       </li>)}</ol>
       <p className="hint">Opening and inspecting a project leave its history unchanged.</p>
-    </details>
+    </details>}
   </WorkspaceFrame>;
 }
 

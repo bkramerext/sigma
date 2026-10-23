@@ -1816,3 +1816,8 @@ Pyright, frontend typecheck and production build; Ruff check/format also passed
 for the updated research browser scenario. A fresh browser run stopped at its
 existing stale “Open Counting Constrained Binary Strings” selector before
 reaching workspace assertions.
+
+The Project details & history section is controlled by
+`SHOW_PROJECT_DETAILS_AND_HISTORY` in the frontend runtime and is currently
+hidden (`false`). Frontend typecheck and production build passed after this
+flag was added.
