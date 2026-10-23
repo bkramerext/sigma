@@ -1,5 +1,31 @@
 # SIGMA status
 
+## T25: Outcome visual hierarchy
+
+Replaced the two-column session presentation with one vertical reading flow.
+Outcome summary, evidence references, and caveats stay immediately visible;
+Status, Strategy Assessments, Metrics, and Provenance are independently
+collapsible. Evidence & Obligations appears when a solution review or saved
+artifacts exist. Details use stacked label/value pairs rather than tables or
+side-by-side columns, with the existing copper/dark disclosures and Markdown
+controls retained.
+
+The Metrics subsection renders the existing T24 operational and research-quality
+groups and provenance source inventory without recomputing measures. Provenance
+also surfaces recorded step attempts and outcomes, artifact/session/strategy
+links, model and billing configuration distinctions, prior-session evidence,
+and saved Python execution details where available. Missing historic fields
+remain marked unavailable; session completion and recorded verification are
+not presented as independent proof.
+
+Validation: `./sigma test` passed (workflow scenarios, Ruff, Pyright, frontend
+typecheck, and production build). The focused real-Chrome check
+`browser_checks/a17_research.py` passed against the current UI and provider
+fixture, including keyboard disclosure interaction, no-table and single-column
+assertions, T24 metrics/provenance, historical and interrupted records,
+multi-strategy live activity, and desktop/mobile widths (1440, 1280, 390, and
+320 px). No paid/live provider call was made.
+
 ## A18 continuation: live research and portfolio coordination (2026-10-22–23)
 
 This continues the A18 work on PR #8; it does not replace the earlier baseline
