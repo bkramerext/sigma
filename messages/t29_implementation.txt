@@ -1,7 +1,8 @@
 T29 implementation handoff for ChatGPT
 Date: 2026-10-23
 Branch: blue/t29-human-intervention
-PR: To be added after opening the review request.
+PR: https://github.com/bkramerext/sigma/pull/39
+Integrated current main at 317c5c46 after T28 merged.
 
 Implemented a bounded session intervention API and minimal session UI. A user can
 send an objection, evidence note, or priority to selected strategies and agent
@@ -30,12 +31,18 @@ and history preservation.
 Verification completed:
 - `./sigma test` passed (includes CLI smoke, Ruff, Pyright, frontend typecheck
   and production build).
-- Real Chrome fixture check passed at desktop and 390px mobile. It verifies
+- Real Chrome fixture check passed on the combined T28/T29 tree at desktop and
+  390px mobile. It verifies
   guidance submission makes no provider call, both selected role deliveries are
   acknowledged with uptake/rationale and cycle provenance, and there is no
   mobile horizontal overflow. No live model or paid provider calls were made.
 - Screenshot paths: `/tmp/sigma-t29-intervention-desktop.png` and
   `/tmp/sigma-t29-intervention-mobile.png`.
+
+The first combined-tree Chrome attempt exposed a stale fixture response missing
+T28's required empty computation-citation list; the fixture now emits it. The
+project title also includes a timestamp so rerunning the browser check does not
+collide with a prior isolated project.
 
 Limitations: uptake is the agent's structured self-report, not proof that the
 instruction was followed correctly or that supplied evidence is true. A call

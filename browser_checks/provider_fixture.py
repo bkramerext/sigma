@@ -302,6 +302,7 @@ async def handler(request):
             }
             for item in context.get("human_guidance", [])
         ]
+        result.setdefault("computational_citations", [])
         return httpx.Response(
             200,
             json={

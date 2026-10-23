@@ -57,6 +57,7 @@ def investigation(n):
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
         "human_guidance_reviews": [],
+        "computational_citations": [],
     }
 
 
@@ -82,7 +83,12 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "retracted_cross_strategy_source_artifact_ids": [],
         "peer_handoff_reviews": [],
         "human_guidance_reviews": [],
+        "computational_citations": [],
     }
+
+
+def bare_execution(execution):
+    return {key: value for key, value in execution.items() if key != "artifact_inspections"}
 
 
 def execution_tool_fixture(python_available: bool):
@@ -344,9 +350,14 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     )
     skeptic_context = contexts[1][1]["investigator_output"]
     assert skeptic_context["python_code"] == code
-    assert skeptic_context["python_execution"] == execution
+    assert {
+        key: value
+        for key, value in skeptic_context["python_execution"].items()
+        if key != "artifact_inspections"
+    } == execution
+    assert skeptic_context["python_execution"]["artifact_inspections"] == []
     assert skeptic_context["python_execution"]["status"] == "timeout"
-    assert finished["steps"][0]["output"] == skeptic_context
+    assert finished["steps"][0]["output"] == finished["artifacts"][0]["investigator_output"]
     sources = finished["outcome"]["metrics"]["sources"]
     assert sources["session_id"] == started["id"]
     assert sources["execution_ids"] == [execution["id"]]
@@ -355,8 +366,11 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     artifact = finished["artifacts"][0]
     assert artifact["session_id"] == started["id"] and artifact["strategy_id"] == strategy.id
     assert artifact["strategy_cycle"] == 1
-    assert artifact["investigator_output"]["python_execution"] == execution
-    assert finished["artifacts"][0]["investigator_output"] == skeptic_context
+    assert {
+        key: value
+        for key, value in artifact["investigator_output"]["python_execution"].items()
+        if key != "artifact_inspections"
+    } == execution
     assert (
         finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
     )
@@ -371,7 +385,11 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     exported = export_project_view(str(path))
     exported_artifact = exported["research_sessions"][0]["artifacts"][0]
     assert exported_artifact["investigator_output"]["python_code"] == code
-    assert exported_artifact["investigator_output"]["python_execution"] == execution
+    assert {
+        key: value
+        for key, value in exported_artifact["investigator_output"]["python_execution"].items()
+        if key != "artifact_inspections"
+    } == execution
     with patch("sigma.api.export_project_view", return_value=exported):
         paper_evidence, _ = papers._snapshot(str(path))
     paper_sources = {item["id"]: item["data"] for item in paper_evidence["sources"]}
@@ -394,7 +412,13 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         preview = peer_context["other_strategy_evidence"][0]["python_execution"]
         assert preview["id"] == execution["id"] and preview["status"] == "timeout"
         assert preview["source"] == code and preview["stderr"] == execution["stderr"]
-    assert finished["artifacts"][0]["investigator_output"]["python_execution"] == execution
+    assert {
+        key: value
+        for key, value in finished["artifacts"][0]["investigator_output"][
+            "python_execution"
+        ].items()
+        if key != "artifact_inspections"
+    } == execution
     large_preview_record = json.loads(json.dumps(finished))
     large_execution = large_preview_record["artifacts"][0]["investigator_output"][
         "python_execution"
@@ -465,8 +489,8 @@ async def test_recovery_reuses_saved_python_execution(path: Path):
     execute.assert_not_awaited()
     recovered = research_sessions._read(str(path), session_id)
     branch = recovered["strategy_runs"][0]
-    assert branch["pending_investigation"]["python_execution"] == saved_execution
-    assert recovered["steps"][0]["output"]["python_execution"] == saved_execution
+    assert bare_execution(branch["pending_investigation"]["python_execution"]) == saved_execution
+    assert bare_execution(recovered["steps"][0]["output"]["python_execution"]) == saved_execution
     assert any(event["kind"] == "python.recovered" for event in recovered["events"])
 
 
@@ -534,7 +558,9 @@ async def test_stop_during_python_execution_preserves_provenance(path: Path):
     assert len(provider_calls) == 1  # the Skeptic is not called after a user stop
     saved = research_sessions.get_session(str(path), started["id"])
     pending = saved["strategy_runs"][0]["pending_investigation"]
-    assert pending["python_code"] == code and pending["python_execution"] == execution
+    assert pending["python_code"] == code
+    assert bare_execution(pending["python_execution"]) == execution
+    assert pending["python_execution"]["artifact_inspections"] == []
     assert saved["steps"][0]["status"] == "completed"
     assert saved["steps"][0]["output"] == pending
     assert any(event["kind"] == "python.completed" for event in saved["events"])
@@ -1659,6 +1685,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "python_code": None,
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
+        "computational_citations": [],
     }
     review = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -3473,6 +3500,7 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "python_code": None,
         "sage_code": None,
         "prior_session_failure_attempt_ids": [],
+        "computational_citations": [],
     }
     accepted = {
         **skeptic(1, "stop", "productive_conclusion"),

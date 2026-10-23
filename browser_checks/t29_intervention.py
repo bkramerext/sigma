@@ -32,7 +32,7 @@ with sync_playwright() as playwright:
         """async () => {
           const response = await fetch('/api/projects/create', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({title:'T29 Guidance Browser Verification',
+            body: JSON.stringify({title:'T29 Guidance Browser Verification ' + Date.now(),
               problem:'Verify bounded user guidance in a deterministic browser fixture.',
               investigation_type:'default', difficulty:'easy'})
           });
