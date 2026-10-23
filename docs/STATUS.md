@@ -44,7 +44,9 @@ restoration drills to T22.4; the optional archive/restore utility is tested
 locally but no production backup target or recovery drill is claimed. Loss of
 the host volume may be unrecoverable until that follow-up is completed.
 See `deploy/README.md` and `messages/t22_deployment_r4r.txt` for commands,
-recovery steps and full requirement-by-requirement status.
+recovery steps and full requirement-by-requirement status. The implementation
+is submitted for review in [PR #52](https://github.com/bkramerext/sigma/pull/52)
+at validation head `9830880505b5f1731cb1a93f435771df089641b6`.
 
 ## Lean toolbar color feedback (2026-10-23)
 
