@@ -93,7 +93,11 @@ With a fresh `provider_fixture:app` on port 8001 and the normal UI on 5173, run
 project name and header reflow at 1280, 1100, 700, 390 and 320px, the absence of
 the workspace tagline, shared Home/Close button states, identical Home/workspace
 connection pill styling and live label, disclosure/focus behavior, and keyboard
-Close. Screenshots are `/tmp/sigma-a13-header-*.png`.
+Back to home. It also cycles and persists the model/thinking pills, skips a
+verified model that does not support the selected effort, checks the relative
+cost explanation and placeholder auth state, and verifies no horizontal
+overflow. Screenshots are `/tmp/sigma-a23-model-controls-*.png` and
+`/tmp/sigma-a13-header-*.png`.
 
 ## A15 single-request Generate Strategy
 

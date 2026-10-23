@@ -46,10 +46,10 @@
 | A21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
 | A22 | Cloud deployment | Planned / unverified | Unassigned |
 | A23 | Project difficulty setting | Done | — |
-| A23+ | Clickable model and thinking-level pills under Difficulty; cost dollar signs; sign-in placeholder | Proposed | Unassigned |
+| A23.1 | Interactive model and thinking controls | Implementation complete; PR open | Blue |
 | A24 | Consolidated outcome metrics, operational and research quality | Ready to assign; not verified started | Green proposed |
 
-### A23+ scope
+### A23.1 scope
 
 Clicking model and thinking pills cycles through the **actually supported** selections. Show relative pricing as `$`, `$$`, etc. Reconcile incompatible reasoning levels, persist selection, and apply changes only to future requests. Preserve the selected billing mode; do not initiate paid-API fallback. The authentication pill remains a placeholder. Preserve SIGMA's existing UI styling.
 

@@ -410,6 +410,41 @@ side-by-side controls. The captured new-project dialog shows Difficulty beside
 Research category. At 320px wide, the project name wraps cleanly while a set
 difficulty badge remains visible and the page has no horizontal overflow.
 
+## A23.1 Evaluation (2026-10-23)
+
+Added compact model, thinking-level, and authentication-status pills beneath
+the project title/difficulty row. The model catalog now supplies relative cost
+tiers derived from the published API token prices; the model pill exposes the
+explanation that these tiers are not session charges. The header reads the
+existing account-verified model catalog and persists choices through the
+existing project settings update service, so later provider requests use the
+saved model and thinking level. It never changes the selected billing mode.
+
+The model pill cycles only among account-verified available models that support
+the current thinking level. If no compatible alternate exists, the control is
+disabled with an explanation. The thinking pill cycles only through the
+selected model's supported efforts. A static Sign in/Signed in placeholder
+reflects ChatGPT connection state; API-key mode displays Sign in with an
+accessible explanation that ChatGPT plan sign-in is inactive. No authentication
+flow was added.
+
+Verification passed:
+
+- `./sigma test`: all scenarios passed, including Ruff check/format, Pyright,
+  frontend TypeScript check, and production Vite build. Model-catalog scenarios
+  verify all three documented relative price tiers and reject a model/thinking
+  pair after the fixture narrows the model's supported efforts.
+- `uv run --with playwright python browser_checks/header.py`: real Chrome with
+  an isolated local fixture passed model and thinking selection by keyboard,
+  persisted project settings, unsupported-model skipping, cost disclosure,
+  placeholder status, and no billing-mode change at 1280, 1100, 700, 390, and
+  320px. No provider inference or paid API call was made. Inspected captures:
+  `/tmp/sigma-a23-model-controls-1280.png` and
+  `/tmp/sigma-a23-model-controls-390.png`.
+
+The model catalog and settings contract are tested with deterministic fixtures;
+live provider inference was not used for this UI/configuration assignment.
+
 ## A17.8 Evaluation (2026-10-22)
 
 **Recommendation: A17.8 needs further work before acceptance; do not mark A17
