@@ -340,6 +340,17 @@ def main() -> None:
             and response.content == b"PNG fixture"
             and response.headers["content-disposition"].startswith("attachment;")
         )
+        artifact_directory = directory / f"{record['id']}.artifacts"
+        artifact_file = artifact_directory / "plot.png"
+        artifact_file.write_bytes(b"PNG altered")  # same size, different content
+        rejects(lambda: python_sandbox.get_execution_artifact(path, record["id"], "plot.png"))
+        artifact_file.write_bytes(b"PNG fixture")
+        relocated = directory / "relocated-artifacts"
+        artifact_directory.rename(relocated)
+        artifact_directory.symlink_to(relocated, target_is_directory=True)
+        rejects(lambda: python_sandbox.get_execution_artifact(path, record["id"], "plot.png"))
+        artifact_directory.unlink()
+        relocated.rename(artifact_directory)
         with patch.object(python_sandbox, "execute", return_value=fake):
             response = client.post(
                 "/api/projects/research-executions",

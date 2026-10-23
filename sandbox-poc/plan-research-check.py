@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from sigma import research_sessions
 from sigma.openai_connection import auth_context
-from sigma.projects import ProjectError, create_strategy, initialize_project
+from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 from sigma.proposals import configuration
 
 
@@ -29,20 +29,32 @@ async def plan_only():
     return context
 
 
-async def run(path: Path, effort: str, output_tokens: int) -> None:
+async def run(
+    path: Path, effort: str, output_tokens: int, rounds: int, continue_project: bool
+) -> None:
     credential = await plan_only()
-    view = initialize_project(
-        path,
-        "Small-argument square-root response",
-        "Assess whether direct double-precision evaluation of f(x)=(sqrt(1+x)-1)/x is reliable for positive x from 1e-18 through 1e-2. Give a concrete recommendation with reproducible evidence and state the limitations of observations and of any general claim.",
-        ai_model="gpt-6.1-sol",
-        reasoning_effort=effort,
-    )
-    strategy = create_strategy(
-        path,
-        "Numerical reliability investigation",
-        "Investigate numerical reliability, challenge candidate explanations with measurable tests, and follow the evidence.",
-    ).project.strategies[0]
+    if continue_project:
+        view = inspect_project(path)
+        if view.project.ai_model != "gpt-6.1-sol" or view.project.reasoning_effort != effort:
+            raise ProjectError(
+                "Existing project configuration differs; the evaluation will not rewrite it"
+            )
+        strategy = next(
+            item for item in view.project.strategies if item.enabled and item.removed_at is None
+        )
+    else:
+        view = initialize_project(
+            path,
+            "Small-argument square-root response",
+            "Assess whether direct double-precision evaluation of f(x)=(sqrt(1+x)-1)/x is reliable for positive x from 1e-18 through 1e-2. Give a concrete recommendation with reproducible evidence and state the limitations of observations and of any general claim.",
+            ai_model="gpt-6.1-sol",
+            reasoning_effort=effort,
+        )
+        strategy = create_strategy(
+            path,
+            "Numerical reliability investigation",
+            "Investigate numerical reliability, challenge candidate explanations with measurable tests, and follow the evidence.",
+        ).project.strategies[0]
     config = await configuration(view=view, context=credential)
     if not config["available"]:
         raise ProjectError(
@@ -50,14 +62,21 @@ async def run(path: Path, effort: str, output_tokens: int) -> None:
         )
     limits = research_sessions.get_limits(str(path))
     limits.update(
-        research_rounds=2,
-        model_calls=4,
+        research_rounds=rounds,
+        model_calls=2 * rounds,
         session_duration_minutes=5,
         output_tokens_per_call=output_tokens,
     )
     limits = research_sessions.save_limits(str(path), limits)
     print(
-        json.dumps({"path": str(path), "mode": "chatgpt", "model": config["model"], "call_cap": 4}),
+        json.dumps(
+            {
+                "path": str(path),
+                "mode": "chatgpt",
+                "model": config["model"],
+                "call_cap": limits["model_calls"],
+            }
+        ),
         flush=True,
     )
     started_at = time.monotonic()
@@ -104,7 +123,11 @@ async def run(path: Path, effort: str, output_tokens: int) -> None:
             if isinstance(step.get("output"), dict) and step["output"].get("python_execution")
         ],
     }
-    (path / "evaluation-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    (path / f"evaluation-summary-{session['id']}.json").write_text(
+        json.dumps(summary, indent=2) + "\n"
+    )
+    if not (path / "evaluation-summary.json").exists():
+        (path / "evaluation-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(
         json.dumps(
             {
@@ -128,11 +151,25 @@ def main():
     parser.add_argument("--project", type=Path)
     parser.add_argument("--reasoning-effort", choices=("medium", "high"), default="high")
     parser.add_argument("--output-tokens", type=int, choices=(2048, 4096), default=4096)
+    parser.add_argument("--rounds", type=int, choices=(1, 2), default=2)
+    parser.add_argument(
+        "--continue-project",
+        action="store_true",
+        help="Start a new bounded session in the existing evaluation project, preserving prior evidence",
+    )
     args = parser.parse_args()
     if not args.run:
         parser.error("--run is required; this evaluation uses real plan allowance")
     path = args.project or Path("projects") / f"a19-plan-stability-{uuid4().hex[:8]}.sigma"
-    asyncio.run(run(path.resolve(), args.reasoning_effort, args.output_tokens))
+    asyncio.run(
+        run(
+            path.resolve(),
+            args.reasoning_effort,
+            args.output_tokens,
+            args.rounds,
+            args.continue_project,
+        )
+    )
 
 
 if __name__ == "__main__":

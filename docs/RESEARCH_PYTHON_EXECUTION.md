@@ -14,6 +14,11 @@ can be inferred. Recovery never reruns that uncertain proposal automatically.
 Final records are immutable. There is no automatic repair or additional
 provider call.
 
+An Investigator's proposal text predates execution. Its statements that a run
+is still proposed are preserved as history; the attached execution supplies
+the later status. The Skeptic synthesizes that result and retires resolved
+execution obligations without requiring a cycle just to rewrite the proposal.
+
 The Skeptic receives the full Investigator output, including the exact source
 and a `python_execution` record with execution ID, status, exit code,
 stdout/stderr, duration, resource snapshot, and captured file metadata. The
@@ -34,6 +39,11 @@ execution ID. Project JSON audit exports and A20 paper evidence snapshots retain
 the exact proposed source and full execution record. Captured binary files stay
 in the private project sidecar and can be retrieved through the execution
 artifact endpoint.
+Peer strategies and later sessions receive attributed computation previews,
+including source and terminal status, with explicit stdout/stderr truncation
+flags. Full evidence remains unchanged in the original record. Binary plots
+and datasets are available through the API; models receive their metadata and
+printed summaries, not their pixels or complete contents.
 
 The local API mirrors this contract:
 
@@ -60,7 +70,11 @@ checked against the selected project's saved session. Sample projects cannot
 receive execution records; open a sample copy first.
 Execution status is `running`, `interrupted`, `completed`, `failed`, `timeout`,
 `output_limit`, `unavailable`, or `busy`. Only one container is admitted per local backend
-process; concurrent attempts are captured as busy without starting a container.
+process. Research branches take turns through a cancellable gate before
+dispatch, so concurrent proposals do not waste a cycle on busy admission.
+Waiting proposals emit `python.queued`; cancellation or an expired session
+deadline prevents their dispatch. Direct API attempts during an admitted run
+are captured as busy without starting a container.
 A nonzero process exit is never a successful execution. Failed,
 timed-out, output-limited, or unavailable attempts are retained as such.
 Artifact collection errors are retained separately as `artifact_error`, without
@@ -79,6 +93,9 @@ memory and swap ceiling, one CPU, 64 processes, 15 seconds wall time, 16,000
 UTF-8 source bytes, and 32,000 combined stdout/stderr bytes. There are no host
 bind mounts or forwarded credentials. The image contains pinned Python 3.12.8,
 NumPy 2.2.2, SciPy 1.15.1, pandas 2.2.3, SymPy 1.13.3 and Matplotlib 3.10.0.
+Artifact capture has at most five seconds and shares the remaining execution
+deadline; it cannot extend a near-deadline program by another capture window.
+Runtime inspection, kill/removal and process reaping also have finite timeouts.
 
 Investigator Python is optional and intended for finite, deterministic checks.
 The Skeptic must assess both program and result. Executed computation remains
@@ -103,8 +120,10 @@ answer, a small residual, a successful exit, and metadata about a plot do not
 establish the claimed result. Numerical contradiction and operational failure
 require different follow-up questions.
 
-`sandbox-poc/research-check.py` exercises six multi-cycle scientific workflows
-with real Docker and scripted provider responses. `adversarial-check.py`
+`sandbox-poc/research-check.py` exercises seven scientific scenarios plus a
+three-strategy portfolio (eight workflows, fourteen proposals) with real Docker
+and scripted provider responses, including a 100,000-row captured dataset.
+`adversarial-check.py`
 attacks output/artifact handling, cancellation, concurrent admission, resource
 exhaustion, and a real backend SIGKILL with detached-child cleanup. Neither
 tests live model judgment. `plan-research-check.py --run` is an explicit bounded

@@ -82,7 +82,9 @@ def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
     return command
 
 
-def _capture_artifacts(container_id: str) -> tuple[tuple[str, str, bytes], ...]:
+def _capture_artifacts(
+    container_id: str, timeout_seconds: float = 5
+) -> tuple[tuple[str, str, bytes], ...]:
     try:
         process = subprocess.Popen(
             [CONTAINER_RUNTIME, "exec", container_id, "tar", "-C", "/artifacts", "-cf", "-", "."],
@@ -96,7 +98,7 @@ def _capture_artifacts(container_id: str) -> tuple[tuple[str, str, bytes], ...]:
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
     archive_chunks = bytearray()
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + timeout_seconds
     try:
         while selector.get_map():
             remaining = deadline - time.monotonic()
@@ -340,7 +342,9 @@ def _run(
             if just_finished:
                 try:
                     cid = cidfile.read_text(encoding="ascii").strip()
-                    artifacts = _capture_artifacts(cid)
+                    artifacts = _capture_artifacts(
+                        cid, timeout_seconds=max(0.001, min(5, deadline - time.monotonic()))
+                    )
                 except (OSError, UnicodeError, ProjectError) as exc:
                     status = "failed"
                     message = (
@@ -353,7 +357,7 @@ def _run(
                     process.stdin.close()
                 except BrokenPipeError:
                     pass
-                deadline = time.monotonic() + 3
+                deadline = min(deadline, time.monotonic() + 3)
         if process.poll() is not None and not selector.get_map():
             break
     try:

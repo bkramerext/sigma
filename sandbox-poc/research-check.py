@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import hashlib
 import json
+import math
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
@@ -23,6 +26,13 @@ from sigma.python_sandbox import get_execution, get_execution_artifact
 
 REAL_CLIENT = httpx.AsyncClient
 CASES = {
+    "misleading-printed-answer": [
+        (
+            "completed",
+            "Check whether a printed proof claim is supported by any computation.",
+            "import json\nprint(json.dumps({'claim':'All n*n+n+41 are prime; PROVED','tested_inputs':0}))",
+        ),
+    ],
     "cancellation-error": [
         (
             "completed",
@@ -138,8 +148,9 @@ assert len(table)==24 and table.groupby('n').standard_error.mean().iloc[-1]<tabl
 assert abs(reference-0.7468241328124271)<1e-12
 summary=table.groupby('n').agg(mean_estimate=('estimate','mean'),mean_standard_error=('standard_error','mean'),max_absolute_error=('absolute_error','max'))
 table.to_csv('/artifacts/trials.csv',index=False)
+pd.DataFrame({'sampled_value':values}).to_csv('/artifacts/raw-last-trial.csv',index=False)
 fig,ax=plt.subplots(); ax.errorbar(summary.index,summary.mean_estimate,yerr=2*summary.mean_standard_error,fmt='o'); ax.axhline(reference); ax.set_xscale('log'); fig.savefig('/artifacts/convergence.png')
-print(json.dumps({'reference':reference,'quadrature_error_estimate':quadrature_error,'trials':len(table),'total_samples':int(table.n.sum()),'summary':json.loads(summary.to_json()),'confidence_intervals_are_not_proof':True}))
+print(json.dumps({'reference':reference,'quadrature_error_estimate':quadrature_error,'trials':len(table),'total_samples':int(table.n.sum()),'summary':json.loads(summary.to_json()),'last_trial_mean':float(values.mean()),'confidence_intervals_are_not_proof':True}))
 """,
         ),
     ],
@@ -161,18 +172,54 @@ print(json.dumps({'terms':n,'partial_sum':partial,'remainder_bound':bound,'infin
 }
 
 
-def review(cycle: int, method: str, status: str) -> dict:
+def observation(name: str, cycle: int, execution: dict) -> str:
+    if execution["status"] == "timeout":
+        return "The wall limit expired. This is an operational failure, not a divergence proof; use a bounded experiment with a remainder bound."
+    if execution["status"] == "failed":
+        return "The singular-matrix exception does not show inconsistency. Change to a rank-revealing solve and inspect the null space."
+    data = json.loads(execution["stdout"])
+    if name == "misleading-printed-answer":
+        assert (
+            data["tested_inputs"] == 0 and "n*n+n+41" not in execution["source"].split("print")[0]
+        )
+        return "Reject the printed PROVED claim: the source only prints an assumption and tests zero inputs. No primality evidence was produced."
+    if name == "cancellation-error":
+        if cycle == 1:
+            assert data["naive"] == 0 and data["stable"] == 0.5
+            return "A zero exit concealed numerical error: the naive value is 0 while the stable value is 0.5. Rationalize and check against a symbolic reference."
+        assert data["symbolic_limit"] == "1/2"
+        return "The revised expression agrees with the symbolic limit 1/2 and finite samples; a uniform floating-point error bound remains separate."
+    if name == "ill-conditioned-system":
+        assert data["relative_residual"] < 1e-12 and data["relative_solution_error"] > 0.1
+        return "Reject the residual-based accuracy claim: a tiny residual accompanies relative solution error above 0.1 in an ill-conditioned system."
+    if name == "false-prime-hypothesis":
+        if cycle == 1:
+            assert data["counterexamples"] == []
+            return "No counterexample in 0..39 does not prove universal primality; widen the exact search."
+        assert data["first_counterexample"] == 40 and data["value"] == 41**2
+        return "The exact factorization 1681=41^2 at n=40 refutes universal primality; this counterexample is stronger than a failed finite search."
+    if name == "singular-system-repair":
+        assert data["rank"] == 1 and data["unique"] is False
+        return "The revised least-squares solution and null vector show nonuniqueness, not inconsistency."
+    if name == "monte-carlo-repeats":
+        assert data["trials"] == 24 and data["total_samples"] == 888000
+        return "Twenty-four seeded trials show reduced estimated standard error against independent quadrature; confidence intervals and a finite sample are not universal guarantees."
+    assert data["terms"] == 40 and data["remainder_bound"] < 2e-12
+    return "The bounded geometric sum supplies an explicit remainder estimate; the earlier timeout contributed no mathematical conclusion."
+
+
+def review(cycle: int, method: str, status: str, finding: str) -> dict:
     return {
         "assessment": "continue",
         "stop_reason": "recoverable_objection",
-        "response": f"Observed execution status {status}. {method} This is finite evidence; neither a timeout nor a floating-point result proves or refutes a general mathematical claim.",
+        "response": f"Observed execution status {status}. {finding} {method}",
         "objections": [
             "Check numerical accuracy and assumptions against the source, not the exit code alone."
         ],
         "remaining_obligations": ["Establish the scope of the claim beyond the tested cases."],
         "next_question": method,
         "objective_status": "partial",
-        "solution_claim": "A bounded experiment produced inspectable evidence.",
+        "solution_claim": finding,
         "argument_summary": "The saved source, status, diagnostics and output delimit what was actually observed.",
         "assumptions_reviewed": [
             "Synthetic inputs and fixed seeds do not represent arbitrary populations."
@@ -188,7 +235,7 @@ def review(cycle: int, method: str, status: str) -> dict:
     }
 
 
-async def run_case(root: Path, name: str, experiments: list) -> dict:
+async def run_case(root: Path, name: str, experiments: list, strategy_count: int = 1) -> dict:
     path = root / f"{name}-{uuid4().hex[:8]}.sigma"
     view = initialize_project(
         path, name, "Investigate the computational claim and its limitations."
@@ -196,8 +243,16 @@ async def run_case(root: Path, name: str, experiments: list) -> dict:
     strategy = create_strategy(
         path, "Discriminating numerical experiments", experiments[0][1]
     ).project.strategies[0]
+    strategies = [strategy] + [
+        create_strategy(path, f"Independent computation {i}", experiments[0][1]).project.strategies[
+            -1
+        ]
+        for i in range(2, strategy_count + 1)
+    ]
     limits = research_sessions.get_limits(str(path))
-    limits.update(research_rounds=len(experiments), model_calls=2 * len(experiments))
+    limits.update(
+        research_rounds=len(experiments), model_calls=2 * len(experiments) * strategy_count
+    )
     limits = research_sessions.save_limits(str(path), limits)
     credential = {
         "identity": "fixture-account",
@@ -236,7 +291,7 @@ async def run_case(root: Path, name: str, experiments: list) -> dict:
             assert execution["status"] == status, execution
             assert (
                 execution["session_id"] == context_session[0]
-                and execution["strategy_id"] == strategy.id
+                and execution["strategy_id"] == context["strategy"]["id"]
                 and execution["cycle"] == cycle
             )
             assert get_execution(path, execution["id"]) == execution
@@ -251,7 +306,9 @@ async def run_case(root: Path, name: str, experiments: list) -> dict:
                 if cycle < len(experiments)
                 else "Explain which general claims still need an argument."
             )
-            result = review(cycle, next_method, status)
+            result = review(cycle, next_method, status, observation(name, cycle, execution))
+            if name == "misleading-printed-answer":
+                result["strategy_contribution"] = "unproductive"
         return httpx.Response(
             200,
             json={
@@ -283,6 +340,7 @@ async def run_case(root: Path, name: str, experiments: list) -> dict:
             view.project.id,
             credential["identity"],
             expected_limits=limits,
+            strategy_ids=[item.id for item in strategies],
         )
         context_session.append(started["id"])
         for _ in range(6000):
@@ -292,15 +350,32 @@ async def run_case(root: Path, name: str, experiments: list) -> dict:
             await asyncio.sleep(0.01)
         else:
             raise AssertionError("Research workflow exceeded the evaluation deadline")
-    assert session["status"] == "ended" and len(session["artifacts"]) == len(experiments), session
+    assert (
+        session["status"] == "ended"
+        and len(session["artifacts"]) == len(experiments) * strategy_count
+    ), session
     for artifact, execution in zip(session["artifacts"], inspected, strict=True):
         assert artifact["investigator_output"]["python_execution"] == execution
         assert artifact["objective_review"]["verification_status"] == "incomplete"
         for metadata in execution["artifacts"]:
             content, _ = get_execution_artifact(path, execution["id"], metadata["filename"])
             assert hashlib.sha256(content).hexdigest() == metadata["sha256"]
+            if metadata["filename"] == "raw-last-trial.csv":
+                values = [
+                    float(row["sampled_value"])
+                    for row in csv.DictReader(StringIO(content.decode("utf-8")))
+                ]
+                assert len(values) == 100000 and all(math.exp(-1) <= value <= 1 for value in values)
+                assert (
+                    abs(
+                        math.fsum(values) / len(values)
+                        - json.loads(execution["stdout"])["last_trial_mean"]
+                    )
+                    < 1e-15
+                )
     result = {
         "case": name,
+        "strategies": strategy_count,
         "session_id": session["id"],
         "statuses": [item["status"] for item in inspected],
         "executions": [
@@ -327,6 +402,16 @@ def main():
         results = []
         for name, experiments in CASES.items():
             results.append(asyncio.run(run_case(root, name, experiments)))
+        results.append(
+            asyncio.run(
+                run_case(
+                    root,
+                    "ill-conditioned-system",
+                    CASES["ill-conditioned-system"],
+                    strategy_count=3,
+                )
+            )
+        )
         (root / f"summary-{uuid4().hex[:8]}.json").write_text(
             json.dumps(
                 {"provider": "scripted fixture; no model calls", "results": results}, indent=2

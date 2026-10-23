@@ -311,6 +311,36 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     )
     assert paper_artifact["investigator_output"]["python_code"] == code
     assert paper_artifact["investigator_output"]["python_execution"]["source"] == code
+    # Cross-strategy coordination must see the failure, not only the original
+    # pre-execution claim. Its preview leaves the original exact evidence intact.
+    peer_branch = {
+        "strategy_id": str(uuid4()),
+        "strategy_title": "Peer approach",
+        "strategy_text": "Review the computation independently.",
+        "current_question": "Does peer evidence change the approach?",
+        "pending_investigation": investigation(1),
+    }
+    for role in ("investigator", "skeptic"):
+        peer_context = research_sessions._portfolio_context(finished, peer_branch, role, 1)
+        preview = peer_context["other_strategy_evidence"][0]["python_execution"]
+        assert preview["id"] == execution["id"] and preview["status"] == "timeout"
+        assert preview["source"] == code and preview["stderr"] == execution["stderr"]
+    assert finished["artifacts"][0]["investigator_output"]["python_execution"] == execution
+    large_preview_record = json.loads(json.dumps(finished))
+    large_execution = large_preview_record["artifacts"][0]["investigator_output"][
+        "python_execution"
+    ]
+    large_execution.update(stdout="x" * 3000, stderr="e" * 2000)
+    peer_context = research_sessions._portfolio_context(
+        large_preview_record, peer_branch, "skeptic", 1
+    )
+    preview = peer_context["other_strategy_evidence"][0]["python_execution"]
+    assert preview["stdout_truncated"] and len(preview["stdout"]) == 2000
+    assert preview["stderr_truncated"] and len(preview["stderr"]) == 1000
+    assert large_execution["stdout"] == "x" * 3000 and preview["source"] == code
+    prior_findings = research_sessions._prior_session_findings(str(path), str(uuid4()))
+    assert prior_findings[0]["python_execution"]["id"] == execution["id"]
+    assert prior_findings[0]["python_execution"]["status"] == "timeout"
 
 
 async def test_recovery_reuses_saved_python_execution(path: Path):
@@ -534,6 +564,127 @@ async def test_restart_during_python_has_no_automatic_rerun(path: Path):
     evidence = recovered["strategy_runs"][0]["pending_investigation"]["python_execution"]
     assert evidence["status"] == "interrupted" and evidence["exit_code"] is None
     assert evidence["stdout"] == "" and "may have run" in evidence["interruption_reason"]
+    recovered["deadline_at"] = "2000-01-01T00:00:00+00:00"
+    pending = recovered["strategy_runs"][0]["pending_investigation"]
+    pending.pop("python_execution")
+    pending["python_code"] = "print('new work after deadline')"
+    research_sessions._save(str(path), recovered)
+    with patch.object(
+        research_sessions,
+        "execute_research_code",
+        new=AsyncMock(side_effect=AssertionError("expired work must not dispatch")),
+    ):
+        await research_sessions._complete_pending_python(
+            record["id"], str(path), branch["strategy_id"], 1, asyncio.Lock()
+        )
+    expired = research_sessions._read(str(path), record["id"])
+    assert "python_execution" not in expired["strategy_runs"][0]["pending_investigation"]
+
+
+async def test_portfolio_python_queue_and_stop(path: Path):
+    for stopping in (False, True):
+        case = path.with_name(("stop" if stopping else "complete") + ".sigma")
+        view, first, credential, config = await setup(case)
+        strategies = [first] + [
+            create_strategy(
+                case, f"Computation {i}", "Run an independently attributed finite experiment."
+            ).project.strategies[-1]
+            for i in (2, 3)
+        ]
+        limits = research_sessions.get_limits(str(case))
+        limits.update(research_rounds=1, model_calls=6)
+        limits = research_sessions.save_limits(str(case), limits)
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        provider_investigations = []
+        state = {"active": 0, "maximum": 0}
+
+        async def handler(request, provider_investigations=provider_investigations):
+            payload = json.loads(request.content)
+            context = json.loads(payload["input"])
+            if payload["text"]["format"]["name"] == "research_investigator":
+                provider_investigations.append(context["strategy"]["id"])
+                output = {**investigation(1), "python_code": "print('finite check')"}
+            else:
+                assert context["investigator_output"]["python_execution"]["status"] == "completed"
+                output = skeptic(1, "stop", "productive_conclusion")
+            return httpx.Response(200, json=provider_response(output))
+
+        async def compute(
+            _path,
+            source,
+            calls=calls,
+            state=state,
+            entered=entered,
+            release=release,
+            stopping=stopping,
+            **provenance,
+        ):
+            calls.append(provenance)
+            state["active"] += 1
+            state["maximum"] = max(state["maximum"], state["active"])
+            entered.set()
+            try:
+                if stopping:
+                    await release.wait()
+                else:
+                    await asyncio.sleep(0.05)
+                return {
+                    "id": str(uuid4()),
+                    "source": source,
+                    "status": "completed",
+                    "exit_code": 0,
+                    "stdout": "finite check\n",
+                    "stderr": "",
+                    "artifacts": [],
+                    **provenance,
+                }
+            finally:
+                state["active"] -= 1
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "execute_research_code", new=compute),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            started = await research_sessions.start_session(
+                str(case),
+                first.id,
+                str(uuid4()),
+                view.project.id,
+                credential["identity"],
+                expected_limits=limits,
+                strategy_ids=[item.id for item in strategies],
+            )
+            if stopping:
+                await entered.wait()
+                for _ in range(100):
+                    if len(provider_investigations) == 3:
+                        break
+                    await asyncio.sleep(0.01)
+                assert len(provider_investigations) == 3
+                stop = asyncio.create_task(
+                    research_sessions.control_session(str(case), started["id"], "stop")
+                )
+                await asyncio.sleep(0.02)
+                release.set()
+                finished = await stop
+            else:
+                finished = await wait_for(case, started["id"])
+        assert state["maximum"] == 1 and state["active"] == 0
+        assert len(calls) == (1 if stopping else 3), calls
+        assert finished["status"] == ("stopped" if stopping else "ended"), finished
+        if stopping:
+            assert len([e for e in finished["events"] if e["kind"] == "python.started"]) == 1
+            assert len(finished["steps"]) == 3 and finished["calls_used"] == 3
+        else:
+            assert len(finished["artifacts"]) == 3 and finished["calls_used"] == 6
 
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
@@ -3189,6 +3340,7 @@ def main():
         asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
         asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))
         asyncio.run(test_failed_experiment_is_reused_then_revised(root / "python-revision.sigma"))
+        asyncio.run(test_portfolio_python_queue_and_stop(root / "python-queue.sigma"))
         asyncio.run(
             test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
         )

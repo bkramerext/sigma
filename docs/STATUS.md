@@ -2804,3 +2804,96 @@ Before the next A18 sync, `./sigma test` passed all checks and real Chrome
 `browser_checks/a17_research.py` passed against a fresh local fixture and UI
 from this checkout. Further validation against Blue's newly advanced branch
 is recorded below when complete.
+
+### Latest A18 integration, actual model evidence, and final checks
+
+A19 now includes Blue's `a18-blue` tip `b5c8ff1`, through merge commit
+`3195927` on Green's branch. Blue's branch was not changed. The merge preserves
+peer handoffs, relation retractions, provider timeout classification and the
+new 120-second provider deadline alongside A19's 256,000-character context cap.
+The strict Skeptic fixtures were updated for the required
+`retracted_cross_strategy_source_artifact_ids` field. The A19 diff against
+that base remains confined to computation and its documentation/tests.
+
+The integration review found another practical gap: peer and prior-session
+summaries retained the Investigator's pre-run claim but omitted computation
+status. They now carry attributed code/result previews with truncation flags;
+the original exact evidence is unchanged. Simultaneous research proposals now
+take turns through a cancellable gate before dispatch. This avoids spending
+an entire model round on busy admission. A three-strategy actual-Docker
+portfolio completed all three computations with distinct provenance. The
+stop regression confirms that the already dispatched run is saved while the
+two queued proposals never launch. Queued proposals are visible as
+`python.queued`, and no new program starts after the session deadline. The
+direct execution API retains its explicit busy status.
+
+The expanded scientific harness passed **eight workflows and fourteen Python
+proposals**, covering the original six scenarios, rejection of a hardcoded
+printed "PROVED" claim with zero tested inputs, and the three-strategy
+portfolio. Its scripted Skeptic now makes case-specific judgments from the
+actual results: an exact prime counterexample refutes the universal claim,
+small residual is insufficient accuracy evidence, singularity is not
+inconsistency, and timeout is not mathematical refutation. The Monte Carlo
+case also captured a 100,000-row, 1,896,400-byte CSV. Independent host parsing
+checked row count, value range and the reported mean; retrieval hashes matched.
+Latest scientific records are retained under
+`projects/a19-final-large-data-20261023.sigma/`. These fixtures still cannot
+establish live model judgment or general scientific competence.
+
+After the A18 deadline changed, a bounded **real ChatGPT-plan** session
+successfully exercised Investigator→Python→Skeptic. It used the already
+selected plan, `gpt-6.1-sol`, Medium reasoning and a two-call cap; no paid API
+call, account change or billing switch was made. Session
+`3da31b2e-a751-4c17-8605-07cd01feff89` is saved in
+`projects/a19-plan-stability-integrated-20261023.sigma`:
+
+- Investigator returned after about 70.9 seconds, explaining the cancellation
+  mechanism and proposing its own deterministic NumPy/Decimal experiment.
+  Neither the stable formula nor expected answer was supplied in the project
+  or strategy. The task is nevertheless a familiar elementary numerical
+  stability problem; it is not evidence of hard independent discovery.
+- Execution `70f38541-3ddf-4447-8f8d-d7137d47452f` completed in 281 ms.
+  The program compared direct and rationalized formulas against 100-digit
+  references, checked alternative 140-digit references and tried three grid
+  sizes, boundary points and named inputs. At x=1e-15 the direct relative error
+  was about 0.11182, versus 2.80e-17 for the stable form. The largest sampled
+  stable relative error on the 1,028-input largest grid was 2.351010e-16.
+- Skeptic finished at 110.7 seconds total. It inspected the code and successful
+  execution, quoted the observed errors correctly, retained the arithmetic
+  assumptions, distinguished samples from a uniform bound, and correctly
+  recognized that the proposed zero range was sufficient rather than an
+  exact cutoff. Source, exact stdout/stderr, image ID and provenance remain
+  attached to the saved research artifact.
+- A replay (`8e76a3fb-e928-4005-82d2-4344a3cb0c26`) produced identical output.
+  A separate SymPy experiment (`df0a6d2d-142f-4a11-9ce2-6e74cc1aa234`) used
+  exact rational representations of four binary64 inputs to independently
+  confirm the error estimates and symbolically check the condition-number
+  identity. These are reproducibility and arithmetic checks, not Lean proof.
+
+The real Skeptic also exposed a workflow flaw: it asked for a new cycle just
+to update the proposal's "not yet executed" prose, although that prose was
+necessarily written before execution. The instructions now explicitly explain
+that timing and ask the Skeptic to synthesize the attached result, retire
+resolved execution obligations and avoid a rewrite-only cycle. The original
+artifact remains **mixed/partial and unverified**, preserving the actual
+review; it was not relabeled after changing instructions.
+
+A separate bounded continuation to evaluate that correction and saved-result
+reuse was rejected before output with HTTP 400 (`responses-error`, no specific
+provider code). Session `f0f09b6b-d933-4a74-8a20-74f8e2ea643d` is retained in
+the same project; its failure did not mutate the successful prior artifact or
+trigger a billing fallback. The provider's precise cause is unknown, and no
+more live calls were made. Across the four trials, five requests were
+dispatched: two completed, two timed out and one was rejected. Usage metadata
+was absent, so plan consumption cannot be quantified. The latest phase
+guidance and cross-session synthesis remain unverified with a live model.
+
+Final verification against the merged A18 code passed the full `./sigma test`
+suite, all sandbox/scientific/adversarial scripts, separate Ruff checks for
+`sandbox-poc/`, and real Chrome `browser_checks/a17_research.py` against a fresh
+fixture from this checkout. The latter covered the latest Skeptic schema,
+multi-strategy activity, control actions, existing workspace and exports.
+Artifact tampering and parent-directory symlinks are rejected by deterministic
+regressions. Artifact collection now shares the remaining execution deadline
+instead of extending a near-limit run by another five seconds. The final
+runtime and Investigator→Docker→Skeptic smoke checks passed after that change.
