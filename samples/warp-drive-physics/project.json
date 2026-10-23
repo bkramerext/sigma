@@ -2,7 +2,7 @@
   "schema_version": 6,
   "id": "e8211dc4-b70f-49d1-a514-671f44ed7e8c",
   "title": "Warp Drive Design",
-  "problem": "Investigate whether a physically coherent framework for effective faster-than-light interstellar travel could exist, with the ultimate objective of a warp-drive concept. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.",
+  "problem": "Difficulty: Hard.\n\nInvestigate whether a physically coherent framework for effective faster-than-light interstellar travel could exist, with the ultimate objective of a warp-drive concept. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.",
   "events": [
     {
       "sequence": 1,
@@ -14,6 +14,5 @@
   "research_mode": "physics",
   "active_order": [],
   "ai_model": "gpt-6.1-sol",
-  "reasoning_effort": "high",
-  "difficulty": "hard"
+  "reasoning_effort": "high"
 }
