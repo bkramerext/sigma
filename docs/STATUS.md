@@ -3627,6 +3627,83 @@ Verification after these review changes passed on 2026-10-23: focused
 the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
 frontend typecheck, and production build. No live provider calls were made.
 
+## T22.2: Google authentication and invited access (2026-10-23)
+
+Implemented cloud authentication as an explicit deployment opt-in. When enabled,
+the FastAPI boundary requires a live server-side session for every API route
+except readiness/status and the OIDC begin/callback endpoints; mutating requests
+require the configured exact Origin. Local mode stays on the existing behavior.
+The Google flow uses authorization code plus PKCE S256, one-time state and
+nonce, fixed Google discovery/token endpoints, published JWKS signature
+verification, exact issuer/audience, expiry, nonce, subject and `email_verified`
+checks. Access is limited to normalized exact email entries, exact email domains,
+and the configured bootstrap administrator. Explicit revoked email rules win
+over domain rules. Session cookies are Secure, HttpOnly, SameSite=Lax host-only
+cookies; only SHA-256 session digests are stored in a private SQLite file.
+
+Administrators can list, add and revoke email/domain entries and grant an email
+administrator role through the copper/dark Access Management UI. No invitation
+emails are sent. Cloud mode denies the process-wide `/api/ai/*` endpoints so a
+Google account cannot inherit local ChatGPT authorization or AI billing. The
+bootstrap email is bound to its first Google subject. Configuration and setup
+are documented in [CLOUD-AUTH](CLOUD-AUTH.md).
+
+`tests/cloud_auth.py` uses generated local RSA signing keys and mocked Google
+responses; it verifies successful bootstrap and individual invitation, exact
+domain matching, lookalike denial, signature/issuer/audience/expiry/nonce/email
+claim rejection, OAuth state replay, session expiry, revocation against existing
+sessions, API route protection, spoofed identity-header rejection, missing
+configuration fail-closed behavior, and local-mode compatibility. No live Google
+or model-provider calls are involved.
+
+Following the T22.2 acceptance update, an unauthorized valid identity now lands
+on a distinct “Access not yet granted” page. Its three actions link to the
+parent-T22 `/demo` route without creating a workspace, open a prefilled
+`mailto:` invitation request using `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`, or restart
+Google sign-in with `prompt=select_account`. The public status response exposes
+only the configured contact and the current caller's own identity state; it
+does not expose grants or other users. `/demo` is a no-workspace handoff page;
+the curated read-only Demo and guest APIs remain T22 work.
+
+Explicit limits: no per-user project/workspace isolation or migration, guest
+Demo, durable job scheduling, cloud deployment, or hosted AI-provider auth was
+implemented. The existing file-backed project API remains shared across
+authorized cloud users, so this auth increment alone must not be treated as a
+private multi-tenant research deployment. No deployment credentials or Google
+OAuth client were created.
+
+Final verification on 2026-10-23 passed: `./sigma test` (including six focused
+cloud-auth tests, all backend scenarios, the 10-strategy 20/20-call load case,
+Ruff, Pyright with zero errors/warnings, frontend typecheck, and production
+build), plus `browser_checks/t22_access_denied.py` in real Chrome at desktop and
+mobile viewport sizes. The browser check verified the denied screen, configured
+prefilled `mailto:` request, account-switch link, and `/demo` handoff without
+project or AI API calls. No live Google or model-provider calls were made.
+
+## T22.2 PR #37 corrections (2026-10-23)
+
+Moved cloud sign-in into the existing copper/dark Home header above Projects;
+authenticated account actions now stay in the Home/project headers. Removed the
+legacy Google placeholder. Unauthenticated cloud visitors render Home without
+mounting the private App/catalog, so the screen makes no private project or AI
+requests and creates no workspace. The local-disabled branch continues to mount
+the original local App and APIs without cloud identity.
+
+An unauthorized callback now issues no session and stores the verified email
+only in a short-lived private denial record accessible through an opaque,
+Secure/HttpOnly cookie. The denial endpoint is separate from status and exposes
+only that attempt's email. The Home denial experience shows it and places it in
+the prefilled invitation draft. Starting account selection removes the record
+and cookie and retains Google's `prompt=select_account`. Curated Demo and private
+workspace storage remain in parent T22 scope.
+
+Correction verification passed on 2026-10-23: `./sigma test` (including eight
+focused cloud-auth tests, all backend scenarios, the 10-strategy 20/20-call load
+case, Ruff, Pyright with zero errors/warnings, frontend typecheck and production
+build); `uv run --with playwright python browser_checks/t22_access_denied.py`
+passed in real Chrome with cloud-denied and local-mode coverage at desktop and
+mobile widths. No live Google or model-provider calls were made.
+
 ## T28: Computational evidence and artifact comprehension (2026-10-23)
 
 T28 extends the existing Python and SageMath execution evidence. Agents now
@@ -3857,3 +3934,56 @@ tree at desktop and 390px mobile. It verified guidance submitted during an
 in-flight request causes no extra call, the targeted agent-step acknowledgment
 and provenance persist, and the mobile UI has no horizontal overflow. No live
 provider calls were made.
+
+## T22.2 PR #37 review corrections on current main (2026-10-23)
+
+Starting `/api/cloud-auth/login` now deletes the presented prior session digest
+from the private auth database and expires the host-only session cookie before
+beginning account selection. The denied callback also defensively deletes any
+presented session and expires its cookie, so a valid but unauthorized Google
+identity cannot leave an earlier account active. Authorized account switching
+uses the same fresh-login boundary. Local mode continues to bypass cloud auth.
+
+The administrator Access Management dialog now shows the configured bootstrap
+administrator and currently authorized sessions with role and expiry. Its
+backend summary removes expired or revoked sessions before returning them.
+Current-main project difficulty/catalog/header changes are retained, while the
+legacy Google placeholder is removed from project headers in favor of the cloud
+identity control when cloud auth is enabled.
+
+Deterministic `tests/cloud_auth.py` coverage now exercises authorized A to
+unauthorized B, authorized A to authorized B, and unauthorized B to Use Another
+Account against the real FastAPI middleware, SQLite session database, cookie
+responses, and protected API routes. It checks prior-session deletion and the
+appropriate private API access at each transition. The domain/revocation test
+uses separate browser clients for administrator and member identities.
+
+Validation on this integrated head passed: `./sigma test` (backend scenarios,
+all 10 cloud-auth tests, concurrency workloads, Ruff, format, Pyright with zero
+errors/warnings, frontend typecheck, and production build) and
+`uv run --with playwright python browser_checks/t22_access_denied.py` in real
+Chrome. The browser check covers the denied screen and request, account switch,
+Demo handoff, unrestricted local Home, and administrator session summary. No
+live Google or model-provider calls were made.
+
+### PR #37 refresh against main (2026-10-23)
+
+Fetched main at `6b6d1e458495d93dec0f78b2b983cf3b3acf39cc` and merged it into
+T22.2 at `e8ccb8e21b5bc87d738b67cc190a3bf5f2d54bd2`. The only textual conflict
+was `docs/STATUS.md`: retained T29's new intervention evidence and the existing
+T22.2 auth correction evidence together. `TICKET_TRACKING.md` and the T29 API,
+research-session service/tests, and frontend UI merged automatically; no
+functional hunk was discarded. T22.2 account-switch invalidation, admin
+session summary, cloud API protection, and local unrestricted mode remain in
+the integrated tree.
+
+On the integrated tree, `./sigma test` passed all backend scenarios, including
+10 cloud-auth tests, Ruff, format check, Pyright (zero diagnostics), frontend
+typecheck, and production build. Real Chrome checks also passed:
+`browser_checks/t22_access_denied.py` covered denied-account actions, request
+prefill, Demo handoff, local unrestricted Home, and Access Management session
+summary; `browser_checks/t29_intervention.py` covered intervention submission,
+no extra provider call, acknowledgment provenance, and mobile layout. T29's
+isolated fixture ran on port 8003 because port 8002 was already occupied by a
+different checkout; that listener was left untouched. No live provider calls
+were made.
