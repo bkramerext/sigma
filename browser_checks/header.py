@@ -112,8 +112,12 @@ with sync_playwright() as playwright:
     expect(model_control).to_have_text("Model · Sol $$")
     expect(thinking_control).to_have_text("Thinking · High")
     expect(difficulty_control).to_have_text("Difficulty · Medium")
-    expect(google_signin).to_have_text("Google Sign-in")
+    expect(google_signin).to_contain_text("Google Sign-in")
+    expect(google_signin).to_contain_text("Coming soon")
     expect(google_signin).to_have_attribute("role", "status")
+    expect(google_signin).to_have_attribute(
+        "aria-label", "Google sign-in is unavailable in the local workspace and is coming soon."
+    )
     assert google_signin.locator(".connection-dot").count() == 1
     assert (
         google_signin.locator(".connection-dot").evaluate(
@@ -122,6 +126,7 @@ with sync_playwright() as playwright:
         == "rgb(127, 140, 150)"
     )
     assert not google_signin.evaluate("e => e.matches('button, a, input')")
+    assert google_signin.locator("a, button, input").count() == 0
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
     model_box = model_control.bounding_box()
@@ -233,7 +238,9 @@ with sync_playwright() as playwright:
         and update_requests[3]["reasoning_effort"] == "low"
     )
     assert [request["difficulty"] for request in update_requests[4:]] == ["hard", "easy", "medium"]
-    assert not any("/api/ai/mode" in url for url in observed_urls)
+    assert not any(url.split("?", 1)[0].endswith("/api/ai/mode") for url in observed_urls)
+    google_signin.dispatch_event("click")
+    assert not any("/api/cloud-auth/login" in url for url in observed_urls)
     page.reload()
     model_control = page.locator(".project-art-header .project-model-pill")
     thinking_control = page.locator(".project-art-header .project-thinking-pill")

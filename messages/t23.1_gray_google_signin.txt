@@ -1,0 +1,49 @@
+T23.1 Google sign-in header acceptance handoff
+
+Branch: gray/t23.1-google-signin-pill
+Base: current main, 1134361 (T22 Gate A private workspaces, PR #43)
+Status: R4R; no merge performed.
+
+Finding and change
+
+Cloud identity rendering left the local project header without the required
+Google sign-in pill. The cloud project header also displaced the existing
+ChatGPT connection control. The project header now shows a visibly unavailable,
+noninteractive Google Sign-in / Coming soon status for local workspaces, while
+cloud workspaces retain their Google identity controls and the ChatGPT control
+remains present. The narrow layout preserves Model | Google above Thinking |
+ChatGPT and keeps Difficulty separate. Existing Model, Thinking, Difficulty,
+and ChatGPT handlers were not rewritten.
+
+Verification
+
+- `./sigma test` passed all scenarios, Ruff check/format, Pyright, frontend
+  typecheck, and production Vite build.
+- `SIGMA_HEADER_UI_ORIGIN=http://127.0.0.1:5180 SIGMA_HEADER_API_ORIGIN=http://127.0.0.1:8078 uv run --with playwright python browser_checks/header.py`
+  passed in real Chrome at 1280, 1100, 700, 390, and 320px. It verifies local
+  placeholder presence, accessible unavailable state, no interactive descendants,
+  no auth-login request, and existing header control behavior.
+- `SIGMA_T23_UI_ORIGIN=http://127.0.0.1:5180 SIGMA_T23_API_ORIGIN=http://127.0.0.1:8078 uv run --with playwright python browser_checks/t23_1_google_signin.py`
+  passed in real Chrome at 1280, 390, and 320px. It verifies the cloud
+  signed-out Continue with Google route, authenticated project email/sign-out
+  state, return to signed-out state, ChatGPT presence, row ordering, and no
+  horizontal overflow.
+- Cloud auth endpoints were deterministic local browser fixtures. The login
+  route was exercised locally; external Google OAuth and any live provider
+  calls were not invoked. The cloud behavior verified here is UI and route
+  integration, not a live credential exchange.
+- Screenshots: `/tmp/sigma-t23.1-cloud-header-1280.png`,
+  `/tmp/sigma-t23.1-cloud-header-390.png`, and
+  `/tmp/sigma-t23.1-cloud-header-320.png`; local screenshots from
+  `browser_checks/header.py` are `/tmp/sigma-a23-model-controls-1280.png` and
+  `/tmp/sigma-a23-model-controls-390.png`.
+
+Coordination note
+
+This branch starts at main commit 1134361. It touches `frontend/src/workspace.css`,
+which may overlap the open Lean-logo polish PR #42; the T23.1 changes are limited
+to header control placement and sizing. Please resolve any CSS hunk conflict
+while integrating. I did not contact other workers.
+
+The sample-history work from the earlier secondary assignment remains preserved
+in a local stash and is not included in this PR.

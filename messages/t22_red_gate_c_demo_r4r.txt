@@ -55,3 +55,12 @@ Correction delivery
 - Security correction commit: `af05be8d9b853e5cdb49a9e062c6fa211fd004dd` (followed by a handoff-only documentation commit).
 - GitHub reports PR #44 open and mergeable. It remains unmerged for coordinator review.
 - Final checks on this corrected tree: `uv run python tests/cloud_demo.py` — 6 passed; `./sigma test` — all steps passed; real Chrome Demo and denied-account UI checks passed with mocked API responses. Live browser-to-backend integration remains unverified.
+
+Main integration after Gray's PR #46
+
+- Fetched and integrated current `main` at `c4ef4f0af5c795657f0c55579bfef051c9e78f45` (Restore Google sign-in pill in project header, PR #46).
+- Resolved the only merge conflict in `frontend/src/main.tsx` by retaining both `CloudDemoExperience` and Gray's `GoogleSignInPlaceholder`. The local project header displays the restored noninteractive pill; cloud project headers retain Cloud Identity controls; `/demo` retains its public curated experience. The rest of PR #46's header CSS, checks, tracking, status and handoff changes are integrated.
+- Corrected `browser_checks/header.py`'s false-positive endpoint check: a substring match for `/api/ai/mode` also matched the valid `/api/ai/models` request. It now matches the exact endpoint path.
+- Final verification on the integrated tree: `./sigma test` passed all steps; `uv run python tests/cloud_auth.py` passed (10 tests); `uv run python tests/cloud_demo.py` passed (6 tests).
+- Real Chrome: `browser_checks/t22_demo.py` and `browser_checks/t22_access_denied.py` passed using mocked API responses, including Demo audit/report data; they cover UI behavior and do not establish live browser-to-backend integration. `browser_checks/header.py` passed with the local API and deterministic fixture behavior. `browser_checks/t23_1_google_signin.py` passed with a local API-backed project and mocked cloud-auth status/login/logout; no external Google OAuth was invoked.
+- No conflict remains. PR #44 remains open and unmerged for coordinator review.

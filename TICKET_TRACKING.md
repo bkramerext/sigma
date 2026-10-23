@@ -48,7 +48,7 @@
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
-| T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
+| T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Original implementation merged in PR #12; local Google-pill acceptance follow-up in review | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
 | T25 | Outcome hierarchy and collapsible subsections | Implemented; open for review | Gray · ChatGPT authored ticket · [PR #19](https://github.com/bkramerext/sigma/pull/19) |
 | T26 | SageMath agent-aware sandboxed execution, Python parity | Implemented and validated; review pending | Green · ChatGPT authored ticket · [PR #24](https://github.com/bkramerext/sigma/pull/24) |
