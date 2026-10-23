@@ -3441,3 +3441,27 @@ build), plus `browser_checks/t22_access_denied.py` in real Chrome at desktop and
 mobile viewport sizes. The browser check verified the denied screen, configured
 prefilled `mailto:` request, account-switch link, and `/demo` handoff without
 project or AI API calls. No live Google or model-provider calls were made.
+
+## T22.2 PR #37 corrections (2026-10-23)
+
+Moved cloud sign-in into the existing copper/dark Home header above Projects;
+authenticated account actions now stay in the Home/project headers. Removed the
+legacy Google placeholder. Unauthenticated cloud visitors render Home without
+mounting the private App/catalog, so the screen makes no private project or AI
+requests and creates no workspace. The local-disabled branch continues to mount
+the original local App and APIs without cloud identity.
+
+An unauthorized callback now issues no session and stores the verified email
+only in a short-lived private denial record accessible through an opaque,
+Secure/HttpOnly cookie. The denial endpoint is separate from status and exposes
+only that attempt's email. The Home denial experience shows it and places it in
+the prefilled invitation draft. Starting account selection removes the record
+and cookie and retains Google's `prompt=select_account`. Curated Demo and private
+workspace storage remain in parent T22 scope.
+
+Correction verification passed on 2026-10-23: `./sigma test` (including eight
+focused cloud-auth tests, all backend scenarios, the 10-strategy 20/20-call load
+case, Ruff, Pyright with zero errors/warnings, frontend typecheck and production
+build); `uv run --with playwright python browser_checks/t22_access_denied.py`
+passed in real Chrome with cloud-denied and local-mode coverage at desktop and
+mobile widths. No live Google or model-provider calls were made.

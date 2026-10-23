@@ -43,14 +43,20 @@ and expire after eight hours. State/nonce/verifier records are one-use and
 expire after five minutes. Unsafe requests require the configured exact Origin.
 The auth database contains no provider tokens or project data.
 
-After a valid but unauthorized Google sign-in, the app displays “Access not yet
-granted,” offers the `/demo` guest-route handoff, creates a prefilled
-`mailto:` invitation request to the configured contact, or restarts Google
-account selection. The contact address is intentionally public; status exposes
-only that address and the current user's own sign-in state, never invitation
-rules or other accounts. The `/demo` route is currently a no-workspace handoff
-surface. T22 still owns the curated shared Demo, guest-safe read-only APIs and
-exports; this ticket does not implement that full experience.
+Cloud sign-in controls appear in the existing Home header above Projects, and
+the authenticated identity controls stay in the existing Home/project headers.
+The legacy Google placeholder is not shown. When a valid Google identity is not
+authorized, the app displays “Access not yet granted” in the SIGMA Home design.
+Only that denied flow can read its verified email: the server keeps it in a
+short-lived private-database record behind an opaque `Secure`, `HttpOnly` cookie
+for up to ten minutes. It is not returned by status, does not create a session
+or workspace, and is deleted when Use Another Account starts a fresh
+`prompt=select_account` login. The screen offers the `/demo` guest-route
+handoff and a prefilled `mailto:` invitation request to the configured contact.
+The contact address is intentionally public; access rules and other accounts
+remain private. The `/demo` route is currently a no-workspace handoff surface.
+T22 still owns the curated shared Demo, guest-safe read-only APIs and exports;
+this ticket does not implement that full experience.
 
 T22.2 adds identity, API access checks, invitation administration, and the
 minimal access UI. It does not provision per-user project roots, migrate project

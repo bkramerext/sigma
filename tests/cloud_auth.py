@@ -167,6 +167,7 @@ class CloudAuthTests(TestCase):
         )
         self.assertEqual(status["admin_contact_email"], "access@example.org")
         self.assertNotIn("grants", status)
+        self.assertNotIn("denied_email", status)
         invite = self.client.post(
             "/api/cloud-auth/admin/grants",
             json={"kind": "email", "value": " Person@Example.org ", "role": "member"},
@@ -184,6 +185,43 @@ class CloudAuthTests(TestCase):
         self.assertEqual(
             self.client.post("/api/ai/disconnect", headers={"Origin": ORIGIN}).status_code, 403
         )
+
+    def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
+        denied = self.finish(email="visitor@example.org")
+        self.assertEqual(denied.status_code, 303)
+        self.assertEqual(denied.headers["location"], "/?access=denied")
+        self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        denied_token = denied.cookies[cloud_auth.DENIED_COOKIE]
+        self.assertIn("HttpOnly", denied.headers["set-cookie"])
+        self.assertIn("Secure", denied.headers["set-cookie"])
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied_token)
+        self.assertEqual(
+            self.client.get("/api/cloud-auth/denied").json(), {"email": "visitor@example.org"}
+        )
+        self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
+        self.assertEqual(
+            self.client.get(
+                "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+            ).status_code,
+            401,
+        )
+        restart = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+        self.assertEqual(
+            parse_qs(urlsplit(restart.headers["location"]).query)["prompt"], ["select_account"]
+        )
+        self.assertIn('__Host-sigma_denied="";', restart.headers["set-cookie"])
+        self.assertEqual(self.client.get("/api/cloud-auth/denied").status_code, 404)
+
+    def test_local_mode_keeps_project_and_provider_apis_unauthenticated(self):
+        with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
+            self.assertEqual(self.client.get("/api/cloud-auth/status").json()["enabled"], False)
+            self.assertNotEqual(
+                self.client.get(
+                    "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                ).status_code,
+                401,
+            )
+            self.assertNotEqual(self.client.get("/api/ai/connection").status_code, 401)
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin = self.finish()

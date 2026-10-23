@@ -28,8 +28,10 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
+DENIED_COOKIE = "__Host-sigma_denied"
 SESSION_SECONDS = 8 * 60 * 60
 FLOW_SECONDS = 5 * 60
+DENIED_SECONDS = 10 * 60
 GOOGLE_ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 _EMAIL = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
@@ -195,6 +197,11 @@ def _initialize(path: Path) -> None:
                 verifier TEXT NOT NULL,
                 expires_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS denied_access (
+                token_hash TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY,
                 actor TEXT NOT NULL,
@@ -273,6 +280,7 @@ async def middleware(request: Request, call_next):
         "/api/cloud-auth/status",
         "/api/cloud-auth/login",
         "/api/cloud-auth/callback",
+        "/api/cloud-auth/denied",
     }
     if cfg.error:
         if public:
@@ -329,7 +337,7 @@ def status(request: Request):
 
 
 @router.get("/login")
-def login():
+def login(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE)):
     cfg = config()
     if not cfg.enabled:
         return RedirectResponse("/")
@@ -344,6 +352,8 @@ def login():
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
     with _db(cfg) as db:
+        if denied_cookie:
+            db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
         db.execute("DELETE FROM flows WHERE expires_at<=?", (_now(),))
         db.execute(
             "INSERT INTO flows(state_hash,nonce,verifier,expires_at) VALUES(?,?,?,?)",
@@ -373,6 +383,7 @@ def login():
         samesite="lax",
         path="/",
     )
+    response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -385,6 +396,7 @@ async def callback(
     code: str = "",
     error: str = "",
     flow_cookie: str | None = Cookie(default=None, alias=FLOW_COOKIE),
+    denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
 ):
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
@@ -474,8 +486,28 @@ async def callback(
         raise HTTPException(401, "Google sign-in could not be verified.") from None
     role = _authorization(cfg, subject, email)
     if not role:
+        denied_token = secrets.token_urlsafe(32)
+        with _db(cfg) as db:
+            db.execute("DELETE FROM denied_access WHERE expires_at<=?", (_now(),))
+            if denied_cookie:
+                db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
+            db.execute(
+                "INSERT INTO denied_access(token_hash,email,expires_at) VALUES(?,?,?)",
+                (_hash(denied_token), email, _now() + DENIED_SECONDS),
+            )
         response = RedirectResponse("/?access=denied", status_code=303)
         response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        response.set_cookie(
+            DENIED_COOKIE,
+            denied_token,
+            max_age=DENIED_SECONDS,
+            secure=True,
+            httponly=True,
+            samesite="lax",
+            path="/",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
         return response
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
@@ -494,6 +526,27 @@ async def callback(
         path="/",
     )
     response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@router.get("/denied")
+def denied_identity(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE)):
+    cfg = config()
+    if not cfg.enabled or cfg.error or not denied_cookie or len(denied_cookie) > 128:
+        raise HTTPException(404, "No denied sign-in is available.")
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT email,expires_at FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),)
+        ).fetchone()
+        if not row or row["expires_at"] <= _now():
+            if row:
+                db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
+            raise HTTPException(404, "No denied sign-in is available.")
+        email = row["email"]
+    response = JSONResponse({"email": email})
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response

@@ -16,3 +16,16 @@ Validation completed:
 T22.2 acceptance criteria were updated in place. No follow-up ticket was created. Explicit scope limits: no workspace migration or per-user storage isolation, complete guest Demo, durable job scheduling, or cloud deployment. Existing project files remain shared across authorized cloud users, so this auth change alone is not a multi-tenant deployment.
 
 The PR is open for coordinator review. Do not self-merge.
+
+## PR #37 correction handoff (2026-10-23)
+
+Review corrections are implemented in this same ticket and PR:
+- Moved cloud sign-in into SIGMA's existing copper/dark Home header above Projects and authenticated account actions into the existing Home/project headers. Removed the legacy Google Sign-in placeholder. In cloud mode, unauthenticated visitors get a Home experience with no private App/catalog mounted. Local mode continues to run its original App and APIs without cloud auth.
+- A valid but unauthorized account receives no session and no workspace. Its verified email is retained only in a short-lived server-side denied-flow record behind an opaque protected cookie, shown only in that denial experience, and included in the prefilled mailto. Use Another Account deletes the denial record/cookie and begins fresh Google account selection.
+- Curated read-only Demo and private workspace storage remain in parent T22 scope.
+
+Correction verification:
+- `./sigma test` — passed, including eight deterministic cloud-auth tests, all backend scenarios, Ruff, Pyright (0 diagnostics), frontend typecheck and production build.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5188 uv run --with playwright python browser_checks/t22_access_denied.py` — passed in real Chrome at desktop/mobile sizes, covering denied Home, email-prefilled invitation, account restart, `/demo` handoff, and unrestricted local Home.
+
+Updated T22.2 acceptance criteria in place; no follow-up ticket. PR #37 remains open and unmerged. R4R.
