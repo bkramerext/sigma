@@ -68,35 +68,42 @@ fresh fixture afterward. No paid provider call was made.
 
 ## T21 local alpha UI/browser acceptance (2026-10-23)
 
-Acceptance was run from current `main` at `9cb487e` with the isolated local
-provider fixture; no provider billing or worker coordination was used. Real
-Chrome passed Home project creation/open/recent navigation and persistence,
-project settings and research-limit validation/save/reload, strategy editing,
-three-round multi-strategy progress, pause/resume/stop during provider work,
-historical/interrupted session inspection, outcome and metrics disclosures,
-and audit/text/HTML report downloads including failure recovery. T20.1 header,
-cost-limit clearing, report controls, and narrow-screen checks passed. Screens
-were inspected at desktop and phone widths; screenshots are under `/tmp`,
-including `sigma-a177-after-session-card.png`,
-`sigma-a177-after-export-mobile.png`, `sigma-a23-model-controls-390.png`,
-`sigma-t21-python-evidence-desktop.png`, and
-`sigma-t21-python-evidence-mobile.png`.
+Initial acceptance ran against `main` at `9cb487e`; after T28 merged, the
+current integration run used `main` at `317c5c4`. No live provider calls or
+worker coordination were used. Real Chrome passed project creation/open/recent
+navigation and persistence, settings and limit validation/save/reload, strategy
+editing, three-round multi-strategy progress, pause/resume/stop during provider
+work, historical/interrupted session inspection, Outcome/metrics/provenance,
+and audit/text/HTML report downloads with failure recovery. The T20.1 header,
+cost clearing, and responsive checks passed at desktop and phone sizes.
 
-A separate real Chrome run used the available local Python sandbox and verified
-completed execution status, exact source/stdout, execution ID, and captured
-`computed.json` in the saved computational evidence at 1440px and 390px, with
-no horizontal overflow. Focused Python sandbox, Sage execution-contract, and
-report tests passed. The SageMath Docker image was not installed locally, so
-real Sage execution in Chrome was not run. Rich artifact previews from T28 are
-not present on this main snapshot; current evidence records and computational
-execution details were tested instead. No release-blocking UI defect was found
-and no product UI changes were needed.
+The first post-T28 A17 run exposed a stale shared provider fixture: strict
+research schemas now require `computational_citations`, but the fixture omitted
+it for non-computational responses. The fixture now supplies an empty list and
+the full A17 Chrome flow passes. This was a test-fixture mismatch, not a
+production session regression.
+
+Real Chrome also ran a bounded Python computation and verified the completed
+execution, exact source/stdout, execution ID, and T28's `computed.json` text
+representation in the saved execution record at 1440px and 390px. A real Sage
+10.8 Docker run passed in Chrome: the Skeptic saw the completed execution and
+the captured `witnesses.json` metadata/hash; the Outcome/report and 320px layout
+were inspected. T28 artifact inspections are available inside the expanded
+execution JSON record; the UI does not render a separate preview panel. No
+release-blocking UI defect was found and no product UI changes were needed.
+
+Screenshots are under `/tmp`, including `sigma-a177-after-session-card.png`,
+`sigma-a177-after-export-mobile.png`, `sigma-a23-model-controls-390.png`,
+`sigma-t21-python-evidence-desktop.png`, `sigma-t21-python-evidence-mobile.png`,
+`sigma-t26-sage-desktop.png`, and `sigma-t26-sage-mobile.png`.
 
 Validation: `browser_checks/recents.py`, `browser_checks/settings.py`,
-`browser_checks/a17_research.py`, `browser_checks/header.py`, a real Chrome
-Python-execution evidence scenario, `tests/python_sandbox.py`,
-`tests/sage_execution.py`, `tests/project_reports.py`, and `./sigma test` all
-passed. No paid provider calls were made.
+`browser_checks/a17_research.py`, `browser_checks/header.py`,
+`browser_checks/sage_execution.py`, the real Chrome Python-evidence scenario,
+`tests/computational_evidence.py`, `tests/python_sandbox.py`,
+`tests/research_sessions.py`, `tests/sage_execution.py`,
+`tests/project_reports.py`, and `./sigma test` passed on the integrated main
+state. No paid provider calls were made.
 
 ## PR #35 review follow-up (2026-10-23)
 

@@ -1,42 +1,49 @@
 T21 UI/browser alpha acceptance — Gray
 
-Tested current main at 9cb487e in real Chrome with isolated local fixtures.
-No live model/provider calls or worker coordination were used.
+The first acceptance pass used current main at 9cb487e. T28 (#36) merged while
+the work was in progress, so I merged the new main base without force-pushing
+and reran the relevant integration checks at 317c5c4. The local merge was
+clean. No live provider calls or worker coordination were used.
 
-Covered flows:
-- Create a project, open a sample and recent project, return Home, and verify
-  recent/sample persistence and project identity.
+Covered in real Chrome:
+- Create a project, open sample/recent projects, return Home, and verify recent
+  persistence and project identity.
 - Edit project settings and strategies; validate research limits, save, reload,
-  and confirm persisted values.
-- Run multi-strategy sessions; inspect live progress, outcomes, metrics,
-  provenance, historical and interrupted sessions; pause, resume, and stop while
-  provider work is active.
-- Export Project Audit, text, and HTML reports; exercise report failure and
-  retry behavior.
-- Run a bounded computation through the locally available Python sandbox, then
-  inspect the persisted execution status, exact source/stdout, execution ID,
-  and captured JSON file in the real Chrome Outcome evidence disclosure.
-- Recheck T20.1 project header and responsive controls.
+  and verify persistence.
+- Run multi-strategy sessions; inspect progress, outcomes, metrics, provenance,
+  historical and interrupted sessions; pause, resume, and stop while provider
+  work is active.
+- Export Project Audit, text, and HTML reports, including failure and retry.
+- Run bounded Python and real SageMath 10.8 computations; inspect saved source,
+  output, execution IDs, captured file metadata/hash, and T28's bounded JSON
+  artifact representation. Check desktop and narrow layouts.
+- Recheck T20.1 header controls, cost-limit clearing, and responsive behavior.
 
-Validation passed: browser_checks/recents.py, browser_checks/settings.py,
-browser_checks/a17_research.py, browser_checks/header.py, a real Chrome Python
-execution-evidence scenario, tests/python_sandbox.py, tests/sage_execution.py,
-tests/project_reports.py, and ./sigma test. Desktop and narrow-screen captures
-are in /tmp/sigma-a177-after-session-card.png,
-/tmp/sigma-a177-after-export-mobile.png, /tmp/sigma-a23-model-controls-390.png,
-/tmp/sigma-t21-python-evidence-desktop.png, and
-/tmp/sigma-t21-python-evidence-mobile.png.
+The first post-T28 A17 attempt failed because the shared mock provider fixture
+omitted the newly required `computational_citations` field. I updated its
+non-computational Investigator and Skeptic responses to send an empty list; the
+complete A17 real-Chrome journey then passed. This was a fixture compatibility
+issue, not a product session failure.
 
-Findings and limits:
-- No release-blocking UI defect was found; no UI code change was needed.
-- The local SageMath image sigma-research-sage:10.8 is not installed, so a real
-  Sage browser computation was not run. Sage execution contracts and
-  Python/Sage per-runtime counts passed deterministic tests.
-- T28 richer artifact previews are not present on this main snapshot. Current
-  Python execution records and captured-file metadata were inspected; rerun
-  artifact-preview acceptance after T28 is integrated.
-- No conflict occurred on this acceptance branch. Overall T21 alpha acceptance
-  still needs coordinator integration testing after outstanding PRs merge.
+Validation passed on integrated main:
+- browser_checks/recents.py, browser_checks/settings.py,
+  browser_checks/a17_research.py, browser_checks/header.py,
+  browser_checks/sage_execution.py
+- Real Chrome Python execution evidence scenario at 1440px and 390px
+- tests/computational_evidence.py, tests/python_sandbox.py,
+  tests/research_sessions.py, tests/sage_execution.py, tests/project_reports.py
+- ./sigma test
 
-R4R: the current-main UI/browser acceptance portion is ready for review.
-This handoff does not assert overall local alpha or research-quality acceptance.
+The T28 bounded artifact representation is visible in the expanded execution
+JSON record; the UI has no separate preview panel. That integration is documented
+as a usability limitation, not changed here. No release-blocking UI defect was
+found. No paid provider calls were made.
+
+Desktop/mobile screenshots are in `/tmp/sigma-a177-after-session-card.png`,
+`/tmp/sigma-a177-after-export-mobile.png`, `/tmp/sigma-a23-model-controls-390.png`,
+`/tmp/sigma-t21-python-evidence-desktop.png`,
+`/tmp/sigma-t21-python-evidence-mobile.png`, `/tmp/sigma-t26-sage-desktop.png`,
+and `/tmp/sigma-t26-sage-mobile.png`.
+
+R4R: current-main UI/browser acceptance is ready for review. Overall alpha and
+research-quality acceptance remain with the integration coordinator.
