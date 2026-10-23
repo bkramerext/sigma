@@ -31,6 +31,15 @@ Working notes for future additions to [WOLF.md](WOLF.md). This is a **writing ch
 
 - [ ] Diagram the current A16 workflow: Explorer and Critic as separate LLM calls using the same model, followed by a deterministic Python Coordinator. Show revision/retry branches and human review. Explain why this is bounded multi-agent-style orchestration, not sustained autonomous research.
 
+
+## Parallel Codex coordination (planned after A17.6)
+
+- [ ] Capture the decision to finish and integrate A17.6 before launching three parallel Codex sessions for A18 (research intelligence), A19 (agent-written and debugged sandboxed Python), and A22 (cloud deployment). ChatGPT may be a fourth PR author for specifications, integration fixes, and other targeted changes.
+- [ ] Describe **human-directed dispatch**: ChatGPT advises on priorities, next actions, integration order, and conflicts; the human decides what to do and instructs each Codex window. ChatGPT is not secretly operating or orchestrating the local Codex sessions.
+- [ ] Explain the proposed PR contract: separate branches/worktrees, PRs targeting `main`, no author self-merges, author-owned conflict resolution, ChatGPT integration review, and human approval or explicit authorization for merging. Conflicts must preserve both sides' intended behavior, not be blindly resolved.
+- [ ] Record the mundane but important human-factors problem: Codex overwrote Apple Terminal's window titles, so the human color-coded windows (A17 blue, A18 green, A22 red; A19 not yet assigned). Clear session identity is a reliability measure when dispatching parallel agents.
+- [ ] Distinguish this **agreed workflow** from later observed results. Once parallel development starts, collect actual PRs, review decisions, conflicts, tests, and failures before evaluating how well coordination worked.
+
 ## Evidence to gather before writing the retrospective
 
 - [ ] Link a few representative assignment files and their corresponding commits, tests, and status entries. Prefer specific before/after behavior over a long inventory.
