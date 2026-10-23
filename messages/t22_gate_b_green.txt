@@ -1,7 +1,7 @@
 T22 Gate B — Green handoff
 Date: 2026-10-23
 Branch: feature/t22-gate-b-durable-execution
-Base: main at 1134361 (PR #43, Gate A)
+Base: current main at c4b18d3 (PR #43 Gate A and PR #44 Gate C integrated)
 
 IMPLEMENTED
 
@@ -34,7 +34,8 @@ VERIFICATION — MET
 
 - `./sigma test` — passed all backend regressions, cloud auth/workspace/research
   tests, Ruff, format check, Pyright (0 diagnostics), frontend typecheck and
-  Vite production build.
+  Vite production build on rebased head `c4b18d3`, including PR #44's Demo
+  regressions.
 - `uv run --with playwright python browser_checks/t22_private_workspaces.py` —
   passed in real Chrome with separate A/B contexts and production API/storage
   fixture.
@@ -43,6 +44,12 @@ VERIFICATION — MET
   fake call, backend was hard-killed and restarted, owner recovered the
   interrupted/unknown attempt, the other owner got 404, and duplicate start
   returned the same job without a second provider dispatch.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5199 uv run --with playwright
+  python browser_checks/t22_demo.py` — passed against a fresh Vite instance on
+  the rebased head, retaining Gate C's read-only Demo and export behavior.
+- The first Demo browser invocation used an already-running Vite process on
+  port 5173 and saw its placeholder page. That unrelated listener was left
+  untouched; rerunning on 5199 passed.
 - `tests/cloud_research.py` — deterministic accounting, two-owner concurrency
   and spend races, duplicate reservation, budget exhaustion, cancellation,
   timeout, queued reconnect and simulated restart recovery.

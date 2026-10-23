@@ -4176,7 +4176,9 @@ Do not treat protocol creation or T39 tooling closure as live-agent acceptance.
 ## T22 Gate B durable bounded research (2026-10-23)
 
 Started `feature/t22-gate-b-durable-execution` from merged Gate A main at
-`1134361`. Gate B keeps the existing Research Session/project JSON as the
+`1134361`, then rebased onto current main `c4b18d3` (PR #44 Gate C) while
+retaining both Gate C and Gate B status evidence. Gate B keeps the existing
+Research Session/project JSON as the
 source of truth for session transitions, events, model outputs, computational
 evidence and outcomes. Added a private SQLite admission/accounting ledger beside
 cloud workspace storage for owner-bound jobs and provider-call reservations.
@@ -4228,6 +4230,15 @@ owner sees a paused session with an unknown attempt, a second owner receives
 404, and repeating the same start key returns the original job without a
 second fake dispatch. This exercises actual process restart and browser
 disconnect without live Google or provider calls.
+
+After rebasing onto Gate C main `c4b18d3`, `./sigma test` passed again with the
+Demo regression suite included. The durable research and private workspace
+Chrome checks passed again. `browser_checks/t22_demo.py` also passed against a
+fresh Vite instance on port 5199, verifying the existing Gate C Demo remains
+available with saved evidence, read-only controls, all four exports, and
+desktop/mobile layout. Its first invocation hit an existing Vite listener on
+5173 serving a placeholder page; that unrelated process was left running, and
+the check passed when rerun against the fresh instance.
 
 No cloud deployment/restart or paid provider smoke test was run. The global
 spend ceiling accounts conservatively for ambiguous calls; operator-visible
