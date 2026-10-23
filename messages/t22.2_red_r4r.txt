@@ -29,3 +29,30 @@ Correction verification:
 - `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5188 uv run --with playwright python browser_checks/t22_access_denied.py` — passed in real Chrome at desktop/mobile sizes, covering denied Home, email-prefilled invitation, account restart, `/demo` handoff, and unrestricted local Home.
 
 Updated T22.2 acceptance criteria in place; no follow-up ticket. PR #37 remains open and unmerged. R4R.
+
+## PR #37 deeper-review correction handoff (2026-10-23)
+
+The branch now merges current `main` (`62b23c9`) as parent in commit
+`15ba056`; conflicts in the ticket/status/decision records and Home/header CSS
+were resolved while retaining current-main catalog and project-difficulty work.
+
+Account switching now deletes the prior server session and expires its cookie
+when Google login starts; denied callbacks defensively clear any presented prior
+session too. Backend tests exercise A→unauthorized B, A→authorized B, and
+unauthorized B→Use Another Account through the actual FastAPI app, SQLite store,
+cookie headers, and protected API routes. Admin Access Management shows the
+bootstrap administrator and active authorized sessions with role and expiry;
+expired/revoked sessions are filtered by the backend. Local unrestricted mode
+is preserved.
+
+Final integrated-head verification passed:
+- `./sigma test` — all scenarios, 10 cloud-auth tests, Ruff, formatting, Pyright
+  (zero diagnostics), frontend typecheck, and production build.
+- `uv run --with playwright python browser_checks/t22_access_denied.py` — real
+  Chrome passed for denied-account actions, Demo handoff, unrestricted local
+  Home, and the Access Management account/session summary.
+- No live Google or model-provider calls were made.
+
+The corrected head is pushed to PR #37. T22.2 is updated in place; no follow-up
+ticket was created. PR remains open and unmerged for coordinator review. R4R;
+do not self-merge.

@@ -46,7 +46,7 @@
 | T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
 | T22 | Cloud deployment | In progress; staged tickets | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
-| T22.2 | Google authentication and invited access | Corrections in progress; [PR #37](https://github.com/bkramerext/sigma/pull/37) | Red |
+| T22.2 | Google authentication and invited access | Ready for review; [PR #37](https://github.com/bkramerext/sigma/pull/37) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
