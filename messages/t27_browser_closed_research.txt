@@ -1,0 +1,5 @@
+SIGMA can keep a research session running after its browser tab closes, as long as the SIGMA backend process stays alive. The browser starts the session and then reads persisted progress; the provider calls and coordination run in server-side worker tasks, not in the page.
+
+There is an important distinction between closing the browser and stopping or restarting the backend. On backend restart, SIGMA marks an in-flight provider call interrupted and does not retry it automatically, because the remote request may still complete or consume usage. The session can be resumed explicitly, preserving its saved artifacts and call accounting.
+
+For a local installation, continuous operation therefore requires leaving the machine and SIGMA server running. A future hosted or managed-worker deployment could keep sessions running independently of a user's computer. This is separate from T27 and does not require changing the research orchestration for ordinary browser-tab closure.

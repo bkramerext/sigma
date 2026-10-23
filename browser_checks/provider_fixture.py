@@ -216,6 +216,8 @@ async def handler(request):
                     "evidence_status": "Complete unverified mathematical argument; no proof checker was run.",
                     "open_obligations": [],
                     "python_code": None,
+                    "sage_code": None,
+                    "prior_session_failure_attempt_ids": [],
                 }
                 if maximum_regions
                 else {
@@ -225,6 +227,8 @@ async def handler(request):
                     "evidence_status": "Unverified model derivation; no tool was run.",
                     "open_obligations": [f"Check obligation {cycle}"],
                     "python_code": None,
+                    "sage_code": None,
+                    "prior_session_failure_attempt_ids": [],
                 }
             )
         else:
@@ -261,6 +265,7 @@ async def handler(request):
                     "contribution_rationale": "This strategy supplies both the upper-bound induction and an explicit arrangement attaining equality.",
                     "cross_strategy_relations": [],
                     "retracted_cross_strategy_source_artifact_ids": [],
+                    "peer_handoff_reviews": [],
                 }
                 if maximum_regions
                 else {
@@ -282,6 +287,7 @@ async def handler(request):
                     "contribution_rationale": "The saved derivation advances the objective.",
                     "cross_strategy_relations": [],
                     "retracted_cross_strategy_source_artifact_ids": [],
+                    "peer_handoff_reviews": [],
                 }
             )
         return httpx.Response(

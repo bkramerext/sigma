@@ -49,6 +49,8 @@ def investigation(n):
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
         "python_code": None,
+        "sage_code": None,
+        "prior_session_failure_attempt_ids": [],
     }
 
 
@@ -72,7 +74,25 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "contribution_rationale": "The saved derivation advances the objective through the linked strategy.",
         "cross_strategy_relations": [],
         "retracted_cross_strategy_source_artifact_ids": [],
+        "peer_handoff_reviews": [],
     }
+
+
+def execution_tool_fixture(python_available: bool):
+    return [
+        {
+            "name": "Scientific Python",
+            "available": python_available,
+            "request_field": "python_code",
+            "result_field": "python_execution",
+        },
+        {
+            "name": "SageMath",
+            "available": False,
+            "request_field": "sage_code",
+            "result_field": "sage_execution",
+        },
+    ]
 
 
 async def wait_for(path, session_id, terminal=True):
@@ -253,9 +273,11 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     }
     outputs = [first, skeptic(1, "stop", "no_progress")]
     contexts = []
+    provider_payloads = []
 
     async def handler(request):
         payload = json.loads(request.content)
+        provider_payloads.append(payload)
         context = json.loads(payload["input"])
         contexts.append((payload["text"]["format"]["name"], context))
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
@@ -263,6 +285,11 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions,
+            "execution_capabilities",
+            return_value=execution_tool_fixture(True),
+        ),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
@@ -298,6 +325,12 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         "research_investigator",
         "research_skeptic",
     ], (contexts, finished)
+    assert contexts[0][1]["execution_tools"][0]["available"] is True
+    assert "Scientific Python is available" in provider_payloads[0]["instructions"]
+    assert (
+        "a finite computation does not prove a general claim"
+        in provider_payloads[1]["instructions"]
+    )
     skeptic_context = contexts[1][1]["investigator_output"]
     assert skeptic_context["python_code"] == code
     assert skeptic_context["python_execution"] == execution
@@ -768,9 +801,17 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
             "sequence": 1,
             "claim_or_question": completed["artifacts"][0]["claim_or_question"],
             "method": completed["artifacts"][0]["method"],
+            "assumptions": ["Assumption 1"],
             "evidence_status": completed["artifacts"][0]["evidence_status"],
             "objections": completed["artifacts"][0]["objections"],
             "open_obligations": completed["artifacts"][0]["open_obligations"],
+            "limitations": [
+                "Check boundary case 1",
+                "Obligation 1",
+                "Resolve obligation 1",
+                "Check obligation 1",
+            ],
+            "assumptions_reviewed": ["Assumption 1"],
             "coordinator_decision": completed["artifacts"][0]["coordinator_decision"],
             "next_question": completed["artifacts"][0]["next_question"],
             "session_id": completed["id"],
@@ -785,6 +826,77 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
         persisted["steps"][0]["prior_session_artifact_ids"]
         == next_context["prior_session_artifact_ids"]
     )
+
+
+async def test_failed_attempt_guides_next_session_with_provenance(path: Path):
+    view, strategy, credential, config = await setup(path)
+    requests = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        requests.append(payload)
+        if len(requests) == 1:
+            return httpx.Response(503, json={"error": {"code": "temporary_unavailable"}})
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        if role == "research_investigator":
+            assert len(context["prior_session_failures"]) == 1
+            failure = context["prior_session_failures"][0]
+            assert failure["attempt_id"] in context["prior_session_failure_attempt_ids"]
+            assert failure["failure_kind"] == "provider_error"
+            assert "Python" in payload["instructions"]
+            assert "Scientific Python is unavailable" in payload["instructions"]
+            result = investigation(1)
+            result["prior_session_failure_attempt_ids"] = [failure["attempt_id"]]
+            result["method"] = (
+                "The prior provider attempt was operationally unavailable, not mathematical evidence; "
+                "this bounded retry changes to a self-contained symbolic derivation without proposing code."
+            )
+        else:
+            assert context["prior_session_failures"][0]["attempt_id"] == failed_attempt_id
+            assert (
+                "Do not treat prior_session_failures as mathematical evidence"
+                in payload["instructions"]
+            )
+            result = skeptic(1, "stop", "productive_conclusion")
+        return httpx.Response(200, json=provider_response(result))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(
+            research_sessions,
+            "execution_capabilities",
+            return_value=execution_tool_fixture(False),
+        ),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        failed_start = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        failed = await wait_for(path, failed_start["id"])
+        assert failed["status"] == "failed" and failed["artifacts"] == []
+        failed_path = research_sessions._directory(str(path)) / f"{failed['id']}.json"
+        original_bytes = failed_path.read_bytes()
+        failed_attempt_id = failed["steps"][0]["id"]
+
+        retry_start = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        retried = await wait_for(path, retry_start["id"])
+
+    assert retried["status"] == "ended"
+    assert failed_path.read_bytes() == original_bytes
+    artifact = retried["artifacts"][0]
+    assert artifact["prior_session_failure_attempt_ids"] == [failed_attempt_id]
+    retry_step = next(item for item in retried["steps"] if item["role"] == "investigator")
+    assert retry_step["prior_session_failure_attempt_ids"] == [failed_attempt_id]
+    assert retried["prior_session_failures"][0]["attempt_id"] == failed_attempt_id
 
 
 def test_continuation_context_is_bounded(path: Path):
@@ -1453,6 +1565,8 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
+        "sage_code": None,
+        "prior_session_failure_attempt_ids": [],
     }
     review = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -1967,7 +2081,7 @@ async def test_portfolio_cross_strategy_reviews_ground_synthesis_in_peer_evidenc
 async def test_peer_finding_changes_target_investigator_after_stop_and_resume(path: Path):
     view, source, credential, config = await setup(path)
     target = create_strategy(
-        path, "Target route", "Derive an independent invariant and check its consequences."
+        path, "Real-analysis route", "Derive an invariant for all real line arrangements."
     ).project.strategies[-1]
     limits = research_sessions.get_limits(str(path))
     limits.update({"research_rounds": 3, "model_calls": 10})
@@ -1998,6 +2112,11 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
         observed.append((role, strategy_id, cycle, context))
         if role == "research_investigator":
             result = investigation(cycle)
+            if cycle == 2 and strategy_id == source.id:
+                result["assumptions"] = ["Coordinates and coefficients are integers"]
+                result["method"] = (
+                    "A parity calculation shows a contradiction only for integer-coordinate examples."
+                )
             if cycle == 3:
                 assert (
                     "directly examine its cited source and target artifacts"
@@ -2012,7 +2131,7 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
                 handoff = context["peer_handoffs"][0]
                 assert handoff["source_strategy_id"] == source.id
                 assert handoff["target_strategy_id"] == target.id
-                assert handoff["relation"] == "complements"
+                assert handoff["relation"] == "contradicts"
                 assert handoff["source_artifact_id"] in context["question"]
                 assert handoff["target_artifact_id"] in context["question"]
                 result["method"] = (
@@ -2038,12 +2157,23 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
                     {
                         "strategy_id": target.id,
                         "artifact_id": peer["artifact_id"],
-                        "relation": "complements",
-                        "rationale": "The source route's boundary lemma supplies the missing case in the target route's invariant.",
+                        "relation": "contradicts",
+                        "rationale": "The source route claims a contradiction, though its integer-only assumptions may differ from the target route.",
                     }
                 ]
         elif strategy_id == target.id:
             result = skeptic(cycle, "stop", "productive_conclusion")
+            if context.get("peer_handoffs"):
+                handoff = context["peer_handoffs"][0]
+                assert "peer_handoff_reviews" in payload["text"]["format"]["schema"]["properties"]
+                result["peer_handoff_reviews"] = [
+                    {
+                        "handoff_id": handoff["handoff_id"],
+                        "disposition": "reject",
+                        "assumption_comparison": "The source argument assumes integer coordinates while the target strategy quantifies over all real line arrangements; that domain mismatch blocks transfer.",
+                        "rationale": "The claimed contradiction does not apply to the target's broader domain and leaves its approach unrefuted.",
+                    }
+                ]
         return httpx.Response(200, json=provider_response(result))
 
     with (
@@ -2119,6 +2249,24 @@ async def test_peer_finding_changes_target_investigator_after_stop_and_resume(pa
     ]
     assert target_third_step["peer_handoff_ids"] == [pending[0]["handoff_id"]]
     assert target_third["peer_handoffs_prompted"][0]["handoff_id"] == pending[0]["handoff_id"]
+    target_third_skeptic = next(
+        item
+        for item in observed
+        if item[0] == "research_skeptic" and item[1] == target.id and item[2] == 3
+    )
+    assert [item["handoff_id"] for item in target_third_skeptic[3]["peer_handoffs"]] == [
+        item["handoff_id"] for item in pending
+    ]
+    assert target_third_skeptic[3]["peer_handoffs"][0]["retracted"] is False
+    portfolio = finished["portfolio_decision"]
+    assert len(portfolio["rejected_transfers"]) == 1
+    assert portfolio["rejected_transfers"][0]["source_artifact_id"] == source_artifact["id"]
+    assert portfolio["rejected_transfers"][0]["review_artifact_id"] == target_third["id"]
+    assert portfolio["conflict_candidates"] == []
+    assert (
+        target_third["skeptic_output"]["peer_handoff_reviews"][0]["handoff_id"]
+        == pending[0]["handoff_id"]
+    )
 
 
 async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_pool(path: Path):
@@ -2952,17 +3100,24 @@ def test_peer_handoff_noop_and_domain_mismatch_controls():
     retraction = {
         "id": "source-retraction",
         "strategy_id": source_id,
+        "sequence": 3,
         "skeptic_output": {
             "cross_strategy_relations": [],
             "retracted_cross_strategy_source_artifact_ids": [source_artifact_id],
         },
     }
+    target_branch["active_peer_handoffs"] = [handoff]
     record["artifacts"].append(retraction)
     research_sessions._retract_peer_handoffs(record, source_branch, retraction)
     assert "pending_peer_handoffs" not in target_branch
     assert target_branch["current_question"] == "Continue the real-domain argument."
     assert target_branch["status"] == "queued"
     assert record["artifacts"][0]["skeptic_output"]["cross_strategy_relations"]
+    record.update({"id": str(uuid4()), "problem": "A real-domain objective."})
+    target_branch.update({"strategy_text": "Use a real-domain proof.", "pending_investigation": {}})
+    skeptic_context = research_sessions._portfolio_context(record, target_branch, "skeptic", 1)
+    assert skeptic_context["peer_handoffs"][0]["retracted"] is True
+
     decision = research_sessions._portfolio_decision(record)
     assert decision["conflict_candidates"] == []
     assert len(decision["retracted_peer_handoffs"]) == 1
@@ -3019,6 +3174,60 @@ def test_peer_handoff_noop_and_domain_mismatch_controls():
         item["source_artifact_id"] != second_source_id
         for item in research_sessions._portfolio_decision(record)["cross_strategy_reviews"]
     )
+
+
+def test_peer_handoff_queue_defers_without_silent_loss():
+    source_id, target_id = "queue-source", "queue-target"
+    target_artifact_id = "queue-target-artifact"
+    target_branch = {
+        "strategy_id": target_id,
+        "strategy_title": "Target",
+        "status": "running",
+        "current_question": "Continue the target route.",
+        "artifacts": [target_artifact_id],
+    }
+    source_branch = {"strategy_id": source_id, "strategy_title": "Source", "artifacts": []}
+    target_artifact = {
+        "id": target_artifact_id,
+        "strategy_id": target_id,
+        "strategy_title": "Target",
+        "sequence": 1,
+        "skeptic_output": {},
+    }
+    record = {"strategy_runs": [source_branch, target_branch], "artifacts": [target_artifact]}
+    for index in range(6):
+        source_artifact = {
+            "id": f"source-artifact-{index}",
+            "strategy_id": source_id,
+            "strategy_title": "Source",
+            "sequence": index + 1,
+            "skeptic_output": {
+                "cross_strategy_relations": [
+                    {
+                        "strategy_id": target_id,
+                        "artifact_id": target_artifact_id,
+                        "relation": "supports",
+                        "rationale": f"Evidence {index} may inform the target route.",
+                    }
+                ]
+            },
+        }
+        record["artifacts"].append(source_artifact)
+        research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
+
+    assert len(target_branch["pending_peer_handoffs"]) == 4
+    assert len(target_branch["deferred_peer_handoffs"]) == 2
+    queued_ids = {
+        item["handoff_id"]
+        for item in target_branch["pending_peer_handoffs"] + target_branch["deferred_peer_handoffs"]
+    }
+    consumed = target_branch.pop("pending_peer_handoffs")
+    research_sessions._promote_deferred_peer_handoffs(record)
+    assert len(target_branch["pending_peer_handoffs"]) == 2
+    assert target_branch["deferred_peer_handoffs"] == []
+    assert queued_ids == {
+        item["handoff_id"] for item in consumed + target_branch["pending_peer_handoffs"]
+    }
 
 
 async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path):
@@ -3104,6 +3313,8 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "evidence_status": "Complete inductive argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
+        "sage_code": None,
+        "prior_session_failure_attempt_ids": [],
     }
     accepted = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -3677,6 +3888,11 @@ def main():
             test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
         )
         asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
+        asyncio.run(
+            test_failed_attempt_guides_next_session_with_provenance(
+                root / "failed-continuation.sigma"
+            )
+        )
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
@@ -3766,6 +3982,7 @@ def main():
         )
         test_portfolio_requires_reciprocal_complement_and_surfaces_conflicts()
         test_peer_handoff_noop_and_domain_mismatch_controls()
+        test_peer_handoff_queue_defers_without_silent_loss()
         asyncio.run(
             test_portfolio_budget_too_small_for_next_pair_is_finalized(
                 root / "portfolio-tight-budget.sigma"
