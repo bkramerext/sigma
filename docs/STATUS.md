@@ -3115,3 +3115,125 @@ captures (`/tmp/sigma-t24-migration-report-research_quality-mobile.png` and
 PR #13 is ready for final merge approval; it has not been self-merged. Existing
 provenance limitations in the data contract remain explicit, including absent
 artifact-to-step foreign keys and unknown provider receipt/plan consumption.
+
+
+## T26: first-class SageMath execution (2026-10-23)
+
+Implemented from merged main `b917e24` and ticket/specification PR #20. Every
+actual Investigator and Skeptic request now explicitly advertises both scientific
+Python and SageMath, their observed local availability, proposal/result fields,
+capabilities, bounds and evidence interpretation. The same prompt/schema builder
+is used for dispatch and conservative cost reservation. Role steps save the
+capability snapshot. Investigators alone dispatch; Skeptics inspect returned
+source/results and request revisions through the next Investigator cycle. No
+new provider calls, retries or billing fallback were added.
+
+Sage uses a separate nullable `sage_code` proposal and `sage_execution` result;
+both code fields cannot contain programs. The pinned official Sage 10.8 amd64
+image runs native Sage preparsing under the shared fixed container runner. It
+retains no-network/no-host-mount/non-root/read-only/no-capabilities controls,
+source/output/artifact bounds and one shared admission/queue limit with Python.
+Sage has explicit 60-second/1-GiB/128-MiB-temporary limits; Python retains
+15-second/512-MiB/64-MiB limits. No runtime pull/build occurs. Optional
+`./sigma sandbox-build --runtime sagemath`, `sandbox-capabilities`, and
+`sandbox-execute` commands support setup and use; ordinary setup/tests do not
+download Sage. See [Sage execution](SAGE-EXECUTION.md).
+
+New records preserve runtime/version/native syntax, exact source and hash,
+immutable image ID, status/output/files and project/session/strategy/cycle.
+Sage agent records validate and retain the exact completed Investigator step,
+role and model/effort configuration. Runtime-aware lookup/reservations prevent
+Python/Sage source collisions and preserve interrupted/uncertain reservations
+without rerunning them. Peer/prior-session previews, JSON audit and paper-source
+exports retain Sage evidence with the original IDs. Metrics keep both engines'
+statuses separate and count file storage/source IDs once. Independent metric
+lists now have nine operational and eight research-quality entries, and text/
+HTML exports retain all entries. Historical records remain Python by default.
+
+The existing Outcome hierarchy exposes Sage status, execution ID and file
+hashes through its evidence card. A source/output disclosure provides the full
+escaped execution record for either engine. Visual review found that an
+inherited global `dl` grid squeezed metric labels into alternating narrow
+columns; the metric group now explicitly uses block layout. This is a scoped
+layout correction, without replacing T25's hierarchy.
+
+Failures found and corrected:
+- The upstream Sage home directory was not searchable by UID 65532; the derived
+  image fixes that at build time. Its outer HOME must be the existing /tmp;
+  the runner then creates a private temporary Sage configuration directory.
+- A new stop/resume regression found that the coordinator ended queued branches
+  at their final round even with a pending Investigator result. The round limit
+  now allows that existing cycle's Skeptic review to finish, preserving call
+  budgets and avoiding duplicate computations.
+- The first mixed-session test hit the existing one-active-session restriction;
+  this policy is preserved. The test covers mixed concurrent strategies and
+  verifies a second session is rejected before provider calls.
+
+Verification completed on the final implementation:
+- `./sigma test` passed: all scenarios including new deterministic Sage tests,
+  Ruff, 59 formatted Python files, Pyright zero errors/warnings, frontend
+  typecheck and production build. The ten-strategy regression completed 20/20
+  calls and ten artifacts, max concurrency three.
+- Deterministic Sage tests cover both roles' available/unavailable guidance,
+  strict typed selection, every execution failure status, exact evidence and
+  hash retrieval, role-step attribution, API/export/paper/peer/prior context,
+  engine-separated recovery, uncertain interrupted reservations, failed-source
+  reuse then productive revision, mixed Python/Sage queue stop/resume, and
+  missing execution IDs shown unavailable. A stopped final-cycle computation
+  is saved and reviewed after resume without a duplicate run.
+- Explicit builds via SIGMA tooling passed for both runtimes. Final Sage image:
+  `sha256:893cc1fd570d267cb57235f561ba3c7ac64c08ca2c86e48faba31ac1244bb41e`.
+  The official amd64 base is pinned in `sandbox-poc/Dockerfile.sage`.
+- `sandbox-poc/sage-check.py` passed on the final image: native polynomial
+  algebra and exact rational/exponent semantics, factorization/modular inverse,
+  elliptic-curve cardinality checked against independent finite enumeration,
+  PNG/JSON generation and hash-checked retrieval, non-root/cgroup/capability/
+  read-only controls, network denial, exception, unsafe symlink capture,
+  output limit, memory exhaustion, 60-second timeout and caller cancellation
+  that drains bounded execution and saves its actual result. The combined
+  finite experiment took 29.751s; timeout returned in 60.082s.
+- `sandbox-poc/sage-cli-check.py` passed through the public CLI: native
+  factorization and `2^3 = 8`, saved source and runtime provenance (22.336s).
+- Additional real helper-interface probe passed:
+  `gap.eval('Size(SymmetricGroup(4))')` returned `24` and
+  `singular.eval('ring r=0,(x),dp; poly f=(x-1)*(x+1); f;')` returned `x2-1`.
+  This took 47.924s under amd64 emulation and left no running container.
+- The rebuilt Python image passed `sandbox-poc/runtime-check.py`: scientific
+  imports, actual finite computation/plot capture, network denial and memory/
+  output/time limits. Its original deterministic regressions also passed.
+- Real Chrome `browser_checks/sage_execution.py` passed against mock provider
+  roles with the real final Sage image. The Investigator requested an exact
+  experiment; Sage found 341=11*31 passing the base-2 Fermat test; the Skeptic
+  received that contradicting evidence, its source, originating step and hash.
+  Session/API/artifact/metrics/report access and desktop/320px views passed;
+  the final source/output disclosure and metric block layout were checked.
+  Last run: 24.965s; screenshots `/tmp/sigma-t26-sage-desktop.png` and
+  `/tmp/sigma-t26-sage-mobile.png` were visually inspected.
+- The existing `browser_checks/a17_research.py` Chrome workspace/export/stop/
+  resume/multi-strategy scenario passed as a regression.
+
+Limitations: this pins an amd64 image; arm64 was validated with emulation, not a
+native arm64 Sage build. Cold startup is typically 20–30s here; helper interfaces
+can use nearly the entire 60-second limit. Stop of dispatched work preserves
+bounded-completion semantics and can wait for that hard limit/cleanup; it is not
+an immediate kill. Admission is per backend process, not a host-wide scheduler.
+Availability reports local image inspection, not a guarantee that a later
+container launch cannot fail. Legacy pre-portfolio sessions truthfully report
+computational dispatch unavailable and require a new session. Plot/binary
+contents remain metadata to agents (T28 follow-up). No live-provider calls were
+made; mock-agent tests do not establish real-model tool-selection quality or
+mathematical proof. Docker's host kernel/daemon/image remain trusted boundaries.
+
+Final reconciliation also tightened cross-cycle Sage failure reuse to matching
+version/syntax/image profiles while preserving the original cycle's uncertain
+reservation. Its deterministic regression passed; Pyright caught loop-scoped
+fixture variables in that new test, which were initialized explicitly before
+the final full-suite rerun. The public capability CLI reported both locally
+built runtimes with their distinct 15s/60s limits.
+
+T26 implementation is submitted in [PR #24](https://github.com/bkramerext/sigma/pull/24), open for review and not
+self-merged. The [coordinator handoff](../messages/t26_coordinator_handoff.txt)
+is created and ready to read. Final `./sigma test` passed after the profile
+recovery and command-default checks; the worktree contains no test project
+data. Owned browser fixture/dev servers were stopped, and no research
+containers remained running.

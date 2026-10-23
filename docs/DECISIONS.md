@@ -383,3 +383,29 @@ boundary in the SIGMA service. Pin the Python base image by digest and pin all
 Python dependencies. Build-time downloads are permitted; runtime networking is
 disabled. Container escape protection depends on the trusted host kernel and
 Docker daemon.
+
+
+## T26: SageMath as an explicit research runtime
+
+Keep the scientific-Python contract and add a mutually exclusive `sage_code`
+proposal with `sage_execution` evidence. Share the fixed stdin protocol,
+container isolation, durable reservation, capture/storage and admission gate.
+Record runtime/version/native syntax and source hash rather than inferring an
+interpreter from source text. Historical records without runtime mean Python.
+Sage failure reuse across cycles requires the same version/syntax/image profile;
+recovery within the original cycle preserves its reservation without rerunning.
+
+Every role call gets a locally observed capability snapshot and explicit
+instructions; only Investigators dispatch, while Skeptics request follow-ups
+through the next Investigator. Prompt/schema construction is shared with cost
+reservation. This adds no model call, automatic retry or billing fallback.
+
+Use an optional, digest-pinned official Sage 10.8 amd64-derived image with
+native Sage preparsing. Keep all isolation controls but advertise distinct
+Sage limits (60 seconds, 1 GiB memory, 128 MiB temporary storage): emulated cold
+startup alone took approximately 20–30 seconds here. Python retains its
+15-second/512-MiB/64-MiB limits. No image build/pull occurs during execution.
+Stopping dispatched work preserves Python's bounded-completion and evidence
+capture semantics; queued work never starts after stop. Exact computations
+and agent agreement do not establish formal verification. See
+[Sage execution](SAGE-EXECUTION.md) for setup, contracts and measured limits.

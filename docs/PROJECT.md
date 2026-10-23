@@ -25,7 +25,7 @@ Python/uv, FastAPI, argparse CLI, React/TypeScript/Vite. Browser, CLI, and execu
 **Working now:** local project lifecycle; strategy authoring and generation;
 bounded single- and multi-strategy research sessions; persistent evidence,
 continuity, assessments, forks, report exports, and optional isolated Python
-execution for finite Investigator computations. Research still has no external
+and SageMath execution for finite Investigator computations. Research still has no external
 source tool or formal proof checker. Python output is unverified evidence, not a
 proof. Live model quality has not been established by the deterministic test
 suite.

@@ -620,13 +620,13 @@
 .workspace-page .outcome-assessment h4 { margin: 0 0 4px; }
 .workspace-page .outcome-metric-group { min-width: 0; }
 .workspace-page .outcome-metric-group h5 { margin: 0 0 3px; color: #e4be91; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
-.workspace-page .outcome-metric-group dl { margin: 0; }
+.workspace-page .outcome-metric-group dl { display: block; margin: 0; }
 .workspace-page .outcome-provenance-group { min-width: 0; margin-top: 13px; }
 .workspace-page .outcome-provenance-group:first-child { margin-top: 0; }
 .workspace-page .outcome-provenance-list { margin: 4px 0 0; padding-left: 20px; }
 .workspace-page .outcome-provenance-list > li { margin: 8px 0; padding-left: 2px; }
 .workspace-page .outcome-provenance-list p { margin: 3px 0; }
-.workspace-page .outcome-provenance-list pre { max-width: 100%; margin: 5px 0; padding: 8px; border: 1px solid #293d49; border-radius: 4px; background: #050d14; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-page .outcome-provenance-list pre, .workspace-page .research-execution-record pre { max-width: 100%; margin: 5px 0; padding: 8px; border: 1px solid #293d49; border-radius: 4px; background: #050d14; white-space: pre-wrap; overflow-wrap: anywhere; }
 .workspace-page .outcome-provider-attempts ul { margin: 4px 0; padding-left: 20px; }
 .workspace-page .outcome-provider-attempts li { display: grid; gap: 2px; margin: 6px 0; }
 .workspace-page .outcome-provider-attempts li > span { color: #bac8d3; }

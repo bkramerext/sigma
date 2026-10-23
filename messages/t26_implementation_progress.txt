@@ -1,0 +1,42 @@
+T26 implementation progress — Green
+
+Authorized after merged specification PR #20. Implementation branch:
+feature/t26-sagemath-execution, based on main b917e24.
+
+Investigators dispatch computations. Skeptics inspect results and request
+follow-ups through the next Investigator cycle. Every actual role request
+will receive truthful runtime capabilities and instructions; the same payload
+construction must be used for cost reservation.
+
+Design: separate typed Sage code/result fields and explicit runtime identity,
+shared container execution/storage/artifact machinery and admission limit,
+native .sage preparsing, immutable runtime evidence, exact role-step links for
+new Sage proposals, and existing bounded-completion cancellation behavior.
+Sage remains optional and has no runtime image pulls/builds. Its cold-start and
+memory limits will be validated and advertised separately from Python's limits.
+
+Current activity: implementing integration and downloading the pinned Sage
+10.8 amd64 image for real isolation/resource/recovery validation on this arm64
+host. No paid or live-provider calls. Results are not yet verified.
+
+This message is ready to read in the implementation PR once it is opened.
+
+Validated updates:
+- Native Sage algebra/rational/number-theory runs succeeded under isolation.
+- Upstream home-directory permissions and nonexistent HOME at startup were
+  corrected for non-root/read-only operation.
+- Found/fixed a final-cycle stop/resume bug: pending computation reviews may
+  complete on resume without consuming an extra research cycle.
+- Deterministic tests cover separate runtime identity, both roles' available/
+  unavailable guidance, failure reuse/revision, interrupted recovery, mixed
+  runtime queuing/cancellation and preservation of one active research session.
+- Initial real container suite passed algebra, number theory, plot/JSON capture,
+  boundary/network checks, exceptions, unsafe capture, output/memory limits,
+  timeout and bounded-completion cancellation.
+- Real mocked-provider/real-Sage browser workflow answered the finite experiment
+  with witness 341=11*31, preserved exact evidence, and reached the Skeptic.
+- Final-image and final-browser verification is underway. No live provider calls.
+
+Final update: final-image container, CLI, browser and regression checks passed.
+See messages/t26_coordinator_handoff.txt and docs/STATUS.md for the complete
+results and remaining limitations. The implementation is ready for PR review.
