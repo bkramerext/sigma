@@ -59,6 +59,17 @@ This degree-six polynomial has the reflection relation F(s)=F(1-s) and conjugati
 
 follows by splitting odd and even indices. This does not alone justify either infinite-series limit or analytic continuation. Existing tests/research_ladder.py independently checks several exact rational specializations. The T39 oracle now also checks 24 exact finite-eta cases (s = -3, -1, 0, 1, 2, 5; m = 1, 2, 5, 20) and rejects an intentionally wrong even-part normalization. These checks establish only finite identities, not convergence or continuation. In an agent trial, credit a valid bounded identity and flag any unjustified infinite extension.
 
+## Offline challenge harness (implemented, no provider dispatch)
+
+The new `src/sigma/t39_evaluation.py` exposes:
+
+- `python -m sigma.t39_evaluation --manifest`: emits four evaluator-authored challenges without the answer key. This manifest is **not** a direct SIGMA provider call or an agent research transcript.
+- `python -m sigma.t39_evaluation --review-template RH-SYM --transcript /path/to/transcript.json`: emits a blank review. Save it as JSON, record the transcript SHA-256, session ID, artifact IDs, reviewer identity, concrete objection, next step, notes, and scores.
+- `python -m sigma.t39_evaluation --score /path/to/review.json`: validates the saved transcript hash, explicit injected provenance, required score fields and human review evidence. A MET judgment cannot have a mathematical score below 2. The returned answer key is for the evaluator, never the tested agent.
+- `tests/t39_evaluation.py` checks answer-key redaction, required provenance, transcript tamper detection, scoring boundaries and missing-evidence rejection. It is included in `./sigma test`.
+
+**Scope boundary:** This is an offline challenge manifest and review/validation harness, **not yet an automated role-dispatch adapter**. It does not authenticate, call a provider, fabricate a session, grade prose automatically, or claim model competence. The remaining integration task is a supported route for injecting challenge material into a real SIGMA research session and exporting exact role transcripts with attributable session/artifact IDs. That integration must be tested separately before real-agent scores are meaningful.
+
 ## Actual research trial and scoring
 
 1. Copy the shipped RH sample. Snapshot project and strategy text, environment-dependent execution_tools, model, effort, limits, timestamps and session IDs. Never edit sample history.
