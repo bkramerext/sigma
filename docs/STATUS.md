@@ -4189,7 +4189,7 @@ gates.
 
 This focused revision reproduced each requested defect before changing the
 policy. No live or paid provider calls were made. It now integrates
-`origin/main` at `cd85552a3a0ec9f947f95254c70c7267044d4d2f`, including seven
+`origin/main` at `cd855525f36c5e248c9604ceb633932a450340cb`, including seven
 newer main commits for T39 evaluation, adversarial fixtures, and verification
 workflow. The earlier #46 workspace CSS resolution retains the responsive
 two-column Model/Google and Thinking/ChatGPT layout; PR #42's Lean-logo changes
@@ -4239,7 +4239,7 @@ that an earlier unresolved obligation reaches the subsequent Investigator.
 
 Verification on tested code head: `0fccdad57ef2167b3637268360300ec91a644a5b`.
 Integrated base:
-`cd85552a3a0ec9f947f95254c70c7267044d4d2f` (includes #42 and requested #46
+`cd855525f36c5e248c9604ceb633932a450340cb` (includes #42 and requested #46
 at `c4ef4f0af5c795657f0c55579bfef051c9e78f45`).
 
 - `./sigma test` — first stopped at Ruff failures in newly merged T39 files; after the narrow lint/format-only corrections, **passed** on the current integrated tree, including T37 research session/concurrency scenarios, T39/T22 tests, computational evidence, project reports, Ruff, format check (72 files), Pyright (0 diagnostics), frontend typecheck, and production build.

@@ -2,7 +2,7 @@ T37 PR #45 — coordinator review revision
 Status: R4R; pushed for coordinator review (GitHub REST confirms mergeable=true)
 
 Branch: blue/t37-trustworthy-research-memory
-Integrated base: origin/main cd85552a3a0ec9f947f95254c70c7267044d4d2f
+Integrated base: origin/main cd855525f36c5e248c9604ceb633932a450340cb
   (includes PR #42 and requested PR #46 at c4ef4f0af5c795657f0c55579bfef051c9e78f45)
 Integrated merge commit: 7be80e5 (clean merge of seven newer main commits)
 Tested code head: 0fccdad57ef2167b3637268360300ec91a644a5b
