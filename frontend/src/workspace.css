@@ -291,6 +291,6 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { width: 50px; min-width: 50px; margin-left: 0; }
 .workspace-page .project-pane-actions .text-view-icon.project-latex-button { margin-right: 10px; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
-.workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; filter: brightness(0) saturate(100%) invert(68%) sepia(21%) saturate(797%) hue-rotate(337deg) brightness(110%) contrast(115%); }
+.workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }

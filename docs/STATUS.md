@@ -1,5 +1,18 @@
 # SIGMA status
 
+## Lean toolbar color feedback (2026-10-23)
+
+Changed the disabled Lean logo in mathematical projects from its darker copper
+filter to the same light copper used by the neighboring Project toolbar icons
+(`#e0c4a0`). Updated the A20 browser assertion to require the unfiltered SVG
+color. `./sigma test` passed. A focused real-Chrome check confirmed the logo is
+visible, disabled, and rendered from the light-copper SVG; screenshot:
+`/tmp/sigma-lean-light-copper.png`. The broader `browser_checks/a20_paper.py`
+scenario did not complete because it expects an obsolete Google-sign-in
+placeholder selector; it fails before reaching paper export. Its existing
+Ruff check also reports two RUF007 findings in unrelated adjacent-gap loops.
+No paid provider calls were made.
+
 ## T20.1: Minor UI acceptance fixes (2026-10-23)
 
 Replaced the Project action's LaTeX wordmark with a compact typographic TeX
