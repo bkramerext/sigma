@@ -43,6 +43,9 @@ async def handler(request):
         project_data = project_source["data"]
         title = project_data["title"]
         problem = project_data["problem"]
+        if project_data.get("investigation_type") == "mathematical":
+            assert "organization and precision of a" in body["instructions"]
+            assert "separately prove the upper bound" in body["instructions"]
         max_regions = (
             "maximum regions" in title.casefold()
             or "maximum number of regions" in problem.casefold()
@@ -51,52 +54,90 @@ async def handler(request):
         if max_regions:
             evidence = artifact_refs[:4] or [project_source["id"]]
             paper = {
-                "title": "Line Arrangements: A Saved Unverified Argument",
-                "abstract": r"This paper synthesizes the saved investigation of the maximum number of regions formed by lines. The record proposes the formula $R(n)=1+n(n+1)/2$ and discusses an insertion upper bound and a general-position construction. Its argument remains an unverified model result.",
-                "abstract_claim_ids": ["C1"],
+                "title": "The Maximum Number of Regions Formed by Lines",
+                "abstract": r"We study the maximum number $R(n)$ of regions cut out in the plane by $n$ distinct lines. Inserting lines one at a time gives an upper bound of $k$ new regions at step $k$. The family $L_j:y=jx+j^2$ attains this bound at every step, since the intersections on each new line are distinct. Together with the empty arrangement, this yields the candidate formula $R(n)=1+n(n+1)/2$. The complete argument is present in the saved research record, but has not been independently verified.",
+                "abstract_claim_ids": ["C1", "C2", "C3"],
                 "problem_framing": [
-                    "The objective is to determine the maximum number of regions cut out by n straight lines in the plane."
+                    "An arrangement partitions the plane into connected components of its complement; these components are the regions being counted. We seek the largest possible count among arrangements of n distinct lines.",
+                    "There are two tasks: prove that no insertion can add more than k regions at step k, and construct arrangements in which every insertion adds exactly k.",
                 ],
-                "problem_framing_claim_ids": ["C1"],
+                "problem_framing_claim_ids": ["C1", "C2"],
                 "methods": [
-                    "We inspected the saved research-session artifacts and review record. No external source or proof checker was used."
+                    "We organize the saved argument as induction on the number of inserted lines. The research artifacts supply the upper-bound argument, an explicit attaining family, and the caveat that no independent proof checker was run."
                 ],
-                "methods_claim_ids": ["C1"],
+                "methods_claim_ids": ["C1", "C2", "C3"],
                 "claims": [
                     {
                         "id": "C1",
-                        "statement": "The saved work proposes R(n)=1+n(n+1)/2.",
+                        "statement": "Adding a kth line to an arrangement of k−1 lines creates at most k new regions.",
                         "status": "conjecture",
                         "evidence_refs": evidence,
-                        "reasoning": "The formula and both proof obligations appear in the cited saved work, but the record labels the argument unverified.",
-                    }
+                        "reasoning": "The cited argument bounds the intersection points on the new line and uses convexity of old regions to show its pieces enter distinct regions.",
+                    },
+                    {
+                        "id": "C2",
+                        "statement": "The family L_j:y=jx+j² attains k new regions at every insertion step k.",
+                        "status": "conjecture",
+                        "evidence_refs": evidence,
+                        "reasoning": "For fixed k, intersections with earlier lines have distinct x-coordinates −(k+j), giving k pieces; the saved cell argument shows they split k distinct old regions.",
+                    },
+                    {
+                        "id": "C3",
+                        "statement": "The saved argument derives R(n)=1+n(n+1)/2 for every integer n≥0.",
+                        "status": "conjecture",
+                        "evidence_refs": evidence,
+                        "reasoning": "The recurrence starts at one region for n=0 and adds exactly k at step k, while the source record labels the argument unverified.",
+                    },
                 ],
                 "sections": [
                     {
-                        "heading": "The proposed upper bound",
+                        "heading": "Notation and a cell lemma",
                         "paragraphs": [
-                            r"The saved argument inserts lines one at a time. The kth line has at most k−1 distinct earlier intersections and therefore at most k pieces; it can increase the region count by at most k. Summing gives $R(n)=1+\sum_{k=1}^{n}k$ and $R(n)=1+n(n+1)/2$."
+                            r"Let $R(\mathcal{A})$ be the number of regions determined by a finite line arrangement $\mathcal{A}$. Choose one of the two open sides of each line and intersect the chosen half-planes. Every nonempty intersection is convex, hence connected, and is one region.",
+                            r"If a new line meets an old region, it splits that region into two nonempty pieces: a point on the line lies inside the open region, so a small disk around it contains points on both sides. Further, two separated pieces of the new line cannot lie in the same old region. Convexity would force the segment between them to stay in that region, including an intervening point on an earlier line, which no old region contains.",
+                        ],
+                        "claim_ids": ["C1", "C2"],
+                    },
+                    {
+                        "heading": "Main result (unverified proof candidate)",
+                        "paragraphs": [
+                            r"For every integer $n\geq0$, the maximum number of regions determined by $n$ lines is $R(n)=1+n(n+1)/2$. We give the saved argument for this statement below; the project record classifies it as an unverified candidate."
+                        ],
+                        "claim_ids": ["C3"],
+                    },
+                    {
+                        "heading": "The upper bound",
+                        "paragraphs": [
+                            r"Insert the lines in order. At step $k$, the new line intersects each of the $k−1$ earlier lines in at most one point. These points divide it into at most $k$ connected pieces, including the two unbounded pieces. Each piece lies in an old region, and the cell lemma puts different pieces in different old regions. Each crossed region is split into two, so at most $k$ new regions are created.",
+                            r"Writing $R_k$ for the largest count after $k$ insertions gives $R_k\leq R_{k−1}+k$. Since the empty arrangement has one region, induction yields $R_n\leq 1+\sum_{k=1}^{n}k$.",
                         ],
                         "claim_ids": ["C1"],
                     },
                     {
-                        "heading": "Attainability and evidence boundary",
+                        "heading": "Proof of attainability",
                         "paragraphs": [
-                            "The record proposes a general-position arrangement in which each new line meets earlier lines at distinct points. The saved narrative treats this as the attaining construction, while the review still labels the full argument unverified."
+                            r"For each positive integer $j$, take $L_j:y=jx+j^2$. The slopes are distinct. Fix $k$ and intersect $L_k$ with an earlier line $L_j$, where $1\le j<k$. Solving $kx+k^2=jx+j^2$ gives $x=−(k+j)$. These coordinates are distinct as $j$ varies, so the $k−1$ crossings on $L_k$ are distinct and divide it into exactly $k$ pieces.",
+                            r"By the cell lemma, these pieces lie in distinct old regions, and each crossed region is split into two. Thus $L_k$ adds exactly $k$ regions. The construction attains every insertion bound, not just the final sum.",
                         ],
-                        "claim_ids": ["C1"],
+                        "claim_ids": ["C2"],
+                    },
+                    {
+                        "heading": "The formula and its status",
+                        "paragraphs": [
+                            r"The upper bound and construction match, so $R_k=R_{k−1}+k$ with $R_0=1$. Summing gives $R_n=1+\sum_{k=1}^{n}k=1+n(n+1)/2$. The boundary case $n=0$ is included: with no lines, the plane has one region.",
+                            "The saved artifacts contain this full candidate argument, including the convexity step and explicit construction. They label it unverified, and no independent proof checker was run; we therefore present a saved proof candidate, not a formally certified theorem.",
+                        ],
+                        "claim_ids": ["C1", "C2", "C3"],
                     },
                 ],
                 "limitations": [
-                    "This fixture record is model-generated and has not been formally checked."
+                    "The argument is recorded as an unverified model-generated candidate; no independent proof checker was run."
                 ],
-                "open_obligations": [
-                    "A human should inspect the distinct-intersection construction and induction details."
-                ],
+                "open_obligations": [],
                 "conclusions": [
-                    "The saved evidence supports reporting an unverified solution candidate, not an independently verified theorem."
+                    r"The saved proof candidate explains both why no arrangement can exceed $1+n(n+1)/2$ and how the displayed family attains that count. It remains unverified by an independent checker."
                 ],
-                "conclusion_claim_ids": ["C1"],
+                "conclusion_claim_ids": ["C1", "C2", "C3"],
                 "validation_warnings": ["The proof has not been independently verified."],
             }
         else:

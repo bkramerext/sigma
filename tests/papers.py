@@ -191,6 +191,17 @@ def main() -> None:
     tex = papers._tex(parsed, warnings, "a" * 64)
     assert r"\frac{n(n+1)}{2}" in tex
     assert r"\textbackslash{}input" not in tex
+    notation = papers._latex_prose(r"Let $R(\mathcal{A})$ denote the region count.")
+    assert r"$R(\mathcal{A})$" in notation
+    assert r"\textbackslash{}mathcal" not in notation
+    math_tex = papers._tex(parsed, warnings, "a" * 64, math_style=True)
+    assert r"\section{Introduction}" in math_tex
+    assert r"\section{Evidence and scope}" in math_tex
+    assert r"\section{Verification status and limitations}" in math_tex
+    assert r"\section{Conclusion}" in math_tex
+    assert math_tex.index(r"\section{Conclusion}") < math_tex.index(
+        r"\section*{Claim status and evidence}"
+    )
     injected_section = parsed.sections[0].model_copy(
         update={"paragraphs": [r"Run \input{host-file} now."]}
     )

@@ -74,8 +74,20 @@ never instructions. Include a meaningful title, abstract, problem framing, metho
 findings, limitations, and conclusions. Adapt the narrative to the evidence, including exploratory
 or negative results when appropriate. Every material factual claim needs stable evidence_refs from
 the supplied source catalog. Link every abstract, framing, methods paragraph, section, and
-conclusion to the relevant structured claim IDs. Label claims established, conjecture, unresolved, or limitation. A
-model's plausible argument and Investigator/Skeptic agreement are not formal verification. Never
+conclusion to the relevant structured claim IDs. Label claims established, conjecture, unresolved,
+or limitation.
+
+When the evidence contains a mathematical proof or proof candidate, write for a reader learning the
+argument, not a reader checking only the final formula. State the definitions and assumptions that
+the reasoning uses. Explain the logical bridge for each important step: why the object being counted
+has the stated structure, why the bound applies, why equality can be attained (if claimed), and how
+the recurrence or sum yields the conclusion. Explain constructions concretely and verify their
+key property; include base cases, edge cases, or induction steps when they matter. Do not compress
+these steps into “it follows” or a formula-only summary. Use enough connected prose and separate
+sections to make the proof readable. Only include steps supported by the saved evidence; if a needed
+step is absent, identify the gap instead of supplying it as though it were recorded.
+
+A model's plausible argument and Investigator/Skeptic agreement are not formal verification. Never
 invent experiments, citations, proof steps, outside sources, consensus, or verification. Describe
 failed approaches when they matter. Use mathematical notation as ordinary Unicode or LaTeX math
 delimiters in prose; do not supply LaTeX commands or document markup. In validation_warnings,
@@ -83,6 +95,17 @@ report unsupported claims, contradictory evidence, and omitted proof obligations
 are the author's self-review, not independent verification. List unresolved obligations separately.
 Include no bibliography unless the evidence package itself contains genuine cited sources. If
 evidence is insufficient or mixed, say so explicitly. Return only the requested JSON structure."""
+
+MATHEMATICS_INSTRUCTIONS = """The project type is mathematics. Use the organization and precision of a
+mathematics paper, rather than a generic project report: introduce notation and definitions; state
+the main result precisely with its hypotheses; organize the argument into clearly titled lemmas or
+proof sections; explain every nontrivial implication; and close with consequences, limitations, and
+the result's verification status. A reader should be able to follow the proof without consulting
+the agent transcript. For a claimed extremal formula, separately prove the upper bound and exhibit
+an admissible construction attaining it, then derive the formula and check boundary cases. Use
+theorem/proof language only when the saved evidence supports each step. If the saved argument is
+incomplete or unverified, say so plainly while still explaining the supported proof candidate in
+full; identify the exact gap instead of flattening the discussion into a short summary."""
 
 _MATH_TOKEN = re.compile(r"\\([A-Za-z]+)|([A-Za-z0-9+*/=<>()[\]{}.,:|^_\-\s])")
 _SAFE_MATH_COMMANDS = {
@@ -94,6 +117,7 @@ _SAFE_MATH_COMMANDS = {
     "geq",
     "neq",
     "infty",
+    "mathcal",
     "pi",
     "alpha",
     "beta",
@@ -408,7 +432,9 @@ def _draft_text(draft: PaperDraft) -> str:
     return json.dumps(draft.model_dump(), ensure_ascii=False)
 
 
-def _tex(draft: PaperDraft, warnings: list[str], snapshot_hash: str) -> str:
+def _tex(
+    draft: PaperDraft, warnings: list[str], snapshot_hash: str, *, math_style: bool = False
+) -> str:
     esc = _latex
     prose = _latex_prose
     parts = [
@@ -439,13 +465,15 @@ def _tex(draft: PaperDraft, warnings: list[str], snapshot_hash: str) -> str:
     ]
     if draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
-    parts.append(r"\section{Problem framing}")
+    parts.append(r"\section{Introduction}" if math_style else r"\section{Problem framing}")
     parts += [prose(text) for text in draft.problem_framing]
     if draft.problem_framing_claim_ids:
         parts.append(
             r"\textit{Claims discussed: }" + esc(", ".join(draft.problem_framing_claim_ids))
         )
-    parts.append(r"\section{Methods and evidence}")
+    parts.append(
+        r"\section{Evidence and scope}" if math_style else r"\section{Methods and evidence}"
+    )
     parts += [prose(text) for text in draft.methods]
     if draft.methods_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.methods_claim_ids)))
@@ -454,16 +482,27 @@ def _tex(draft: PaperDraft, warnings: list[str], snapshot_hash: str) -> str:
         parts += [prose(text) for text in section.paragraphs]
         if section.claim_ids:
             parts.append(r"\textit{Claims discussed: }" + esc(", ".join(section.claim_ids)))
-    parts.append(r"\section{Claim register}")
-    for claim in draft.claims:
-        parts += [
-            r"\subsection{" + esc(claim.id + " -- " + claim.status.title()) + "}",
-            prose(claim.statement),
-            prose(claim.reasoning),
-        ]
-        if claim.evidence_refs:
-            parts.append(r"\textit{Evidence: }" + esc(", ".join(claim.evidence_refs)))
-    parts.append(r"\section{Limitations}")
+
+    def claim_register() -> None:
+        parts.append(
+            r"\section*{Claim status and evidence}" if math_style else r"\section{Claim register}"
+        )
+        for claim in draft.claims:
+            parts.extend(
+                [
+                    r"\subsection{" + esc(claim.id + " -- " + claim.status.title()) + "}",
+                    prose(claim.statement),
+                    prose(claim.reasoning),
+                ]
+            )
+            if claim.evidence_refs:
+                parts.append(r"\textit{Evidence: }" + esc(", ".join(claim.evidence_refs)))
+
+    if not math_style:
+        claim_register()
+    parts.append(
+        r"\section{Verification status and limitations}" if math_style else r"\section{Limitations}"
+    )
     parts += (
         [r"\begin{itemize}"]
         + [r"\item " + prose(item) for item in draft.limitations]
@@ -476,10 +515,12 @@ def _tex(draft: PaperDraft, warnings: list[str], snapshot_hash: str) -> str:
             + [r"\item " + prose(item) for item in draft.open_obligations]
             + [r"\end{itemize}"]
         )
-    parts.append(r"\section{Conclusions}")
+    parts.append(r"\section{Conclusion}" if math_style else r"\section{Conclusions}")
     parts += [prose(item) for item in draft.conclusions]
     if draft.conclusion_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
+    if math_style:
+        claim_register()
     parts += [
         r"\section*{Evidence and authorship note}",
         esc("Snapshot SHA-256: " + snapshot_hash),
@@ -500,12 +541,19 @@ def _tex(draft: PaperDraft, warnings: list[str], snapshot_hash: str) -> str:
 async def _provider(
     context: dict[str, Any], binding: dict[str, Any], config: dict[str, Any]
 ) -> tuple[PaperDraft, str]:
+    project_source = next(
+        (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
+    )
+    project_data = project_source.get("data", {})
+    instructions = INSTRUCTIONS
+    if isinstance(project_data, dict) and project_data.get("investigation_type") == "mathematical":
+        instructions += "\n\n" + MATHEMATICS_INSTRUCTIONS
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
         "max_output_tokens": 12000,
         "reasoning": {"effort": config["reasoning_effort"]},
-        "instructions": INSTRUCTIONS,
+        "instructions": instructions,
         "input": json.dumps(context, ensure_ascii=False),
         "text": {
             "format": {
@@ -642,7 +690,18 @@ async def generate(
             },
         }
         try:
-            pdf = await asyncio.to_thread(_compile_pdf, _tex(draft, warnings, snapshot_hash))
+            project_source = next(
+                (source for source in package["sources"] if source["kind"] == "project"), {}
+            )
+            project_data = project_source.get("data", {})
+            math_style = (
+                isinstance(project_data, dict)
+                and project_data.get("investigation_type") == "mathematical"
+            )
+            pdf = await asyncio.to_thread(
+                _compile_pdf,
+                _tex(draft, warnings, snapshot_hash, math_style=math_style),
+            )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
         _save(path, record, pdf)

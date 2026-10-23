@@ -1965,3 +1965,24 @@ separate capability, then verify compatibility against the accepted integrated
 A17 work on the latest `main` before any merge. Do not mark A20 complete until
 human review and an authorized quality trial or an explicit decision to leave
 that criterion open.
+
+### Mathematics paper structure and exposition follow-up
+
+The paper prompt now detects `investigation_type=mathematical` and requires a
+mathematics-paper organization: notation and definitions, a precise result
+statement, separate upper-bound and attainment arguments for extremal results,
+all nontrivial proof steps, edge cases, and explicit verification status. The
+PDF renderer uses math-appropriate Introduction, Evidence and scope,
+Verification status and limitations, and Conclusion headings, with the
+claim/evidence register after the conclusion. The safe math allowlist now
+renders `\mathcal` notation. The Maximum Regions browser fixture demonstrates
+a detailed convex-cell lemma, incremental bound, explicit attaining family,
+recurrence, and base case; browser assertions check these explanations, and
+the isolated fixture checks that the math-specific instructions reach the
+provider.
+
+`./sigma test` and the real Chrome A20 workflow passed after these changes.
+The fixture PDF was opened and visually inspected; its notation and section
+layout render cleanly. `/tmp/sigma-a20-mathematics-paper.pdf` is the improved
+fixture artifact. This is not a live-model paper, so actual provider prose
+quality remains unverified.
