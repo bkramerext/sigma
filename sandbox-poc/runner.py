@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import os
 import selectors
+import signal
 import subprocess
 import sys
+import time
+
+EXECUTION_TIMEOUT_SECONDS = 15
 
 
 def main() -> int:
@@ -21,7 +25,7 @@ def main() -> int:
     source = sys.stdin.buffer.read(size)
     if len(source) != size:
         return 64
-    token = os.environ.pop("SIGMA_RUNNER_TOKEN", "")
+    token = sys.stdin.buffer.readline(33).strip().decode("ascii", errors="ignore")
     if len(token) != 32 or any(char not in "0123456789abcdef" for char in token):
         return 64
     child = subprocess.Popen(
@@ -35,6 +39,7 @@ def main() -> int:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         bufsize=0,
+        start_new_session=True,
         env={"MPLCONFIGDIR": "/tmp/matplotlib"},
     )
     assert child.stdin and child.stdout and child.stderr
@@ -43,18 +48,36 @@ def main() -> int:
     selector = selectors.DefaultSelector()
     selector.register(child.stdout, selectors.EVENT_READ, sys.stdout.buffer)
     selector.register(child.stderr, selectors.EVENT_READ, sys.stderr.buffer)
+    deadline = time.monotonic() + EXECUTION_TIMEOUT_SECONDS
+    timed_out = False
     while selector.get_map():
+        if time.monotonic() >= deadline and child.poll() is None:
+            timed_out = True
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         for key, _ in selector.select(0.1):
             chunk = os.read(key.fd, 8192)
             if chunk:
-                key.data.write(chunk)
-                key.data.flush()
+                try:
+                    key.data.write(chunk)
+                    key.data.flush()
+                except BrokenPipeError:
+                    # Continue consuming until the in-container watchdog can
+                    # kill the workload even if the host client disconnects.
+                    pass
             else:
                 selector.unregister(key.fileobj)
     selector.close()
     return_code = child.wait()
-    sys.stdout.buffer.write(b"\x1eSIGMA_DONE:" + token.encode("ascii") + b"\x1f\n")
-    sys.stdout.buffer.flush()
+    if timed_out:
+        sys.stderr.buffer.write(b"\nExecution exceeded the 15-second wall limit.\n")
+    try:
+        sys.stdout.buffer.write(b"\x1eSIGMA_DONE:" + token.encode("ascii") + b"\x1f\n")
+        sys.stdout.buffer.flush()
+    except BrokenPipeError:
+        pass
     # The host captures /artifacts while this container remains alive, then
     # closes stdin to release the entrypoint and let docker run exit.
     sys.stdin.buffer.read(1)

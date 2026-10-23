@@ -8,17 +8,17 @@ import hashlib
 import json
 import mimetypes
 import os
-import selectors
 import secrets
+import selectors
 import signal
 import subprocess
 import tarfile
 import tempfile
 import threading
 import time
-from io import BytesIO
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -34,6 +34,7 @@ MAX_STORAGE_BYTES = 16_000_000
 MAX_ARTIFACT_BYTES = 64_000
 MAX_CAPTURED_ARTIFACT_BYTES = 4_000_000
 MAX_CAPTURED_ARTIFACTS = 8
+MAX_CAPTURE_ARCHIVE_BYTES = 16 * 1024 * 1024
 _EXECUTION_GATE = threading.BoundedSemaphore(1)
 
 
@@ -48,9 +49,7 @@ class ExecutionResult:
     artifacts: tuple[tuple[str, str, bytes], ...] = ()
 
 
-def docker_command(
-    cidfile: str | None = None, image: str = IMAGE, runner_token: str | None = None
-) -> list[str]:
+def docker_command(cidfile: str | None = None, image: str = IMAGE) -> list[str]:
     """Return fixed container arguments; user values never enter command tokens."""
     command = [
         CONTAINER_RUNTIME,
@@ -72,59 +71,90 @@ def docker_command(
     ]
     if cidfile:
         command.append(f"--cidfile={cidfile}")
-    if runner_token:
-        command.append(f"--env=SIGMA_RUNNER_TOKEN={runner_token}")
     command.append(image)
     return command
 
 
 def _capture_artifacts(container_id: str) -> tuple[tuple[str, str, bytes], ...]:
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             [CONTAINER_RUNTIME, "exec", container_id, "tar", "-C", "/artifacts", "-cf", "-", "."],
-            capture_output=True,
-            timeout=5,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
         )
+    except OSError as exc:
+        raise ProjectError("Could not capture research output files") from exc
+    assert process.stdout
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    archive_chunks = bytearray()
+    deadline = time.monotonic() + 5
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ProjectError("Could not capture research output files")
+            if not selector.select(remaining):
+                continue
+            chunk = os.read(process.stdout.fileno(), 64 * 1024)
+            if not chunk:
+                selector.unregister(process.stdout)
+                continue
+            if len(archive_chunks) + len(chunk) > MAX_CAPTURE_ARCHIVE_BYTES:
+                raise ProjectError("Research output files exceeded their combined size limit")
+            archive_chunks.extend(chunk)
+        if process.wait(timeout=max(0.01, deadline - time.monotonic())) != 0:
+            raise ProjectError("Could not capture research output files")
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ProjectError("Could not capture research output files") from exc
-    if result.returncode != 0:
-        raise ProjectError("Could not capture research output files")
-    if not result.stdout:
+    finally:
+        selector.close()
+        process.stdout.close()
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+    archive_bytes = bytes(archive_chunks)
+    if not archive_bytes:
         return ()
-    if len(result.stdout) > 16 * 1024 * 1024:
-        raise ProjectError("Research output files exceeded their combined size limit")
     captured: list[tuple[str, str, bytes]] = []
     total = 0
     try:
-        archive = tarfile.open(fileobj=BytesIO(result.stdout), mode="r:")
-        for member in archive:
-            filename = member.name.removeprefix("./")
-            if member.isdir() and filename in {"", "."}:
-                continue
-            if (
-                len(captured) >= MAX_CAPTURED_ARTIFACTS
-                or not filename
-                or filename in {".", ".."}
-                or "/" in filename
-                or "\\" in filename
-                or not member.isfile()
-                or member.size > MAX_CAPTURED_ARTIFACT_BYTES
-            ):
-                raise ProjectError("Research output files must be small regular files with simple names")
-            stream = archive.extractfile(member)
-            if stream is None:
-                raise ProjectError("Could not read a research output file")
-            content = stream.read(MAX_CAPTURED_ARTIFACT_BYTES + 1)
-            if len(content) != member.size:
-                raise ProjectError("Research output file size did not match its archive metadata")
-            total += len(content)
-            if total > MAX_CAPTURED_ARTIFACT_BYTES:
-                raise ProjectError("Research output files exceeded their combined size limit")
-            captured.append(
-                (filename, mimetypes.guess_type(filename)[0] or "application/octet-stream", content)
-            )
+        with tarfile.open(fileobj=BytesIO(archive_bytes), mode="r:") as archive:
+            for member in archive:
+                filename = member.name.removeprefix("./")
+                if member.isdir() and filename in {"", "."}:
+                    continue
+                if (
+                    len(captured) >= MAX_CAPTURED_ARTIFACTS
+                    or not filename
+                    or filename in {".", ".."}
+                    or "/" in filename
+                    or "\\" in filename
+                    or not member.isfile()
+                    or member.size > MAX_CAPTURED_ARTIFACT_BYTES
+                ):
+                    raise ProjectError(
+                        "Research output files must be small regular files with simple names"
+                    )
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise ProjectError("Could not read a research output file")
+                content = stream.read(MAX_CAPTURED_ARTIFACT_BYTES + 1)
+                if len(content) != member.size:
+                    raise ProjectError(
+                        "Research output file size did not match its archive metadata"
+                    )
+                total += len(content)
+                if total > MAX_CAPTURED_ARTIFACT_BYTES:
+                    raise ProjectError("Research output files exceeded their combined size limit")
+                captured.append(
+                    (
+                        filename,
+                        mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                        content,
+                    )
+                )
     except (tarfile.TarError, OSError) as exc:
         raise ProjectError("Research output files were not a valid artifact archive") from exc
     return tuple(captured)
@@ -193,7 +223,7 @@ def _run(
 
     try:
         process = subprocess.Popen(
-            docker_command(str(cidfile), image_id, runner_token),
+            docker_command(str(cidfile), image_id),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -207,7 +237,13 @@ def _run(
     assert process.stdin and process.stdout and process.stderr
     started = time.monotonic()
     try:
-        process.stdin.write(str(len(encoded)).encode("ascii") + b"\n" + encoded)
+        process.stdin.write(
+            str(len(encoded)).encode("ascii")
+            + b"\n"
+            + encoded
+            + runner_token.encode("ascii")
+            + b"\n"
+        )
     except BrokenPipeError:
         pass
     selector = selectors.DefaultSelector()
@@ -406,11 +442,6 @@ def _save_record(
         )
         with os.fdopen(fd, "r+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            existing = [
-                item
-                for item in directory.glob("*.json")
-                if item.is_file() and not item.is_symlink()
-            ]
             artifact_dir = directory / f"{record['id']}.artifacts"
             artifact_dir.mkdir(mode=0o700, exist_ok=False)
             artifact_records = []
@@ -451,9 +482,7 @@ def _save_record(
                     for item in directory.rglob("*")
                     if item.is_file() and not item.is_symlink()
                 )
-                if existing_bytes + len(encoded) + sum(
-                    item["size_bytes"] for item in artifact_records
-                ) > MAX_STORAGE_BYTES:
+                if existing_bytes + len(encoded) > MAX_STORAGE_BYTES:
                     raise ProjectError("Research execution storage limit reached")
                 staged = _stage(directory, encoded)
                 try:
@@ -576,9 +605,7 @@ def get_execution(path: str | Path, execution_id: str) -> dict[str, Any]:
     return _read_record(path, execution_id)
 
 
-def get_execution_artifact(
-    path: str | Path, execution_id: str, filename: str
-) -> tuple[bytes, str]:
+def get_execution_artifact(path: str | Path, execution_id: str, filename: str) -> tuple[bytes, str]:
     record = _read_record(path, execution_id)
     metadata = next(
         (item for item in record.get("artifacts", []) if item.get("filename") == filename), None
@@ -586,7 +613,11 @@ def get_execution_artifact(
     if metadata is None or Path(filename).name != filename:
         raise ProjectError("Research output artifact not found")
     target = _execution_directory(path) / f"{record['id']}.artifacts" / filename
-    if target.is_symlink() or not target.is_file() or target.stat().st_size != metadata["size_bytes"]:
+    if (
+        target.is_symlink()
+        or not target.is_file()
+        or target.stat().st_size != metadata["size_bytes"]
+    ):
         raise ProjectError("Research output artifact not found")
     content = target.read_bytes()
     if hashlib.sha256(content).hexdigest() != metadata["sha256"]:

@@ -2405,18 +2405,18 @@ quality remains unverified.
 
 ## A19 — isolated Python execution service (2026-10-22)
 
-The former A19 coordination item was consolidated into A18. Per the new A19
-assignment, a dedicated Python execution specification and interface are now
-being added without changing A18's research orchestration. A20 was subsequently
-merged by PR #5; historical notes above that said it was not merged describe the
-state at the time they were written. A17.8's independent-research acceptance
-gate remains open, and A18 remains concurrently in progress; neither blocks the
-independently testable execution boundary.
+The former A19 coordination item was consolidated into A18. Per the current
+assignment, A19 is layered on the reviewed A18 branch state (`1114aba`) and
+connects its portfolio role-call boundary without changing Blue's checkout or
+branch. A20 was merged by PR #5; historical notes above that said it was not
+merged describe the state at the time they were written. A17.8's independent-
+research acceptance gate remains open, but does not block bounded local
+computation.
 
 The standalone proof of concept is in `sandbox-poc/`. A pinned Python 3.12.8
 base image and fully pinned scientific-Python requirements provide NumPy,
 SciPy, pandas, SymPy, and Matplotlib. The SIGMA service exposes a typed Python
-entry point and POST/list/get project API. It executes one source submission in
+entry point and POST/list/get/artifact project API. It executes one source submission in
 a fresh local image, resolved to its immutable image ID, with Docker
 `--pull=never`, `--network=none`, UID 65532, read-only root, a 64 MiB
 non-executable temporary filesystem, no capabilities, no-new-privileges,
@@ -2424,10 +2424,19 @@ non-executable temporary filesystem, no capabilities, no-new-privileges,
 source bytes, and 32,000 combined captured output bytes. One execution is
 admitted per backend process. Each completed or rejected attempt is stored with
 source, bounded stdout/stderr, status/exit code, timing, image ID, resource
-policy, and optional session/strategy/cycle references in a private project
-sidecar. The project document and research history are not changed. Output,
-timeout, nonzero exit, unavailable image, and concurrent busy states are not
-reported as successful computation.
+policy, optional session/strategy/cycle references, and captured file metadata
+in a private project sidecar. Captured content is restricted to eight flat
+regular files, 4 MB each and combined, with SHA-256 checked on retrieval. The
+project document is not changed.
+
+In A18's portfolio role loop, Investigator may return bounded nullable
+`python_code`. Nonempty code runs once before the Skeptic call. The Skeptic
+receives the exact code, execution status/ID, bounded output, and artifact
+metadata; the same record is retained in the Investigator step and saved
+research artifact. Timeout, nonzero exit, output-limit, unavailable, and busy
+statuses remain explicit. Pause/stop waits for the hard-bounded execution to
+finish and persists its result before propagating cancellation. Code is treated
+as finite-computation evidence, not proof.
 
 Actual container verification used Colima/Docker and the built ARM64 image:
 
@@ -2442,6 +2451,11 @@ Actual container verification used Colima/Docker and the built ARM64 image:
   1 MB output was stopped and capped at 32,000 bytes; an infinite loop was
   killed by the 15-second timeout; and a real execution record was persisted
   and retrieved from a temporary project.
+- The research workload answered its own question: enumerating line
+  arrangements through `n=12` gave 79 regions and matched
+  `1 + n(n+1)/2` at every finite case. It exercised NumPy linear algebra, SciPy
+  integration and root finding, SymPy summation, pandas comparisons, and a
+  captured Matplotlib PNG.
 - `printf ... | python sandbox-poc/run.py` passed as a standalone proof-of-
   concept import smoke for the five libraries.
 - The first actual attempt exposed Docker's requirement that a `--cidfile` path
@@ -2454,10 +2468,14 @@ Actual container verification used Colima/Docker and the built ARM64 image:
 
 `uv run --locked --no-sync python tests/python_sandbox.py` passed deterministic
 command-policy, size/metadata validation, busy admission, private storage,
-project binding, and HTTP API tests. Full `./sigma test` passed all scenarios,
-Ruff check/format, Pyright (0 errors), frontend typecheck, and production build.
-The existing Starlette/httpx deprecation warning appeared and was non-failing.
-No real browser UI was changed; API-level coverage is the relevant adapter check. A18 role-loop
-invocation and Investigator→Skeptic result/artifact propagation remain explicit
-integration work for Blue; this PR does not alter A18 orchestration. Python
-results do not constitute formal verification or Lean evidence.
+project binding, cancellation, and HTTP record/artifact API tests.
+`uv run --locked --no-sync python tests/research_sessions.py` passed A18's full
+research scenarios plus deterministic Investigator→Python→Skeptic and
+stop-during-execution provenance tests. Final `./sigma test` passed every
+scenario, Ruff check/format, Pyright (0 errors), frontend typecheck, and
+production build. Existing Starlette/httpx deprecation warnings were
+non-failing. No browser files changed; there is no A19 UI to verify in Chrome.
+The actual image run used Docker/Colima rather than a live provider; the
+provider/agent integration used deterministic fixtures. No live provider calls
+were made. A17.8 remains an independent acceptance gate. Python results do not
+constitute formal verification or Lean evidence.

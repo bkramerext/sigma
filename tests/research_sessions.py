@@ -44,6 +44,7 @@ def investigation(n):
         "assumptions": [f"Assumption {n}"],
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
+        "python_code": None,
     }
 
 
@@ -206,6 +207,154 @@ async def test_three_cycles_and_idempotency(path: Path):
         range(1, len(finished["events"]) + 1)
     )
     assert any(event["kind"] == "coordinator.started" for event in finished["events"])
+
+
+async def test_investigator_python_is_run_and_reviewed(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 1
+    research_sessions.save_limits(str(path), limits)
+    code = "print(6 * 7)"
+    first = {**investigation(1), "python_code": code}
+    execution = {
+        "id": str(uuid4()),
+        "status": "timeout",
+        "exit_code": 124,
+        "stdout": "",
+        "stderr": "Execution exceeded the 15-second wall limit.",
+        "duration_ms": 15_000,
+        "source": code,
+        "artifacts": [],
+        "environment": {"network": "none", "memory_bytes": 536870912},
+    }
+    outputs = [first, skeptic(1, "stop", "no_progress")]
+    contexts = []
+
+    async def handler(request):
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        contexts.append((payload["text"]["format"]["name"], context))
+        return httpx.Response(200, json=provider_response(outputs.pop(0)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(
+            research_sessions,
+            "execute_research_code",
+            new=AsyncMock(return_value=execution),
+        ) as sandbox,
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        finished = await wait_for(path, started["id"])
+
+    sandbox.assert_awaited_once()
+    sandbox_call = sandbox.await_args
+    assert sandbox_call is not None
+    assert sandbox_call.args[1] == code
+    assert sandbox_call.kwargs == {
+        "session_id": started["id"],
+        "strategy_id": strategy.id,
+        "cycle": 1,
+    }
+    assert [role for role, _ in contexts] == [
+        "research_investigator",
+        "research_skeptic",
+    ], (contexts, finished)
+    skeptic_context = contexts[1][1]["investigator_output"]
+    assert skeptic_context["python_code"] == code
+    assert skeptic_context["python_execution"] == execution
+    assert skeptic_context["python_execution"]["status"] == "timeout"
+    assert finished["steps"][0]["output"] == skeptic_context
+    assert finished["artifacts"][0]["investigator_output"] == skeptic_context
+    assert (
+        finished["artifacts"][0]["investigator_output"]["python_execution"]["id"] == execution["id"]
+    )
+    assert any(event["kind"] == "python.started" for event in finished["events"])
+    assert any(event["kind"] == "python.completed" for event in finished["events"])
+
+
+async def test_stop_during_python_execution_preserves_provenance(path: Path):
+    view, strategy, credential, config = await setup(path)
+    limits = research_sessions.get_limits(str(path))
+    limits["research_rounds"] = 1
+    research_sessions.save_limits(str(path), limits)
+    code = "while True: pass"
+    execution = {
+        "id": str(uuid4()),
+        "status": "timeout",
+        "exit_code": 124,
+        "stdout": "",
+        "stderr": "Execution exceeded the 15-second wall limit.",
+        "duration_ms": 15_000,
+        "source": code,
+        "artifacts": [],
+        "environment": {"network": "none"},
+    }
+    execution_started = asyncio.Event()
+    release_execution = asyncio.Event()
+    provider_calls = []
+
+    async def handler(request):
+        provider_calls.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json=provider_response({**investigation(1), "python_code": code}),
+        )
+
+    async def delayed_execution(*_args, **_kwargs):
+        execution_started.set()
+        await release_execution.wait()
+        return execution
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+        patch.object(research_sessions, "execute_research_code", new=delayed_execution),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            expected_limits=limits,
+        )
+        await asyncio.wait_for(execution_started.wait(), 2)
+        stop_task = asyncio.create_task(
+            research_sessions.control_session(str(path), started["id"], "stop")
+        )
+        await asyncio.sleep(0)
+        release_execution.set()
+        stopped = await asyncio.wait_for(stop_task, 2)
+
+    assert stopped["status"] == "stopped"
+    assert len(provider_calls) == 1  # the Skeptic is not called after a user stop
+    saved = research_sessions.get_session(str(path), started["id"])
+    pending = saved["strategy_runs"][0]["pending_investigation"]
+    assert pending["python_code"] == code and pending["python_execution"] == execution
+    assert saved["steps"][0]["status"] == "completed"
+    assert saved["steps"][0]["output"] == pending
+    assert any(event["kind"] == "python.completed" for event in saved["events"])
 
 
 async def test_new_session_receives_prior_saved_findings(path: Path):
@@ -883,6 +1032,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
+        "python_code": None,
     }
     review = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -928,7 +1078,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "artifact-3",
         "artifact-4",
     ]
-    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 50000}]}
+    oversized_context = {**context_record, "artifacts": [{"id": "old", "method": "x" * 300000}]}
     try:
         research_sessions._agent_context(oversized_context, "skeptic", 2)
     except ProjectError as exc:
@@ -1675,6 +1825,7 @@ async def test_generic_objective_review_on_binary_strings(path: Path):
         "assumptions": ["The two classes are defined by the final symbol."],
         "evidence_status": "Complete inductive argument; no formal checker was run.",
         "open_obligations": [],
+        "python_code": None,
     }
     accepted = {
         **skeptic(1, "stop", "productive_conclusion"),
@@ -2010,6 +2161,10 @@ def main():
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
+        asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
+        asyncio.run(
+            test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
+        )
         asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))

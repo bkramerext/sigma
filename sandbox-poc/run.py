@@ -18,9 +18,7 @@ MAX_SOURCE_BYTES = 16_000
 MAX_OUTPUT_BYTES = 32_000
 
 
-def command(
-    runtime: str = "docker", cidfile: str | None = None, runner_token: str | None = None
-) -> list[str]:
+def command(runtime: str = "docker", cidfile: str | None = None) -> list[str]:
     result = [
         runtime,
         "run",
@@ -42,8 +40,6 @@ def command(
     ]
     if cidfile:
         result.append(f"--cidfile={cidfile}")
-    if runner_token:
-        result.append(f"--env=SIGMA_RUNNER_TOKEN={runner_token}")
     result.append(IMAGE)
     return result
 
@@ -61,7 +57,7 @@ def execute(source: str, timeout: int = 15, runtime: str = "docker") -> tuple[in
     token = secrets.token_hex(16)
     try:
         process = subprocess.Popen(
-            command(runtime, cidfile, token),
+            command(runtime, cidfile),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -72,7 +68,9 @@ def execute(source: str, timeout: int = 15, runtime: str = "docker") -> tuple[in
         return 127, "Container runtime is unavailable."
     assert process.stdin and process.stdout and process.stderr
     try:
-        process.stdin.write(str(len(encoded)).encode("ascii") + b"\n" + encoded)
+        process.stdin.write(
+            str(len(encoded)).encode("ascii") + b"\n" + encoded + token.encode("ascii") + b"\n"
+        )
     except BrokenPipeError:
         pass
     selector = selectors.DefaultSelector()

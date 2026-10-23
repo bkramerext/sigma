@@ -1,9 +1,8 @@
 # A19 — Autonomous Python execution for research agents
 
-**Status:** ready for review, with A18 role-loop invocation remaining as a
-separately coordinated integration. This assignment is reactivated by the
-current user request; it extends A18's local research loop without waiting for
-the open A17.8 research-quality gate.
+**Status:** integrated with A18's portfolio Investigator/Skeptic loop. This
+assignment extends A18's local research loop without waiting for the open
+A17.8 research-quality gate.
 
 ## Goal
 
@@ -19,9 +18,9 @@ proof of a general mathematical claim.
 - A20 is merged in `origin/main` (PR #5); this A19 branch starts from that
   merged main.
 - `docs/ASSIGNMENT-A18.md` is active and being handled concurrently in another
-  checkout. Its multi-strategy research and intervention work is not complete
-  or a dependency for building the isolated execution service. Reconcile shared
-  session-loop changes against the latest main before merge.
+  checkout. Its current portfolio role-call seam is the integration point. A19
+  is based on the reviewed A18 branch state and changes only the Green A19
+  feature branch; Blue's branch remains untouched.
 - A17.8 remains an open research-acceptance gate in `docs/STATUS.md`. It limits
   claims about autonomous research quality, but does not block implementing a
   strictly bounded local computation facility.
@@ -41,11 +40,12 @@ proof of a general mathematical claim.
    no capabilities, and no-new-privileges. Do not mount the checkout, project,
    credentials, or host home into the container.
 4. Provide NumPy, SciPy, pandas, SymPy, and Matplotlib in the image.
-5. Integrate code generation/execution into the current Investigator → Skeptic
-   session cycle. Keep code and result in durable artifacts with clear
-   provenance. The Skeptic must receive the result; unsupported execution,
-   timeout, or nonzero exit must remain visible and must not be labeled as a
-   successful test.
+5. Integrate optional Investigator `python_code` into the portfolio
+   Investigator → Skeptic cycle. Keep code, execution record, and file metadata
+   in the durable session evidence with project/session/strategy/cycle
+   provenance. The Skeptic receives source, status, exit code, stdout/stderr,
+   execution ID, and captured file metadata. Unsupported execution, timeout, or
+   nonzero exit remains visible and is never labeled a successful test.
 6. Keep execution synchronous per Investigator proposal: no autonomous repair
    loop or extra provider calls. Cancellation/worker interruption must retain
    truthful state and never claim a result that was not captured.
@@ -63,4 +63,5 @@ Run `./sigma test`, relevant browser checks, lint/type checks via the project
 test command, and an actual local container smoke test if the runtime is
 available. Record exact outcomes and any engine limitation in `docs/STATUS.md`.
 Do not use live provider calls or claim independent mathematical verification.
-Prepare a focused PR; do not self-merge.
+Keep the PR based on the active A18 integration branch until A18 lands; do not
+self-merge.
