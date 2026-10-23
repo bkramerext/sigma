@@ -1,8 +1,8 @@
 T30 follow-up and existing Nonconsecutive Subset Sums sample review
 
 Branch: gray/nonconsecutive-review-history-resume
-Base: current main after PR #46, c4ef4f0
-Status: R4R once the PR is opened; no merge performed.
+Integrated main: c4b18d3 (T22 Gate C PR #44; includes merged PR #42)
+Status: R4R; no merge performed.
 
 Sample changes
 
@@ -85,8 +85,15 @@ Coordination and dependencies
 
 T30's original sample-export implementation PR #40 is already in current main;
 this change is a focused integration correction and a saved sample fixture. The
-open T37 PR #45 also edits `docs/STATUS.md`, but only at an earlier section; this
-handoff/status addition is at the end and should apply independently. Open PR
-#42 (Lean logo color) is untouched. I did not contact any other worker.
+Open T37 PR #45 also edits `docs/STATUS.md`; the integration conflict with Gate C
+was resolved by preserving both status entries. Its application changes do not
+overlap this PR. PR #42 merged into main during this work and is included only
+through the main merge; this branch adds no Lean-logo changes. I did not contact
+any other worker.
+
+After main advanced to c4b18d3, I merged it into the branch and resolved the
+append-only `docs/STATUS.md` conflict while retaining both the Gate C and sample
+entries. The integrated tree passed `./sigma test` and the real Chrome sample
+check again. PR #48 contains the updated head.
 
 R4R for coordinator review and integration. Do not self-merge.

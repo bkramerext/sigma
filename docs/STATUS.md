@@ -4152,18 +4152,20 @@ the q-binomial contributes k(k+1)/2 in the one-based subset convention, which
 combines with the gap shift k(k-1)/2 to give k^2. Exact polynomial checks
 through n=18 support the formula while its all-n proof remains an obligation.
 Every record and report labels the fixture outputs as not live-model research.
-The Python code ran in the local isolated research sandbox; the Investigator/Skeptic responses were local
-deterministic fixtures, and no paid or live provider calls were made.
+The Python code ran in the local isolated research sandbox. The
+Investigator/Skeptic responses were local deterministic fixtures, and no paid
+or live provider calls were made.
 
-`./sigma test` passed, including the regression that canonical exports of
-legacy projects can be imported as samples without rewriting the source.
+`./sigma test` passed after integrating current main at `c4b18d3`, including
+Gate C tests and the regression that canonical exports of legacy projects can
+be imported as samples without rewriting the source.
 The sample was round-tripped through `samples.make_sample` and the normal sample
 loader: five sessions, five linked artifacts, five completed Python evidence
 records, strategy attribution, and a 35.3K-character report were preserved.
-Real Chrome `browser_checks/nonconsecutive_sample.py` passed at desktop and
-390px and 320px mobile widths, including all five outcome disclosures, saved
-metrics, report content, and no horizontal overflow. Screenshots are in `/tmp/`
-as documented in `browser_checks/README.md`. A first mock follow-up was correctly
+Real Chrome `browser_checks/nonconsecutive_sample.py` passed on the integrated
+head at desktop and 390px and 320px mobile widths, including all five outcome
+disclosures, saved metrics, report content, and no horizontal overflow.
+Screenshots are in `/tmp/` as documented in `browser_checks/README.md`. A first mock follow-up was correctly
 rejected because it supplied a formal peer citation absent from the single-
 strategy session's peer bundle; the deterministic fixture was corrected to
 discuss prior-session findings without claiming peer-evidence attribution.
