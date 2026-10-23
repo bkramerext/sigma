@@ -80,9 +80,15 @@ with sync_playwright() as playwright:
         expect(action_buttons.nth(1)).to_have_attribute("data-tooltip", "Generate Lean proof (coming soon)")
         expect(page.locator(".project-difficulty-badge")).to_have_attribute("title", "This project is considered easy. Click to cycle through easy, medium, and hard.")
         expect(page.locator(".project-difficulty-badge")).to_have_attribute("data-tooltip", "This project is considered easy. Click to cycle through easy, medium, and hard.")
-        expect(page.locator(".project-google-placeholder")).to_have_attribute("title", "Google sign-in planned for cloud support (coming soon)")
-        expect(page.locator(".project-google-placeholder")).to_have_attribute("data-tooltip", "Google sign-in planned for cloud support (coming soon)")
-        assert page.locator(".project-google-placeholder").evaluate("e => getComputedStyle(e).cursor") == "not-allowed"
+        expect(page.locator(".project-google-signin")).to_have_attribute(
+            "title", "Google sign-in is unavailable in the local workspace and is coming soon."
+        )
+        expect(page.locator(".project-google-signin")).to_have_attribute(
+            "data-tooltip", "Google sign-in is unavailable in the local workspace and is coming soon."
+        )
+        expect(page.locator(".project-google-signin")).to_contain_text("Google Sign-in")
+        expect(page.locator(".project-google-signin")).to_contain_text("Coming soon")
+        assert page.locator(".project-google-signin").get_attribute("role") == "status"
         model_tooltip = page.locator(".project-model-pill").get_attribute("data-tooltip")
         assert model_tooltip and model_tooltip.startswith("The selected model is ") and ". Its relative published API token cost is " in model_tooltip and model_tooltip.endswith(" Click to cycle through available models."), model_tooltip
         expect(page.locator(".project-thinking-pill")).to_have_attribute("data-tooltip", "The thinking level is set to high. Click to cycle through levels supported by this model.")
@@ -124,7 +130,7 @@ with sync_playwright() as playwright:
     assert_project_actions()
     difficulty_box = page.locator(".project-difficulty-badge").bounding_box()
     model_pill_box = page.locator(".project-model-pill").bounding_box()
-    google_pill_box = page.locator(".project-google-placeholder").bounding_box()
+    google_pill_box = page.locator(".project-google-signin").bounding_box()
     assert difficulty_box and model_pill_box and google_pill_box
     assert abs(difficulty_box["y"] - model_pill_box["y"]) <= 1, (difficulty_box, model_pill_box, google_pill_box)
     assert abs(difficulty_box["y"] - google_pill_box["y"]) <= 1, (difficulty_box, model_pill_box, google_pill_box)
@@ -135,8 +141,8 @@ with sync_playwright() as playwright:
     lean_button = page.locator(".project-lean-button")
     lean_button.hover()
     expect(page.get_by_role("tooltip")).to_have_text("Generate Lean proof (coming soon)")
-    page.locator(".project-google-placeholder").hover()
-    expect(page.get_by_role("tooltip")).to_have_text("Google sign-in planned for cloud support (coming soon)")
+    page.locator(".project-google-signin").hover()
+    expect(page.get_by_role("tooltip")).to_have_text("Google sign-in is unavailable in the local workspace and is coming soon.")
     page.locator(".project-difficulty-badge").hover()
     expect(page.get_by_role("tooltip")).to_have_text("This project is considered easy. Click to cycle through easy, medium, and hard.")
     page.locator(".project-chatgpt-signin summary").hover()
@@ -197,11 +203,12 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("button", name="Author AI paper", exact=True)).to_have_count(0)
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    expect(export_dialog.get_by_role("radio")).to_have_count(3)
+    expect(export_dialog.get_by_role("radio")).to_have_count(4)
     expect(export_dialog).not_to_contain_text("Academic paper using LaTeX")
     expect(export_dialog.get_by_role("radio", name="Project Audit")).to_be_visible()
     expect(export_dialog.get_by_role("radio", name="Text file")).to_be_visible()
     expect(export_dialog.get_by_role("radio", name="HTML report")).to_be_visible()
+    expect(export_dialog.get_by_role("radio", name="LaTeX report")).to_be_visible()
     export_dialog.get_by_role("button", name="Cancel", exact=True).click()
     expect(export_dialog).to_be_hidden()
     latex_button.click()
