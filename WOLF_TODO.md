@@ -55,3 +55,10 @@ Working notes for future additions to [WOLF.md](WOLF.md). This is a **writing ch
 - Preserve failures, disagreements, and changed decisions; these are part of the engineering evidence.
 - Focus on the development collaboration in WOLF.md; SIGMA's own future research-agent architecture is a separate topic.
 - Avoid private career motivations or recruiting context in repository documentation.
+
+## Day 3: five-worker software factory
+
+- [x] Document the converged roles: four Codex workers (Blue, Green, Red, Gray) and ChatGPT as a fifth AI contributor. The human owns product ideation, forwarding instructions, and manual UI review.
+- [x] Describe scoped T-tickets, `TICKET_TRACKING.md`, model/thinking recommendations, worker-owned branches/PRs, tests, independent ChatGPT review, ordered integration and merges.
+- [x] Ground in PR #11 ticket migration, PR #13 metrics/provenance and PR #12 model/thinking controls, including revisions after review.
+- [ ] Evaluate human message-passing overhead and combined integration smoke tests as the factory grows.
