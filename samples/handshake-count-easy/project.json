@@ -1,0 +1,40 @@
+{
+  "schema_version": 8,
+  "id": "c9bff69e-705a-448b-8c72-d40613835ed5",
+  "title": "Counting Pairwise Handshakes",
+  "problem": "A group has n people, and each pair shakes hands exactly once. Determine the total number of handshakes for general positive integer n. Justify the counting argument and state clearly whether a person may shake their own hand.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T06:28:20.879412+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:28:20.880280+00:00",
+      "strategy_id": "ad1ab412-e20a-4022-aed5-323c69a4667b"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "ad1ab412-e20a-4022-aed5-323c69a4667b",
+      "title": "Direct counting",
+      "approach": "Derive a general count from the stated setup. Check small group sizes, explain why every handshake is counted exactly once, and identify any assumption that changes the answer.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:28:20.880280+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "ad1ab412-e20a-4022-aed5-323c69a4667b"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "easy"
+}

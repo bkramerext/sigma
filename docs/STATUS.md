@@ -1,5 +1,120 @@
 # SIGMA status
 
+## A18 continuation: live research and portfolio coordination (2026-10-22)
+
+This continues the A18 work on PR #8; it does not replace the earlier baseline
+and implementation record below. I added an Easy-to-Hard research ladder, a
+saved-evidence coordinator review, adversarial portfolio tests, and real-plan
+evaluation. I did not run any API-key-billed call.
+
+### Engineering changes
+
+- Added the answer-free Easy sample **Counting Pairwise Handshakes**, followed
+  by the existing Medium Euler-product and Hard alternating-series,
+  theta-functional-equation, and RH portfolio samples. The first three
+  mathematical samples have explicit methodological hints; those runs cannot
+  establish independent method discovery. The RH entry remains a research
+  program for an open problem, not a candidate proof.
+- The portfolio coordinator now validates Skeptic references against exact
+  supplied peer artifact IDs, records cited cross-strategy relations, and
+  presents evidence-linked continue/revise/hold/challenge/abandon suggestions.
+  It can flag cited contradictions and overlaps, and proposes combining two
+  strategies only when the complementary judgments are reciprocal. All such
+  judgments are unverified and do not mutate the saved strategy pool.
+- Added deterministic tests for failed approaches, fabricated references,
+  one-sided versus reciprocal complement claims, contradictions, strategy
+  evolution/recovery, stop/resume, and timeout isolation. A transport timeout
+  is stored as a failed provider step; the affected branch is marked
+  `hold_after_failure`, its peer branch continues, and the timeout is not
+  reinterpreted as mathematical evidence.
+- The new timeout test exposed a stale portfolio recommendation at terminal
+  budget exhaustion: a branch could retain a pre-finalization `continue`
+  recommendation after its status had changed to ended. Terminal cleanup now
+  recomputes the coordinator summary after final branch statuses and budget
+  reasons are applied; the regression requires a terminal branch never to
+  advertise `continue` or `revise`.
+- Added the run protocol and scoring rubric in
+  [the research ladder evaluation](evaluations/rh-research-ladder.md). Exact
+  finite checks in `tests/research_ladder.py` validate example arithmetic only;
+  they do not prove any analytic claim or RH.
+
+### Live ChatGPT-plan evidence
+
+I checked the active provider mode before each session; both were `chatgpt`,
+connected, and used the configured `gpt-6.1-sol` / High setting. No request was
+sent unless that check passed. The two captured project/session records remain
+locally available under `projects/` and are not committed as source fixtures:
+
+| Stage | Saved project and session | Calls / elapsed | Result |
+|---|---|---:|---|
+| Easy: Counting Pairwise Handshakes | `projects/a18-live-easy-20261022-232853.sigma`; session `1935da6d-5ad6-4d64-9982-06fe5f802300`; artifact `5f2e756e-f7ae-4780-9424-763195af2e7f` | 2 / 39 s | Completed. The Investigator derived `n(n−1)/2`, checked `n=1,2,3`, and supplied an incidence-count argument. The Skeptic raised a specific objection: the distinct-person convention was assumed rather than tied to the wording. It asked for the alternative convention to be handled. The saved outcome is **Mixed · partial progress, unresolved**, with verification `incomplete`; it did not label the result verified. |
+| Medium: Prime Factorization and the Euler Product | `projects/a18-live-medium-20261022-233002.sigma`; session `16316d1d-fdca-4042-85dd-79e03828920f` | 2 dispatched / 40 s | Both concurrent Investigator calls timed out before producing an artifact. The session records both branches as failed, with `hold_after_failure`; strategy assessments are `not_used`, and the outcome is `Pending · execution failed`. No inference about either mathematical approach was made. The configured cap was four calls; no Skeptic calls were dispatched. |
+
+Together these account for four dispatched plan calls: two completed and two
+timed out. The session records contain no token-usage metadata, so token use
+and remaining plan allowance cannot be quantified here. A timed-out remote
+request may still consume plan allowance. There was no reported HTTP 429,
+quota-limit response, or automatic billing fallback, but I stopped live
+experiments after the two timeouts because further calls would add uncertain
+usage without resolving whether the provider was simply slow or limited. No
+Hard or RH live session was run.
+
+### Research-quality assessment
+
+- **Independent discovery:** Partially demonstrated only for the Easy count.
+  The answer was absent from the saved problem and generic strategy. The
+  derivation is short and familiar, and one task cannot establish general
+  discovery ability. The Medium and harder runs supply method hints and are
+  unsuitable for measuring independent method selection.
+- **Skeptic criticism:** Demonstrated once with a concrete assumption tied to
+  the Investigator's formula and an explicit way to resolve it. The objection
+  may be stricter than ordinary mathematical usage, where “pair” conventionally
+  means two distinct people; this is still a useful calibration test, not proof
+  of consistently strong criticism.
+- **Coordinator recognition:** On the Easy artifact, the outcome remained
+  mixed/partial with an unresolved objection and incomplete verification. This
+  is appropriately cautious. It did not claim the count was externally or
+  formally verified. The Medium failure was correctly treated as an execution
+  failure, not disproof of a strategy. Real multi-strategy synthesis remains
+  unverified because that run timed out before any artifact or Skeptic review.
+- **Strategy improvement:** Deterministic tests show that saved objections,
+  peer findings, and revised questions flow into later cycles and that failed
+  strategies remain distinct from mathematically unproductive ones. There is
+  no live evidence yet that agents improved a strategy over a previous attempt.
+- **Cross-strategy reasoning:** The software validates exact peer citations and
+  only suggests a combination for reciprocal complement judgments. The live
+  Medium run failed before peer evidence existed; model ability to make useful
+  cross-strategy decisions is therefore unverified.
+
+The current timeout is 40 seconds per provider request. Two concurrent High
+reasoning Medium calls reached that bound; this is a material operational
+limitation for the present ladder. I did not increase the timeout or retry live
+calls in this evaluation. A subsequent run should first establish a deliberately
+bounded, lower-latency configuration, while preserving strict call caps and
+stopping on the first throttle/limit signal. The system still has no external
+reference search, computation tool, or formal proof checker; model statements
+cannot certify mathematical truth.
+
+### Verification
+
+- Final `./sigma test` passed after adding all five samples, the timeout
+  isolation regression, and the terminal-recommendation fix. It covered all
+  executable scenarios, Ruff check/format, Pyright, frontend typecheck, and
+  production build. The ladder check confirmed five independent sample copies,
+  answer-free Easy inputs, exact finite Euler/eta arithmetic, and theta spot
+  checks; its printed note explicitly limits those checks to finite examples.
+- Real Chrome `browser_checks/a17_research.py` passed against a local provider
+  fixture at desktop (1440px) and mobile (390px), including multi-strategy
+  selection, stop during provider work, resume, and the coordinator panel. I
+  inspected both screenshots. Real Chrome `browser_checks/a20_paper.py` also
+  passed after setting its dedicated UI/fixture ports explicitly.
+
+**Recommendation:** Accept the coordinator and failure-handling engineering as
+implemented once the final full suite passes, but do not accept A18 as evidence
+of research effectiveness. Live evidence is limited to one elementary result
+with a useful criticism and one Medium provider timeout; strategy improvement,
+cross-strategy synthesis, and all Hard/RH capability remain unverified.
+
 ## A18 implementation and evaluation (started 2026-10-22)
 
 ### Baseline and research-quality boundary
@@ -9,9 +124,11 @@ checkpoint `0377231` contains the bounded-continuity and answer-leakage work. Ba
 inspection found one strategy per session, sequential Investigator/Skeptic
 calls, provider gates held per call, and no persisted branch-level execution
 state. The A17.8 Maximum Regions trial is not independent-discovery evidence:
-its saved strategy already contained the answer. No live-provider research has
-been run for A18. Mocked outputs establish software behavior only, not model
-ability or research quality.
+its saved strategy already contained the answer. At this original checkpoint,
+no live-provider A18 research had been run; the subsequent bounded plan-backed
+trials and their limitations are recorded in the continuation section above.
+Mocked outputs establish software behavior only, not model ability or research
+quality.
 
 ### Completed engineering work
 
@@ -88,12 +205,11 @@ live research evaluation.
   recovery, provenance, and branch isolation are covered. New single-strategy
   sessions now share the same A17.6-compatible coordinator path; the legacy
   worker remains for pre-portfolio records.
-- **Research gate: not tested.** No live model run is authorized in this A18
-  work. In particular, no claim is made that agents independently solved
-  Maximum Regions, that the Skeptic produced meaningful criticism, or that a
-  coordinator recognized a real model result. Deterministic fixtures cannot
-  answer those questions. The earlier A17.8 result is disqualified by answer
-  leakage.
+- **Research gate: limited and still incomplete.** At this original checkpoint,
+  no live model run was authorized; the later Easy and timed-out Medium sessions
+  are recorded above. Their evidence does not establish multi-strategy quality.
+  No claim is made that agents independently solved Maximum Regions. The
+  earlier A17.8 result is disqualified by answer leakage.
 - **Not implemented:** a user-authored next-step instruction during a running
   session. In a multi-branch wave, deciding which strategy receives that
   instruction and recording exactly when it entered the prompt needs a durable,

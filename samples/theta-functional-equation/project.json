@@ -1,0 +1,59 @@
+{
+  "schema_version": 8,
+  "id": "4dd39ea8-ca3c-4588-9eb0-cb39f4faa237",
+  "title": "Theta Symmetry and the Zeta Functional Equation",
+  "problem": "Assume the Gaussian theta transformation \u03b8(t) = t^(-1/2)\u03b8(1/t) for t > 0, where \u03b8(t) = \u03a3(n\u2208\u2124) exp(-\u03c0n\u00b2t). Starting from the Dirichlet series definition of \u03b6(s) on Re(s) > 1, derive a meromorphic continuation and the functional equation for the completed zeta function, with all normalization constants stated and checked. Then derive the resulting symmetries of nontrivial zeros and explain why symmetry about the critical line does not imply that every zero lies on it. Justify the Mellin transform, integral split, analytic continuation, and every interchange of sum and integral. Treat the theta identity as a supplied premise, not as evidence that this investigation proved Poisson summation. No outside references or computation tools are available.",
+  "events": [
+    {
+      "sequence": 1,
+      "kind": "project.initialized",
+      "timestamp": "2026-10-23T06:16:05.807218+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.807797+00:00",
+      "strategy_id": "fed1d885-d06d-480c-863f-a576ee20c950"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-23T06:16:05.808280+00:00",
+      "strategy_id": "b810cbf1-a513-458a-8ff4-80221cc03ce4"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "fed1d885-d06d-480c-863f-a576ee20c950",
+      "title": "Mellin transform with a split at one",
+      "approach": "Take the Mellin transform of \u03b8(t)-1 in the initial convergence region. Split the integral at t=1, apply the supplied inversion only to the lower interval, and transform it to an upper-interval integral plus explicit elementary terms. Track \u0393(s/2), powers of \u03c0, poles, and the s \u2194 1-s symmetry without suppressing boundary terms.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.807797+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "b810cbf1-a513-458a-8ff4-80221cc03ce4",
+      "title": "Symmetrized completed-zeta integral",
+      "approach": "Build an integral representation symmetric under t \u2194 1/t before identifying it with the completed zeta function. Derive continuation from the compact-range and tail behavior separately, then recover the functional equation by the substitution. Independently check residues and zero symmetries against the normalization; flag any step that depends on a theorem not supplied in the project.",
+      "author_kind": "human",
+      "created_at": "2026-10-23T06:16:05.808280+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "mathematical",
+  "active_order": [
+    "fed1d885-d06d-480c-863f-a576ee20c950",
+    "b810cbf1-a513-458a-8ff4-80221cc03ce4"
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
+}

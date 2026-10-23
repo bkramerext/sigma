@@ -56,6 +56,14 @@ class Investigator(BaseModel):
     open_obligations: list[str] = Field(max_length=12)
 
 
+class CrossStrategyRelation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    strategy_id: str = Field(min_length=1, max_length=100)
+    artifact_id: str = Field(min_length=1, max_length=100)
+    relation: str = Field(pattern="^(supports|contradicts|complements|overlaps|unrelated)$")
+    rationale: str = Field(min_length=10, max_length=600)
+
+
 class Skeptic(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     assessment: str = Field(pattern="^(continue|revise|stop)$")
@@ -76,6 +84,7 @@ class Skeptic(BaseModel):
     verification_status: str = Field(pattern="^(convincing_unverified|incomplete)$")
     strategy_contribution: str = Field(pattern="^(solution|productive|unproductive)$")
     contribution_rationale: str = Field(max_length=1000)
+    cross_strategy_relations: list[CrossStrategyRelation] = Field(max_length=12)
 
 
 def _now() -> str:
@@ -436,7 +445,9 @@ INVESTIGATOR_GUIDANCE = (
     "Advance the current question with a specific claim and enough public reasoning for a reviewer "
     "to assess it. State assumptions and evidence status honestly. Distinguish a proved step from "
     "a conjecture, example, or assertion; identify every unresolved proof obligation. Do not claim "
-    "external checking or formal verification."
+    "external checking or formal verification. When other_strategy_evidence is supplied, treat "
+    "it as unverified peer work; state whether it changes this strategy's reasoning and never "
+    "silently present another branch's result as independently derived."
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
@@ -449,7 +460,13 @@ SKEPTIC_GUIDANCE = (
     "can satisfy a requirement omitted or shortened later; cite the supporting cycle for each "
     "proof obligation. Identify whether each objection is material and recoverable, a decisive "
     "counterexample, or merely a request for clearer exposition. Criticism alone never ends "
-    "research; approval is never verification. Request another cycle only for a genuinely "
+    "research; approval is never verification. In a multi-strategy session, compare the supplied "
+    "other_strategy_evidence with this branch's evidence. For each material relationship, "
+    "record the exact peer strategy_id and artifact_id, classify it as supports, contradicts, "
+    "complements, overlaps, or unrelated, and give a concise public rationale. Never cite an ID "
+    "absent from other_strategy_evidence; return an empty list when no peer evidence is supplied "
+    "or no relationship is justified. These are unverified review claims, not coordinator facts; "
+    "a single-strategy session must return an empty list. Request another cycle only for a genuinely "
     "unresolved objective requirement or material objection. Choose stop only with an actual "
     "decisive contradiction, a useful completed conclusion, or no concrete next step. A decisive "
     "counterexample must be stated in objections and tied to supporting cycle numbers; if you "
@@ -1262,9 +1279,24 @@ async def _call(
     if not isinstance(data, dict):
         raise ProjectError("Research provider returned malformed output")
     try:
-        return schema_model.model_validate(data).model_dump(), _usage(raw)
+        validated = schema_model.model_validate(data).model_dump()
     except ValidationError as exc:
         raise ProjectError("Research provider returned malformed research output") from exc
+    if role == "skeptic":
+        supplied = {
+            (item.get("strategy_id"), item.get("artifact_id"))
+            for item in context.get("other_strategy_evidence", [])
+            if isinstance(item, dict)
+        }
+        seen: set[tuple[str, str]] = set()
+        for relation in validated["cross_strategy_relations"]:
+            reference = (relation["strategy_id"], relation["artifact_id"])
+            if reference not in supplied or reference in seen:
+                raise ProjectError(
+                    "Skeptic returned a cross-strategy reference not present in the supplied peer evidence"
+                )
+            seen.add(reference)
+    return validated, _usage(raw)
 
 
 def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, Any]:
@@ -1350,12 +1382,195 @@ def _portfolio_context(
             "evidence_status": _bounded_note(artifact.get("evidence_status"), 200),
             "objections": _bounded_notes(artifact.get("objections"), 3, 200),
             "open_obligations": _bounded_notes(artifact.get("open_obligations"), 3, 200),
+            "cross_strategy_relations": [
+                {
+                    "artifact_id": item.get("artifact_id"),
+                    "relation": item.get("relation"),
+                    "rationale": _bounded_note(item.get("rationale"), 200),
+                }
+                for item in artifact.get("skeptic_output", {}).get("cross_strategy_relations", [])[
+                    :4
+                ]
+                if isinstance(item, dict)
+            ],
         }
         for artifact in peer_artifacts
     ]
     if len(json.dumps(context, ensure_ascii=False)) > 48000:
         raise ProjectError("Research context exceeds the safe input limit")
     return context
+
+
+def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
+    """Turn cited peer reviews into bounded, reviewable coordination suggestions."""
+    artifacts = record.get("artifacts", [])
+    artifact_by_id = {item.get("id"): item for item in artifacts if isinstance(item, dict)}
+    relationships: list[dict[str, Any]] = []
+    for source in artifacts:
+        skeptic = source.get("skeptic_output")
+        if not isinstance(skeptic, dict):
+            continue
+        for relation in skeptic.get("cross_strategy_relations", []):
+            target = artifact_by_id.get(relation.get("artifact_id"))
+            if (
+                not isinstance(target, dict)
+                or target.get("strategy_id") != relation.get("strategy_id")
+                or target.get("strategy_id") == source.get("strategy_id")
+            ):
+                continue
+            relationships.append(
+                {
+                    "source_strategy_id": source["strategy_id"],
+                    "source_artifact_id": source["id"],
+                    "target_strategy_id": target["strategy_id"],
+                    "target_artifact_id": target["id"],
+                    "relation": relation["relation"],
+                    "rationale": relation["rationale"],
+                }
+            )
+
+    combination_candidates: list[dict[str, Any]] = []
+    conflict_candidates = [item for item in relationships if item["relation"] == "contradicts"]
+    overlap_warnings = [item for item in relationships if item["relation"] == "overlaps"]
+    seen_pairs: set[tuple[str, str]] = set()
+    for relation in relationships:
+        if relation["relation"] != "complements":
+            continue
+        left, right = sorted((relation["source_strategy_id"], relation["target_strategy_id"]))
+        pair = (left, right)
+        if pair in seen_pairs:
+            continue
+        reciprocal = next(
+            (
+                candidate
+                for candidate in relationships
+                if candidate["relation"] == "complements"
+                and candidate["source_strategy_id"] == relation["target_strategy_id"]
+                and candidate["target_strategy_id"] == relation["source_strategy_id"]
+            ),
+            None,
+        )
+        if reciprocal is None:
+            continue
+        seen_pairs.add(pair)
+        combination_candidates.append(
+            {
+                "strategy_ids": [left, right],
+                "basis_artifact_ids": list(
+                    dict.fromkeys(
+                        [
+                            relation["source_artifact_id"],
+                            relation["target_artifact_id"],
+                            reciprocal["source_artifact_id"],
+                            reciprocal["target_artifact_id"],
+                        ]
+                    )
+                ),
+                "rationales": [relation["rationale"], reciprocal["rationale"]],
+                "status": "unverified_candidate_for_human_review",
+            }
+        )
+
+    actions = []
+    for branch in record.get("strategy_runs", []):
+        linked = [
+            artifact_by_id[identifier]
+            for identifier in branch.get("artifacts", [])
+            if identifier in artifact_by_id
+        ]
+        latest = linked[-1] if linked else None
+        last_decision = branch.get("last_decision", "")
+        skeptic = latest.get("skeptic_output", {}) if latest else {}
+        conflict = next(
+            (
+                item
+                for item in conflict_candidates
+                if branch["strategy_id"] in {item["source_strategy_id"], item["target_strategy_id"]}
+            ),
+            None,
+        )
+        overlap = next(
+            (
+                item
+                for item in overlap_warnings
+                if branch["strategy_id"] in {item["source_strategy_id"], item["target_strategy_id"]}
+            ),
+            None,
+        )
+        if branch.get("status") == "failed":
+            action = "hold_after_failure"
+            rationale = "Execution failed; this is not evidence that the approach is unsound."
+        elif branch.get("status") in {"queued", "running"}:
+            if conflict is not None:
+                action = "resolve_cross_strategy_conflict"
+                rationale = "A Skeptic reported a contradiction with cited peer evidence; resolve it before treating either route as supported."
+            elif overlap is not None:
+                action = "differentiate_or_combine"
+                rationale = "A Skeptic reported overlapping mechanisms; test what is genuinely distinct before spending another independent branch cycle."
+            else:
+                action = "revise" if last_decision == "revise" else "continue"
+                rationale = (
+                    "Continue with the Skeptic's strategy-specific next question."
+                    if action == "continue"
+                    else "Revise against the cited recoverable objection and next question."
+                )
+        elif last_decision == "stop_decisive_counterexample":
+            action = "challenge_counterexample"
+            rationale = "The reported counterexample needs independent checking before rejecting the approach."
+        elif (
+            last_decision == "stop_no_progress"
+            and skeptic.get("strategy_contribution") == "unproductive"
+        ):
+            action = "abandon_for_session"
+            rationale = "The Skeptic reported no concrete next step and no productive contribution."
+        elif last_decision in {"stop_budget_exhausted", "stop_round_limit"}:
+            action = "hold_for_limits"
+            rationale = (
+                "The branch stopped at its configured budget; effectiveness remains undetermined."
+            )
+        else:
+            action = "review_terminal"
+            rationale = "The branch ended; retain its evidence and review before changing the strategy pool."
+        actions.append(
+            {
+                "strategy_id": branch["strategy_id"],
+                "strategy_title": branch["strategy_title"],
+                "action": action,
+                "rationale": rationale,
+                "basis_artifact_ids": [item["id"] for item in linked[-2:]],
+                "next_question": branch.get("current_question", ""),
+            }
+        )
+
+    return {
+        "active_strategies": [
+            branch["strategy_title"]
+            for branch in record.get("strategy_runs", [])
+            if branch.get("status") in {"queued", "running"}
+        ],
+        "stopped_strategies": [
+            {
+                "strategy_id": branch["strategy_id"],
+                "strategy_title": branch["strategy_title"],
+                "reason": branch.get("reason"),
+                "artifact_ids": list(branch.get("artifacts", [])),
+            }
+            for branch in record.get("strategy_runs", [])
+            if branch.get("status") in {"ended", "failed"}
+        ],
+        "basis_artifact_ids": [item["id"] for item in artifacts],
+        "strategy_actions": actions,
+        "combination_candidates": combination_candidates,
+        "conflict_candidates": conflict_candidates,
+        "overlap_warnings": overlap_warnings,
+        "cross_strategy_reviews": relationships,
+        "status": "model_reported_unverified",
+        "limitations": [
+            "Cross-strategy relations are model-reported and require human review.",
+            "Suggestions never edit, disable, combine, or remove saved strategies.",
+            "A provider failure is not treated as evidence against an approach.",
+        ],
+    }
 
 
 def _commit_portfolio_review(
@@ -1853,6 +2068,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 record["updated_at"] = _now()
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
+                record["portfolio_decision"] = _portfolio_decision(record)
                 if len(runs) == 1 and str(runs[0].get("last_decision", "")).startswith("stop_"):
                     record["terminal_reason"] = runs[0]["last_decision"]
                 _event(record, "portfolio.completed", record["message"])
@@ -1884,6 +2100,7 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                 record["cycle"] = max((branch["cycle"] for branch in runs), default=0)
                 record["outcome"] = _outcome(record)
                 record["strategy_assessments"] = _strategy_assessments(record)
+                record["portfolio_decision"] = _portfolio_decision(record)
                 record["updated_at"] = _now()
                 _event(record, "portfolio.completed", record["message"])
                 _save(path, record)
@@ -1979,32 +2196,17 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             record["updated_at"] = _now()
             record["status"] = "running"
             record["current_action"] = "Comparing strategy evidence"
-            active_titles = [
-                branch["strategy_title"]
-                for branch in record["strategy_runs"]
-                if branch["status"] in {"queued", "running"}
-            ]
-            stopped = [
-                {
-                    "strategy_id": branch["strategy_id"],
-                    "strategy_title": branch["strategy_title"],
-                    "reason": branch.get("reason"),
-                    "artifact_ids": list(branch["artifacts"]),
-                }
-                for branch in record["strategy_runs"]
-                if branch["status"] in {"ended", "failed"}
-            ]
-            record["portfolio_decision"] = {
-                "active_strategies": active_titles,
-                "stopped_strategies": stopped,
-                "basis_artifact_ids": [item["id"] for item in record["artifacts"]],
-            }
+            record["portfolio_decision"] = _portfolio_decision(record)
+            active_titles = record["portfolio_decision"]["active_strategies"]
+            stopped = record["portfolio_decision"]["stopped_strategies"]
+            combinations = record["portfolio_decision"]["combination_candidates"]
             record["message"] = (
-                "Coordinator compared saved strategy evidence. Continuing: "
+                "Coordinator made unverified, evidence-linked recommendations. Continuing: "
                 + (", ".join(active_titles) if active_titles else "none")
                 + ". Stopped or failed: "
                 + (", ".join(item["strategy_title"] for item in stopped) if stopped else "none")
-                + ". Each branch retains its own next question and contribution record."
+                + f". Reciprocal combination candidates: {len(combinations)}. "
+                + "Saved strategies are unchanged."
             )
             _event(record, "coordinator.portfolio_review", record["message"])
             _save(path, record)

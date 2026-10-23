@@ -76,9 +76,13 @@ type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?:
 type ResearchStep = { id: string; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; output?: Record<string, unknown> };
 type PriorSessionFinding = { id: string; sequence: number; claim_or_question: string; method: string; evidence_status: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; session_id: string; session_number: number; strategy_id: string; strategy_title: string };
 type ResearchStrategyRun = { strategy_id: string; strategy_title: string; status: string; current_action: string; current_question: string; cycle: number; calls_used: number; artifacts: string[]; reason?: string | null };
+type PortfolioStrategyAction = { strategy_id: string; strategy_title: string; action: string; rationale: string; basis_artifact_ids: string[]; next_question: string };
+type PortfolioCombination = { strategy_ids: string[]; basis_artifact_ids: string[]; rationales: string[]; status: string };
+type PortfolioRelation = { source_strategy_id: string; source_artifact_id: string; target_strategy_id: string; target_artifact_id: string; relation: string; rationale: string };
+type PortfolioDecision = { status?: string; strategy_actions?: PortfolioStrategyAction[]; combination_candidates?: PortfolioCombination[]; conflict_candidates?: PortfolioRelation[]; overlap_warnings?: PortfolioRelation[]; limitations?: string[] };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary: string; caveats: string[]; basis_artifact_ids: string[]; provisional: boolean; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_runs?: ResearchStrategyRun[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { id: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_minutes: string; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
 function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchSession): string {
@@ -217,6 +221,39 @@ function ResearchSessionContents({ session, expanded, busy, onViewStrategy, onVi
       {!!session.outcome.caveats.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
     </section>
     {!!session.strategy_runs && session.strategy_runs.length > 1 && <section className="research-strategy-activity" aria-label="Live strategy activity"><h3>Strategy activity</h3><ul>{session.strategy_runs.map(branch => <li key={branch.strategy_id} className={`strategy-run-${branch.status}`}><p><strong>{branch.strategy_title}</strong> · {branch.status} · {branch.current_action}</p><p>Cycle {branch.cycle} · {branch.calls_used} calls · {branch.artifacts.length} saved findings</p>{!!branch.current_question && <p><strong>Current question:</strong> {branch.current_question}</p>}{!!branch.reason && <p><strong>Coordinator rationale:</strong> {branch.reason}</p>}</li>)}</ul></section>}
+      {!!session.portfolio_decision?.strategy_actions?.length && <section className="coordinator-portfolio-review" aria-label="Coordinator portfolio recommendations">
+      <h3>Coordinator recommendations</h3>
+      <p>Evidence-linked coordinator recommendations. Peer relations are model-reported and unverified; saved strategies are never changed automatically.</p>
+      <ul>{session.portfolio_decision.strategy_actions.map(item => <li key={item.strategy_id}>
+        <p><strong>{item.strategy_title}:</strong> {item.action.replaceAll('_', ' ')}</p>
+        <p>{item.rationale}{item.basis_artifact_ids.length > 0 && <> · Evidence: {outcomeArtifactReferences(item.basis_artifact_ids, session)}</>}</p>
+        {!!item.next_question && <p><strong>Next question:</strong> {item.next_question}</p>}
+      </li>)}</ul>
+      {!!session.portfolio_decision.combination_candidates?.length && <div className="coordinator-combinations">
+        <strong>Combination candidates for human review</strong>
+        <ul>{session.portfolio_decision.combination_candidates.map((item, index) => {
+          const titles = item.strategy_ids.map(id => session.strategy_runs?.find(branch => branch.strategy_id === id)?.strategy_title ?? 'Strategy');
+          return <li key={`${item.strategy_ids.join(':')}-${index}`}>
+            <p>{titles.join(' + ')} · {outcomeArtifactReferences(item.basis_artifact_ids, session)}</p>
+            {item.rationales.map((rationale, rationaleIndex) => <p key={rationaleIndex}>{rationale}</p>)}
+          </li>;
+        })}</ul>
+      </div>}
+      {!!session.portfolio_decision.conflict_candidates?.length && <div className="coordinator-conflicts">
+        <strong>Cross-strategy contradictions to resolve</strong>
+        <ul>{session.portfolio_decision.conflict_candidates.map((item, index) => <li key={`${item.source_artifact_id}-${item.target_artifact_id}-${index}`}>
+          <p>{item.relation.replaceAll('_', ' ')} · {outcomeArtifactReferences([item.source_artifact_id, item.target_artifact_id], session)}</p>
+          <p>{item.rationale}</p>
+        </li>)}</ul>
+      </div>}
+      {!!session.portfolio_decision.overlap_warnings?.length && <div className="coordinator-overlaps">
+        <strong>Potentially overlapping approaches</strong>
+        <ul>{session.portfolio_decision.overlap_warnings.map((item, index) => <li key={`${item.source_artifact_id}-${item.target_artifact_id}-${index}`}>
+          <p>{outcomeArtifactReferences([item.source_artifact_id, item.target_artifact_id], session)} · {item.rationale}</p>
+        </li>)}</ul>
+      </div>}
+      {!!session.portfolio_decision.limitations?.length && <p className="coordinator-review-limit">{session.portfolio_decision.limitations.join(' ')}</p>}
+    </section>}
     {!!session.strategy_assessments?.length && <section className="strategy-assessments" aria-label="Strategy Assessments"><h3>Strategy Assessments</h3><p>Each assessment is this strategy’s contribution to the project objective in this session.</p><div className="strategy-assessments-scroll"><table><thead><tr><th scope="col">Strategy</th><th scope="col">Assessment</th><th scope="col">Rationale and evidence</th></tr></thead><tbody>{session.strategy_assessments.map((item, index) => {
       const label: Record<StrategyAssessment['assessment'], string> = { contributed_to_solution: 'Contributed to solution', productive: 'Productive', unproductive: 'Unproductive', not_used: 'Not used', disabled: 'Disabled', unknown: 'Unknown' };
       const references = item.basis_artifact_ids.map(id => session.artifacts.find(artifact => artifact.id === id)?.sequence).filter((sequence): sequence is number => sequence !== undefined);
