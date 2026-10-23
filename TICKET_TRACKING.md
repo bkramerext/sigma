@@ -1,6 +1,6 @@
 # SIGMA Ticket Tracking
 
-**Snapshot:** October 23, 2026 (Days 0–3)  
+**Snapshot:** October 23, 2026 (Days 0–3; updated during PR #11 integration review)  
 **Scope:** Cumulative ticket and minor-work tracker. A status of `Done` indicates reported/verified implementation, not proof of research effectiveness. `Proposed` does not mean a Codex worker has started.
 
 ## Foundation and generation
@@ -46,8 +46,8 @@
 | T21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
 | T22 | Cloud deployment | Planned / unverified | Unassigned |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
-| T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Proposed | Unassigned |
-| T24 | Outcome metrics and provenance *data* (no presentation table) | Ready to assign; not verified started | Green proposed · ChatGPT authored ticket | 
+| T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
+| T24 | Outcome metrics and provenance *data* (no presentation table) | [PR #13](https://github.com/bkramerext/sigma/pull/13) reviewed; open | Green · ChatGPT authored ticket | 
 | T25 | Outcome hierarchy and collapsible subsections | Proposed; not started | Gray proposed · ChatGPT authored ticket |
 
 ### T23.1 scope
@@ -104,10 +104,10 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 
 | Codex | Last ticket | Current work |
 |---|---|---|
-| Blue | T18 merged ([PR #8](https://github.com/bkramerext/sigma/pull/8)) | T23.1 proposed; no active work verified |
-| Green | T19 merged ([PR #9](https://github.com/bkramerext/sigma/pull/9)) | T24 proposed next; not confirmed started |
+| Blue | T18 merged ([PR #8](https://github.com/bkramerext/sigma/pull/8)) | T23.1 implementation in [PR #12](https://github.com/bkramerext/sigma/pull/12); reviewed, awaiting integration |
+| Green | T19 merged ([PR #9](https://github.com/bkramerext/sigma/pull/9)) | T24 implementation in [PR #13](https://github.com/bkramerext/sigma/pull/13); reviewed, awaiting integration |
 
-**Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. There is no confirmed currently-running worker from the repository evidence in this snapshot.
+**Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. Activity is inferred from reported PR work; current Codex process status is not independently visible.
 
 **Delivery target:** October 26, 2026. Outstanding integration, cloud work, T23.1 pills, T24 metrics and T17.8 acceptance should be tracked separately; completion of software work does not close the research-quality gate.
 
@@ -126,4 +126,4 @@ Ticket naming convention: `T1`, `T8.2`, `T17.7.1`; canonical ticket documents li
 
 ## PR and authorship conventions
 
-Include a clickable GitHub [PR #N](https://github.com/bkramerext/sigma/pulls) link **only when a specific PR exists**; each ticket's own PR belongs in its tracker row once opened. The current ticket-file migration is [PR #11](https://github.com/bkramerext/sigma/pull/11), authored by **ChatGPT**. Credit ChatGPT for ticket drafting, integration planning, and review where performed, without implying that ChatGPT or a Codex worker implemented changes it did not.
+Include a clickable GitHub PR link **only when a specific PR exists**; each ticket's own PR belongs in its tracker row once opened. The current ticket-file migration is [PR #11](https://github.com/bkramerext/sigma/pull/11), authored by **ChatGPT**. Credit ChatGPT for ticket drafting, integration planning, and review where performed, without implying that ChatGPT or a Codex worker implemented changes it did not.
