@@ -703,7 +703,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
     if (opened) opened.opener = null;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const route = demo ? (exportType === 'audit' ? '/api/cloud-demo' : '/api/cloud-demo/report') : (exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report');
+      const route = demo ? (exportType === 'audit' ? '/api/cloud-demo/' : '/api/cloud-demo/report') : (exportType === 'audit' ? '/api/projects/export' : '/api/projects/export/report');
       const query = new URLSearchParams({ ...(!demo ? { path } : {}), ...(isReport ? { format: reportFormat } : {}) });
       const suffix = query.toString();
       const response = await fetch(`${route}${suffix ? `?${suffix}` : ''}`, { cache: 'no-store' });
@@ -2529,7 +2529,7 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
   const [exportOpen, setExportOpen] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/cloud-demo', { cache: 'no-store', signal: controller.signal }).then(async response => {
+    fetch('/api/cloud-demo/', { cache: 'no-store', signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error('The curated Demo is temporarily unavailable.');
       const value = await response.json() as CloudDemoAudit;
       if (value.export_version !== 2 || !value.project || !Array.isArray(value.agentic_runs) || !Array.isArray(value.research_sessions)) throw new Error('The curated Demo data could not be verified.');

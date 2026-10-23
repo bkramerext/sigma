@@ -1,4 +1,5 @@
 import { copyFileSync } from 'node:fs';
+import { env } from 'node:process';
 import { defineConfig } from 'vite';
 
 // Copy before Vite scans publicDir. buildStart is too late on a clean dev launch.
@@ -12,5 +13,5 @@ for (const name of [
 }
 
 export default defineConfig({
-  server: { proxy: { '/api': 'http://127.0.0.1:8000' } },
+  server: { proxy: { '/api': env.SIGMA_API_TARGET ?? 'http://127.0.0.1:8000' } },
 });

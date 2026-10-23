@@ -94,7 +94,7 @@ with sync_playwright() as playwright:
         ),
     )
     demo_page.route(
-        "**/api/cloud-demo",
+        "**/api/cloud-demo/",
         lambda route: route.fulfill(
             status=200, content_type="application/json", body=json.dumps(DEMO_AUDIT)
         ),

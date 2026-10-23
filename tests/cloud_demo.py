@@ -57,7 +57,7 @@ class CloudDemoTests(TestCase):
 
     def test_anonymous_demo_browsing_exports_and_guessed_project_inputs_are_fixed(self):
         before = hashlib.sha256(self.snapshot.read_bytes()).digest()
-        audit = self.client.get("/api/cloud-demo")
+        audit = self.client.get("/api/cloud-demo/")
         self.assertEqual(audit.status_code, 200)
         value = audit.json()
         self.assertEqual(value["project"]["title"], "Counting Pairwise Handshakes")
@@ -72,7 +72,7 @@ class CloudDemoTests(TestCase):
         )
         self.assertTrue(value["agentic_runs"])
         guessed = self.client.get(
-            "/api/cloud-demo", params={"path": "/etc/passwd", "project_id": "private"}
+            "/api/cloud-demo/", params={"path": "/etc/passwd", "project_id": "private"}
         )
         self.assertEqual(guessed.json(), value)
         self.assertEqual(
@@ -107,7 +107,7 @@ class CloudDemoTests(TestCase):
             ).status_code,
             403,
         )
-        self.assertEqual(self.client.post("/api/cloud-demo", json={}).status_code, 403)
+        self.assertEqual(self.client.post("/api/cloud-demo/", json={}).status_code, 403)
         denied_cookie = secrets.token_urlsafe(32)
         with cloud_auth._db(cloud_auth.config()) as db:
             db.execute(
@@ -115,7 +115,7 @@ class CloudDemoTests(TestCase):
                 (cloud_auth._hash(denied_cookie), "visitor@example.org", int(time.time()) + 300),
             )
         self.client.cookies.set(cloud_auth.DENIED_COOKIE, denied_cookie)
-        self.assertEqual(self.client.get("/api/cloud-demo").status_code, 200)
+        self.assertEqual(self.client.get("/api/cloud-demo/").status_code, 200)
         self.assertEqual(
             self.client.get("/api/projects/export", params={"path": str(self.root)}).status_code,
             401,
@@ -125,10 +125,10 @@ class CloudDemoTests(TestCase):
 
     def test_demo_configuration_fails_closed_and_local_mode_is_unchanged(self):
         with patch.dict(os.environ, {"SIGMA_CLOUD_DEMO_AUDIT": ""}):
-            unavailable = self.client.get("/api/cloud-demo")
+            unavailable = self.client.get("/api/cloud-demo/")
             self.assertEqual(unavailable.status_code, 503)
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
-            self.assertEqual(self.client.get("/api/cloud-demo").status_code, 404)
+            self.assertEqual(self.client.get("/api/cloud-demo/").status_code, 404)
             # Existing local project API remains unrestricted by hosted Demo rules.
             local = self.client.get(
                 "/api/projects/inspect", params={"path": str(self.snapshot.parent / "local.sigma")}

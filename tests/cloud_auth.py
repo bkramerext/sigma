@@ -160,6 +160,7 @@ class CloudAuthTests(TestCase):
         )
         signed_in = self.finish()
         self.assertEqual(signed_in.status_code, 303)
+        self.assertTrue((self.root / "workspaces" / "workspaces.sqlite3").is_file())
         session = signed_in.cookies[cloud_auth.SESSION_COOKIE]
         self.assertIn("Secure", signed_in.headers["set-cookie"])
         self.assertIn("HttpOnly", signed_in.headers["set-cookie"])
@@ -173,6 +174,27 @@ class CloudAuthTests(TestCase):
         self.assertEqual(status["admin_contact_email"], "access@example.org")
         self.assertNotIn("grants", status)
         self.assertNotIn("denied_email", status)
+        # Exercise the real verified Principal -> workspace dependency path,
+        # not only the test-only deterministic identity adapter.
+        workspace_response = self.client.get(
+            "/api/projects/recent",
+            headers={
+                "X-Test-Subject": "forged-browser-subject",
+                "X-User-Email": "victim@example.org",
+                "X-Workspace-ID": "forged-workspace",
+            },
+        )
+        self.assertEqual(workspace_response.status_code, 200, workspace_response.text)
+        self.assertEqual(workspace_response.json()["projects"], [])
+        workspace_database = self.root / "workspaces" / "workspaces.sqlite3"
+        self.assertTrue(workspace_database.is_file())
+        import sqlite3
+
+        with sqlite3.connect(workspace_database) as db:
+            entries = db.execute("SELECT subject_hash,workspace_id FROM workspaces").fetchall()
+        self.assertEqual(len(entries), 1)
+        self.assertNotIn(b"forged-browser-subject", workspace_database.read_bytes())
+        self.assertNotIn(b"victim@example.org", workspace_database.read_bytes())
         invite = self.client.post(
             "/api/cloud-auth/admin/grants",
             json={"kind": "email", "value": " Person@Example.org ", "role": "member"},
@@ -196,6 +218,7 @@ class CloudAuthTests(TestCase):
         self.assertEqual(denied.status_code, 303)
         self.assertEqual(denied.headers["location"], "/?access=denied")
         self.assertNotIn(cloud_auth.SESSION_COOKIE, denied.cookies)
+        self.assertFalse((self.root / "workspaces").exists())
         denied_token = denied.cookies[cloud_auth.DENIED_COOKIE]
         self.assertIn("HttpOnly", denied.headers["set-cookie"])
         self.assertIn("Secure", denied.headers["set-cookie"])
@@ -204,7 +227,7 @@ class CloudAuthTests(TestCase):
             self.client.get("/api/cloud-auth/denied").json(), {"email": "visitor@example.org"}
         )
         self.assertEqual(self.client.get("/api/cloud-auth/status").json()["authenticated"], False)
-        public_demo = self.client.get("/api/cloud-demo")
+        public_demo = self.client.get("/api/cloud-demo/")
         self.assertEqual(public_demo.status_code, 200)
         self.assertEqual(public_demo.json()["project"]["title"], "Counting Pairwise Handshakes")
         self.assertEqual(

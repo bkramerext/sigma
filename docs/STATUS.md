@@ -3988,6 +3988,74 @@ isolated fixture ran on port 8003 because port 8002 was already occupied by a
 different checkout; that listener was left untouched. No live provider calls
 were made.
 
+## T22 Gate A private workspaces against merged PR #37 (2026-10-23)
+
+Integrated current `main` at `24ca812f8502c594a673e7233bd7962e9b8c907b`
+(`24ca812`) into the private-workspace branch. Resolved the `src/sigma/api.py`
+conflict by retaining PR #37's cloud-auth middleware, trusted-host setup and
+router while adding a FastAPI request dependency that consumes the middleware's
+actual `cloud_auth.Principal`. Protected requests fail closed without that
+principal. Workspace selection uses only its verified Google `subject`; email,
+role, request headers, browser-supplied workspace IDs and paths do not select
+storage. Authorized OIDC callbacks provision an empty workspace before issuing
+the session. An unauthorized callback creates no workspace, and storage failure
+prevents session issuance.
+
+While validating, `origin/main` advanced to `a486833368156c8a2c0e941bcc43868f808185f0`
+(`a486833`). Merged that current head as `a21074d`; its delta from PR #37 was
+T38/T39 evaluation tickets and software-factory documentation only, with no
+application-code conflicts. The final checks below ran after that merge.
+
+The mapping database stores a domain-separated subject hash and a random
+server-generated workspace ID. Project creation and all project-path services
+run under that request's workspace root; symlink, traversal and cross-root paths
+map to a generic 404. Recent-project state and proposal-cancellation IDs are
+workspace-scoped. Existing local project roots, recents, ChatGPT authorization,
+and CLI behavior remain active when cloud auth is disabled. The shared Samples
+catalog is read-only; opening a sample copies it into the current user's root.
+No legacy local projects are migrated or copied automatically.
+
+Added deterministic two-user integration coverage using a separate Uvicorn
+process around the production FastAPI app and real persistent project services.
+It checks isolation for projects, strategies, sessions, exports/reports,
+executions (including failed records), artifacts, paper URLs, proposals,
+text, and Recent IDs; forged headers; copied IDs and paths; traversal and
+symlinks; revocation data retention; server restart; and an offline workspace
+backup/restore preserving owner mappings and artifact bytes. A focused
+cancellation regression checks that another workspace cannot cancel a proposal
+by guessing its request ID. `tests/cloud_auth.py` now also verifies the actual
+mock-Google -> session -> merged middleware -> workspace path and proves
+forged subject/email/workspace headers cannot override the principal or cause a
+second mapping. An unauthorized identity does not provision a workspace.
+
+Real Chrome `browser_checks/t22_private_workspaces.py` passed with separate A/B
+browser contexts routed through the actual API/storage fixture: each created
+project appeared only in its own Recent list and a copied cross-user project
+path returned the generic 404. The existing OIDC/auth regressions passed all 10
+cases. Final `./sigma test` passed, including all backend tests, the new
+workspace and auth regressions, Ruff, format check, Pyright (zero diagnostics),
+frontend typecheck and production build. No Google or provider service calls
+were made. Ruff initially found import ordering/formatting issues and the test
+suite caught a bad test expectation on the stateless `/api/projects/close`
+endpoint; those were corrected before the final passing run. Starlette's
+existing `httpx` deprecation warnings remain informational.
+
+API ownership review found no uncovered private project/session/artifact path
+in the current route set: path-bearing operations reach the common
+`projects.project_path` boundary, root-based create/destination operations use
+the bound workspace, and recents/cancellation use workspace state. `/api/ui-instance`,
+the read-only shared Samples catalog, general execution-capability metadata,
+and authenticated `/api/cloud-auth/*` administration are separate surfaces.
+Gate B remains a required dependency before cloud research execution is
+deployment-ready: current cloud auth blocks `/api/ai/*`, but model-backed
+project routes such as proposal generation, research-session start, paper
+generation and text conversion still use the process-level provider context if
+configured. They are project-path scoped but not yet authorized against
+per-user provider credentials/budgets. This increment did not add Gate B's
+provider authorization, durable-job controls or compute budgets, and no paid
+calls were made. Public Demo behavior and cloud deployment remain later T22
+gates.
+
 ## T22 Gate C public Demo implementation (2026-10-23)
 
 The hosted `/demo` route now shows one curated, read-only SIGMA research
@@ -4007,10 +4075,13 @@ link, the invitation request remains reachable from the denied flow, and local
 SIGMA continues to bypass cloud authorization and show its full project UI.
 Implementation does not alter Green's workspace branch or storage design.
 
-After fetching current main at `a486833368156c8a2c0e941bcc43868f808185f0`, the
-isolated `cloud/t22-public-demo` branch fast-forwarded from its original
-`24ca812` base. There were no file conflicts; main's added T38/T39 evaluation
-documents and Software Factory review guidance were preserved. On this integrated
+After current main advanced to `113436118514ff7cca2c806c8924f958ff16392f`
+through Gate A private-workspace PR #43, the public-Demo branch integrated that
+head. Conflicts in `src/sigma/api.py` and `docs/STATUS.md` were reconciled: the
+Demo now runs in a mounted read-only sub-application outside the app-wide
+private-workspace dependency while remaining subject to the parent cloud-auth
+middleware, and both Gate A and Gate C status evidence are retained. No
+workspace implementation was rewritten. On this integrated
 tree, `./sigma test` passed all backend scenarios, including Demo and cloud-auth
 security tests, Ruff, formatting, Pyright (zero diagnostics), frontend typecheck
 and production build. Real Chrome checks passed for
@@ -4025,6 +4096,7 @@ deterministic snapshot fixture. No live Google sign-in or paid provider calls
 were made.
 
 Known integration limit: deployment must install the curated snapshot at its
-configured `SIGMA_CLOUD_DEMO_AUDIT` location. Private workspace isolation and
-cloud deployment remain in parent T22 and parallel workspace work; this PR does
-not claim either is complete.
+configured `SIGMA_CLOUD_DEMO_AUDIT` location. Gate A private-workspace isolation
+is integrated from PR #43; Gate B provider authorization/budget controls and
+cloud deployment remain open in parent T22. This PR does not claim those gates
+are complete.
