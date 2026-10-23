@@ -140,8 +140,14 @@ the auth database and workspace tree. The existing project session records
 remain the source of truth for events, checkpoints, call outputs, computation
 runs, and outcomes. Steps retain their role, strategy, cycle, and source-artifact
 references; raw full prompts are not persisted. Queued sessions with no provider
-attempt can be picked up when the owner reconnects after restart. Claimed work
-is reconciled to paused/interrupted with an unknown attempt; it is not replayed.
+attempt and a saved session record can be picked up when the owner reconnects
+after restart. A prior-process queued ledger row is removed only when recovery
+holds the project admission lock and proves the project still matches, the
+session record is absent, and no provider-call rows exist. This recovers a crash
+between queue reservation and session publication without using row age. Missing
+or unsafe metadata, valid session records, running jobs and every call
+reservation are preserved. Claimed work is reconciled to paused/interrupted
+with an unknown attempt; it is not replayed.
 
 The shared cloud key is deliberately restricted to bounded research sessions.
 Standalone proposal, agentic-proposal, paper-generation, and text-conversion

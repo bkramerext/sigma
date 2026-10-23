@@ -14,8 +14,12 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
 from sigma import cloud_workspaces
+from sigma.projects import ProjectError, inspect_project
+
+_PROCESS_EPOCH = uuid4().hex
 
 
 class CloudResearchUnavailable(RuntimeError):
@@ -94,6 +98,8 @@ def _connect() -> sqlite3.Connection:
                 status TEXT NOT NULL CHECK(status IN ('queued','running','stopping','paused','interrupted','terminal')),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
+                project_relpath TEXT NOT NULL DEFAULT '',
+                process_epoch TEXT NOT NULL DEFAULT '',
                 UNIQUE(workspace_id, idempotency_key)
             );
             CREATE INDEX IF NOT EXISTS jobs_workspace_status ON jobs(workspace_id, status);
@@ -110,6 +116,11 @@ def _connect() -> sqlite3.Connection:
                 updated_at TEXT NOT NULL
             );
         """)
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
+        if "project_relpath" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN project_relpath TEXT NOT NULL DEFAULT ''")
+        if "process_epoch" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN process_epoch TEXT NOT NULL DEFAULT ''")
         os.chmod(path, 0o600)
         return db
     except (OSError, sqlite3.Error) as exc:
@@ -118,6 +129,20 @@ def _connect() -> sqlite3.Connection:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _project_relpath(record: dict[str, Any], owner_path: Path) -> str:
+    value = record.get("project_path")
+    if not isinstance(value, str) or not value:
+        return ""
+    try:
+        root = owner_path.resolve(strict=True)
+        project = Path(value).resolve(strict=True)
+        if not project.is_dir() or not project.is_relative_to(root):
+            return ""
+        return project.relative_to(root).as_posix()
+    except (OSError, RuntimeError, ValueError):
+        return ""
 
 
 @contextmanager
@@ -150,6 +175,10 @@ def prepare_job(record: dict[str, Any]) -> None:
     per_user_queue = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 2)
     global_queue = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_QUEUED", 16)
     _spend_ceiling()
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
+    project_relpath = _project_relpath(record, workspace.path)
     now = _now()
     try:
         with _transaction() as db:
@@ -179,8 +208,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                             "Research queue is full; retry when capacity is available."
                         )
                     db.execute(
-                        "UPDATE jobs SET status='queued',updated_at=? WHERE session_id=?",
-                        (now, record["id"]),
+                        "UPDATE jobs SET status='queued',updated_at=?,project_relpath=?,process_epoch=? WHERE session_id=?",
+                        (now, project_relpath, _PROCESS_EPOCH, record["id"]),
                     )
                 return
             user_queued = db.execute(
@@ -195,7 +224,7 @@ def prepare_job(record: dict[str, Any]) -> None:
                 )
             # Jobs are initially queued. Claiming uses an atomic running-slot test.
             db.execute(
-                "INSERT INTO jobs VALUES(?,?,?,?,?,?,?)",
+                "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch) VALUES(?,?,?,?,?,?,?,?,?)",
                 (
                     record["id"],
                     owner,
@@ -204,6 +233,8 @@ def prepare_job(record: dict[str, Any]) -> None:
                     "queued",
                     now,
                     now,
+                    project_relpath,
+                    _PROCESS_EPOCH,
                 ),
             )
     except sqlite3.Error as exc:
@@ -245,6 +276,10 @@ def claim_job(session_id: str) -> bool:
 def sync_job(record: dict[str, Any]) -> None:
     """Persist lifecycle transitions as an owner-checked ledger projection."""
     owner = _workspace_id()
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
+    project_relpath = _project_relpath(record, workspace.path)
     now = _now()
     state = record.get("status")
     try:
@@ -260,7 +295,7 @@ def sync_job(record: dict[str, Any]) -> None:
                     else "queued"
                 )
                 db.execute(
-                    "INSERT INTO jobs VALUES(?,?,?,?,?,?,?)",
+                    "INSERT INTO jobs(session_id,workspace_id,project_id,idempotency_key,status,created_at,updated_at,project_relpath,process_epoch) VALUES(?,?,?,?,?,?,?,?,?)",
                     (
                         record["id"],
                         owner,
@@ -269,6 +304,8 @@ def sync_job(record: dict[str, Any]) -> None:
                         ledger_state,
                         record.get("created_at", now),
                         now,
+                        project_relpath,
+                        _PROCESS_EPOCH,
                     ),
                 )
                 return
@@ -283,11 +320,117 @@ def sync_job(record: dict[str, Any]) -> None:
             else:
                 ledger_state = row["status"]
             db.execute(
-                "UPDATE jobs SET status=?,updated_at=? WHERE session_id=?",
-                (ledger_state, now, record["id"]),
+                "UPDATE jobs SET status=?,updated_at=?,project_relpath=CASE WHEN project_relpath='' THEN ? ELSE project_relpath END WHERE session_id=?",
+                (ledger_state, now, project_relpath, record["id"]),
             )
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def reconcile_orphaned_jobs() -> list[str]:
+    """Delete prior-process queued rows proven to have no session or call.
+
+    The project admission lock closes the prepare_job/_save crash window. If a
+    publisher is still live, recovery waits and observes its session file. Any
+    uncertain path/state or any provider-call row is preserved; age is never
+    evidence for releasing a job or spend reservation.
+    """
+    workspace = cloud_workspaces.current()
+    if workspace is None:
+        raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
+    owner = workspace.workspace_id
+    try:
+        with _connect() as db:
+            candidates = db.execute(
+                "SELECT session_id,project_id,project_relpath FROM jobs WHERE workspace_id=? AND status='queued' AND process_epoch<>?",
+                (owner, _PROCESS_EPOCH),
+            ).fetchall()
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+    removed: list[str] = []
+    root = workspace.path.resolve(strict=True)
+    for candidate in candidates:
+        session_id = candidate["session_id"]
+        try:
+            if str(UUID(session_id)) != session_id:
+                continue
+        except (ValueError, TypeError, AttributeError):
+            continue
+        relative = candidate["project_relpath"]
+        relative_path = Path(relative) if isinstance(relative, str) else Path("/")
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or relative_path.is_absolute()
+            or ".." in relative_path.parts
+        ):
+            continue
+        lexical_project = root
+        unsafe = False
+        for part in relative_path.parts:
+            lexical_project = lexical_project / part
+            if lexical_project.is_symlink():
+                unsafe = True
+                break
+        if unsafe:
+            continue
+        try:
+            project = lexical_project.resolve(strict=True)
+            if not project.is_dir() or not project.is_relative_to(root):
+                continue
+            project_document = project / "project.json"
+            session_directory = project / "research-sessions"
+            if (
+                project_document.is_symlink()
+                or not project_document.is_file()
+                or session_directory.is_symlink()
+                or not session_directory.is_dir()
+            ):
+                continue
+            try:
+                project_view = inspect_project(str(project))
+            except ProjectError:
+                continue
+            if project_view.project.id != candidate["project_id"]:
+                continue
+
+            # This is the same lock held by start_session from before prepare_job
+            # through _save, so a live publisher cannot be mistaken for a crash.
+            from sigma import research_sessions
+
+            with research_sessions._project_manager_lock(str(project)):
+                session_record = session_directory / f"{session_id}.json"
+                if session_record.exists() or session_record.is_symlink():
+                    continue
+                with _transaction() as db:
+                    current = db.execute(
+                        "SELECT workspace_id,status,project_id,project_relpath,process_epoch FROM jobs WHERE session_id=?",
+                        (session_id,),
+                    ).fetchone()
+                    if (
+                        not current
+                        or current["workspace_id"] != owner
+                        or current["status"] != "queued"
+                        or current["project_id"] != candidate["project_id"]
+                        or current["project_relpath"] != relative
+                        or current["process_epoch"] == _PROCESS_EPOCH
+                    ):
+                        continue
+                    has_call = db.execute(
+                        "SELECT 1 FROM calls WHERE session_id=? LIMIT 1", (session_id,)
+                    ).fetchone()
+                    if has_call:
+                        continue
+                    db.execute(
+                        "DELETE FROM jobs WHERE session_id=? AND workspace_id=? AND status='queued'",
+                        (session_id, owner),
+                    )
+                    removed.append(session_id)
+        except (OSError, RuntimeError, ValueError, sqlite3.Error, ProjectError):
+            # Recovery is conservative: inability to prove absence keeps the row.
+            continue
+    return removed
 
 
 def release_job(session_id: str, *, paused: bool = False) -> None:

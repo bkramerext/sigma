@@ -1854,6 +1854,10 @@ async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
     if not cloud_workspaces.enabled():
         return
+    try:
+        cloud_research.reconcile_orphaned_jobs()
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
     async with _manager_lock:
         for record in _all(path):
             if record.get("status") != "queued" or record["id"] in _tasks:
@@ -2148,6 +2152,11 @@ async def start_session(
         raise ProjectError("Choose a saved, active strategy before investigating")
     if not strategy.enabled:
         raise ProjectError("This strategy is disabled; enable it before starting research")
+    if cloud_workspaces.enabled():
+        try:
+            cloud_research.reconcile_orphaned_jobs()
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
     async with _manager_lock:
         with _project_manager_lock(view.path):
             limits = get_limits(view.path)
@@ -2316,6 +2325,11 @@ async def start_session(
 async def control_session(path: str, session_id: str, action: str) -> dict[str, Any]:
     if action not in {"pause", "resume", "stop"}:
         raise ProjectError("Unknown research session action")
+    if action == "resume" and cloud_workspaces.enabled():
+        try:
+            cloud_research.reconcile_orphaned_jobs()
+        except cloud_research.CloudResearchUnavailable as exc:
+            raise ProjectError(str(exc)) from exc
     state_lock = _session_state_lock(session_id)
     if action in {"stop", "pause"}:
         async with state_lock:
