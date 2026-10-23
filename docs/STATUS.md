@@ -4,8 +4,8 @@
 
 ### Baseline and research-quality boundary
 
-The branch is `a18-blue`, originally based on `origin/main` at `6adbeed`; checkpoint
-`0377231` contains the bounded-continuity and answer-leakage work. Baseline
+The branch is `a18-blue`, originally based on `origin/main` at `6adbeed`;
+checkpoint `0377231` contains the bounded-continuity and answer-leakage work. Baseline
 inspection found one strategy per session, sequential Investigator/Skeptic
 calls, provider gates held per call, and no persisted branch-level execution
 state. The A17.8 Maximum Regions trial is not independent-discovery evidence:
@@ -165,6 +165,10 @@ the isolated fixture (`SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5175`, fixture
 fixture-authored compiled PDF. No live provider call was made. The A18 research
 gate remains untested, with the limitations and no-independent-solve claims
 above unchanged.
+
+Before opening the review, fetched and merged the subsequently advanced
+`origin/main` tip `b04a319` (journal-only changes) in merge commit `bfd8587`.
+The PR head includes this latest base; GitHub reports the PR mergeable.
 
 ## A23: project difficulty setting (2026-10-22)
 
