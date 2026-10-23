@@ -39,6 +39,14 @@ def fixture() -> dict:
                 "outcome": {
                     "assessment": "mixed",
                     "provisional": False,
+                    "metrics": {
+                        "operational": [
+                            {"label": "Model calls", "value": "2 dispatched · 2 completed"}
+                        ],
+                        "research_quality": [
+                            {"label": "Verification", "value": "Convincing, unverified"}
+                        ],
+                    },
                     "solution_review": {
                         "claim": "Candidate formula",
                         "argument_summary": "Upper bound and attaining construction.",
@@ -103,7 +111,56 @@ def fixture() -> dict:
     }
 
 
+def test_unequal_metric_groups() -> None:
+    # Exercise each longer group, either empty group, and historical no-metrics.
+    # Row text includes the old delimiter to ensure it remains ordinary content.
+    operational = [
+        {"label": "Calls", "value": "2 completed"},
+        {"label": "Last operational row", "value": "<script>ops</script> || input: 20"},
+    ]
+    quality = [
+        {"label": "Verification", "value": "Unverified"},
+        {"label": "Last quality row", "value": "Open obligation: x < 2"},
+    ]
+    for ops, research in (
+        (operational, quality[:1]),
+        (operational[:1], quality),
+        (operational, []),
+        ([], quality),
+        ([], []),
+    ):
+        data = fixture()
+        data["research_sessions"][0]["outcome"]["metrics"] = {
+            "operational": ops,
+            "research_quality": research,
+        }
+        plain, _ = render_report(data, "txt")
+        html_report, _ = render_report(data, "html")
+        assert isinstance(plain, str) and isinstance(html_report, str)
+        for item in ops + research:
+            assert f"{item['label']}: {item['value']}" in plain
+            assert f"<dt>{item['label']}</dt>" in html_report
+        assert ("Operational metrics" in plain) == bool(ops)
+        assert ("Research-quality metrics" in plain) == bool(research)
+        assert ("Operational metrics</h5>" in html_report) == bool(ops)
+        assert ("Research-quality metrics</h5>" in html_report) == bool(research)
+        if ops or research:
+            header_end = html_report.index(
+                "</header>", html_report.index('<article class="report-session">')
+            )
+            assert header_end < html_report.index("Outcome metrics</h4>")
+        if len(ops) == 2:
+            assert "&lt;script&gt;ops&lt;/script&gt; || input: 20" in html_report
+        if len(research) == 2:
+            assert "Open obligation: x &lt; 2" in html_report
+        assert "<script>" not in html_report
+        assert html_report.count('<dl class="report-outcome-metrics">') == bool(ops) + bool(
+            research
+        )
+
+
 def main() -> None:
+    test_unequal_metric_groups()
     data = fixture()
     plain, plain_type = render_report(data, "txt")
     assert isinstance(plain, str)
@@ -114,6 +171,11 @@ def main() -> None:
         "Session #3",
         "Execution status: ended",
         "Outcome:",
+        "Outcome metrics",
+        "Operational metrics",
+        "Model calls: 2 dispatched · 2 completed",
+        "Research-quality metrics",
+        "Verification: Convincing, unverified",
         "Solution claim: Candidate formula",
         "Verification status: convincing_unverified",
         "Strategy Assessments",
@@ -144,6 +206,9 @@ def main() -> None:
     assert "<script>alert" not in html_report
     assert "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;" in html_report
     assert "&lt;pre&gt;" not in html_report
+    assert '<dl class="report-outcome-metrics">' in html_report
+    assert "report-outcome-metrics-table" not in html_report
+    assert "2 dispatched · 2 completed" in html_report
     assert (
         "<h1>Riemann &lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt; &amp; proof</h1>"
         in html_report

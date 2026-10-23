@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import threading
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -39,7 +40,8 @@ DEFAULT_LIMITS = {
     "maximum_estimated_cost_usd": None,
 }
 TOKEN_PRICES_PER_MILLION = {
-    # OpenAI published Standard pricing, short context, checked 2026-10-22.
+    # OpenAI published Standard pricing, short context, checked 2026-10-23:
+    # https://developers.openai.com/api/docs/pricing
     "gpt-6.1-sol": {"input": 2.0, "cached_input": 0.1, "output": 10.0},
     "gpt-6-luna": {"input": 0.1, "cached_input": 0.01, "output": 0.5},
     "gpt-6-astra": {"input": 10.0, "cached_input": 1.0, "output": 50.0},
@@ -239,7 +241,7 @@ def _retracted_counterexample(response: str) -> bool:
     )
 
 
-def _outcome(record: dict[str, Any]) -> dict[str, Any]:
+def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     artifacts = record.get("artifacts", [])
     status = record.get("status")
     if not artifacts:
@@ -359,6 +361,559 @@ def _outcome(record: dict[str, Any]) -> dict[str, Any]:
         "provisional": status in {"queued", "running", "paused"},
         "solution_review": solution_review,
     }
+
+
+def _metric_text(items: list[Any], *, limit: int = 2) -> str:
+    values = list(dict.fromkeys(str(item).strip() for item in items if str(item).strip()))
+    if not values:
+        return "None recorded"
+    shown = "; ".join(values[:limit])
+    return f"{shown} (+{len(values) - limit} more)" if len(values) > limit else shown
+
+
+def _duration_label(seconds: float | None) -> str:
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
+        return "—"
+    whole = int(seconds)
+    minutes, remainder = divmod(whole, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {remainder}s"
+    return f"{remainder}s"
+
+
+def _timestamp_seconds(step: dict[str, Any]) -> float | None:
+    try:
+        start = datetime.fromisoformat(step["started_at"])
+        end = datetime.fromisoformat(step["finished_at"])
+        seconds = (end - start).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return None
+    return seconds if seconds >= 0 and math.isfinite(seconds) else None
+
+
+def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[str, Any]:
+    """Project compact operational and research metrics from saved evidence only."""
+    raw_steps = record.get("steps")
+    steps = (
+        [step for step in raw_steps if isinstance(step, dict)]
+        if isinstance(raw_steps, list)
+        else []
+    )
+    unique_steps: list[dict[str, Any]] = []
+    step_ids: set[str] = set()
+    for index, step in enumerate(steps):
+        identifier = step.get("id")
+        if isinstance(identifier, str):
+            if identifier in step_ids:
+                continue
+            step_ids.add(identifier)
+        unique_steps.append(step)
+
+    calls_used = record.get("calls_used")
+    saved_call_count = calls_used if type(calls_used) is int and calls_used >= 0 else None
+    dispatched = max(saved_call_count or 0, len(unique_steps))
+    unrecorded_calls = max(0, dispatched - len(unique_steps))
+    call_counter_disagrees = saved_call_count is not None and saved_call_count != len(unique_steps)
+    call_counts = {
+        "completed": 0,
+        "rejected": 0,
+        "timed out": 0,
+        "interrupted / cancelled": 0,
+        "failed": 0,
+        "in progress": 0,
+        "status unavailable": unrecorded_calls,
+    }
+    role_names = {"investigator": "Investigator", "skeptic": "Skeptic"}
+    roles: set[str] = set()
+    strategies: dict[str, str] = {}
+    retry_keys: dict[tuple[str, int | str, str], int] = {}
+    durations: dict[str, list[float | None]] = {}
+    for step in unique_steps:
+        role = step.get("role")
+        if isinstance(role, str):
+            roles.add(role_names.get(role, role.replace("_", " ").title()))
+            durations.setdefault(role, []).append(_timestamp_seconds(step))
+        strategy_id = step.get("strategy_id")
+        strategy_title = step.get("strategy_title")
+        if isinstance(strategy_id, str):
+            strategies[strategy_id] = (
+                strategy_title
+                if isinstance(strategy_title, str) and strategy_title
+                else strategy_id
+            )
+        scope = (
+            strategy_id
+            if isinstance(strategy_id, str)
+            else str(record.get("strategy_id", "legacy"))
+        )
+        cycle = step.get("cycle") if type(step.get("cycle")) is int else "unknown"
+        role_key = role if isinstance(role, str) else "unknown"
+        retry_key = (scope, cast(int | str, cycle), role_key)
+        retry_keys[retry_key] = retry_keys.get(retry_key, 0) + 1
+
+        status = step.get("status")
+        failure_kind = step.get("failure_kind")
+        http_status = step.get("provider_http_status")
+        if status == "completed":
+            bucket = "completed"
+        elif failure_kind == "timeout" or (
+            status == "failed" and "timeout" in str(step.get("failure_message", "")).lower()
+        ):
+            bucket = "timed out"
+        elif failure_kind in {"cancelled", "interrupted"} or status in {
+            "interrupted",
+            "cancelled",
+            "canceled",
+        }:
+            bucket = "interrupted / cancelled"
+        elif failure_kind == "provider_rejected" or (
+            type(http_status) is int and 400 <= http_status < 500
+        ):
+            bucket = "rejected"
+        elif status == "failed":
+            # Older records kept only a safe provider diagnostic in failure_message.
+            message = str(step.get("failure_message", ""))
+            match = re.search(r"HTTP\s+(\d{3})", message)
+            bucket = "rejected" if match and 400 <= int(match.group(1)) < 500 else "failed"
+        elif status == "running":
+            bucket = "in progress"
+        else:
+            bucket = "status unavailable"
+        call_counts[bucket] += 1
+
+    if call_counter_disagrees and saved_call_count is not None:
+        call_total = (
+            f"{dispatched} budget-counted calls ({unrecorded_calls} step status unavailable; "
+            "saved steps and call counter disagree)"
+            if saved_call_count > len(unique_steps)
+            else f"{dispatched} persisted call steps (saved budget counter {saved_call_count}; "
+            "saved steps and call counter disagree)"
+        )
+    else:
+        call_total = f"{dispatched} dispatched"
+    calls_value = (
+        call_total + " · " + " · ".join(f"{value} {label}" for label, value in call_counts.items())
+    )
+    retry_count = sum(max(0, count - 1) for count in retry_keys.values())
+    provider_failure_count = (
+        call_counts["rejected"] + call_counts["timed out"] + call_counts["failed"]
+    )
+    provider_value = (
+        f"{provider_failure_count} provider failure(s) ({call_counts['rejected']} rejected, "
+        f"{call_counts['timed out']} timed out, {call_counts['failed']} other) · "
+        f"{call_counts['interrupted / cancelled']} interrupted / cancelled · "
+        f"{retry_count} later attempt(s); no automatic retries"
+    )
+
+    usage_steps = [
+        step.get("token_usage")
+        for step in unique_steps
+        if step.get("status") == "completed" and isinstance(step.get("token_usage"), dict)
+    ]
+    all_calls_have_usage = dispatched == 0 or (
+        len(usage_steps) == dispatched and not unrecorded_calls
+    )
+
+    def token_sum(key: str) -> str:
+        if dispatched == 0:
+            return "0"
+        values = [usage.get(key) for usage in usage_steps if isinstance(usage, dict)]
+        if (
+            not all_calls_have_usage
+            or len(values) != dispatched
+            or any(type(value) is not int for value in values)
+        ):
+            known = (
+                len(values)
+                if all(type(value) is int for value in values)
+                else sum(type(value) is int for value in values)
+            )
+            if key == "cached_input_tokens":
+                return f"— ({known}/{dispatched} calls include cached-token metadata)"
+            return f"— ({known}/{dispatched} calls report token usage)"
+        return f"{sum(cast(int, value) for value in values):,}"
+
+    input_tokens = token_sum("input_tokens")
+    output_tokens = token_sum("output_tokens")
+    cached_tokens = token_sum("cached_input_tokens")
+    complete_token_usage_calls = sum(
+        isinstance(usage, dict)
+        and type(usage.get("input_tokens")) is int
+        and type(usage.get("output_tokens")) is int
+        for usage in usage_steps
+    )
+    totals_known = dispatched == 0 or (
+        all_calls_have_usage and complete_token_usage_calls == dispatched
+    )
+    total_tokens = (
+        "0"
+        if dispatched == 0
+        else f"{sum(cast(int, usage['input_tokens']) + cast(int, usage['output_tokens']) for usage in usage_steps if isinstance(usage, dict)):,}"
+        if totals_known
+        else f"— (token usage incomplete for {dispatched - complete_token_usage_calls} call(s))"
+    )
+
+    try:
+        started = datetime.fromisoformat(str(record.get("started_at") or record["created_at"]))
+        if record.get("status") == "stopped" and isinstance(record.get("stopped_at"), str):
+            ended = datetime.fromisoformat(record["stopped_at"])
+        elif record.get("status") in {"completed", "ended", "failed", "stopped"}:
+            ended = datetime.fromisoformat(str(record.get("updated_at") or record["created_at"]))
+        else:
+            ended = datetime.now(UTC)
+        elapsed = max(
+            0.0,
+            (ended - started).total_seconds() - float(record.get("stopped_duration_seconds", 0)),
+        )
+        wall_time = _duration_label(elapsed)
+    except (KeyError, TypeError, ValueError):
+        wall_time = "—"
+    agent_durations = []
+    for role, label in role_names.items():
+        values = durations.get(role, [])
+        if not values:
+            shown = "—" if dispatched else "0"
+        elif any(value is None for value in values):
+            shown = f"— (duration missing for {sum(value is None for value in values)} call(s))"
+        else:
+            shown = (
+                _duration_label(sum(cast(float, value) for value in values))
+                + f" across {len(values)} call(s)"
+            )
+        agent_durations.append(f"{label} {shown}")
+
+    executions: dict[str, dict[str, Any]] = {}
+    unidentified_execution = False
+
+    def collect_execution(value: Any) -> None:
+        nonlocal unidentified_execution
+        if not isinstance(value, dict):
+            return
+        if not isinstance(value.get("id"), str):
+            unidentified_execution = True
+            return
+        executions.setdefault(value["id"], value)
+
+    artifacts_raw = record.get("artifacts")
+    artifacts = (
+        [item for item in artifacts_raw if isinstance(item, dict)]
+        if isinstance(artifacts_raw, list)
+        else []
+    )
+    for artifact in artifacts:
+        investigator = artifact.get("investigator_output")
+        collect_execution(
+            investigator.get("python_execution") if isinstance(investigator, dict) else None
+        )
+    for step in unique_steps:
+        output = step.get("output")
+        collect_execution(output.get("python_execution") if isinstance(output, dict) else None)
+    for branch in (
+        record.get("strategy_runs", []) if isinstance(record.get("strategy_runs"), list) else []
+    ):
+        if isinstance(branch, dict):
+            collect_execution(
+                branch.get("pending_investigation", {}).get("python_execution")
+                if isinstance(branch.get("pending_investigation"), dict)
+                else None
+            )
+    python_statuses: dict[str, int] = {}
+    unique_python_files: dict[tuple[str, str], int | None] = {}
+    for execution_id, execution in executions.items():
+        status = execution.get("status")
+        status_label = str(status) if isinstance(status, str) else "status unavailable"
+        python_statuses[status_label] = python_statuses.get(status_label, 0) + 1
+        for file in (
+            execution.get("artifacts", []) if isinstance(execution.get("artifacts"), list) else []
+        ):
+            if not isinstance(file, dict):
+                continue
+            filename = file.get("filename")
+            digest = file.get("sha256")
+            identity = (execution_id, str(digest or filename or len(unique_python_files)))
+            size = file.get("size_bytes")
+            unique_python_files.setdefault(
+                identity, size if type(size) is int and size >= 0 else None
+            )
+    proposal_present = any(
+        isinstance(artifact.get("investigator_output"), dict)
+        and isinstance(artifact["investigator_output"].get("python_code"), str)
+        for artifact in artifacts
+    )
+    for step in unique_steps:
+        output = step.get("output")
+        proposal_present = proposal_present or (
+            isinstance(output, dict) and isinstance(output.get("python_code"), str)
+        )
+    for branch in (
+        record.get("strategy_runs", []) if isinstance(record.get("strategy_runs"), list) else []
+    ):
+        if isinstance(branch, dict) and isinstance(branch.get("pending_investigation"), dict):
+            proposal_present = proposal_present or isinstance(
+                branch["pending_investigation"].get("python_code"), str
+            )
+    if executions:
+        python_value = ", ".join(
+            f"{count} {status}" for status, count in sorted(python_statuses.items())
+        )
+        if unidentified_execution:
+            python_value += " · — (execution record without ID)"
+    elif unidentified_execution:
+        python_value = "— (execution record without ID)"
+    else:
+        python_value = (
+            "0 executions"
+            if not proposal_present
+            else "0 executions (Python proposal saved; execution not recorded)"
+        )
+    python_file_bytes_known = all(size is not None for size in unique_python_files.values())
+    python_bytes = sum(size for size in unique_python_files.values() if size is not None)
+    python_storage_label = (
+        f"{len(unique_python_files)} Python file(s) ({python_bytes:,} B)"
+        if python_file_bytes_known
+        else f"{len(unique_python_files)} Python file(s) (size unavailable)"
+    )
+    if record.get("mode") == "chatgpt":
+        cost_value = "— (plan allowance consumption unknown)"
+    elif dispatched == 0:
+        cost_value = "$0.000000 estimated (no provider calls)"
+    elif (
+        totals_known
+        and all(
+            isinstance(usage, dict)
+            and _estimate_cost(record.get("model", ""), cast(dict[str, int | None], usage))
+            is not None
+            for usage in usage_steps
+        )
+        and len(usage_steps) == dispatched
+    ):
+        estimate = sum(
+            cast(float, _estimate_cost(record.get("model", ""), cast(dict[str, int | None], usage)))
+            for usage in usage_steps
+            if isinstance(usage, dict)
+        )
+        cost_value = f"${estimate:.6f} estimated (rates checked 2026-10-23)"
+    else:
+        cost_value = "— (complete usage metadata or applicable price unavailable)"
+
+    strategies_raw = record.get("strategy_runs")
+    if isinstance(strategies_raw, list):
+        for branch in strategies_raw:
+            if (
+                isinstance(branch, dict)
+                and isinstance(branch.get("strategy_id"), str)
+                and branch["strategy_id"] in strategies
+            ):
+                continue
+            if (
+                isinstance(branch, dict)
+                and isinstance(branch.get("strategy_id"), str)
+                and type(branch.get("calls_used")) is int
+                and branch["calls_used"] > 0
+            ):
+                strategies[branch["strategy_id"]] = str(
+                    branch.get("strategy_title") or branch["strategy_id"]
+                )
+    strategy_names = list(dict.fromkeys(strategies.values()))
+    strategy_value = (
+        ", ".join(strategy_names) if strategy_names else "— (no strategy has a dispatched call)"
+    )
+
+    started_cycles: set[tuple[str, int]] = set()
+    for step in unique_steps:
+        if type(step.get("cycle")) is int:
+            started_cycles.add(
+                (
+                    str(step.get("strategy_id") or record.get("strategy_id") or "legacy"),
+                    step["cycle"],
+                )
+            )
+    completed_cycles = {
+        (
+            str(artifact.get("strategy_id") or record.get("strategy_id") or "legacy"),
+            artifact.get("strategy_cycle", artifact.get("sequence")),
+        )
+        for artifact in artifacts
+        if type(artifact.get("strategy_cycle", artifact.get("sequence"))) is int
+    }
+    cycles_value = f"{len(completed_cycles)} completed / {len(started_cycles)} started"
+
+    latest_by_strategy: dict[str, dict[str, Any]] = {}
+    for artifact in artifacts:
+        strategy_id = str(artifact.get("strategy_id") or record.get("strategy_id") or "legacy")
+        latest_by_strategy[strategy_id] = artifact
+    proof_obligations: list[Any] = []
+    unresolved_objections: list[Any] = []
+    evidence_conclusions: dict[str, set[str]] = {}
+    artifact_ids = {str(item.get("id")) for item in artifacts if isinstance(item.get("id"), str)}
+    for artifact in latest_by_strategy.values():
+        review = artifact.get("objective_review")
+        if isinstance(review, dict):
+            obligations = review.get("proof_obligations")
+            if isinstance(obligations, list):
+                proof_obligations.extend(obligations)
+            branch_obligations = artifact.get("open_obligations")
+            if isinstance(branch_obligations, list):
+                proof_obligations.extend(branch_obligations)
+            objections = review.get("unresolved_objections")
+            if isinstance(objections, list):
+                unresolved_objections.extend(objections)
+        else:
+            obligations = artifact.get("open_obligations")
+            if isinstance(obligations, list):
+                proof_obligations.extend(obligations)
+            skeptic_output = artifact.get("skeptic_output")
+            objections = (
+                skeptic_output.get("unresolved_objections")
+                if isinstance(skeptic_output, dict)
+                else None
+            )
+            if isinstance(objections, list):
+                unresolved_objections.extend(objections)
+    for artifact in artifacts:
+        review = artifact.get("objective_review")
+        if not isinstance(review, dict):
+            continue
+        refs = review.get("basis_artifact_ids")
+        valid_refs = (
+            {item for item in refs if isinstance(item, str) and item in artifact_ids}
+            if isinstance(refs, list)
+            else set()
+        )
+        claim = review.get("claim")
+        if valid_refs and isinstance(claim, str) and claim.strip():
+            key = " ".join(claim.casefold().split())
+            evidence_conclusions.setdefault(key, set()).update(valid_refs)
+    if not artifacts:
+        evidence_value = "— (no saved findings)"
+    else:
+        cited_evidence = (
+            set().union(*evidence_conclusions.values()) if evidence_conclusions else set()
+        )
+        evidence_value = (
+            f"{len(evidence_conclusions)} conclusion(s) · {len(cited_evidence)} cited finding(s)"
+            if evidence_conclusions
+            else "0 (no evidence-linked conclusion recorded)"
+        )
+    if artifacts:
+        proof_value = f"{len({str(item) for item in proof_obligations if str(item).strip()})} · {_metric_text(proof_obligations)}"
+        objections_value = f"{len({str(item) for item in unresolved_objections if str(item).strip()})} · {_metric_text(unresolved_objections)}"
+    else:
+        proof_value = objections_value = "— (no saved findings)"
+
+    assessments = record.get("strategy_assessments")
+    contribution_counts: dict[str, int] = {}
+    if isinstance(assessments, list):
+        for item in assessments:
+            if isinstance(item, dict) and isinstance(item.get("assessment"), str):
+                key = item["assessment"].replace("_", " ")
+                contribution_counts[key] = contribution_counts.get(key, 0) + 1
+    if contribution_counts:
+        contribution_value = " · ".join(
+            f"{label}: {count}" for label, count in sorted(contribution_counts.items())
+        )
+    elif artifacts:
+        contribution_value = "Unknown (no saved attribution)"
+    else:
+        contribution_value = "— (no saved findings)"
+
+    solution_review = outcome.get("solution_review")
+    verification = (
+        solution_review.get("verification_status") if isinstance(solution_review, dict) else None
+    )
+    verification_labels = {
+        "convincing_unverified": "Convincing, unverified",
+        "incomplete": "Incomplete",
+        "verified": "Verified",
+        "unknown": "Unknown",
+    }
+    verification_value = verification_labels.get(str(verification), "Not assessed")
+    classification = str(outcome.get("label") or outcome.get("assessment") or "Unknown")
+    research_artifact_bytes = None
+    project_path_value = record.get("project_path")
+    session_id = record.get("id")
+    if isinstance(project_path_value, str) and isinstance(session_id, str):
+        target = Path(project_path_value) / "research-sessions" / f"{session_id}.json"
+        try:
+            if not target.is_symlink() and target.is_file():
+                research_artifact_bytes = target.stat().st_size
+        except OSError:
+            pass
+    storage_label = (
+        f"{len(artifacts)} finding(s) · {python_storage_label} · "
+        f"session record {research_artifact_bytes:,} B"
+        if research_artifact_bytes is not None
+        else f"{len(artifacts)} finding(s) · {python_storage_label} · session size —"
+    )
+
+    operational = [
+        {
+            "label": "Participating agents",
+            "value": ", ".join(sorted(roles)) if roles else "— (no dispatched calls)",
+        },
+        {"label": "Model calls by status", "value": calls_value},
+        {
+            "label": "Tokens · input / output / cached / total",
+            "value": f"{input_tokens} / {output_tokens} / {cached_tokens} / {total_tokens}",
+            "detail": "Cached tokens are a subset of input tokens.",
+        },
+        {
+            "label": "Wall-clock / agent call time",
+            "value": f"{wall_time} wall · " + " · ".join(agent_durations),
+            "detail": "Agent durations sum distinct call intervals and may overlap under concurrency.",
+        },
+        {
+            "label": "Python runs by status",
+            "value": python_value,
+            "detail": "Unique persisted execution IDs; recovered or reused results count once.",
+        },
+        {
+            "label": "Artifacts and storage",
+            "value": storage_label,
+            "detail": "Python file sizes are summed once per execution ID and file hash/name.",
+        },
+        {"label": "Provider failures / retries", "value": provider_value},
+        {"label": "Estimated monetary cost", "value": cost_value},
+    ]
+    research_quality = [
+        {"label": "Strategies investigated", "value": strategy_value},
+        {
+            "label": "Research cycles",
+            "value": cycles_value,
+            "detail": "Counts a strategy's cycle once even when its Investigator and Skeptic calls overlap with other strategies.",
+        },
+        {"label": "Outcome classification", "value": classification},
+        {
+            "label": "Verification status",
+            "value": verification_value,
+            "detail": "Engineering completion, agent agreement, and successful computation do not establish mathematical verification.",
+        },
+        {"label": "Open proof obligations", "value": proof_value},
+        {"label": "Evidence-backed conclusions", "value": evidence_value},
+        {"label": "Strategy contribution", "value": contribution_value},
+        {"label": "Unresolved objections", "value": objections_value},
+    ]
+    return {
+        "operational": operational,
+        "research_quality": research_quality,
+        # An inventory of existing evidence IDs, not verification authority or
+        # a claim that every row uses every source. Full evidence stays in the
+        # owning session's steps/artifacts and original execution records.
+        "sources": {
+            "session_id": session_id if isinstance(session_id, str) else None,
+            "step_ids": sorted(step_ids),
+            "artifact_ids": sorted(artifact_ids),
+            "execution_ids": sorted(executions),
+            "strategy_ids": sorted(strategies),
+        },
+    }
+
+
+def _outcome(record: dict[str, Any]) -> dict[str, Any]:
+    return _outcome_without_metrics(record)
 
 
 def _strategy_assessments(record: dict[str, Any]) -> list[dict[str, Any]]:
@@ -563,32 +1118,53 @@ def _allocate_session_number(path: str, records: list[dict[str, Any]]) -> int:
     return current
 
 
-def _usage(raw: Any) -> dict[str, int] | None:
+def _usage(raw: Any) -> dict[str, int | None] | None:
     if not isinstance(raw, dict) or not isinstance(raw.get("usage"), dict):
         return None
     usage = raw["usage"]
     input_tokens, output_tokens = usage.get("input_tokens"), usage.get("output_tokens")
     details = usage.get("input_tokens_details", {})
-    cached = details.get("cached_tokens", 0) if isinstance(details, dict) else None
-    if any(type(value) is not int or value < 0 for value in (input_tokens, output_tokens, cached)):
+    cached = details.get("cached_tokens") if isinstance(details, dict) else None
+    if any(type(value) is not int or value < 0 for value in (input_tokens, output_tokens)):
         return None
-    if cached > input_tokens:
+    if cached is not None and (type(cached) is not int or cached < 0 or cached > input_tokens):
         return None
     return {
         "input_tokens": cast(int, input_tokens),
-        "cached_input_tokens": cast(int, cached),
+        "cached_input_tokens": cast(int | None, cached),
         "output_tokens": cast(int, output_tokens),
     }
 
 
-def _estimate_cost(model: str, usage: dict[str, int]) -> float | None:
+def _estimate_cost(model: str, usage: dict[str, int | None]) -> float | None:
     prices = TOKEN_PRICES_PER_MILLION.get(model)
-    if prices is None:
+    if (
+        prices is None
+        or type(usage.get("input_tokens")) is not int
+        or type(usage.get("output_tokens")) is not int
+        or type(usage.get("cached_input_tokens")) is not int
+    ):
         return None
-    input_cost = (usage["input_tokens"] - usage["cached_input_tokens"]) * prices["input"]
-    cached_cost = usage["cached_input_tokens"] * prices["cached_input"]
-    output_cost = usage["output_tokens"] * prices["output"]
+    input_cost = (
+        cast(int, usage["input_tokens"]) - cast(int, usage["cached_input_tokens"])
+    ) * prices["input"]
+    cached_cost = cast(int, usage["cached_input_tokens"]) * prices["cached_input"]
+    output_cost = cast(int, usage["output_tokens"]) * prices["output"]
     return round((input_cost + cached_cost + output_cost) / 1_000_000, 9)
+
+
+def _provider_failure_fields(exc: Exception) -> dict[str, Any]:
+    """Persist bounded response classification without storing provider bodies."""
+    message = str(exc)
+    match = re.search(r"HTTP\s+(\d{3})", message)
+    if match is None:
+        return {"failure_kind": "provider_error"}
+    status = int(match.group(1))
+    result: dict[str, Any] = {
+        "failure_kind": "provider_rejected" if 400 <= status < 500 else "provider_error"
+    }
+    result["provider_http_status"] = status
+    return result
 
 
 def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) -> float | None:
@@ -751,7 +1327,9 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             )
         except (ValueError, TypeError):
             result["elapsed_seconds"] = None
-    result["outcome"] = _outcome(record)
+    outcome = _outcome(record)
+    outcome["metrics"] = _outcome_metrics(record, outcome)
+    result["outcome"] = outcome
     assessments = record.get("strategy_assessments")
     if not isinstance(assessments, list) or (
         not assessments and record.get("status") not in {"queued", "running"}
@@ -780,6 +1358,8 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
         for step in record.get("steps", []):
             if step.get("status") == "running":
                 step["status"] = "interrupted"
+                step["failure_kind"] = "interrupted"
+                step["interruption_reason"] = "backend_restart"
                 step["finished_at"] = _now()
         record["current_step"] = None
         record["current_steps"] = []
@@ -1269,7 +1849,7 @@ async def _call(
     role: str,
     context: dict[str, Any],
     timeout_seconds: float | None = None,
-) -> tuple[dict[str, Any], dict[str, int] | None]:
+) -> tuple[dict[str, Any], dict[str, int | None] | None]:
     credential = await auth_context()
     if (
         credential["mode"] != record["mode"]
@@ -2224,6 +2804,8 @@ async def _portfolio_role_call(
                 step.update({"status": "failed", "finished_at": _now()})
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
+                else:
+                    step.update(_provider_failure_fields(exc))
                 if step.get("cost_reserve") is not None:
                     record["cost_status"] = "unavailable"
                     record["estimated_cost_usd"] = None
@@ -2269,8 +2851,9 @@ async def _portfolio_role_call(
             )
             step = next(item for item in record["steps"] if item["id"] == step_id)
             step.update({"status": "completed", "finished_at": _now(), "output": output})
-            if record.get("mode") == "api_key":
+            if usage is not None:
                 step["token_usage"] = usage
+            if record.get("mode") == "api_key":
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 if step.get("cost_reserve") is not None:
                     record["estimated_cost_reserved_usd"] = max(
@@ -2942,8 +3525,9 @@ async def _worker(session_id: str, path: str) -> None:
             record = current
             step = record["steps"][-1]
             step.update({"status": "completed", "finished_at": _now(), "output": output})
-            if record.get("mode") == "api_key":
+            if usage is not None:
                 step["token_usage"] = usage
+            if record.get("mode") == "api_key":
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 if estimate is None:
                     record["cost_status"] = "unavailable"
@@ -3193,6 +3777,12 @@ async def _worker(session_id: str, path: str) -> None:
             ]
             for step in running_steps:
                 step["status"] = "interrupted"
+                step["failure_kind"] = (
+                    "cancelled" if record["status"] == "stopped" else "interrupted"
+                )
+                step["interruption_reason"] = (
+                    "user_stop" if record["status"] == "stopped" else "user_pause"
+                )
                 step["finished_at"] = _now()
                 _event(
                     record,
@@ -3256,6 +3846,11 @@ async def _worker(session_id: str, path: str) -> None:
             for step in record.get("steps", []):
                 if step.get("status") == "running":
                     step["status"] = "interrupted" if record["status"] == "paused" else "failed"
+                    step.update(
+                        {"failure_kind": "interrupted"}
+                        if record["status"] == "paused"
+                        else _provider_failure_fields(exc)
+                    )
                     step["finished_at"] = _now()
                     _event(record, "call.failed", record["message"], step["role"])
             record["current_step"] = None

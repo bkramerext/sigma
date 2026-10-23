@@ -47,7 +47,7 @@
 | T22 | Cloud deployment | Planned / unverified | Unassigned |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | [PR #12](https://github.com/bkramerext/sigma/pull/12) reviewed; open | Blue |
-| T24 | Outcome metrics and provenance *data* (no presentation table) | [PR #13](https://github.com/bkramerext/sigma/pull/13) reviewed; open | Green · ChatGPT authored ticket |
+| T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
 | T25 | Outcome hierarchy and collapsible subsections | Proposed; not started | Gray proposed · ChatGPT authored ticket |
 
 ### T23.1 scope
@@ -105,7 +105,7 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 | Codex | Last ticket | Current work |
 |---|---|---|
 | Blue | T18 merged ([PR #8](https://github.com/bkramerext/sigma/pull/8)) | T23.1 implementation in [PR #12](https://github.com/bkramerext/sigma/pull/12); reviewed, awaiting integration |
-| Green | T19 merged ([PR #9](https://github.com/bkramerext/sigma/pull/9)) | T24 implementation in [PR #13](https://github.com/bkramerext/sigma/pull/13); reviewed, awaiting integration |
+| Green | T19 merged ([PR #9](https://github.com/bkramerext/sigma/pull/9)) | T24 [PR #13](https://github.com/bkramerext/sigma/pull/13) reconciled with migrated main; checks passed; awaiting final merge approval |
 
 **Terminology:** Ticket and assignment are interchangeable. **Color:** Blue and Green identify Codex workers, not status. Activity is inferred from reported PR work; current Codex process status is not independently visible.
 
