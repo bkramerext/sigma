@@ -115,6 +115,14 @@ ticket are absent in this checkout; the historical implementation and
 verification records remain in this file. T29's human-intervention branch is
 not part of this main snapshot and is outside this acceptance scope.
 
+Before publication, `main` advanced to `e58eccd` with documentation-only
+software-factory commits. That base was merged into this branch; the
+application and test tree used for validation did not change. GitHub compare
+reports the branch ahead by two commits and behind by zero, and the local
+three-dot diff is clean. PR metadata still reports `mergeable: false`; this
+does not match the clean local merge/compare result and is noted for coordinator
+inspection.
+
 ### Workflow trace and falsifiable rubric
 
 The current pipeline takes the persisted project question and session strategy

@@ -4,6 +4,12 @@ Base: current main `ef3aadc` (T21 PR #38), on branch
 `gray/t17-8-agentic-solution-quality`. No paid provider or live model calls were
 made. No direct worker coordination occurred.
 
+Main advanced to `e58eccd` with documentation-only software-factory commits
+before publication. I merged that base into the branch; application and test
+files did not change. GitHub compare says ahead by two commits, behind by zero,
+and the local three-dot diff is clean. PR metadata still says `mergeable: false`,
+which conflicts with that comparison and is flagged for coordinator inspection.
+
 The current workflow was traced through project/strategy snapshot, Investigator
 request and validated response, Skeptic review of ordered saved evidence,
 coordinator decision, objective/verification projection, strategy attribution,
