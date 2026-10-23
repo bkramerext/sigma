@@ -899,6 +899,65 @@ async def test_failed_attempt_guides_next_session_with_provenance(path: Path):
     assert retried["prior_session_failures"][0]["attempt_id"] == failed_attempt_id
 
 
+def test_prior_session_failure_history_prioritizes_newest_attempts(path: Path):
+    view = initialize_project(path, "Failure history", "A bounded research question.")
+    old_session_id, new_session_id = str(uuid4()), str(uuid4())
+
+    def save_failed_session(
+        session_id: str, created_at: str, attempt_id: str, attempted_at: str
+    ) -> None:
+        research_sessions._save(
+            view.path,
+            {
+                "id": session_id,
+                "project_path": view.path,
+                "project_id": view.project.id,
+                "session_number": 1,
+                "strategy_id": "strategy",
+                "strategy_title": "Approach",
+                "status": "failed",
+                "created_at": created_at,
+                "updated_at": created_at,
+                "steps": [
+                    {
+                        "id": attempt_id,
+                        "strategy_id": "strategy",
+                        "strategy_title": "Approach",
+                        "role": "investigator",
+                        "cycle": 1,
+                        "status": "failed",
+                        "started_at": attempted_at,
+                        "finished_at": attempted_at,
+                        "failure_kind": "provider_error",
+                    }
+                ],
+            },
+        )
+
+    older_attempt = str(uuid4())
+    newer_attempt = str(uuid4())
+    # Deliberately make session creation order disagree with attempt recency.
+    save_failed_session(
+        old_session_id,
+        "2026-10-23T12:00:00+00:00",
+        older_attempt,
+        "2026-10-23T10:00:00+00:00",
+    )
+    save_failed_session(
+        new_session_id,
+        "2026-10-23T09:00:00+00:00",
+        newer_attempt,
+        "2026-10-23T11:00:00+00:00",
+    )
+    findings, omitted = research_sessions._prior_session_failures(view.path, str(uuid4()))
+    assert omitted == 0
+    assert [item["attempt_id"] for item in findings] == [newer_attempt, older_attempt]
+    assert [item["attempted_at"] for item in findings] == [
+        "2026-10-23T11:00:00+00:00",
+        "2026-10-23T10:00:00+00:00",
+    ]
+
+
 def test_continuation_context_is_bounded(path: Path):
     view = initialize_project(path, "Long-history project", "A bounded research question.")
     source_id = str(uuid4())
@@ -3230,6 +3289,69 @@ def test_peer_handoff_queue_defers_without_silent_loss():
     }
 
 
+def test_peer_handoff_deferred_storage_is_bounded_and_reports_overflow():
+    source_id, target_id = "bounded-source", "bounded-target"
+    target_artifact_id = "bounded-target-artifact"
+    target_branch = {
+        "strategy_id": target_id,
+        "strategy_title": "Target",
+        "status": "running",
+        "current_question": "Continue the target route.",
+        "artifacts": [target_artifact_id],
+    }
+    source_branch = {"strategy_id": source_id, "strategy_title": "Source", "artifacts": []}
+    record = {
+        "strategy_runs": [source_branch, target_branch],
+        "artifacts": [
+            {
+                "id": target_artifact_id,
+                "strategy_id": target_id,
+                "strategy_title": "Target",
+                "sequence": 1,
+                "skeptic_output": {},
+            }
+        ],
+    }
+    total = 4 + research_sessions.MAX_DEFERRED_PEER_HANDOFFS + 10
+    for index in range(total):
+        source_artifact = {
+            "id": f"bounded-source-{index}",
+            "strategy_id": source_id,
+            "strategy_title": "Source",
+            "sequence": index + 1,
+            "skeptic_output": {
+                "cross_strategy_relations": [
+                    {
+                        "strategy_id": target_id,
+                        "artifact_id": target_artifact_id,
+                        "relation": "supports",
+                        "rationale": f"Finding {index} can inform the target route.",
+                    }
+                ]
+            },
+        }
+        record["artifacts"].append(source_artifact)
+        research_sessions._queue_peer_handoffs(record, source_branch, source_artifact)
+
+    assert len(target_branch["pending_peer_handoffs"]) == 4
+    assert (
+        len(target_branch["deferred_peer_handoffs"]) == research_sessions.MAX_DEFERRED_PEER_HANDOFFS
+    )
+    assert target_branch["deferred_peer_handoff_overflow_count"] == 10
+    assert (
+        len(target_branch["deferred_peer_handoff_overflow"])
+        == research_sessions.MAX_RECORDED_HANDOFF_OVERFLOW
+    )
+    assert target_branch["deferred_peer_handoff_overflow_omitted_count"] == 2
+    assert target_branch["deferred_peer_handoff_overflow"][-1]["source_artifact_id"] == (
+        f"bounded-source-{total - 1}"
+    )
+    assert len(json.dumps(target_branch).encode("utf-8")) < 32_000
+    overflow = research_sessions._portfolio_decision(record)["deferred_handoff_overflows"][0]
+    assert overflow["overflow_count"] == 10
+    assert overflow["omitted_overflow_records"] == 2
+
+
 async def test_portfolio_budget_too_small_for_next_pair_is_finalized(path: Path):
     view, first, credential, config = await setup(path)
     second = create_strategy(path, "Second strategy", "Try another mechanism.").project.strategies[
@@ -3893,6 +4015,9 @@ def main():
                 root / "failed-continuation.sigma"
             )
         )
+        test_prior_session_failure_history_prioritizes_newest_attempts(
+            root / "failure-recency.sigma"
+        )
         test_continuation_context_is_bounded(root / "continuation-stress.sigma")
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
@@ -3983,6 +4108,7 @@ def main():
         test_portfolio_requires_reciprocal_complement_and_surfaces_conflicts()
         test_peer_handoff_noop_and_domain_mismatch_controls()
         test_peer_handoff_queue_defers_without_silent_loss()
+        test_peer_handoff_deferred_storage_is_bounded_and_reports_overflow()
         asyncio.run(
             test_portfolio_budget_too_small_for_next_pair_is_finalized(
                 root / "portfolio-tight-budget.sigma"

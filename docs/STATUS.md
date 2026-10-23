@@ -3320,3 +3320,24 @@ The response to the question about work continuing after browser closure is in
 `messages/t27_browser_closed_research.txt`: session work is server-side and
 continues while the backend remains running; backend restart interrupts an
 in-flight call for explicit recovery rather than retrying it automatically.
+
+### T27 PR #18 review follow-up (2026-10-23)
+
+Prior-session failed/interrupted attempts are now globally sorted by attempt
+recency, using finished/started/session timestamps, before the 12-attempt and
+8 KB context limits are applied. `test_prior_session_failure_history_prioritizes_newest_attempts`
+intentionally makes session creation order differ from attempt recency and
+confirms the newest attempt is presented first.
+
+Deferred peer handoffs now have an explicit per-strategy limit of 24. At
+capacity, SIGMA keeps an overflow count and at most eight compact recent
+omission records; older omission records increment a separate counter. The
+coordinator decision exposes this bounded overflow summary. The regression
+`test_peer_handoff_deferred_storage_is_bounded_and_reports_overflow` drives ten
+handoffs past capacity and checks the deferred cap, recent-record cap, omitted
+count, visible coordinator summary, and serialized branch size.
+
+Verification after these review changes passed on 2026-10-23: focused
+`tests/research_sessions.py` and `./sigma test`, including all backend scenarios,
+the 10-strategy 20/20-call load case, Ruff, Pyright (zero errors/warnings),
+frontend typecheck, and production build. No live provider calls were made.

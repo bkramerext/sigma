@@ -32,6 +32,8 @@ MAX_TOTAL = 16_000_000
 MAX_PRIOR_CONTEXT_BYTES = 16_000
 MAX_PRIOR_FAILURES = 12
 MAX_PRIOR_FAILURE_CONTEXT_BYTES = 8_000
+MAX_DEFERRED_PEER_HANDOFFS = 24
+MAX_RECORDED_HANDOFF_OVERFLOW = 8
 MAX_AGENT_CONTEXT_BYTES = 256_000
 CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
@@ -2335,8 +2337,27 @@ def _queue_peer_handoffs(
                 )
             if len(pending) < 4:
                 pending.append(handoff)
-            else:
+            elif len(deferred) < MAX_DEFERRED_PEER_HANDOFFS:
                 deferred.append(handoff)
+            else:
+                target["deferred_peer_handoff_overflow_count"] = (
+                    target.get("deferred_peer_handoff_overflow_count", 0) + 1
+                )
+                overflow = target.setdefault("deferred_peer_handoff_overflow", [])
+                overflow.append(
+                    {
+                        "handoff_id": handoff["handoff_id"],
+                        "source_artifact_id": handoff["source_artifact_id"],
+                        "target_artifact_id": handoff["target_artifact_id"],
+                        "relation": handoff["relation"],
+                    }
+                )
+                if len(overflow) > MAX_RECORDED_HANDOFF_OVERFLOW:
+                    overflow.pop(0)
+                    target["deferred_peer_handoff_overflow_omitted_count"] = (
+                        target.get("deferred_peer_handoff_overflow_omitted_count", 0) + 1
+                    )
+                continue
             target["current_question"] = target[
                 "peer_handoff_base_question"
             ] + _peer_handoff_question(pending)
@@ -2657,6 +2678,19 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
         "overlap_warnings": overlap_warnings,
         "cross_strategy_reviews": relationships,
         "retracted_peer_handoffs": list(record.get("retracted_peer_handoffs", [])),
+        "deferred_handoff_overflows": [
+            {
+                "strategy_id": branch["strategy_id"],
+                "strategy_title": branch["strategy_title"],
+                "overflow_count": branch.get("deferred_peer_handoff_overflow_count", 0),
+                "omitted_overflow_records": branch.get(
+                    "deferred_peer_handoff_overflow_omitted_count", 0
+                ),
+                "recent_omissions": list(branch.get("deferred_peer_handoff_overflow", [])),
+            }
+            for branch in record.get("strategy_runs", [])
+            if branch.get("deferred_peer_handoff_overflow_count", 0)
+        ],
         "status": "model_reported_unverified",
         "limitations": [
             "Cross-strategy relations are model-reported and require human review.",
@@ -3703,6 +3737,10 @@ def _prior_session_failures(
             # classification metadata, never raw exception text.
             entry = {
                 "attempt_id": step.get("id"),
+                "attempted_at": step.get("finished_at")
+                or step.get("started_at")
+                or session.get("updated_at")
+                or session.get("created_at"),
                 "session_id": session.get("id"),
                 "session_number": session.get("session_number"),
                 "strategy_id": step.get("strategy_id"),
@@ -3716,6 +3754,20 @@ def _prior_session_failures(
             }
             if isinstance(entry["attempt_id"], str):
                 all_failures.append(entry)
+
+    def recency(entry: dict[str, Any]) -> float:
+        value = entry.get("attempted_at")
+        if not isinstance(value, str):
+            return float("-inf")
+        try:
+            parsed = datetime.fromisoformat(value)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.timestamp()
+        except ValueError:
+            return float("-inf")
+
+    all_failures.sort(key=recency, reverse=True)
     for entry in all_failures:
         candidate = [*failures, entry]
         if (
