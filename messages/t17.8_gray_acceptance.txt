@@ -95,3 +95,8 @@ T29 integration recheck:
 No conflict or new acceptance blocker was found. T17.8 remains open for human
 sign-off; live-model solution quality remains UNVERIFIED. R4R again for review
 of the integrated branch.
+
+After pushing the updated branch, GitHub PR REST reports PR #41 as
+`mergeable: true` / `mergeable_state: clean` at base `aaf0995` and head
+`c1fe8ea`. A previous connector summary still showed a stale `mergeable: false`
+value; no merge conflict remains.

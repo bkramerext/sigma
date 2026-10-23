@@ -241,6 +241,10 @@ listed above.
 
 No T17.8/T29 conflict or acceptance blocker was found. T17.8 remains open for
 human sign-off; real-model solution quality remains **UNVERIFIED**.
+After pushing this integration, GitHub's pull-request REST state reports PR #41
+as `mergeable: true`, `mergeable_state: clean`, with base `aaf0995` and head
+`c1fe8ea`. A prior connector snapshot still returned `mergeable: false`; the
+current REST state confirms that is stale connector metadata, not a conflict.
 
 ## PR #35 review follow-up (2026-10-23)
 
