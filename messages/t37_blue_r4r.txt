@@ -1,10 +1,11 @@
 T37 PR #45 — coordinator review revision
-Status: R4R; pushed for coordinator review
+Status: R4R; pushed for coordinator review (GitHub reports mergeable=false; see metadata below)
 
 Branch: blue/t37-trustworthy-research-memory
 Integrated base: origin/main b9844ed3301793601a3ba5adee1eabcda0c50dab
   (includes PR #42 and requested PR #46 at c4ef4f0af5c795657f0c55579bfef051c9e78f45)
-Tested integrated head before this handoff-only commit: f8ee8571ad87a22c2d0acdbc2fcb6a53abfaebd2
+Tested integrated code head: f8ee8571ad87a22c2d0acdbc2fcb6a53abfaebd2
+Pushed branch head before this handoff-only commit: cf4a67310314735de2249fda3d2768b9b801dc73
 PR: https://github.com/bkramerext/sigma/pull/45
 
 Review findings reproduced and corrected
@@ -72,4 +73,4 @@ Review findings reproduced and corrected
 No live provider calls or paid API calls were made. Deterministic evidence
 handling and fixture plumbing are verified; empirical live-model research
 quality is UNVERIFIED. Model-reported dispositions remain unverified. T17.8
-remains separate. PR #45 is open and pushed; do not self-merge.
+remains separate. PR #45 is open and pushed; do not self-merge. GitHub `get_pr_info` reports base b9844ed, head cf4a673, and `mergeable=false`. The compare endpoint reports status `ahead`, ahead_by 12, behind_by 0, with b9844ed as both base and merge base. This contradictory metadata is recorded without claiming mergeability confirmation.

@@ -4259,7 +4259,11 @@ Base integrated: `b9844ed3301793601a3ba5adee1eabcda0c50dab` (includes #42 and re
 The branch is integrated with the latest `main` and pushed to PR #45. PR #42's
 `frontend/public/lean-logo.svg` and its CSS change are inherited from main; T37
 made no additional Lean-logo edits. GitHub PR metadata and mergeability are
-recorded in the final handoff.
+recorded in the final handoff: PR #45 is open at head
+`cf4a67310314735de2249fda3d2768b9b801dc73`, GitHub reports
+`mergeable=false`, and GitHub's compare endpoint reports the PR branch is ahead
+12 / behind 0 with latest main as its merge base. This status is reported as-is;
+it is not presented as GitHub mergeability confirmation.
 
 Remaining limits: model-reported addressed/superseded/retracted statuses are
 still unverified judgments; bounded extracts cannot replace original source
