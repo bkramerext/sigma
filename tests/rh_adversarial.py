@@ -45,6 +45,22 @@ def toy_function(value: ComplexQ) -> ComplexQ:
     return mul(center_factor, mul(right_factor, left_factor))
 
 
+def finite_eta_identity(s: int, m: int) -> bool:
+    """Check the *finite* eta parity identity using exact rational values.
+
+    Integer s includes positive, zero, and negative exponents. No convergence
+    or analytic-continuation inference is made from this finite calculation.
+    """
+    assert m >= 1
+    term = lambda n: Fraction(1, n**s)
+    alternating = sum(((-1) ** (n - 1) * term(n) for n in range(1, 2 * m + 1)), Fraction())
+    ordinary = sum((term(n) for n in range(1, 2 * m + 1)), Fraction())
+    even = Fraction(2) ** (1 - s) * sum(
+        (term(n) for n in range(1, m + 1)), Fraction()
+    )
+    return alternating == ordinary - even
+
+
 def main() -> None:
     # Nonzero witness rules out an identically-zero function, which would
     # otherwise pass every hard-coded root and reflection assertion.
@@ -80,12 +96,22 @@ def main() -> None:
     assert all(root[0] < Fraction(7, 8) for root in roots)
     assert any(root[0] != HALF for root in roots)
 
+    # Positive control: a valid finite lemma must not be rejected merely
+    # because the corresponding infinite-series extension needs proof.
+    assert all(finite_eta_identity(s, m) for s in (-3, -1, 0, 1, 2, 5) for m in (1, 2, 5, 20))
+    # Deliberately wrong normalization must fail for a nontrivial instance.
+    assert sum((Fraction((-1) ** (n - 1), n**2) for n in range(1, 7)), Fraction()) != (
+        sum((Fraction(1, n**2) for n in range(1, 7)), Fraction())
+        - Fraction(2) ** (2 - 2) * sum((Fraction(1, n**2) for n in range(1, 4)), Fraction())
+    )
+
     print(
         "PASS exact degree-six polynomial countermodel: reflection/conjugation "
         "symmetry, finite-height on-line zeros, and a zero-free right "
         "half-plane coexist with off-critical zeros"
     )
-    print("NOTE this checks invalid inference patterns, not any RH zero or agent judgment")
+    print("PASS exact finite eta identity for signed integer exponents and bounded m")
+    print("NOTE these are mathematical oracles, not RH results or agent judgment")
 
 
 if __name__ == "__main__":
