@@ -218,6 +218,7 @@ async def handler(request):
                     "python_code": None,
                     "sage_code": None,
                     "prior_session_failure_attempt_ids": [],
+                    "computational_citations": [],
                 }
                 if maximum_regions
                 else {
@@ -229,6 +230,7 @@ async def handler(request):
                     "python_code": None,
                     "sage_code": None,
                     "prior_session_failure_attempt_ids": [],
+                    "computational_citations": [],
                 }
             )
         else:
@@ -266,6 +268,7 @@ async def handler(request):
                     "cross_strategy_relations": [],
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
+                    "computational_citations": [],
                 }
                 if maximum_regions
                 else {
@@ -288,6 +291,7 @@ async def handler(request):
                     "cross_strategy_relations": [],
                     "retracted_cross_strategy_source_artifact_ids": [],
                     "peer_handoff_reviews": [],
+                    "computational_citations": [],
                 }
             )
         return httpx.Response(
