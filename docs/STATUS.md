@@ -2653,7 +2653,7 @@ first full-suite rerun caught a Pyright mismatch in the new path-typed recovery
 call and the runtime smoke caught invalid synthetic provenance; both were
 fixed before the final passing run. No live provider calls were made.
 
-The A19 branch was then synced with Blue's latest `a18-blue` head
+The A19 branch was first synced with Blue's `a18-blue` head
 (`2927897`) without changing that branch. The merged interface adds required
 Skeptic cross-strategy relations and a 60-second provider-call deadline; the
 A19 guidance, agent fixture, and 256 KB context bound coexist with those
@@ -2664,3 +2664,19 @@ fixture-backed Investigator→sandbox→Skeptic check passed, including the
 required relation field and PNG retrieval. Real Chrome A18 workflow passed on
 the merged tree against a fresh local provider fixture. No live provider call
 was made.
+
+After Blue advanced A18 with portfolio lifecycle and preflight-recovery fixes,
+A19 was merged with the new tip `b7e4111` (merge commit `8f03694` on this
+branch; Blue's branch was not changed). Adversarial review confirmed that
+Investigator execution remains shielded through stop/pause, writes its terminal
+sidecar before cancellation propagates, and leaves the control state intact;
+restart recovery reattaches an exact project/session/strategy/cycle/source
+match instead of rerunning it, and the resulting full record is attached to
+the Investigator evidence before the Skeptic call. The Skeptic propagation,
+crash-window recovery, and stop-during-execution regressions all passed as part
+of a fresh `./sigma test` on this merged tree (including A18's new lifecycle
+and preflight tests, Ruff check/format, Pyright, frontend typecheck, and
+production build). Fresh actual-Docker runs of both
+`sandbox-poc/runtime-check.py` and `sandbox-poc/agent-workflow-check.py` passed;
+the latter completed the fixture-backed Investigator→sandbox→Skeptic cycle
+and retrieved its 17,141-byte PNG. No live provider call was made.

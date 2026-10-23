@@ -18,9 +18,10 @@ proof of a general mathematical claim.
 - A20 is merged in `origin/main` (PR #5); this A19 branch starts from that
   merged main.
 - `docs/ASSIGNMENT-A18.md` is active and being handled concurrently in another
-  checkout. Its current portfolio role-call seam is the integration point. A19
-  is based on the reviewed A18 branch state and changes only the Green A19
-  feature branch; Blue's branch remains untouched.
+  checkout. Its portfolio role-call seam is the integration point. A19 was
+  initially based on reviewed A18 commit `1114aba` and has since merged the
+  latest A18 branch head into the Green feature branch; Blue's branch remains
+  untouched and the PR's net diff contains A19 work only.
 - A17.8 remains an open research-acceptance gate in `docs/STATUS.md`. It limits
   claims about autonomous research quality, but does not block implementing a
   strictly bounded local computation facility.
