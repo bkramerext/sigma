@@ -46,13 +46,13 @@
 | T21 | Final integration, demonstration and acceptance testing | Planned; standalone work not started | Unassigned |
 | T22 | Cloud deployment | Planned / unverified | Unassigned |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
-| T23.1 | Clickable model and thinking-level pills under Difficulty; cost dollar signs; sign-in placeholder | Proposed | Unassigned |
+| T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Proposed | Unassigned |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Ready to assign; not verified started | Green proposed · ChatGPT authored ticket | 
 | T25 | Outcome hierarchy and collapsible subsections | Proposed; not started | Gray proposed · ChatGPT authored ticket |
 
 ### T23.1 scope
 
-Clicking model and thinking pills cycles through the **actually supported** selections. Show relative pricing as `$`, `$$`, etc. Reconcile incompatible reasoning levels, persist selection, and apply changes only to future requests. Preserve the selected billing mode; do not initiate paid-API fallback. The authentication pill remains a placeholder. Preserve SIGMA's existing UI styling.
+Exactly four separate pills in the **upper-right**: top row **Model | Google sign-in**; bottom row **Thinking | ChatGPT sign-in**. Model and Thinking cycle actual supported selections, persist for future calls, and display relative model dollar-sign pricing. **Google sign-in is a clearly unavailable placeholder for T22 cloud work; ChatGPT sign-in reuses the existing implemented functional account control.** Preserve Difficulty where it is. No billing fallback. See [T23.1](tickets/t23.1.md).
 
 ### T24 scope
 
