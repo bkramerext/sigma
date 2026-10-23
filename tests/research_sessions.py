@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -581,6 +582,45 @@ async def test_chatgpt_stream(path: Path):
             record, "investigator", {"problem": view.project.problem, "strategy": strategy.approach}
         )
     assert result == (output, {"input_tokens": 25, "cached_input_tokens": 5, "output_tokens": 12})
+
+
+async def test_session_deadline_bounds_generous_call_timeout(path: Path):
+    _, _, credential, _ = await setup(path)
+    assert research_sessions.CALL_TIMEOUT == 900
+    cancelled = asyncio.Event()
+
+    async def handler(request):
+        try:
+            await asyncio.sleep(5)
+        finally:
+            cancelled.set()
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    record = {
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "mode": credential["mode"],
+        "identity_hash": research_sessions._digest(credential["identity"]),
+        "deadline_at": (datetime.now(UTC) + timedelta(seconds=0.05)).isoformat(),
+    }
+    started = time.monotonic()
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        try:
+            await asyncio.wait_for(research_sessions._call(record, "investigator", {}), 1)
+        except TimeoutError:
+            pass
+        else:
+            raise AssertionError("An in-flight call must stop at the session deadline")
+    assert time.monotonic() - started < 0.8
+    assert cancelled.is_set()
 
 
 async def test_limits_snapshot_and_usage_cost(path: Path):
@@ -2867,6 +2907,11 @@ def main():
         asyncio.run(test_pause_counts_interrupted_call(root / "pause.sigma"))
         asyncio.run(test_malformed_output_and_restart(root / "recovery.sigma"))
         asyncio.run(test_chatgpt_stream(root / "chatgpt.sigma"))
+        asyncio.run(
+            test_session_deadline_bounds_generous_call_timeout(
+                root / "generous-call-deadline.sigma"
+            )
+        )
         asyncio.run(test_limits_snapshot_and_usage_cost(root / "limits.sigma"))
         test_limits_validation(root / "invalid-limits.sigma")
         asyncio.run(test_legacy_limits_are_preserved(root / "legacy-limits.sigma"))

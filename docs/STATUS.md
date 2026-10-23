@@ -45,7 +45,7 @@ evaluation. I did not run any API-key-billed call.
   including three in-flight workers plus a fourth queued strategy.
 - Model/account preflight exceptions and hangs now pause the session before
   dispatching a provider call. A bounded 30-second preflight timeout is
-  separate from the 60-second model-call timeout. A deterministic recovery test
+  separate from the model-call timeout. A deterministic recovery test
   forces a preflight timeout, verifies zero calls were charged, then resumes and
   completes one full Investigator/Skeptic cycle.
 - The reviewer was right that cross-strategy coordinator actions were
@@ -92,9 +92,9 @@ evaluation. I did not run any API-key-billed call.
 
 ### Live ChatGPT-plan evidence
 
-I checked the active provider mode before each session; both were `chatgpt`,
-connected, and used the configured `gpt-6.1-sol` / High setting. No request was
-sent unless that check passed. The two captured project/session records remain
+I checked the active provider mode before each session; all were `chatgpt`,
+connected, and used `gpt-6.1-sol` (High for the first two, Medium for the transfer
+trial). No request was sent unless that check passed. The three captured project/session records remain
 locally available under `projects/` and are not committed as source fixtures:
 
 | Stage | Saved project and session | Calls / elapsed | Result |
@@ -151,10 +151,14 @@ stages.
 The earlier Medium run used a 40-second request timeout and both concurrent
 High-reasoning calls reached it. The new trial used the raised 60-second
 request timeout at Medium reasoning; both initial calls again reached the
-client ceiling. After that evidence, the per-call timeout was raised to 120
-seconds to allow longer reasoning calls. This is not live-validated because
+client ceiling. The per-call timeout was initially raised to 120 seconds, then
+increased to **15 minutes** after the human correctly challenged the short
+ceiling for sustained research. Each call is capped by the session's remaining
+time; Stop still cancels local provider work immediately. A deterministic
+transport regression verifies an in-flight call is cancelled at the session
+deadline despite the generous call ceiling. The new ceiling is not live-validated because
 allowance consumption from the four timed-out requests is unknown. Timeout
-steps now persist `failure_kind=timeout`, the configured seconds, and a clear
+steps now persist `failure_kind=timeout`, the effective call/session seconds, and a clear
 note that remote processing may continue and consume plan usage. A separate
 30-second preflight timeout protects model/account checks without charging a
 provider call. Deterministic tests exercise fail-fast preflight recovery and
@@ -174,7 +178,9 @@ mathematical truth.
   on 2026-10-23, including preflight failure/timeout recovery, queued-branch
   stop, duration/call-limit resume, the A-to-B finding that changes B's
   scheduled next question and survives stop/resume, and source-evidence
-  retraction both before and after the target consumes the handoff. Ruff check
+  retraction both before and after the target consumes the handoff. The suite
+  passed again after raising the call ceiling to 15 minutes and adding the
+  in-flight session-deadline cancellation regression. Ruff check
   and format, Pyright (zero errors), frontend typecheck, and production Vite
   build also passed.
 - Real Chrome `browser_checks/a17_research.py` passed against a local provider
@@ -186,7 +192,7 @@ mathematical truth.
 **Recommendation:** Accept the coordinator and failure-handling engineering as
 implemented once the final full suite passes, but do not accept A18 as evidence
 of research effectiveness. Live evidence is limited to one elementary result
-with a useful criticism and one Medium provider timeout; strategy improvement,
+with a useful criticism and two Medium provider timeout trials; strategy improvement,
 cross-strategy synthesis, and all Hard/RH capability remain unverified.
 
 ## A18 implementation and evaluation (started 2026-10-22)
