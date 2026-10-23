@@ -23,9 +23,15 @@ with sync_playwright() as playwright:
     )
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     page = context.new_page()
+    def select_samples():
+        tab = page.get_by_role("tab", name="Samples", exact=True)
+        if tab.get_attribute("aria-selected") != "true":
+            tab.click()
+
     errors = []
     starts = []
     start_payloads = []
+    limit_updates = []
     provider_calls = []
     legacy_titleless = {"enabled": False}
     legacy_outcome = {"enabled": False}
@@ -38,6 +44,14 @@ with sync_playwright() as playwright:
         lambda request: (
             (starts.append(request.url), start_payloads.append(request.post_data_json))
             if request.url.endswith("/api/projects/research-sessions/start")
+            else None
+        ),
+    )
+    page.on(
+        "request",
+        lambda request: (
+            limit_updates.append(request.post_data_json)
+            if request.method == "PUT" and request.url.endswith("/api/projects/research-limits")
             else None
         ),
     )
@@ -139,7 +153,7 @@ with sync_playwright() as playwright:
     assert credit_box["y"] + credit_box["height"] <= 900
     assert home_credit.evaluate("e => getComputedStyle(e).userSelect") == "none"
     page.screenshot(path="/tmp/sigma-a1771-home-credit.png")
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Counting Constrained Binary Strings"
     ).click()
@@ -150,7 +164,11 @@ with sync_playwright() as playwright:
     back_row = page.locator(".project-back-row")
     title_box = header_title.bounding_box()
     back_box = back_row.bounding_box()
-    assert title_box and back_box and back_box["y"] >= title_box["y"] + title_box["height"]
+    art_box = page.locator(".project-header-art").bounding_box()
+    assert title_box and back_box and art_box
+    assert back_box["x"] >= art_box["x"] + art_box["width"] * 0.55
+    assert back_box["x"] + back_box["width"] <= art_box["x"] + art_box["width"] + 2
+    assert back_box["y"] < art_box["y"] + art_box["height"] / 2
     back_button_box = page.get_by_role("button", name="Back to home", exact=True).bounding_box()
     back_caption = page.get_by_role("button", name="Back to home caption", exact=True)
     expect(back_caption).to_be_visible()
@@ -187,11 +205,13 @@ with sync_playwright() as playwright:
     )
     back_caption.hover()
     expect(back_caption).to_have_css("color", "rgb(224, 196, 160)")
-    expect(page.get_by_role("tooltip")).to_have_text("Back to home caption")
+    expect(page.get_by_role("tooltip")).to_have_count(0)
+    page.get_by_role("button", name="Back to home", exact=True).hover()
+    expect(page.get_by_role("tooltip")).to_have_count(0)
     back_caption.click()
     page.wait_for_url(browser_base_url + "/")
     expect(page.get_by_role("tooltip")).to_have_count(0)
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Counting Constrained Binary Strings"
     ).click()
@@ -317,22 +337,28 @@ with sync_playwright() as playwright:
     page.keyboard.press("ArrowRight")
     expect(settings.get_by_role("tab", name="Limits")).to_have_attribute("aria-selected", "true")
     expect(settings.get_by_role("tabpanel", name="Limits")).to_be_visible()
-    expect(settings.get_by_label("Research rounds")).to_have_value("3")
-    expect(settings.get_by_label("Model calls")).to_have_value("6")
+    expect(settings.get_by_label("Skeptic iterations")).to_have_value("3")
+    expect(settings.get_by_label("Maximum agent calls")).to_have_value("30")
+    expect(settings.get_by_label("Maximum session duration", exact=True)).to_have_value("1")
+    expect(settings.get_by_label("Maximum session duration unit")).to_have_value("hours")
+    expect(settings.get_by_label("Maximum output tokens per call")).to_have_value("12000")
     page.screenshot(path="/tmp/sigma-a177-after-settings-short-desktop.png")
     locked_scroll = page.evaluate("window.scrollY")
-    rounds_input = settings.get_by_label("Research rounds")
+    rounds_input = settings.get_by_label("Skeptic iterations")
     assert rounds_input.evaluate("element => getComputedStyle(element).appearance") == "textfield"
-    rounds_input.fill("4")
-    expect(
-        settings.get_by_role("alert").filter(has_text="two model calls per round")
-    ).to_be_visible()
+    rounds_input.fill("6")
+    expect(settings.get_by_role("alert").filter(has_text="whole number from 1 to 5")).to_be_visible()
     expect(save_settings).to_be_disabled()
     rounds_input.fill("0")
-    expect(
-        settings.get_by_role("alert").filter(has_text="whole number from 1 to 10")
-    ).to_be_visible()
+    expect(settings.get_by_role("alert").filter(has_text="whole number from 1 to 5")).to_be_visible()
     rounds_input.fill("3")
+    duration_input = settings.get_by_label("Maximum session duration", exact=True)
+    duration_unit = settings.get_by_label("Maximum session duration unit")
+    duration_unit.select_option("days")
+    duration_input.fill("8")
+    expect(settings.get_by_role("alert").filter(has_text="1 minute to 7 days")).to_be_visible()
+    expect(save_settings).to_be_disabled()
+    duration_input.fill("7")
     limits_panel = settings.locator("#settings-panel-limits")
     limits_panel_box = limits_panel.bounding_box()
     assert limits_panel_box
@@ -345,10 +371,12 @@ with sync_playwright() as playwright:
     assert page.evaluate("window.scrollY") == locked_scroll
     assert limits_panel.evaluate("e => e.scrollTop") > 0
     cost_input = settings.get_by_label("Maximum estimated session cost (USD)")
+    expect(cost_input).to_have_value("")
     cost_input.fill("0")
     expect(settings.get_by_role("alert").filter(has_text="$0.01 to $100.00")).to_be_visible()
     expect(save_settings).to_be_disabled()
     cost_input.fill("")
+    expect(cost_input).to_have_value("")
     expect(save_settings).to_be_enabled()
     limits_box = settings.bounding_box()
     assert (
@@ -358,6 +386,12 @@ with sync_playwright() as playwright:
         and abs(main_box["height"] - limits_box["height"]) < 1
     )
     page.set_viewport_size({"width": 390, "height": 420})
+    duration_box = settings.locator(".research-duration-controls").bounding_box()
+    duration_input_box = duration_input.bounding_box()
+    duration_unit_box = duration_unit.bounding_box()
+    assert duration_box and duration_input_box and duration_unit_box
+    assert duration_box["x"] >= 0 and duration_box["x"] + duration_box["width"] <= 390
+    assert duration_unit_box["x"] >= duration_input_box["x"] + duration_input_box["width"]
     limits_panel_box = limits_panel.bounding_box()
     assert limits_panel_box
     page.mouse.move(
@@ -376,8 +410,32 @@ with sync_playwright() as playwright:
     )
     save_box = save_settings.bounding_box()
     assert save_box and save_box["y"] >= 0 and save_box["y"] + save_box["height"] <= 420
-    settings.get_by_role("tab", name="Main", exact=True).click()
     page.screenshot(path="/tmp/sigma-a177-after-settings-main-mobile.png")
+    save_settings.click()
+    expect(settings).to_be_hidden()
+    saved_limits = page.evaluate("async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }")
+    assert saved_limits["session_duration_minutes"] == 7 * 24 * 60, saved_limits
+    assert saved_limits["maximum_estimated_cost_usd"] is None, {
+        "saved": saved_limits,
+        "updates": limit_updates,
+    }
+    page.get_by_role("button", name="Project settings", exact=True).click()
+    settings = page.get_by_role("dialog", name="Settings")
+    settings.get_by_role("tab", name="Limits").click()
+    expect(settings.get_by_label("Maximum session duration", exact=True)).to_have_value("7")
+    expect(settings.get_by_label("Maximum session duration unit")).to_have_value("days")
+    settings.get_by_label("Maximum session duration", exact=True).fill("2")
+    settings.get_by_label("Maximum session duration unit").select_option("hours")
+    settings.get_by_role("button", name="Save", exact=True).click()
+    expect(settings).to_be_hidden()
+    saved_limits = page.evaluate("async () => { const path = new URL(location.href).searchParams.get('path'); return await (await fetch('/api/projects/research-limits?' + new URLSearchParams({path}))).json(); }")
+    assert saved_limits["session_duration_minutes"] == 120, saved_limits
+    page.reload()
+    page.get_by_role("button", name="Project settings", exact=True).click()
+    settings = page.get_by_role("dialog", name="Settings")
+    settings.get_by_role("tab", name="Limits").click()
+    expect(settings.get_by_label("Maximum session duration", exact=True)).to_have_value("2")
+    expect(settings.get_by_label("Maximum session duration unit")).to_have_value("hours")
     settings.get_by_role("button", name="Cancel", exact=True).click()
     assert page.evaluate("getComputedStyle(document.documentElement).overflow") != "hidden"
     page.set_viewport_size({"width": 1440, "height": 900})
@@ -744,7 +802,7 @@ with sync_playwright() as playwright:
         assert abs(item_rect - summary_rect) < 1.5, (summary_selector, summary_rect, item_rect)
     page.screenshot(path="/tmp/sigma-a177-after-session-card.png")
     expect(research).to_contain_text("Cycle 3 of 3")
-    expect(research).to_contain_text("6/6 calls")
+    expect(research).to_contain_text("6/30 calls")
     expect(first_session.locator(".session-status")).to_have_text("ended")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     artifacts = research.locator("section.research-artifacts")
@@ -1267,7 +1325,7 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 1440, "height": 900})
     page.get_by_role("button", name="Back to home", exact=True).click()
     page.wait_for_url(browser_base_url + "/")
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
     ).click()

@@ -23,6 +23,7 @@ type ResearchMode = 'biology' | 'chemistry' | 'computer_science' | 'economics' |
 type ProjectDifficulty = 'easy' | 'medium' | 'hard';
 const difficultyLabels: Record<ProjectDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 const difficultyLabel = (value: ProjectDifficulty | null): string => value ? difficultyLabels[value] : 'Not set';
+const difficultyDescription = (value: ProjectDifficulty | null): string => value ? `${difficultyLabels[value]} difficulty` : 'Difficulty not set';
 const researchTypes: { value: ResearchMode; label: string }[] = [
   { value: 'biology', label: 'Biology' },
   { value: 'chemistry', label: 'Chemistry' },
@@ -86,7 +87,8 @@ type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negativ
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { id: string; project_id?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
-type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_minutes: string; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
+type DurationUnit = 'minutes' | 'hours' | 'days';
+type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_value: string; session_duration_unit: DurationUnit; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
 function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchSession): string {
   return ids?.map(id => `Artifact ${session.artifacts.find(artifact => artifact.id === id)?.sequence ?? '?'}`).join(', ') || 'No artifact references';
 }
@@ -154,11 +156,15 @@ function researchArtifactMarkdown(artifact: ResearchArtifact): string {
   ];
   return lines.join('\n');
 }
+const MAX_SESSION_DURATION_MINUTES = 7 * 24 * 60;
+const durationUnitMinutes: Record<DurationUnit, number> = { minutes: 1, hours: 60, days: 1440 };
 const limitBounds = {
-  research_rounds: [1, 10], model_calls: [2, 20], session_duration_minutes: [1, 120], output_tokens_per_call: [256, 16384],
+  research_rounds: [1, 5], model_calls: [2, 30], output_tokens_per_call: [256, 16384],
 } as const;
 function draftLimits(value: ResearchLimits): ResearchLimitsDraft {
-  return { research_rounds: String(value.research_rounds), model_calls: String(value.model_calls), session_duration_minutes: String(value.session_duration_minutes), output_tokens_per_call: String(value.output_tokens_per_call), maximum_estimated_cost_usd: value.maximum_estimated_cost_usd === null ? '' : String(value.maximum_estimated_cost_usd) };
+  const unit: DurationUnit = value.session_duration_minutes >= 1440 && value.session_duration_minutes % 1440 === 0 ? 'days' : value.session_duration_minutes >= 60 && value.session_duration_minutes % 60 === 0 ? 'hours' : 'minutes';
+  const duration = value.session_duration_minutes / durationUnitMinutes[unit];
+  return { research_rounds: String(value.research_rounds), model_calls: String(value.model_calls), session_duration_value: String(duration), session_duration_unit: unit, output_tokens_per_call: String(value.output_tokens_per_call), maximum_estimated_cost_usd: value.maximum_estimated_cost_usd === null ? '' : String(value.maximum_estimated_cost_usd) };
 }
 function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits | null; errors: Partial<Record<keyof ResearchLimitsDraft, string>> } {
   const errors: Partial<Record<keyof ResearchLimitsDraft, string>> = {};
@@ -172,6 +178,15 @@ function validateLimitDraft(draft: ResearchLimitsDraft): { value: ResearchLimits
       errors[key] = `Enter a whole number from ${minimum} to ${maximum}.`; continue;
     }
     value[key] = number;
+  }
+  if (!/^\d+$/.test(draft.session_duration_value)) {
+    errors.session_duration_value = 'Enter a whole number.';
+  } else {
+    const enteredDuration = Number(draft.session_duration_value);
+    const durationMinutes = enteredDuration * durationUnitMinutes[draft.session_duration_unit];
+    if (!Number.isSafeInteger(enteredDuration) || !Number.isSafeInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > MAX_SESSION_DURATION_MINUTES) {
+      errors.session_duration_value = 'Enter a duration from 1 minute to 7 days.';
+    } else value.session_duration_minutes = durationMinutes;
   }
   if (draft.maximum_estimated_cost_usd === '') value.maximum_estimated_cost_usd = null;
   else if (!/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(draft.maximum_estimated_cost_usd)) {
@@ -800,7 +815,13 @@ function FloatingTooltip() {
   const [active, setActive] = useState<{ element: HTMLElement; text: string } | null>(null);
   const tooltip = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLElement | null>(null);
+  const suppressedAfterClick = useRef(new WeakSet<HTMLElement>());
   const previousDescriptions = useRef(new WeakMap<HTMLElement, string | null>());
+  const hoverTimer = useRef<number | null>(null);
+  const clearHoverTimer = () => {
+    if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  };
   const position = useCallback(() => {
     const element = activeRef.current;
     const hint = tooltip.current;
@@ -815,16 +836,6 @@ function FloatingTooltip() {
     hint.style.left = `${left}px`;
     hint.style.top = `${top}px`;
   }, []);
-  const show = useCallback((element: HTMLElement | null) => {
-    const text = element?.dataset.tooltip?.trim() || element?.getAttribute('aria-label')?.trim();
-    if (!element || !text) return;
-    if (activeRef.current === element) { setActive({ element, text }); return; }
-    const previous = element.getAttribute('aria-describedby');
-    previousDescriptions.current.set(element, previous);
-    element.setAttribute('aria-describedby', [previous, 'sigma-ui-tooltip'].filter(Boolean).join(' '));
-    activeRef.current = element;
-    setActive({ element, text });
-  }, []);
   const hide = useCallback((element?: HTMLElement | null) => {
     const current = activeRef.current;
     if (!current || element && element !== current) return;
@@ -835,20 +846,49 @@ function FloatingTooltip() {
     activeRef.current = null;
     setActive(null);
   }, []);
+  const show = useCallback((element: HTMLElement | null) => {
+    if (document.querySelector('.project-model-confirm-popover')) { hide(); return; }
+    const text = element?.dataset.tooltip?.trim() || element?.getAttribute('aria-label')?.trim();
+    if (!element || !text) return;
+    if (activeRef.current === element) { setActive({ element, text }); return; }
+    const previous = element.getAttribute('aria-describedby');
+    previousDescriptions.current.set(element, previous);
+    element.setAttribute('aria-describedby', [previous, 'sigma-ui-tooltip'].filter(Boolean).join(' '));
+    activeRef.current = element;
+    setActive({ element, text });
+  }, [hide]);
   useEffect(() => {
     const targetFor = (target: EventTarget | null) => target instanceof Element
       ? target.closest<HTMLElement>('[data-tooltip]:not([data-tooltip-disabled]), button[aria-label]:not([data-tooltip-disabled])')
       : null;
     const onPointerOver = (event: PointerEvent) => {
       const element = targetFor(event.target);
-      if (element && element !== activeRef.current) show(element);
+      if (document.querySelector('.project-model-confirm-popover')) { clearHoverTimer(); hide(); return; }
+      if (element && suppressedAfterClick.current.has(element)) return;
+      if (element && element !== activeRef.current) {
+        clearHoverTimer();
+        hide();
+        hoverTimer.current = window.setTimeout(() => {
+          hoverTimer.current = null;
+          if (element.matches(':hover') && !suppressedAfterClick.current.has(element)) show(element);
+        }, 400);
+      }
     };
     const onPointerOut = (event: PointerEvent) => {
       const element = targetFor(event.target);
       const related = targetFor(event.relatedTarget);
+      if (element && related !== element) clearHoverTimer();
+      if (element && related !== element) suppressedAfterClick.current.delete(element);
       if (element && element === activeRef.current && related !== element && !element.matches(':focus-visible')) hide(element);
     };
-    const onFocusIn = (event: FocusEvent) => show(targetFor(event.target));
+    const onClick = (event: Event) => {
+      const element = targetFor(event.target);
+      if (!element) return;
+      clearHoverTimer();
+      suppressedAfterClick.current.add(element);
+      hide(element);
+    };
+    const onFocusIn = (event: FocusEvent) => { clearHoverTimer(); show(targetFor(event.target)); };
     const onFocusOut = (event: FocusEvent) => {
       const element = targetFor(event.target);
       if (element && !element.matches(':hover') && !element.contains(event.relatedTarget as Node | null)) hide(element);
@@ -856,13 +896,16 @@ function FloatingTooltip() {
     const onMove = () => position();
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
+    document.addEventListener('click', onClick, true);
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('focusout', onFocusOut, true);
     window.addEventListener('scroll', onMove, true);
     window.addEventListener('resize', onMove);
     return () => {
+      clearHoverTimer();
       document.removeEventListener('pointerover', onPointerOver, true);
       document.removeEventListener('pointerout', onPointerOut, true);
+      document.removeEventListener('click', onClick, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
       window.removeEventListener('scroll', onMove, true);
@@ -1073,19 +1116,23 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   </div>;
 }
 
-function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
+function Header({ goHome, close, projectTitle, projectType, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
-      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}</span>{projectDifficulty && <span className={`project-difficulty-badge difficulty-${projectDifficulty}`} aria-label={`Project difficulty: ${difficultyLabels[projectDifficulty]}`}>Difficulty · {difficultyLabels[projectDifficulty]}</span>}</div>}<div className="project-back-row"><button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" title="Back to home" data-tooltip="Back to home"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button><button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption">Back to home</button></div></div>
+      {projectArtwork && close && <div className="project-back-row project-art-back-row">
+        <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" data-tooltip-disabled><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>
+        <button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption" data-tooltip-disabled>Back to home</button>
+      </div>}
+      {projectArtwork ? close && <div className="project-title-line">{projectTitle && <div className="project-header-title-row">{projectType && <ResearchTypeIcon type={projectType}/>}<span className="project-header-title" title={projectTitle}>{projectTitle}</span></div>}</div>
         : <p className="expansion">Strategy Investigation, Generation, Measurement &amp; Assessment</p>}
     </div>
     <div className="header-controls">
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in is not implemented; planned for cloud support" aria-label="Google Sign-in is not implemented; planned for cloud support"><span className="connection-dot" aria-hidden="true"/>Google Sign-in</span>
+      <span className="project-google-placeholder project-google-signin" role="status" title="Google sign-in planned for cloud support (coming soon)" data-tooltip="Google sign-in planned for cloud support (coming soon)" aria-label="Google Sign-in planned for cloud support (coming soon)"><span className="connection-dot" aria-hidden="true"/>Google Sign-in</span>
       <ConnectionStatus disabled={connectionDisabled} projectHeader/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
@@ -1110,9 +1157,9 @@ function focusWorkspace(id: string) {
   target?.focus(); target?.scrollIntoView({ block: 'start' });
 }
 
-function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, connectionDisabled = false }: {
+function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, projectView, onProjectUpdated, connectionDisabled = false }: {
   children: React.ReactNode; goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
-  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; connectionDisabled?: boolean;
+  close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; connectionDisabled?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(() => window.localStorage.getItem('sigma.sidebarCollapsed') === 'true');
   function toggleSidebar() {
@@ -1125,7 +1172,7 @@ function WorkspaceFrame({ children, goHome, close, projectTitle, projectType, pr
     <a className="workspace-skip" href="#workspace-content" onClick={event => {
       event.preventDefault(); focusWorkspace('workspace-content');
     }}>Skip to project content</a>
-    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectDifficulty={projectDifficulty} projectView={projectView} onProjectUpdated={onProjectUpdated} projectArtwork connectionDisabled={connectionDisabled}/>
+    <Header goHome={goHome} close={close} projectTitle={projectTitle} projectType={projectType} projectView={projectView} onProjectUpdated={onProjectUpdated} projectArtwork connectionDisabled={connectionDisabled}/>
     <div className={`workspace-layout${!ENABLE_WORKSPACE_SIDEBAR ? ' sidebar-disabled' : collapsed ? ' nav-collapsed' : ''}`}>
       {ENABLE_WORKSPACE_SIDEBAR && <nav className="workspace-nav" aria-label="Project navigation">
         <button className="nav-collapse" type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} data-tooltip={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={toggleSidebar}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={collapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'}/></svg></button>
@@ -1164,9 +1211,9 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
     finally { submitting.current = false; setBusy(false); }
   }
   return <dialog ref={dialog} className="project-entry-dialog" aria-labelledby="project-entry-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <h2 id="project-entry-heading">Open Project</h2><p className="entry-help">Choose an existing local project by its directory path.</p>
+    <header className="entry-dialog-header"><h2 id="project-entry-heading">Open Project</h2><button type="button" className="entry-cancel" disabled={busy} onClick={onCancel}>Cancel</button></header><p className="entry-help">Choose an existing local project by its directory path.</p>
     <form onSubmit={save}><fieldset disabled={busy}><label htmlFor="open-project-path">Project directory</label><input ref={first} id="open-project-path" required value={path} onChange={event => setPath(event.target.value)} aria-describedby="project-path-help"/><p id="project-path-help" className="entry-hint">Try <code>projects/rh.sigma</code>, or an absolute path such as <code>/Users/you/projects/question.sigma</code>. Paths refer to this local server.</p>
-    {error && <p className="error" role="alert">{error}</p>}<div className="entry-dialog-actions"><button type="submit">{busy ? 'Opening…' : 'Open Project'}</button><button type="button" className="entry-cancel" onClick={onCancel}>Cancel</button></div></fieldset></form>
+    {error && <p className="error" role="alert">{error}</p>}<div className="entry-dialog-actions"><button type="submit">{busy ? 'Opening…' : 'Open Project'}</button></div></fieldset></form>
   </dialog>;
 }
 
@@ -1181,7 +1228,49 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   const [catalogReady, setCatalogReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [pendingModel, setPendingModel] = useState<CatalogChoice | null>(null);
+  const [confirmationPosition, setConfirmationPosition] = useState<{ left: number; top: number } | null>(null);
   const saving = useRef(false);
+  const modelButton = useRef<HTMLButtonElement>(null);
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  const confirmationPopover = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (pendingModel) {
+      const place = () => {
+        const anchor = modelButton.current?.getBoundingClientRect();
+        const popover = confirmationPopover.current?.getBoundingClientRect();
+        if (!anchor) return;
+        const width = popover?.width ?? Math.min(320, window.innerWidth - 16);
+        const height = popover?.height ?? 110;
+        const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
+        const below = anchor.bottom + height + 8 <= window.innerHeight - 8;
+        setConfirmationPosition({ left, top: below ? anchor.bottom + 8 : Math.max(8, anchor.top - height - 8) });
+      };
+      const frame = requestAnimationFrame(() => {
+        place();
+        confirmButton.current?.focus();
+      });
+      const escape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setPendingModel(null);
+        }
+      };
+      window.addEventListener('resize', place);
+      window.addEventListener('scroll', place, true);
+      document.addEventListener('keydown', escape, true);
+      return () => {
+        cancelAnimationFrame(frame);
+        window.removeEventListener('resize', place);
+        window.removeEventListener('scroll', place, true);
+        document.removeEventListener('keydown', escape, true);
+      };
+    } else {
+      setConfirmationPosition(null);
+      modelButton.current?.focus();
+    }
+  }, [pendingModel]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1198,7 +1287,8 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
 
   const current = models.find(model => model.id === view.project.ai_model);
-  const available = models.filter(model => model.availability === 'available');
+  const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
+  const available = models.filter(model => model.availability === 'available').sort((a, b) => costOrder[b.relative_cost] - costOrder[a.relative_cost] || a.label.localeCompare(b.label));
   const currentAvailableIndex = available.findIndex(model => model.id === view.project.ai_model);
   const nextModel = available.length > 1
     ? available[(currentAvailableIndex + 1 + available.length) % available.length]
@@ -1220,15 +1310,20 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   };
   const nextModelEffort = reconciledEffort(nextModel);
   const effortWillChange = Boolean(nextModel && nextModelEffort !== view.project.reasoning_effort);
+  const nextModelCostsMore = Boolean(current && nextModel && costOrder[nextModel.relative_cost] > costOrder[current.relative_cost]);
+  const difficultyOrder: ProjectDifficulty[] = ['easy', 'medium', 'hard'];
+  const currentDifficultyIndex = view.project.difficulty ? difficultyOrder.indexOf(view.project.difficulty) : -1;
+  const nextDifficulty = difficultyOrder[(currentDifficultyIndex + 1) % difficultyOrder.length];
+  const difficultyText = view.project.difficulty ? difficultyLabels[view.project.difficulty].toLowerCase() : 'not set';
   const costHelpId = `project-model-cost-help-${view.project.id}`;
 
-  async function update(nextModel: string, nextEffort: string) {
+  async function update(changes: Partial<Settings>) {
     if (saving.current || disabled || busy) return;
     saving.current = true; setBusy(true); setMessage('');
     const expected = settingsOf(view);
     try {
       const saved = await post<ProjectView>('update', {
-        path: view.path, ...expected, ai_model: nextModel, reasoning_effort: nextEffort, expected,
+        path: view.path, ...expected, ...changes, expected,
       });
       onSaved(saved);
     } catch (error) {
@@ -1250,12 +1345,33 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
     ? ` Switching to ${nextModel?.label.split(' · ')[0]} will also change Thinking from ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort} to ${thinkingLabels[nextModelEffort!]}.`
     : '';
   const visibleEffortNotice = effortWillChange ? `Next model uses ${thinkingLabels[nextModelEffort!]}.` : '';
-  return <div className="project-header-controls" aria-label="Project model and thinking controls">
-    <button type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`Cycle through available models.${nextEffortNotice}`} disabled={modelDisabled} onClick={() => nextModel && nextModelEffort && void update(nextModel.id, nextModelEffort)}><span>Model · </span>{modelLabel}</button>
-    <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title="Cycle through thinking levels supported by this model" disabled={thinkingDisabled} onClick={() => nextEffort && void update(view.project.ai_model, nextEffort)}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
+  const pendingModelName = pendingModel?.label.split(' · ')[0] ?? 'this model';
+  function requestModelChange() {
+    if (!nextModel || !nextModelEffort) return;
+    if (nextModelCostsMore) setPendingModel(nextModel);
+    else void update({ ai_model: nextModel.id, reasoning_effort: nextModelEffort });
+  }
+  function confirmModelChange() {
+    if (!pendingModel) return;
+    const confirmed = pendingModel;
+    setPendingModel(null);
+    const effort = reconciledEffort(confirmed);
+    if (effort) void update({ ai_model: confirmed.id, reasoning_effort: effort });
+  }
+  function cycleDifficulty() {
+    void update({ difficulty: nextDifficulty });
+  }
+  return <div className="project-header-controls" aria-label="Project model, thinking, and difficulty controls">
+    <button type="button" className={`project-control-pill project-difficulty-badge difficulty-${view.project.difficulty ?? 'unset'}`} aria-label={`Project difficulty ${view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'not set'}`} title={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} data-tooltip={`This project is considered ${difficultyText}. Click to cycle through easy, medium, and hard.`} disabled={disabled || busy || !!pendingModel} onClick={cycleDifficulty}>Difficulty · {view.project.difficulty ? difficultyLabels[view.project.difficulty] : 'Not set'}</button>
+    <button ref={modelButton} type="button" className="project-control-pill project-model-pill" aria-label={`Model ${modelLabel}. Relative published API token cost ${current?.relative_cost ?? 'unknown'}.${nextEffortNotice}`} aria-describedby={costHelpId} title={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Click to cycle through available models.${nextEffortNotice}`} data-tooltip={`The selected model is ${modelLabel}. Its relative published API token cost is ${current?.relative_cost ?? 'unknown'}. Click to cycle through available models.${nextEffortNotice}`} disabled={modelDisabled || !!pendingModel} onClick={requestModelChange}><span>Model · </span>{modelLabel}</button>
+    <button type="button" className="project-control-pill project-thinking-pill" aria-label={`Thinking level ${thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}`} title={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} data-tooltip={`The thinking level is set to ${(thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort).toLowerCase()}. Click to cycle through levels supported by this model.`} disabled={thinkingDisabled || !!pendingModel} onClick={() => nextEffort && void update({ ai_model: view.project.ai_model, reasoning_effort: nextEffort })}>Thinking · {thinkingLabels[view.project.reasoning_effort] ?? view.project.reasoning_effort}</button>
     <span id={costHelpId} className="sr-only">Dollar signs show relative published API token price tiers. They are not actual research session charges.</span>
     {visibleEffortNotice && <span className="project-controls-message" role="status">{visibleEffortNotice}</span>}
     {statusMessage && <span className="project-controls-message" role="status">{statusMessage}</span>}
+    {pendingModel && createPortal(<div ref={confirmationPopover} className="project-model-confirm-popover" role="group" aria-label={`Confirm switch to ${pendingModelName}`} style={confirmationPosition ? { left: confirmationPosition.left, top: confirmationPosition.top } : { left: -10000, top: -10000 }}>
+      <p><strong>Switch to {pendingModelName}?</strong> {pendingModelName} has a higher relative published API token cost tier ({pendingModel.relative_cost} versus {current?.relative_cost}). Continue to save this model?</p>
+      <div className="project-model-confirm-actions session-remove-confirm-actions"><button ref={confirmButton} type="button" onClick={confirmModelChange}>Confirm</button><button type="button" onClick={() => setPendingModel(null)}>Cancel</button></div>
+    </div>, document.body)}
   </div>;
 }
 
@@ -1343,7 +1459,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'main' | 'limits'>('main');
-  const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, model_calls: 6, session_duration_minutes: 30, output_tokens_per_call: 4000, maximum_estimated_cost_usd: null }));
+  const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, model_calls: 30, session_duration_minutes: 60, output_tokens_per_call: 12000, maximum_estimated_cost_usd: null }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   const limitValidation = validateLimitDraft(limitDraft);
   useEffect(() => { dialog.current?.showModal(); first.current?.focus(); }, []);
@@ -1379,6 +1495,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }, [values.title]);
   function change<K extends keyof Settings,>(key: K, value: Settings[K]) { setValues(previous => ({ ...previous, [key]: value })); }
   const selected = catalog.find(model => model.id === values.ai_model);
+  const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
+  const orderedCatalog = [...catalog].sort((a, b) => costOrder[a.relative_cost] - costOrder[b.relative_cost] || a.label.localeCompare(b.label));
   const samePair = !!initial && values.ai_model === initial.project.ai_model && values.reasoning_effort === initial.project.reasoning_effort;
   const compatible = selected?.efforts.includes(values.reasoning_effort) || samePair;
   const pairError = selected && !selected.efforts.includes(values.reasoning_effort) && !samePair ? 'This model does not support the selected Thinking level. Choose a supported level explicitly.' : '';
@@ -1413,7 +1531,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <label htmlFor="project-model">LLM Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
-        {catalog.map(model => <option key={model.id} value={model.id}>{model.label}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
+        {orderedCatalog.map(model => <option key={model.id} value={model.id}>{model.label.replace(/\s*\([^)]*\)$/, '').trim()} · {model.relative_cost}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
       </select>
       <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately. ' : 'ChatGPT plan allowance or credits · connection required for generation. '}{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p>
       <label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
@@ -1430,11 +1548,11 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>These limits apply to future sessions. Existing sessions keep the limits captured when they started.</p>
       <fieldset disabled={busy || !limitsLoaded}>
-        <label htmlFor="research-rounds">Research rounds</label><input id="research-rounds" type="number" min={1} max={10} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 10.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
-        <label htmlFor="research-calls">Model calls</label><input id="research-calls" type="number" min={2} max={20} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 20. At least two calls per round are required for Investigator and Skeptic.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
-        <label htmlFor="research-duration">Session duration (minutes)</label><input id="research-duration" type="number" min={1} max={120} step={1} value={limitDraft.session_duration_minutes} aria-invalid={!!limitValidation.errors.session_duration_minutes} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_minutes: event.target.value }))}/><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 to 120 minutes. Time spent paused counts.</p>{limitValidation.errors.session_duration_minutes && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_minutes}</p>}
-        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={16384} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 16,384. SIGMA sends this limit where supported; ChatGPT routing may not expose provider enforcement, so parsed output remains bounded separately.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
-        <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="number" min={0.01} max={100} step="0.01" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/><p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage pause further calls when a cap is set.</p>{limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
+        <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
+        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2} max={30} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
+        <label htmlFor="research-duration-value">Maximum session duration</label><div className="research-duration-controls"><input id="research-duration-value" type="number" min={1} max={Math.floor(MAX_SESSION_DURATION_MINUTES / durationUnitMinutes[limitDraft.session_duration_unit])} step={1} value={limitDraft.session_duration_value} aria-invalid={!!limitValidation.errors.session_duration_value} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_value: event.target.value }))}/><select id="research-duration-unit" aria-label="Maximum session duration unit" value={limitDraft.session_duration_unit} onChange={event => setLimitDraft(value => ({ ...value, session_duration_unit: event.target.value as DurationUnit }))}><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 minute to 7 days. Time spent paused counts.</p>{limitValidation.errors.session_duration_value && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_value}</p>}
+        <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={16384} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 16,384 tokens. SIGMA sends this limit where supported and enforces it against reported output usage or a conservative response-size bound.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
+        <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/><p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage pause further calls when a cap is set.</p>{limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
     </section>}
@@ -1442,8 +1560,8 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; available: boolean; error: string | null };
-type SampleProject = { id: string; title: string; problem: string; investigation_type: string; strategy_count: number };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; available: boolean; error: string | null };
+type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const [projects, setProjects] = useState<RecentProject[]>([]);
@@ -1455,8 +1573,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
-    const currentPath = window.localStorage.getItem('sigma.currentProject');
-    setProjects(currentPath ? [...data.projects].sort((a: RecentProject, b: RecentProject) => Number(b.path === currentPath) - Number(a.path === currentPath)) : data.projects); setLoading(false);
+    setProjects(data.projects); setLoading(false);
   }, []);
   useEffect(() => { const controller = new AbortController(); void load(controller.signal).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } }); return () => controller.abort(); }, [load]);
   async function open(entry: RecentProject) {
@@ -1471,19 +1588,28 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
+  const recentGroups = projects.reduce<Array<{ type: string | null; projects: RecentProject[] }>>((groups, project) => {
+    const group = groups.find(item => item.type === project.investigation_type);
+    if (group) group.projects.push(project);
+    else groups.push({ type: project.investigation_type, projects: [project] });
+    return groups;
+  }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new project.</p>}
-    <ul>{projects.map(entry => <li key={entry.id}>
-      <div className="recent-entry">
-        <div className="recent-title-row">
-          <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className="is-current-project">{entry.title}</strong> : entry.title}</button>
+    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'} open={group.projects.some(entry => entry.path === window.localStorage.getItem('sigma.currentProject'))}>
+      <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
+      <ul>{group.projects.map((entry, index) => <li key={entry.id}>
+        <div className="recent-entry">
+          <div className="recent-title-row">
+            <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}</button>
+          </div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : `${strategyCount(entry.strategy_count)} · ${difficultyDescription(entry.difficulty)}`}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
+          <span title={entry.path}>{entry.path}</span>
+          {confirmRemoveId === entry.id && <div className="recent-remove-actions"><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Recent Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
         </div>
-        <div className="recent-meta-row"><small>{entry.investigation_type && entry.investigation_type in researchTypeLabels && <ResearchTypeIcon type={entry.investigation_type as ResearchMode}/>}<span>{researchTypeLabel(entry.investigation_type)}{entry.strategy_count === null ? '' : ` · ${strategyCount(entry.strategy_count)}`}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
-        <span title={entry.path}>{entry.path}</span>
-        {confirmRemoveId === entry.id && <div className="recent-remove-actions"><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Recent Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
-      </div>
-      {entry.error && <p className="recent-unavailable">{entry.error}</p>}
-    </li>)}</ul>
+        {entry.error && <p className="recent-unavailable">{entry.error}</p>}
+      </li>)}</ul>
+    </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -1499,7 +1625,10 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     void fetch('/api/projects/samples', { signal: controller.signal }).then(async response => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? 'Samples unavailable.');
-      setProjects(data.projects); setLoading(false);
+      setProjects([...data.projects].sort((a: SampleProject, b: SampleProject) => {
+        const typeOrder = researchTypeLabel(a.investigation_type).localeCompare(researchTypeLabel(b.investigation_type), 'en', { sensitivity: 'base' });
+        return typeOrder || a.title.localeCompare(b.title, 'en', { sensitivity: 'base' });
+      })); setLoading(false);
     }).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } });
     return () => controller.abort();
   }, []);
@@ -1514,9 +1643,18 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
+  const groups = projects.reduce<Array<{ type: ResearchMode; samples: SampleProject[] }>>((result, sample) => {
+    const group = result.find(item => item.type === sample.investigation_type);
+    if (group) group.samples.push(sample);
+    else result.push({ type: sample.investigation_type, samples: [sample] });
+    return result;
+  }, []);
   return <div className="empty home-empty home-samples">
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
-    <ul>{projects.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><ResearchTypeIcon type={sample.investigation_type as ResearchMode}/><span>{researchTypeLabel(sample.investigation_type)} · {strategyCount(sample.strategy_count)}</span></small></button></li>)}</ul>
+    {groups.map(group => <details className="sample-type-group" key={group.type} open>
+      <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
+      <ul>{group.samples.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
+    </details>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -1527,17 +1665,31 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   useEffect(() => { window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [tab]);
   const recent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
-  function switchTab(next: 'recent' | 'samples') { setTab(next); (next === 'recent' ? recent : samples).current?.focus(); }
+  const recentPanel = useRef<HTMLDivElement>(null);
+  const samplesPanel = useRef<HTMLDivElement>(null);
+  function switchTab(next: 'recent' | 'samples') {
+    if (next === tab) {
+      const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
+      if (panel) {
+        const selector = next === 'samples' ? '.sample-type-group' : '.recent-type-group';
+        const groups = Array.from(panel.querySelectorAll<HTMLDetailsElement>(selector));
+        const expandAll = groups.length > 0 && groups.every(group => !group.open);
+        groups.forEach(group => { group.open = expandAll; });
+      }
+      return;
+    }
+    setTab(next); (next === 'recent' ? recent : samples).current?.focus();
+  }
   return <div className="home-catalog"><div className="catalog-tabs" role="tablist" aria-label="Project lists" onKeyDown={event => {
     if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); switchTab(tab === 'samples' ? 'recent' : 'samples'); }
     if (event.key === 'Home') { event.preventDefault(); switchTab('samples'); }
     if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
-    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} onClick={() => setTab('samples')}>Samples</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} onClick={() => setTab('recent')}>Recent</button>
+    <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>
   </div>
-    <div id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
-    <div id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
+    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen}/></div>
   </div>;
 }
 
@@ -1608,8 +1760,8 @@ function Home({ initialPath, onOpen }: {
       <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
-          <button type="button" ref={newButton} className="home-project-action" onClick={() => setEntry('new')}>New</button>
-          <button type="button" ref={openButton} className="home-project-action" onClick={() => setEntry('open')}>Open</button>
+          <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
+          <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
         </div>
         <HomeCatalog onOpen={onOpen}/>
       </section>
@@ -2121,9 +2273,29 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     } catch (error) { setError(errorMessage(error)); setAnnouncement('Order save failed. Previous order restored.'); }
     finally { setOrdering(false); setPreviewOrder(null); requestAnimationFrame(() => document.getElementById(`grip-${active.id}`)?.focus()); }
   }
-  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectDifficulty={project.difficulty} projectView={view!} onProjectUpdated={setView}>
+  return <WorkspaceFrame {...frame} projectTitle={project.title} projectType={project.investigation_type} projectView={view!} onProjectUpdated={setView}>
     <section className="workspace-pane project-pane" aria-labelledby="project-pane-heading">
-      <header className="workspace-pane-heading project-pane-heading"><h2 id="project-pane-heading" ref={heading} tabIndex={-1}><button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}><DisclosureChevron expanded={projectExpanded}/>Project</button></h2><div className="project-pane-actions"><button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}><span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span></button><button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Lean proof verification (coming soon)" title="Lean proof verification (coming soon)" data-tooltip="Lean proof verification (coming soon)" disabled><img src="/lean-logo.svg" alt="" aria-hidden="true"/></button><button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg></button><button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}><SettingsGearIcon /></button></div></header>
+      <header className="workspace-pane-heading project-pane-heading">
+        <h2 id="project-pane-heading" ref={heading} tabIndex={-1}>
+          <button type="button" className="workspace-section-disclosure" aria-expanded={projectExpanded} aria-controls="project-pane-content" title={`${projectExpanded ? 'Collapse' : 'Expand'} Project section`} onClick={() => setProjectExpanded(value => { window.localStorage.setItem(`sigma.projectPane:${path}`, String(!value)); return !value; })}>
+            <DisclosureChevron expanded={projectExpanded}/>Project
+          </button>
+        </h2>
+        <div className="project-pane-actions">
+          <button type="button" className="text-view-link text-view-icon project-latex-button" aria-label="LaTeX research paper" title="Generate a LaTeX research paper" data-tooltip="Generate a LaTeX research paper" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => setPaperOpen(true)}>
+            <span className="latex-wordmark" aria-hidden="true">T<span className="latex-lowered-e">E</span>X</span>
+          </button>
+          {project.investigation_type === 'mathematical' && <button type="button" className="text-view-link text-view-icon project-lean-button" aria-label="Generate Lean proof (coming soon)" title="Generate Lean proof (coming soon)" data-tooltip="Generate Lean proof (coming soon)" disabled>
+            <img src="/lean-logo.svg" alt="" aria-hidden="true"/>
+          </button>}
+          <button type="button" className="text-view-link text-view-icon" aria-label="Export project" title="Export project" data-tooltip="Export project" disabled={closing || ordering || !!dragId} onClick={() => setExportOpen(true)}>
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3.5 13v3.5h13V13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          <button ref={editProjectButton} type="button" className="text-view-link text-view-icon" aria-label="Project settings" title="Settings" disabled={closing || ordering || !!dragId || activeMode !== null} onClick={() => { if (enterMode('project-settings')) setProjectEditing(true); }}>
+            <SettingsGearIcon />
+          </button>
+        </div>
+      </header>
       <div id="project-pane-content" hidden={!projectExpanded}>
       <ProjectPaneTitle view={view} onSaved={setView} disabled={closing || ordering || !!dragId} modeDisabled={activeMode !== null && activeMode !== 'project-title'} descriptionDraft={combinedTextDrafts.project ?? project.problem} onEnterMode={() => enterMode('project-title')} onExitMode={() => exitMode('project-title')} onEditDescription={() => requestTextEdit('project')}/>
       <div className="project-pane-content">

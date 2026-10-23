@@ -46,7 +46,9 @@ with sync_playwright() as playwright:
         ),
     )
     page.goto("http://127.0.0.1:5173")
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    samples_tab = page.get_by_role("tab", name="Samples", exact=True)
+    if samples_tab.get_attribute("aria-selected") != "true":
+        samples_tab.click()
     panel = page.get_by_role("tabpanel", name="Samples", exact=True)
     panel.get_by_role("button", name="Open Counting Constrained Binary Strings").click()
     expect(

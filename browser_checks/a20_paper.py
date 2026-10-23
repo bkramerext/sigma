@@ -35,7 +35,9 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", forward)
     page.goto(UI_ORIGIN + "/")
-    page.get_by_role("tab", name="Samples", exact=True).click()
+    samples_tab = page.get_by_role("tab", name="Samples", exact=True)
+    if samples_tab.get_attribute("aria-selected") != "true":
+        samples_tab.click()
     page.get_by_role("tabpanel", name="Samples").get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
     ).click()
@@ -58,6 +60,7 @@ with sync_playwright() as playwright:
     expect(latex_button).to_be_visible()
     assert latex_button.evaluate("element => getComputedStyle(element).color") == "rgb(228, 181, 124)"
     expect(latex_button.locator(".latex-wordmark")).to_have_text("TEX")
+    page.evaluate("window.scrollTo(0, 0)")
 
     def assert_project_actions():
         page.evaluate("() => document.fonts.ready.then(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))")
@@ -66,35 +69,83 @@ with sync_playwright() as playwright:
         expect(actions.locator(".project-lean-button")).to_have_count(1)
         action_buttons = actions.get_by_role("button")
         expect(action_buttons.nth(0)).to_have_attribute("aria-label", "LaTeX research paper")
-        expect(action_buttons.nth(1)).to_have_attribute("aria-label", "Lean proof verification (coming soon)")
+        expect(action_buttons.nth(1)).to_have_attribute("aria-label", "Generate Lean proof (coming soon)")
         expect(action_buttons.nth(1)).to_be_disabled()
+        expect(action_buttons.nth(1)).to_have_attribute("title", "Generate Lean proof (coming soon)")
         expect(action_buttons.nth(2)).to_have_attribute("aria-label", "Export project")
         expect(action_buttons.nth(3)).to_have_attribute("aria-label", "Project settings")
         expect(action_buttons.nth(0)).to_have_attribute("title", "Generate a LaTeX research paper")
         expect(action_buttons.nth(0)).to_have_attribute("data-tooltip", "Generate a LaTeX research paper")
-        expect(action_buttons.nth(1)).to_have_attribute("title", "Lean proof verification (coming soon)")
-        expect(action_buttons.nth(1)).to_have_attribute("data-tooltip", "Lean proof verification (coming soon)")
+        expect(action_buttons.nth(1)).to_have_attribute("title", "Generate Lean proof (coming soon)")
+        expect(action_buttons.nth(1)).to_have_attribute("data-tooltip", "Generate Lean proof (coming soon)")
+        expect(page.locator(".project-difficulty-badge")).to_have_attribute("title", "This project is considered easy. Click to cycle through easy, medium, and hard.")
+        expect(page.locator(".project-difficulty-badge")).to_have_attribute("data-tooltip", "This project is considered easy. Click to cycle through easy, medium, and hard.")
+        expect(page.locator(".project-google-placeholder")).to_have_attribute("title", "Google sign-in planned for cloud support (coming soon)")
+        expect(page.locator(".project-google-placeholder")).to_have_attribute("data-tooltip", "Google sign-in planned for cloud support (coming soon)")
+        assert page.locator(".project-google-placeholder").evaluate("e => getComputedStyle(e).cursor") == "not-allowed"
+        model_tooltip = page.locator(".project-model-pill").get_attribute("data-tooltip")
+        assert model_tooltip and model_tooltip.startswith("The selected model is ") and ". Its relative published API token cost is " in model_tooltip and model_tooltip.endswith(" Click to cycle through available models."), model_tooltip
+        expect(page.locator(".project-thinking-pill")).to_have_attribute("data-tooltip", "The thinking level is set to high. Click to cycle through levels supported by this model.")
+        expect(page.locator(".project-chatgpt-signin summary")).to_have_attribute("title", "OpenAI API connected; open AI connection settings")
+        expect(page.locator(".project-chatgpt-signin summary")).to_have_attribute("data-tooltip", "OpenAI API connected; open AI connection settings")
         expect(actions.locator(".latex-wordmark")).to_have_text("TEX")
         logo = actions.locator(".project-lean-button img")
         expect(logo).to_have_attribute("src", "/lean-logo.svg")
         assert logo.evaluate("e => [e.naturalWidth, e.naturalHeight]") == [300, 150]
-        assert logo.evaluate("e => getComputedStyle(e).filter") != "none"
+        logo_filter = logo.evaluate("e => getComputedStyle(e).filter")
+        assert all(token in logo_filter for token in ("invert(0.68)", "sepia(0.21)", "hue-rotate(337deg)")), logo_filter
+        assert logo.evaluate("e => [getComputedStyle(e).width, getComputedStyle(e).height]") == ["42px", "21px"]
+        svg = page.evaluate("async () => await (await fetch('/lean-logo.svg')).text()")
+        assert 'id="path188"' in svg and 'stroke-width:18' in svg
+        assert 'id="path75"' in svg and 'stroke-width:6' in svg
         action_boxes = actions.evaluate("e => [...e.children].map(b => { const r = b.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; })")
-        assert all(box["width"] == 34 and box["height"] == 34 for box in action_boxes), action_boxes
+        assert [box["width"] for box in action_boxes] == [34, 50, 34, 34], action_boxes
+        assert all(box["height"] == 34 for box in action_boxes), action_boxes
         tex_box = action_boxes[0]
         assert all(abs(box["y"] + box["height"] / 2 - tex_box["y"] - tex_box["height"] / 2) <= 3 for box in action_boxes), action_boxes
         gaps = [
             next_box["x"] - box["x"] - box["width"]
             for box, next_box in zip(action_boxes, action_boxes[1:])
         ]
-        assert all(gap >= 0 for gap in gaps) and max(gaps) - min(gaps) <= 1, gaps
+        assert [round(gap) for gap in gaps] == [16, 11, 6], gaps
+        visual_boxes = [
+            actions.locator(".latex-wordmark").bounding_box(),
+            logo.bounding_box(),
+            actions.locator("button").nth(2).locator("svg").bounding_box(),
+            actions.locator("button").nth(3).locator("svg").bounding_box(),
+        ]
+        assert all(visual_boxes), visual_boxes
+        visual_gaps = [
+            next_box["x"] - box["x"] - box["width"]
+            for box, next_box in zip(visual_boxes, visual_boxes[1:])
+        ]
+        assert max(visual_gaps) - min(visual_gaps) <= 1, visual_gaps
 
     assert_project_actions()
+    difficulty_box = page.locator(".project-difficulty-badge").bounding_box()
+    model_pill_box = page.locator(".project-model-pill").bounding_box()
+    google_pill_box = page.locator(".project-google-placeholder").bounding_box()
+    assert difficulty_box and model_pill_box and google_pill_box
+    assert abs(difficulty_box["y"] - model_pill_box["y"]) <= 1, (difficulty_box, model_pill_box, google_pill_box)
+    assert abs(difficulty_box["y"] - google_pill_box["y"]) <= 1, (difficulty_box, model_pill_box, google_pill_box)
+    assert abs(model_pill_box["x"] - difficulty_box["x"] - difficulty_box["width"] - 8) <= 1, (difficulty_box, model_pill_box, google_pill_box)
+    assert abs(google_pill_box["x"] - model_pill_box["x"] - model_pill_box["width"] - 8) <= 1, (difficulty_box, model_pill_box, google_pill_box)
     latex_button.hover()
     expect(page.get_by_role("tooltip")).to_have_text("Generate a LaTeX research paper")
     lean_button = page.locator(".project-lean-button")
     lean_button.hover()
-    expect(page.get_by_role("tooltip")).to_have_text("Lean proof verification (coming soon)")
+    expect(page.get_by_role("tooltip")).to_have_text("Generate Lean proof (coming soon)")
+    page.locator(".project-google-placeholder").hover()
+    expect(page.get_by_role("tooltip")).to_have_text("Google sign-in planned for cloud support (coming soon)")
+    page.locator(".project-difficulty-badge").hover()
+    expect(page.get_by_role("tooltip")).to_have_text("This project is considered easy. Click to cycle through easy, medium, and hard.")
+    page.locator(".project-chatgpt-signin summary").hover()
+    expect(page.get_by_role("tooltip")).to_have_text("OpenAI API connected; open AI connection settings")
+    page.locator(".project-thinking-pill").hover()
+    expect(page.get_by_role("tooltip")).to_have_text("The thinking level is set to high. Click to cycle through levels supported by this model.")
+    model_tooltip = page.locator(".project-model-pill").get_attribute("data-tooltip")
+    page.locator(".project-model-pill").hover()
+    expect(page.get_by_role("tooltip")).to_have_text(model_tooltip)
     lean_button.focus()
     expect(lean_button).not_to_be_focused()
     page.keyboard.press("Enter")
@@ -109,6 +160,23 @@ with sync_playwright() as playwright:
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
     page.set_viewport_size({"width": 390, "height": 844})
     page.screenshot(path="/tmp/sigma-t20-project-download-mobile.png", full_page=True)
+    project_url = page.url
+    lean_button = page.locator(".project-lean-button")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    page.locator(".project-pane-actions").screenshot(path="/tmp/sigma-lean-copper-closeup.png")
+    page.screenshot(path="/tmp/sigma-t20-lean-copper-desktop.png", full_page=True)
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.screenshot(path="/tmp/sigma-t20-lean-copper-mobile.png", full_page=True)
+    # The Lean action is only relevant to mathematical projects.
+    page.goto(UI_ORIGIN + "/")
+    samples_tab = page.get_by_role("tab", name="Samples", exact=True)
+    if samples_tab.get_attribute("aria-selected") != "true":
+        samples_tab.click()
+    page.locator(".sample-type-group").filter(has_text="Engineering").evaluate("element => { element.open = true; }")
+    page.locator(".sample-open").filter(has_text="Warp Drive Feasibility").click()
+    page.wait_for_url("**/project?*")
+    expect(page.locator(".project-lean-button")).to_have_count(0)
+    page.goto(project_url)
     page.set_viewport_size({"width": 1440, "height": 1000})
     latex_button.click()
     direct_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")

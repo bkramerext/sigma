@@ -87,6 +87,17 @@ with sync_playwright() as p:
     expect(dialog.get_by_label("LLM Model", exact=True)).to_have_value("gpt-6.1-sol")
     expect(dialog.get_by_label("Thinking level", exact=True)).to_have_value("high")
     assert dialog.get_by_label("LLM Model", exact=True).locator("option").count() == 3
+    model_options = dialog.get_by_label("LLM Model", exact=True).locator("option")
+    assert model_options.evaluate_all("options => options.map(option => option.value)") == [
+        "gpt-6-luna",
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+    ]
+    assert model_options.all_text_contents() == [
+        "Luna · Economy · $",
+        "Sol · Balanced · $$",
+        "Astra · Advanced · $$$",
+    ]
     title = "Settings browser " + uuid4().hex[:6]
     dialog.get_by_label("Project name", exact=True).fill(title)
     dialog.get_by_label("Research problem", exact=True).fill(
@@ -153,7 +164,7 @@ with sync_playwright() as p:
     creates[0].fulfill(response=fetch_fixture(creates[0]))
     page.unroute("**/api/projects/create")
     expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
-    difficulty_badge = page.get_by_label("Project difficulty: Medium", exact=True)
+    difficulty_badge = page.get_by_label("Project difficulty Medium", exact=True)
     expect(difficulty_badge).to_be_visible()
     header_icon = page.locator(".project-header-title-row .research-type-icon")
     title_row = page.locator(".project-header-title-row")
@@ -335,16 +346,19 @@ with sync_playwright() as p:
         expect(page.get_by_role("button", name="Project settings", exact=True)).to_be_visible()
         expect(
             page.get_by_text(
-                "OpenAI API · key billing" if status == "connected" else label, exact=True
+                "OpenAI API connected"
+                if status == "connected"
+                else f"ChatGPT sign-in · {label}",
+                exact=True,
             )
         ).to_be_visible()
-        page.get_by_label("AI connection settings", exact=True).click()
+        page.locator(".project-chatgpt-signin summary").click()
         expect(page.get_by_role("button", name="Retry connection", exact=True)).to_be_enabled()
         assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
         page.screenshot(path=f"/tmp/sigma-a8-status-{status}-320.png", full_page=True)
         page.unroute("**/api/ai/connection?*")
-    # A legacy document has no evidence for difficulty. It must remain unset and
-    # the project header must not render a guessed difficulty badge.
+    # A legacy document has no evidence for difficulty. It must remain unset;
+    # the explicit Not set pill must not guess a difficulty.
     legacy = json.loads(state.read_bytes())
     legacy["schema_version"] = 7
     legacy.pop("difficulty", None)
@@ -358,7 +372,7 @@ with sync_playwright() as p:
     expect(
         page.get_by_role("heading", name="Another editor changed this name", exact=True)
     ).to_be_visible()
-    assert page.locator(".project-difficulty-badge").count() == 0
+    expect(page.get_by_role("button", name="Project difficulty not set", exact=True)).to_be_visible()
     settings_button = page.get_by_role("button", name="Project settings", exact=True)
     settings_button.click()
     expect(dialog.get_by_label("Difficulty", exact=True)).to_have_value("")

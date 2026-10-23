@@ -235,6 +235,9 @@ def main():
             limits_url = "/api/projects/research-limits"
             defaults = client.get(limits_url, params={"path": str(path)}).json()
             assert defaults == research_sessions.DEFAULT_LIMITS
+            assert defaults["model_calls"] == 30
+            assert defaults["session_duration_minutes"] == 60
+            assert defaults["output_tokens_per_call"] == 12000
             changed_limits = {**defaults, "research_rounds": 2, "model_calls": 4}
             saved_limits = client.put(limits_url, json={"path": str(path), **changed_limits})
             assert saved_limits.status_code == 200 and saved_limits.json() == changed_limits
@@ -246,8 +249,9 @@ def main():
                 == 400
             )
             for invalid in (
-                {**defaults, "research_rounds": 11, "model_calls": 20},
-                {**defaults, "session_duration_minutes": 121},
+                {**defaults, "research_rounds": 6, "model_calls": 30},
+                {**defaults, "model_calls": 31},
+                {**defaults, "session_duration_minutes": 7 * 24 * 60 + 1},
                 {**defaults, "output_tokens_per_call": 16385},
                 {**defaults, "maximum_estimated_cost_usd": 0.001},
             ):

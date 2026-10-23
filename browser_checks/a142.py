@@ -39,7 +39,9 @@ with sync_playwright() as playwright:
 
     page.route("**/api/**", api_route)
     page.goto("http://127.0.0.1:5173")
-    page.get_by_role("tab", name="Samples").click()
+    samples_tab = page.get_by_role("tab", name="Samples")
+    if samples_tab.get_attribute("aria-selected") != "true":
+        samples_tab.click()
     panel = page.get_by_role("tabpanel", name="Samples")
     panel.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
     expect(
