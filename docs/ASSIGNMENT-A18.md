@@ -4,6 +4,18 @@ Status: **ready for Blue implementation**. A18 is the integrated local research-
 
 Read `docs/HUMAN-AI-INTERACTION.md`, `docs/ASSIGNMENT-A17.6.md`, and `docs/STATUS.md` before implementation. Inspect the current code and tests before proposing changes. Preserve local operation and existing user workflows.
 
+## Why A18 exists: SIGMA's defining product promise
+
+**Blue: this is a long-lived, product-defining assignment, not a collection of small stories.** SIGMA exists to help people make real progress on hard problems that cannot be solved in one prompt, one session, or by a single line of attack. The research may span days or weeks, involve competing ideas and dead ends, and require revisiting assumptions as evidence accumulates. If SIGMA cannot sustain and organize that work, the product does not fulfill its purpose, no matter how polished the interface or how many agents it can launch.
+
+A productive SIGMA user should be able to state a difficult objective, develop or generate several meaningfully different strategies, set multiple agents to work on them, and understand what is happening without micromanaging every step. Agents should do substantive work: derive, test, challenge, compare, revise, and sometimes reject approaches. The system should help the user distinguish a promising mechanism from attractive speculation, recognize when a proof or experiment is incomplete, and decide what to investigate next. Failed approaches and negative findings are valuable if they prevent repeated wasted effort.
+
+The user should be able to interrupt the investigation, inspect a trustworthy record of claims and evidence, fork an approach based on what was learned, redirect effort, and return later without reconstructing the project's intellectual history. SIGMA should preserve *why* decisions were made, what remains unresolved, which strategy contributed what, and how confidence is justified. Human supervision should be practical at the level of research goals and strategy, not an obligation to babysit every model call. Concurrent agents should expand the breadth and critical depth of inquiry while remaining visible, bounded, and accountable.
+
+**Build the integrated experience, not a checklist of disconnected features.** A18 is intentionally ambitious and may take sustained engineering effort. Own the end-to-end product outcome, make coherent architectural improvements when needed, and keep the research loop working as a whole. Use intermediate checkpoints, tests, and PRs to control risk and communicate progress, **not to redefine A18 into a sequence of tiny independent stories or to defer essential capabilities**. If a requirement conflicts with real usability, reliability, or research integrity, investigate and propose the best integrated solution rather than implementing the words mechanically. Escalate material product tradeoffs, but otherwise exercise engineering ownership.
+
+The bar is not that SIGMA always solves hard problems; no system can promise that. The bar is that SIGMA can pursue them intelligently, make and preserve defensible progress, expose uncertainty and failure honestly, and substantially improve a human researcher's ability to organize and advance difficult work. **That is the reason for A18 and the standard by which it will be judged.**
+
 ## Objective
 
 Make SIGMA a dependable local research system that produces useful, evidence-backed progress through bounded agentic investigation, preserves that progress, and can be meaningfully supervised by a human. Improve the actual research mechanism and end-to-end reliability, not the number of features or panes.
@@ -52,7 +64,7 @@ A17.6–A17.8 are integrated. Read and preserve their current outcome-recognitio
 3. **Integrate:** re-read main before opening the PR, preserve A20/A23 behavior, and run `./sigma test`, focused browser checks, and an end-to-end local scenario. Fix regressions before enhancements.
 4. **Evaluate:** complete deterministic quality checks and prepare the live evaluation protocol. Execute real-provider trials **only after explicit user authorization**, with a bounded call/time budget. Report research acceptance separately from engineering acceptance.
 
-Prefer a small number of coherent, independently testable increments over a broad rewrite. Avoid schema changes unless necessary for durable evidence or continuation, and preserve legacy-session compatibility.
+Maintain coherent, testable checkpoints while delivering the integrated research product; checkpoints are risk controls, not a reason to split A18 into small feature stories or drop core scope. Avoid schema changes unless necessary for durable evidence or continuation, and preserve legacy-session compatibility.
 
 ## Complete strategy lifecycle and concurrent research (required A18 scope)
 
