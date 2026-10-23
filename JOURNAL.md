@@ -160,3 +160,21 @@ We finished Day 2 with **two autonomous Codex development sessions running in se
 The most significant change was conceptual as well as technical: SIGMA now has a more coherent way to **control research, preserve its work, assess its quality, and communicate its results**. The remaining challenge is to make the research itself genuinely productive.
 
 The day reinforced three standards for that next step: **simplify the user's control surface; make every consequential research claim traceable to evidence; and evaluate agents by reproducible outcomes rather than convincing narratives**. Those standards define the overnight work and the next round of integration.
+
+
+## Day 3 — October 23, 2026
+
+**Theme: converging on a five-worker software factory and an explicit process for distributing and integrating work.**
+
+- The development team reached a clear division: **Blue, Green, Red, Gray and ChatGPT** are five AI workers. The human owns product ideation, manual UI inspection and passing instructions between Codex windows. ChatGPT owns architectural coordination, ticket authorship, code review, integration decisions and PR merges. Codex workers own bounded implementation and automated verification.
+- Replaced the informal assignment handoff with **T-numbered tickets** under `tickets/` and a root `TICKET_TRACKING.md` ledger. Discuss feedback before committing it to a ticket; record behavior, limits, tests and economical model/thinking recommendations; route to a color specialist; work in separate branches and PRs; review and revise before merging.
+- Every colored checkout completed `./sigma setup` and `./sigma test`, resolving Gray's missing TypeScript dependency without a manual package-install workaround.
+- Merged **PR #11** for ticket migration, **PR #13** for Green's outcome metrics/provenance, and **PR #12** for Blue's project-header model/thinking controls, in that order. ChatGPT reviewed each; Blue and Green revised issues found during review and integrated the updated branch before merge. Tests and browser checks were reported passing. A final combined-main smoke check and human UI review remain distinct from those PR-level checks.
+
+### Process and roles
+
+**The human remains actively involved**, but is no longer responsible for personally organizing each implementation detail. The human directs the product, forwards messages between isolated agent sessions and judges the actual interface. **ChatGPT is a fifth worker**, not only a conversational adviser: it writes scoped tickets, reviews implementation, updates GitHub and takes responsibility for merge order and decisions. **Blue, Green, Red and Gray** are implementation specialists with separate working copies and responsibilities. Red's cloud work and Gray's Outcome UI work are future assignments; planned work is not recorded as shipped.
+
+The new production cycle is **ideation → agreed ticket → owner and branch → implementation/tests → PR review → revision → dependency-ordered merge → combined verification → manual UI feedback**. Persistent GitHub artifacts bridge context gaps between agents. No Codex worker self-merges. Quality gates distinguish tests reported by the worker, independent diff review, full integrated behavior and human visual judgment. This system proved workable during the day's three-PR sequence, but message-passing overhead, shared-state coordination and real research effectiveness remain open challenges.
+
+**Day 3 observation:** SIGMA is now being developed by a recognizable software factory, with a product owner and five AI contributors. The meaningful innovation is not the worker count; it is that **work creation, delegation, verification and integration have become explicit, repeatable and accountable**.
