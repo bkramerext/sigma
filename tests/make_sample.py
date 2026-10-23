@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -248,6 +249,30 @@ async def main() -> None:
             assert len(inspect_project(opened.path).project.strategies) == 3
             assert snapshot_tree(source) == source_before
             assert len(inspect_project(source).project.strategies) == 2
+
+            # Legacy Projects must export a canonical document the same
+            # sample-import path can validate; dataclass-only defaults are
+            # not fields in a v5 project document.
+            legacy_source = projects_root / "legacy-sample-source.sigma"
+            legacy_source.mkdir(mode=0o700)
+            legacy_template = Path("samples/nonconsecutive-subset-sums/project.json")
+            legacy_before = legacy_template.read_bytes()
+            shutil.copyfile(legacy_template, legacy_source / "project.json")
+            legacy_export = export_project_view(str(legacy_source))
+            assert legacy_export["project"]["schema_version"] == 5
+            assert "ai_model" not in legacy_export["project"]
+            assert "reasoning_effort" not in legacy_export["project"]
+            legacy_export_path = root / "legacy-export.json"
+            legacy_export_path.write_text(
+                json.dumps(legacy_export, ensure_ascii=False), encoding="utf-8"
+            )
+            samples.make_sample(legacy_export_path, "t30-legacy-export")
+            legacy_copy = samples.open_sample_project("t30-legacy-export")
+            assert legacy_copy.project.problem == legacy_export["project"]["problem"]
+            assert [item.title for item in legacy_copy.project.strategies] == [
+                item["title"] for item in legacy_export["project"]["strategies"]
+            ]
+            assert legacy_template.read_bytes() == legacy_before
 
     print(
         "PASS exported project -> make_sample -> sample loader preserves sessions, outcomes, evidence and provenance safely"
