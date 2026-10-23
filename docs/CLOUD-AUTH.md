@@ -62,8 +62,12 @@ service-owned saved audit snapshot kept outside private project storage. The
 snapshot contains the project, saved strategies, sessions, outcomes, research
 evidence and analysis. JSON audit and Text/HTML/LaTeX reports are generated from
 that snapshot without models, agents, computation, per-visitor copies or writes.
-Keep the configured file read-only to the service and review its contents before
-deployment; missing or invalid configuration makes the Demo unavailable.
+Keep the configured file in a service-owned directory that is not writable by
+group or others, and review its contents before deployment. The server resolves
+the file and rejects it if it falls under either the configured workspace root
+or `$SIGMA_CLOUD_AUTH_HOME/workspaces`, including paths reached through
+symlinked parents. Missing, incorrectly owned, writable, or private-workspace
+configuration makes the Demo unavailable.
 
 T22.2 adds identity, API access checks, invitation administration, and the
 minimal access UI. Gate A provisions a durable private workspace for each

@@ -142,6 +142,69 @@ class CloudDemoTests(TestCase):
             )
             self.assertNotEqual(local.status_code, 401)
 
+    def test_demo_rejects_files_inside_configured_or_default_workspace_roots(self):
+        roots = (
+            self.root / "configured-workspaces",
+            self.root / "auth" / "workspaces",
+        )
+        for index, workspace_root in enumerate(roots):
+            with self.subTest(workspace_root=workspace_root):
+                workspace_root.mkdir(mode=0o700, parents=True)
+                private_snapshot = workspace_root / f"private-{index}.json"
+                private_snapshot.write_bytes(self.snapshot.read_bytes())
+                private_snapshot.chmod(0o600)
+                env = {"SIGMA_CLOUD_DEMO_AUDIT": str(private_snapshot)}
+                if index == 0:
+                    env["SIGMA_CLOUD_WORKSPACES_ROOT"] = str(workspace_root)
+                else:
+                    env.pop("SIGMA_CLOUD_WORKSPACES_ROOT", None)
+                with patch.dict(os.environ, env, clear=False):
+                    if index == 1:
+                        os.environ.pop("SIGMA_CLOUD_WORKSPACES_ROOT", None)
+                    response = self.client.get("/api/cloud-demo/")
+                self.assertEqual(response.status_code, 503)
+                self.assertNotIn(b"Counting Pairwise Handshakes", response.content)
+
+    def test_demo_rejects_workspace_file_through_symlinked_parent(self):
+        workspace_root = self.root / "private-workspaces"
+        workspace_root.mkdir(mode=0o700)
+        private_snapshot = workspace_root / "private-audit.json"
+        private_snapshot.write_bytes(self.snapshot.read_bytes())
+        private_snapshot.chmod(0o600)
+        alias = self.root / "deployment-alias"
+        alias.symlink_to(workspace_root, target_is_directory=True)
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_WORKSPACES_ROOT": str(workspace_root),
+                "SIGMA_CLOUD_DEMO_AUDIT": str(alias / private_snapshot.name),
+            },
+        ):
+            response = self.client.get("/api/cloud-demo/")
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn(b"Counting Pairwise Handshakes", response.content)
+
+    def test_demo_rejects_snapshot_writable_by_group_or_others(self):
+        writable_snapshot = self.root / "auth" / "writable-audit.json"
+        writable_snapshot.write_bytes(self.snapshot.read_bytes())
+        writable_snapshot.chmod(0o664)
+        with patch.dict(os.environ, {"SIGMA_CLOUD_DEMO_AUDIT": str(writable_snapshot)}):
+            response = self.client.get("/api/cloud-demo/")
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn(b"Counting Pairwise Handshakes", response.content)
+
+    def test_curated_owned_snapshot_remains_available_with_all_exports(self):
+        audit = self.client.get("/api/cloud-demo/")
+        self.assertEqual(audit.status_code, 200)
+        for format_name in ("json", "txt", "html", "tex"):
+            response = (
+                audit
+                if format_name == "json"
+                else self.client.get("/api/cloud-demo/report", params={"format": format_name})
+            )
+            self.assertEqual(response.status_code, 200, format_name)
+            self.assertTrue(response.content, format_name)
+
 
 if __name__ == "__main__":
     import unittest

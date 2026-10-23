@@ -1,4 +1,4 @@
-R4R — T22 parent Gate C public read-only Demo
+R4R — T22 parent Gate C public read-only Demo security correction
 
 PR: https://github.com/bkramerext/sigma/pull/44
 Branch: cloud/t22-public-demo
@@ -9,7 +9,7 @@ Original implementation base: 24ca812f8502c594a673e7233bd7962e9b8c907b
 Scope delivered
 
 - Replaced the hosted `/demo` placeholder with a copper/dark SIGMA research experience backed by one deterministic audit snapshot adapted from `samples/handshake-count-easy/project.json`. The snapshot has stable IDs/timestamps, project metadata, two strategies, a saved session/outcome, analysis, research evidence, a finite computation and a captured CSV artifact. The CSV and finite result are explicitly illustrative and not presented as a proof.
-- Added `SIGMA_CLOUD_DEMO_AUDIT`, an absolute server-configured snapshot path. The guest API takes no project ID or filesystem path. It returns only that snapshot and renders reports from saved content. Missing or invalid configuration fails closed; local mode returns 404 for the hosted Demo API and retains its existing unrestricted app behavior.
+- `SIGMA_CLOUD_DEMO_AUDIT` selects the one deployment-controlled snapshot. The server resolves it, requires a regular service-owned file and service-owned containing directory that are not group/other-writable, and rejects it inside either `SIGMA_CLOUD_WORKSPACES_ROOT` or the default `$SIGMA_CLOUD_AUTH_HOME/workspaces`. Resolution catches parent-symlink aliases. Missing or unsafe configuration fails closed; local mode returns 404 for the hosted Demo API and retains its existing unrestricted app behavior.
 - Added a dedicated mounted read-only sub-application for `/api/cloud-demo/` and `/api/cloud-demo/report`. This is outside the root app's private-workspace dependency, so anonymous and denied identities do not need a workspace. The parent cloud-auth middleware permits only GET/HEAD to the two exact endpoints. No mutable route, project lookup, AI call, agent call, or scientific execution is available on the Demo surface.
 - Extended the existing A17.5 export dialog with LaTeX. Audit JSON plus Text, HTML and LaTeX reports are produced from the snapshot. Added anonymous Home Demo navigation; the existing denied account's invitation flow remains reachable from the Demo.
 - Updated parent `tickets/t22.md`, `TICKET_TRACKING.md`, `docs/STATUS.md`, `docs/CLOUD-AUTH.md`, and the existing cloud auth browser check. No workspace storage implementation was introduced or changed.
@@ -22,15 +22,15 @@ Requirement disposition and evidence
 - MET — Guest mutation and arbitrary project/path/export attempts fail: `tests/cloud_demo.py` tests POSTs with the correct configured Origin (401), private project inspect/session/export routes (401), and guessed path/project-ID parameters against both Demo endpoints (only the curated snapshot is returned).
 - MET — No guest writes or execution: API test checks the snapshot hash and absence of per-guest `.sigma` projects before/after browsing and exports. Proposal, research-session start, and Python execution functions are patched to fail if invoked. Routes do not call those services.
 - MET — Local mode remains unrestricted: `tests/cloud_demo.py` checks hosted Demo is disabled locally and private project API behavior is not changed to guest 401; Chrome auth regression confirms local Home still has New and normal project navigation.
-- MET — Guest Home navigation, denied invitation experience, visual fit and responsive behavior: real Chrome `browser_checks/t22_access_denied.py` and `browser_checks/t22_demo.py`, including desktop 1440px and mobile 390px.
+- MET — Guest Home navigation, denied invitation experience, visual fit and responsive behavior: real Chrome `browser_checks/t22_access_denied.py` and `browser_checks/t22_demo.py`, including desktop 1440px and mobile 390px. These browser checks mock API responses (including Demo audit/report data), so they validate UI rendering, actions and downloads, not live browser-to-backend integration.
 - UNVERIFIED — External cloud deployment and live Google OAuth were not exercised; no paid model calls were made. This PR does not claim Gate B provider/budget controls or production deployment readiness.
 
 Validation on the integrated tree
 
 - `./sigma test` — passed all backend scenarios, Demo and cloud-auth security tests, Green's workspace isolation scenarios, Ruff, format check, Pyright (zero diagnostics), frontend typecheck and production build.
-- After the final assertion refinement: `uv run python tests/cloud_demo.py` — 2 tests passed.
-- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:58863 uv run --with playwright python browser_checks/t22_demo.py` — passed in real Chrome; saved evidence, read-only controls, four exports and desktop/mobile overflow checks.
-- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:58863 uv run --with playwright python browser_checks/t22_access_denied.py` — passed in real Chrome; anonymous Home link, denied invitation request, account switching, Demo navigation, local mode and administrator summary.
+- Snapshot-boundary correction: `uv run python tests/cloud_demo.py` — 6 tests passed, covering configured and default private roots, a symlinked parent alias, unsafe file permissions, valid curated data, and all four exports.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:58863 uv run --with playwright python browser_checks/t22_demo.py` — passed in real Chrome against mocked API responses; saved evidence, read-only controls, four export downloads and desktop/mobile overflow checks. This does not establish live browser-to-backend integration.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:58863 uv run --with playwright python browser_checks/t22_access_denied.py` — passed in real Chrome against mocked auth/Demo API responses; anonymous Home link, denied invitation request, account switching, Demo navigation, local mode and administrator summary.
 - `uv run python tests/cloud_workspaces.py` — passed against Green's integrated Gate A implementation.
 
 Branch integration and coordinator dependency note
@@ -39,4 +39,12 @@ After PR #44 was opened, current main advanced to Gate A private-workspace PR #4
 
 Coordinator integration requirement (reported through this handoff, with no worker-to-worker contact): future changes to the shared cloud-auth/workspace middleware must preserve anonymous GET/HEAD access to `/api/cloud-demo/` and `/api/cloud-demo/report` while keeping those routes outside private workspace selection. `tests/cloud_demo.py` exercises the mounted boundary with cloud auth enabled, and `tests/cloud_workspaces.py` verifies private workspace isolation on the same app. No unresolved security boundary remains in this implementation.
 
-Known operational limit: deployment must place the reviewed curated snapshot at the path configured by `SIGMA_CLOUD_DEMO_AUDIT`. The Gate A workspace code is included from main/PR #43, but this PR's own feature scope remains Gate C; Gate B and deployment remain open in parent T22.
+Known operational limits: deployment must place the reviewed curated snapshot at the path configured by `SIGMA_CLOUD_DEMO_AUDIT`, with service ownership and no group/other write permission, outside both effective private-workspace roots. Chrome checks use mocked API responses and do not independently validate live browser-to-backend integration. Gate B and deployment remain open in parent T22.
+
+
+Coordinator security correction (PR #44 review)
+
+- Resolved and reviewed the PR #44 comment requiring protection against snapshot paths inside either effective private-workspace root, including resolved symlink aliases, and requiring trusted ownership/permissions.
+- Implemented the server-side check in `src/sigma/cloud_demo.py`; no workspace files or Green-owned workspace implementation were changed.
+- Added deterministic API regressions for explicit and default workspace roots, parent-symlink aliases, unsafe write permissions, and valid curated snapshot exports.
+- Final verification: `uv run python tests/cloud_demo.py` — 6 passed; `./sigma test` — all steps passed, including cloud Demo/auth/workspace checks, Ruff, formatting, Pyright, frontend typecheck and production build. Both real-Chrome checks passed against mocked API responses, not a live browser-to-backend integration.

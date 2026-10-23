@@ -1,7 +1,9 @@
-"""Real Chrome checks for the hosted read-only Demo and all report exports.
+"""Real Chrome UI checks for the read-only Demo and all report exports.
 
-Run with the configured cloud API and Vite server active; no Google or model call
-is made. The Demo snapshot is loaded from the dedicated fixture configuration.
+The checks use deterministic mocked API responses, including report bodies; they
+cover browser rendering and interactions, not live browser-to-backend behavior.
+Backend authorization and snapshot boundaries are covered by tests/cloud_demo.py.
+No Google or model call is made.
 """
 
 import os
