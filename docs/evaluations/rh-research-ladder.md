@@ -16,8 +16,8 @@ capstone has three: explicit formula and prime-counting consequences, a
 spectral realization, and zero-free/density estimates. They are intentionally
 distinct routes for testing portfolio comparison and skeptic attribution.
 They provide methodological hints, so their runs are **not independent
-discovery tests**. The RH strategies are research programs with explicit
-obligations, not candidate proofs.
+discovery tests**. The RH strategies are bounded investigations with explicit local
+obligations, not solution-sized candidate proofs.
 
 ## Run protocol
 
