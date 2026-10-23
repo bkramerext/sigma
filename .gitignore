@@ -224,7 +224,15 @@ __marimo__/
 !projects/rh.sigma/.gitkeep
 projects/.names.lock
 frontend/node_modules/
+deploy/cloudflare/node_modules/
+deploy/cloudflare/.wrangler/
 frontend/dist/
 # Home runtime artwork is copied byte-for-byte from assets/ by Vite.
 frontend/public/sigma-home-background.png
 .aider*
+
+# Cloud deployment secrets and local smoke configuration
+deploy/runtime.env
+deploy/worker-secrets.json
+deploy/cloudflare/.dev.vars
+deploy/cloudflare/.dev.vars.*

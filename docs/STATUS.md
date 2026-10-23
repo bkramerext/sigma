@@ -1,5 +1,53 @@
 # SIGMA status
 
+## T22 cloud deployment and operations preparation (2026-10-23)
+
+Added a pinned Python API image, unprivileged read-only container runtime,
+fail-closed production configuration/volume validation, a Cloudflare Worker
+for HTTPS static hosting and same-origin API routing, a pinned Cloudflare
+Tunnel runner, secret examples, deploy/rollback helpers, and a safe stop-world
+archive/restore utility. Google auth SQLite and Gate A private workspace data
+live below one explicitly initialized durable host volume; the curated Gate C
+Demo remains in the image and must resolve outside that volume. The Worker
+strips browser-provided Cloudflare/identity headers, then injects only its
+configured Access service token. Local SIGMA remains outside the container
+entrypoint and cloud auth remains explicitly enabled by deployment env.
+
+Validation on the integrated branch: `./sigma test` passed all existing and
+deployment scenarios, Ruff, formatting, Pyright (zero diagnostics), frontend
+typecheck, and production build. Cloudflare Worker Node tests passed 4/4. The
+pinned API image built on Docker 29.5.2 (linux/arm64; 26.01 MB build context),
+and Wrangler 4.152.0 `deploy --dry-run` read all 73 built frontend assets and
+validated Worker bindings without contacting a Cloudflare account.
+`ops/container_smoke.sh sigma-api:t22-deployment-final` passed deterministic
+production API readiness, anonymous Demo access, Project Audit JSON and
+Text/HTML/LaTeX exports, private read and mutation denial (401), auth-database
+checksum stability across container restart, and fail-closed missing-secret,
+invalid-origin, and uninitialized-volume startup. Real Chrome
+`browser_checks/t22_deployment_smoke.py` passed at 1440px and 390px through
+Wrangler local Worker -> the running API container, with no mocked Demo API
+responses; it exercised the saved Demo, all four exports, and private API
+denials. This is real local browser/backend routing evidence, not a live
+Cloudflare edge/Tunnel/Access deployment check.
+
+UNVERIFIED: no external Cloudflare account, Google client, public hostname,
+Tunnel, Access policy, durable production host/backup target, actual HTTPS
+deployment or OAuth login was configured. Live pricing varies by account and
+usage; current Cloudflare Workers guidance lists a Free allowance of 100,000
+requests/day (10ms CPU per invocation) and a Workers Paid minimum of $5/month,
+with overage charges; static asset requests are currently free. This does not
+estimate the separate Linux host, disk/backups, optional custom domain, or
+model provider costs. Gate B's durable execution, concurrency, usage budgets,
+and per-user provider credentials must integrate before cloud research runs.
+The current T22 alpha decision defers scheduled/off-host backups and clean-host
+restoration drills to T22.4; the optional archive/restore utility is tested
+locally but no production backup target or recovery drill is claimed. Loss of
+the host volume may be unrecoverable until that follow-up is completed.
+See `deploy/README.md` and `messages/t22_deployment_r4r.txt` for commands,
+recovery steps and full requirement-by-requirement status. The implementation
+is submitted for review in [PR #52](https://github.com/bkramerext/sigma/pull/52)
+at validation head `9830880505b5f1731cb1a93f435771df089641b6`.
+
 ## Lean toolbar color feedback (2026-10-23)
 
 Changed the disabled Lean logo in mathematical projects from its darker copper
