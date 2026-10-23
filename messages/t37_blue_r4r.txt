@@ -63,3 +63,9 @@ Known limitations:
 - T17.8's independent research-quality gate remains separate and unchanged.
 
 T37 is ready for coordinator review. Do not merge without review.
+
+PR #45: https://github.com/bkramerext/sigma/pull/45
+PR head after handoff/tracker documentation: 9eed632e862dccf0a550ea3e29144ff08335cde6.
+The tested implementation tree is f9f617deb7ee0f9f3cd3fed7b34fe6f13530e0e4;
+subsequent commits only add this handoff and tracker PR metadata.
+GitHub reports PR #45 open and mergeable. R4R.
