@@ -4001,6 +4001,11 @@ storage. Authorized OIDC callbacks provision an empty workspace before issuing
 the session. An unauthorized callback creates no workspace, and storage failure
 prevents session issuance.
 
+While validating, `origin/main` advanced to `a486833368156c8a2c0e941bcc43868f808185f0`
+(`a486833`). Merged that current head as `a21074d`; its delta from PR #37 was
+T38/T39 evaluation tickets and software-factory documentation only, with no
+application-code conflicts. The final checks below ran after that merge.
+
 The mapping database stores a domain-separated subject hash and a random
 server-generated workspace ID. Project creation and all project-path services
 run under that request's workspace root; symlink, traversal and cross-root paths
