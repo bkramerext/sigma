@@ -109,6 +109,10 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 
 **Delivery target:** October 26, 2026. Outstanding integration, cloud work, T23.1 pills, T24 metrics and T17.8 acceptance should be tracked separately; completion of software work does not close the research-quality gate.
 
+## Outcome layout: Provenance
+
+Outcome displays **Metrics**, **Strategy Assessments**, and **Provenance** as peer subsections. Provenance links each conclusion and recorded metric to its originating research session, strategy, agent role/model and thinking level, cycle, role step, source evidence artifact, Python execution and captured file when applicable. Preserve stable IDs, timestamps, reused/interrupted provenance and audit drill-down; never imply that model-generated evidence is independently verified. Track implementation in **T24** alongside the outcome table.
+
 ## Planned Codex workers
 
 | Codex | Planned responsibility | Status |
@@ -116,4 +120,4 @@ Do not equate successful deterministic tests with demonstrated research effectiv
 | Red | Cloud support (T22) | Later; not started |
 | Gray | UI improvements, live prompts, and tickets | Later; not started |
 
-Ticket naming convention: `T1`, `T8.2`, `T17.7.1`; canonical ticket documents live at `tickets/t1.md`, `tickets/t8.2.md`, etc. Historical references remain valid until document migration is complete.
+Ticket naming convention: `T1`, `T8.2`, `T17.7.1`; canonical ticket documents live at `tickets/t1.md`, `tickets/t8.2.md`, etc. Historical ticket documents are migrated into `tickets/` in this PR; supplementary historical design/security documents use `tN-design.md` or `tN-security.md`. T14.1 is retained as historical record but removed from the active tracker.
