@@ -41,6 +41,8 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/make_sample.py"],
             [*python, "python", "tests/example_math.py"],
             [*python, "python", "tests/research_ladder.py"],
+            [*python, "python", "tests/rh_adversarial.py"],
+            [*python, "python", "tests/t39_evaluation.py"],
             [*python, "python", "tests/project_settings.py"],
             [*python, "python", "tests/model_connection.py"],
             [*python, "python", "tests/chatgpt.py"],
