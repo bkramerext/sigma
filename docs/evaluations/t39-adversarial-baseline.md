@@ -18,10 +18,10 @@ Current code/test baseline, inspected on main:
 | src/sigma/research_tools.py | Optional local scientific Python/Sage execution capabilities are observed at dispatch | That either local image exists in a particular user environment |
 | samples/riemann-hypothesis-research/project.json | Three answer-free, scoped strategy roots and explicit evidence discipline | Any previous real-agent success or independently checked mathematical result |
 
-Two integration concerns to check without overlapping Blue's active T37 branch:
+Two integration concerns identified by source inspection, kept outside Blue's active T37 implementation:
 
-- **Tool-capability mismatch, UNVERIFIED in actual UI:** the RH sample's static problem states no numerical/symbolic tools exist, while the runtime conditionally exposes scientific Python and Sage when local images exist. Inspect the actual session capability snapshot and generated prompt before considering a sample-language correction. No change to the shipped sample in this PR.
-- **Skeptic guidance inconsistency, code-inspected:** src/sigma/research_sessions.py contains the sentence “require a complete argument to be rewritten in every cycle”, adjacent to guidance that earlier artifacts can satisfy proof requirements. This may wrongly encourage repetitive work. Coordinate any fix after T37 rather than editing its active file here.
+- **Tool-capability mismatch, static wording corrected; runtime integration UNVERIFIED:** the RH sample previously forbade all numerical/symbolic computation, while the normal workflow conditionally exposes local Python/Sage in its per-call `execution_tools`. This PR adjusts the shipped RH sample text and the ladder documentation to defer to actual advertised availability and require saved execution evidence. The sample remains free of generated sessions. A real provider prompt and local-runtime execution have not been independently exercised.
+- **Skeptic guidance inconsistency, code-inspected and not yet corrected:** src/sigma/research_sessions.py contains the sentence “require a complete argument to be rewritten in every cycle”, adjacent to guidance that earlier artifacts can satisfy proof requirements. The instruction may cause unnecessary repeated work. Schedule a coordinated fix after Blue's T37 branch rather than changing its active implementation here.
 
 ## Precommitted falsification cases
 
@@ -66,7 +66,7 @@ For each case, score from 0 (wrong/missed), 1 (qualified or partly correct), to 
 
 ## Baseline result and next investigation
 
-- **MET (independently executed locally):** the exact polynomial countermodel passes under standalone Python. This confirms the evaluator's logical traps, not SIGMA's ability to recognize them.
+- **MET (independently executed oracle):** the exact polynomial test source passed under Python 3.13.5 in the coordinator container. A separate SymPy 1.14 factorization check confirmed an even degree-six polynomial and all six distinct roots. Three local mutation checks (off-line zeros moved into the finite-height window, off-line displacement removed, and reflection symmetry broken) were rejected by the original test assertions. These checks verify the oracle's mathematical integrity and sensitivity, **not** SIGMA's ability to recognize traps. The full checkout/test suite was not executed.
 - **MET (code inspection only):** the existing test suite includes fixture-based objective-label and provenance protections. Execution of the full repository suite in the coordinator environment is **UNVERIFIED**, because the GitHub connector exposes source but not this checkout's installed test environment.
 - **UNVERIFIED:** real-agent skepticism, useful strategy adaptation, mathematical partial-result generation, runtime tool availability in user deployment, and UI/report behavior on an actual T39 run.
 - **PENDING T37:** reliable propagation of unresolved obligations across longer and older session histories.
