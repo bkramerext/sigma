@@ -53,6 +53,19 @@ with sync_playwright() as playwright:
     assert record["research_sessions"][0]["artifacts"]
     assert "R(n)" in json.dumps(record["research_sessions"][0]["artifacts"], ensure_ascii=False)
 
+    # A copper LaTeX wordmark in the project header opens paper authoring directly.
+    latex_button = page.get_by_role("button", name="LaTeX research paper", exact=True)
+    expect(latex_button).to_be_visible()
+    assert latex_button.evaluate("element => getComputedStyle(element).color") == "rgb(228, 181, 124)"
+    latex_button.click()
+    direct_dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(direct_dialog).to_be_visible()
+    expect(page.get_by_role("dialog", name="Export Project")).to_be_hidden()
+    direct_dialog.get_by_role("button", name="Close", exact=True).click()
+    expect(direct_dialog).to_be_hidden()
+    expect(latex_button).to_be_focused()
+
+    # Existing export authoring route remains compatible with saved filename choices.
     expect(page.get_by_role("button", name="Author AI paper", exact=True)).to_have_count(0)
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
@@ -167,5 +180,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS real Chrome A20: saved evidence, Export Project authoring entry, remembered export choices, traceable claims, durable version and compiled PDF."
+    "PASS real Chrome A20: direct copper LaTeX header entry, Export Project compatibility, saved evidence, traceable claims, durable version and compiled PDF."
 )
