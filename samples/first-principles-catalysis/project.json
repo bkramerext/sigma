@@ -50,7 +50,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A sourced novelty gap, grouping protocol, baseline error distribution and limitations.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000002",
@@ -61,7 +62,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A new conditional diagnostic, effect size, counterexamples or a clear failed hypothesis.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000003",
@@ -72,7 +74,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A quantitatively testable prediction of channel ordering on new reactions.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000004",
@@ -83,7 +86,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A negative-control battery with at least one decisive counterexample.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000005",
@@ -94,7 +98,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "A reproducible independent-test result, or an explicit unresolved verdict with a decisive next test.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     }
   ],
   "research_mode": "chemistry",
