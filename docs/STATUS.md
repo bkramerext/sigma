@@ -20,7 +20,8 @@ direct choices—Project Audit, Text file, HTML report, and Academic paper using
 LaTeX—with extensions displayed next to the filename and no format dropdown.
 Project export and settings icons, Back to home, and the New/Generate links use
 the same color and semibold 13px type as Disable/Fork/Remove. Strategy Remove
-uses the same neutral action color; confirmation remains destructive. The
+and visible Session/Recent Remove links use the same neutral action color;
+confirmation remains destructive. The
 settings control uses a standard gear outline, and the Project and Strategy
 Markdown controls are optically lowered 2px for vertical centering. Existing
 high-contrast hover treatment is retained.
