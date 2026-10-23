@@ -1,8 +1,8 @@
 {
   "schema_version": 5,
   "id": "c4a1c064-6d18-48e3-97e3-832fa85a8d42",
-  "title": "Can Catalysis Be Predicted from First Principles?",
-  "problem": "Investigate the fundamental unresolved challenge of predicting heterogeneous catalytic activity, selectivity, and stability from atomic structure and operating conditions without fitting directly to measured catalyst performance. Use ambient-condition electrochemical nitrogen reduction to ammonia as a stringent case study, including the competing hydrogen evolution reaction and pervasive risk of false-positive ammonia measurements. Evaluate dynamic active sites, reaction pathways, solvent and electrolyte effects, electrochemical potential, uncertainty in electronic-structure approximations, and long-term catalyst reconstruction. Separate established evidence from hypothetical mechanisms, computational predictions, and proposed experiments. Do not assume a viable ambient electrochemical nitrogen-to-ammonia catalyst has been demonstrated by a given study; require rigorous isotope and contamination controls. Seek narrow falsifiable predictions, prospective validation, and explicit failure criteria rather than claiming the general catalytic prediction problem solved.",
+  "title": "Can We Predict Chemical Reactions from Quantum Mechanics?",
+  "problem": "Investigate a fundamental open problem in theoretical and computational chemistry: given molecular composition, initial structure, and physical environment, can we predict which chemical reactions occur, their pathways, rate constants, selectivities, and product distributions from quantum mechanics with independently validated accuracy? Even though molecular dynamics is governed by quantum mechanics, general predictive solutions remain out of reach for complex, reactive, many-body systems. Examine the limits of electronic-structure approximations, nuclear quantum effects, transition-state and rare-event sampling, solvent and temperature coupling, and combinatorial reaction-network exploration. Choose tractable benchmark reactions and formulate falsifiable prospective predictions; distinguish exact principles from computational approximations and observed outcomes. Do not imply that solving a benchmark reaction solves the general problem. Deliver prioritized research hypotheses, uncertainty budgets, discriminating calculations or experiments, and explicit limitations.",
   "events": [
     {
       "sequence": 1,
@@ -43,57 +43,57 @@
   "strategies": [
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000001",
-      "title": "Active-site identity under operating conditions",
-      "approach": "Compare candidate catalytic surface motifs under realistic electrochemical potentials, solvent environments, and adsorbate coverages. Explicitly distinguish idealized pristine surfaces from dynamic active structures and propose in situ tests.",
+      "title": "Electronic-structure accuracy and uncertainty",
+      "approach": "Compare methods for potential-energy surfaces and reaction barriers on a small benchmark reaction with high-quality reference data. Quantify correlation, basis-set, multireference, and model errors and how these propagate into predicted rates.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A ranked set of site hypotheses and falsifiable spectroscopic signatures.",
+      "summary": "A reproducible error budget and method-selection rule.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000002",
-      "title": "Reaction pathways and selectivity",
-      "approach": "Compare associative and dissociative nitrogen reduction pathways against competing hydrogen evolution using uncertainty-aware free-energy profiles. Identify rate-limiting steps and conditions where rankings reverse.",
+      "title": "Reaction pathway discovery",
+      "approach": "Evaluate whether unbiased or enhanced-search methods recover all kinetically relevant pathways for a defined reactive system. Use independently known pathways where possible; state coverage and stopping criteria.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A microkinetic comparison with a decisive discriminating observable.",
+      "summary": "A pathway-coverage benchmark and clear missed-pathway failure modes.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000003",
-      "title": "Solvent, electrolyte, and potential effects",
-      "approach": "Test whether explicit solvent, ionic environment, double-layer effects, and applied potential materially alter predicted barriers and selectivity. Separate approximations from controlled calculations.",
+      "title": "Dynamics and rare events",
+      "approach": "Test transition-state theory and rare-event sampling against dynamical recrossing, nonstatistical behavior, and nuclear quantum effects on a selected reaction.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A sensitivity analysis showing which environmental terms change conclusions.",
+      "summary": "A quantitative prediction with uncertainty and a falsifying observable.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000004",
-      "title": "Ammonia contamination and measurement validity",
-      "approach": "Design stringent isotope-labeling and blank-control protocols to distinguish genuine N2-derived ammonia from ambient, feedstock, membrane, electrolyte, and laboratory contamination. Include analytical limits and false-positive mechanisms.",
+      "title": "Solvent and environmental coupling",
+      "approach": "Compare gas-phase, implicit-solvent, and explicit-environment predictions for a benchmark reaction; assess temperature, pressure, and ionic effects where relevant.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A measurement and controls plan capable of rejecting spurious ammonia production.",
+      "summary": "A discriminating experiment or computation that isolates environment-induced changes.",
       "provenance": null
     },
     {
       "id": "c4a1c001-7a62-4b61-912a-4560b0000005",
-      "title": "Catalyst stability and predictive transfer",
-      "approach": "Study catalyst reconstruction, dissolution, poisoning, and long-term activity; design out-of-sample comparisons between predicted and measured catalyst performance. Avoid inferring durability from short simulations or isolated energetics.",
+      "title": "From mechanisms to product distributions",
+      "approach": "Construct a bounded reaction network and propagate elementary-step uncertainties into measurable yields, rates, and selectivity under unseen conditions. Evaluate prospective out-of-sample prediction.",
       "author_kind": "human",
       "created_at": "2026-10-23T20:00:00+00:00",
       "removed_at": null,
       "stage": "draft",
-      "summary": "A prospective validation protocol for activity, selectivity, and stability.",
+      "summary": "A preregisterable prediction and validation plan for products and rates.",
       "provenance": null
     }
   ],
