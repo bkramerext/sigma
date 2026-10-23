@@ -86,14 +86,15 @@ Hard or RH live session was run.
   Medium run failed before peer evidence existed; model ability to make useful
   cross-strategy decisions is therefore unverified.
 
-The current timeout is 40 seconds per provider request. Two concurrent High
-reasoning Medium calls reached that bound; this is a material operational
-limitation for the present ladder. I did not increase the timeout or retry live
-calls in this evaluation. A subsequent run should first establish a deliberately
-bounded, lower-latency configuration, while preserving strict call caps and
-stopping on the first throttle/limit signal. The system still has no external
-reference search, computation tool, or formal proof checker; model statements
-cannot certify mathematical truth.
+At the time of the Medium run, the provider timeout was 40 seconds; both
+concurrent High-reasoning requests reached that bound. I have raised the
+per-request bound to 60 seconds, while retaining the separate configured
+session-duration ceiling, and added a deterministic test that exercises SIGMA's
+own timeout cancellation path. This change has not been re-evaluated live
+because the timed-out calls may have consumed plan allowance and no usage
+metadata is available. The system still has no external reference search,
+computation tool, or formal proof checker; model statements cannot certify
+mathematical truth.
 
 ### Verification
 

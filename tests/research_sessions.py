@@ -1797,7 +1797,7 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
         payload = json.loads(request.content)
         context = json.loads(payload["input"])
         if context["strategy"]["id"] == first.id:
-            raise httpx.ReadTimeout("fixture transport timed out")
+            await asyncio.sleep(0.1)
         role = payload["text"]["format"]["name"]
         cycle = context["cycle"]
         output = investigation(cycle) if role == "research_investigator" else skeptic(cycle)
@@ -1806,6 +1806,7 @@ async def test_portfolio_timeout_is_not_misclassified_as_strategy_failure(path: 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
         patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "CALL_TIMEOUT", 0.01),
         patch(
             "sigma.research_sessions.httpx.AsyncClient",
             side_effect=lambda **kwargs: REAL_CLIENT(
