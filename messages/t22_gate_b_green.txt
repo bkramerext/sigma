@@ -1,7 +1,7 @@
 T22 Gate B — Green handoff
 Date: 2026-10-23
 Branch: feature/t22-gate-b-durable-execution
-Base: current main at 6b0d0c9 (PR #43 Gate A, PR #44 Gate C, T22.3 spec)
+Base: current main at cd85552 (includes T22.3, T22.4, T22.5 specifications and latest acceptance updates)
 
 IMPLEMENTED
 
@@ -39,10 +39,10 @@ IMPLEMENTED
 
 VERIFICATION — MET
 
-- `./sigma test` — passed on the current implementation head after rebasing
-  onto `6b0d0c9`. This includes all backend regressions (Gate C Demo, cloud
-  auth/workspaces, Gate B reconciliation and session tests), Ruff, formatting,
-  Pyright (0 diagnostics), frontend typecheck and production build.
+- `./sigma test` — passed on integrated source head `5b5241a` after merging
+  current main at `cd85552`. This includes all backend regressions (Gate C Demo,
+  cloud auth/workspaces, Gate B reconciliation and session tests), Ruff,
+  formatting, Pyright (0 diagnostics), frontend typecheck and production build.
 - `uv run --with playwright python browser_checks/t22_private_workspaces.py` —
   passed in real Chrome after the latest change, with separate A/B contexts and
   production API/storage fixture.
@@ -66,6 +66,22 @@ VERIFICATION — MET
 - `tests/cloud_research_api.py` — production FastAPI start/status/idempotency
   and cross-workspace status/control denial with deterministic fake provider.
 - No live Google or model-provider calls; no paid calls.
+
+
+INTEGRATION UPDATE — current main `cd85552`
+
+- Integrated latest `main`, including T22.3 and the new T22.5 per-user spend
+  specification. T22.5 explicitly is not assigned as part of this Gate B repair;
+  cumulative per-user USD caps and owner budget summaries remain unimplemented
+  and are not claimed as complete.
+- The newly merged T39 code exposed Ruff lint/format failures in the repository
+  gate. Corrected the invalid-type exception and formatted the three affected
+  T39 files so the integrated `./sigma test` can pass.
+- Final checks on source head `5b5241a`: `./sigma test` passed; focused
+  `tests/cloud_research.py`, real-Chrome `t22_durable_research.py`, and
+  real-Chrome `t22_private_workspaces.py` passed. The handoff update is committed
+  on top of that verified source head; final PR head is reported in the coordinator
+  response.
 
 LIMITATIONS / UNVERIFIED
 

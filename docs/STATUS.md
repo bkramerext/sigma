@@ -4266,3 +4266,13 @@ an estimate, not a provider invoice. The SQLite queue and project-file writes
 remain separate durable stores; provably orphaned queued rows are automatically
 reconciled as described above. Gate C, public Demo, Cloudflare deployment, and
 public release remain outside this Gate B implementation.
+
+
+After current main advanced to `cd85552`, integrated its T22.3–T22.5 specs and
+latest evaluation updates. Full `./sigma test` initially surfaced merged T39
+Ruff lint/format violations; corrected them and reran successfully. Final checks
+on source head `5b5241a`: full suite (backend, Ruff/format, Pyright, frontend
+typecheck/build), focused cloud recovery, real-Chrome durable restart/cancel,
+and real-Chrome private workspace isolation all passed. T22.5's cumulative
+per-user USD ceiling and owner budget summary remain explicitly unimplemented
+and not assigned to this Gate B repair.
