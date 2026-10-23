@@ -44,7 +44,7 @@
 | T19 | Isolated Python execution for Investigator → Skeptic | Merged, engineering done | Green · [PR #9](https://github.com/bkramerext/sigma/pull/9) |
 | T20 | AI-authored research paper / LaTeX export option | Merged, engineering done | [PR #5](https://github.com/bkramerext/sigma/pull/5) |
 | T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
-| T22 | Cloud deployment | In progress; Gate A private workspaces merged (PR #43), Gate C public Demo in review (PR #44) | Red |
+| T22 | Cloud deployment | Gates A/C merged; Gate B PR #49 refreshed against main `803e655` and R4R; deployment prep PR #52 open; T22.5 remains separate and unimplemented | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |

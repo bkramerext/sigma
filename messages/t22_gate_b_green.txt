@@ -1,0 +1,120 @@
+T22 Gate B — Green handoff
+Date: 2026-10-23
+Branch: feature/t22-gate-b-durable-execution
+Base before refresh: current main at cd85552. Refreshed against current main
+at 803e655 (which includes the referenced 40df3f4 and subsequent merged work).
+
+IMPLEMENTED
+
+- Preserved SIGMA's existing Investigator/Skeptic research-session and project
+  persistence model. The existing project session records remain authoritative
+  for lifecycle events, checkpoints, model outputs, Python/Sage evidence and
+  outcomes.
+- Added a workspace-owned SQLite ledger beside private workspace storage for
+  durable job state, concurrency/queue admission, provider-call reservations,
+  token reservations and estimated/unknown spend.
+- Reserved the call ID, conservative spend and tokens in a transaction before
+  provider dispatch. Duplicate attempt IDs cannot dispatch again. Confirmed
+  usage reconciles the reservation; ambiguous timeouts, cancellation and
+  process recovery retain a nonzero reservation and become visibly unknown.
+- Added atomic per-workspace/global running and queue limits, per-workspace
+  token budget, existing session call/time bounds, and an operator-configured
+  global inference-spend ceiling. Cloud inference requires the explicit
+  SIGMA_CLOUD_OPENAI_API_KEY; no local key or ChatGPT account fallback occurs.
+- Queued sessions without a provider attempt can be scheduled when an owner
+  reconnects. A recovered running call is marked interrupted/unknown and is
+  never automatically replayed. Existing explicit pause/resume/stop controls
+  remain in use.
+- Coordinator review found and fixed the crash window between
+  `prepare_job()` and `_save()`. Each job now records its project-relative
+  location and creating process epoch. Recovery takes the existing project
+  admission lock and deletes only a prior-process queued row whose project ID
+  validates, session file is absent, and call ledger has no entries. No age
+  threshold is used; valid queued/running jobs and every provider-call
+  reservation are preserved. Recovery is scoped to the authenticated workspace.
+- Blocked cloud proposal, agentic-proposal, paper-generation and text-conversion
+  inference routes until they have their own durable budget accounting. Local
+  mode remains unrestricted and unchanged.
+- Documented configuration and recovery semantics in docs/CLOUD-AUTH.md and
+  recorded actual verification and limitations in docs/STATUS.md.
+
+VERIFICATION — MET on the refreshed integrated tree
+
+- `./sigma test` — passed after integrating current main at `803e655`. This
+  includes Gate C Demo, cloud auth/workspaces, Gate B reconciliation and
+  session tests, T30 sample/report tests, T37 context-selection regressions,
+  Ruff, formatting, Pyright (0 diagnostics), frontend typecheck and build.
+- `uv run --with playwright python browser_checks/t22_private_workspaces.py` —
+  passed in real Chrome, with separate A/B contexts and the production
+  API/storage fixture.
+- `uv run --with playwright python browser_checks/t22_durable_research.py` —
+  passed in real Chrome. Two browser contexts disconnected during a blocked
+  fake call, backend was hard-killed and restarted, owner recovered the
+  interrupted/unknown attempt, the other owner got 404, and duplicate start
+  returned the same job without a second provider dispatch.
+- `uv run --with playwright python browser_checks/a17_research.py` — passed in
+  real Chrome with fresh local Vite and provider fixture servers on dedicated
+  ports. The first attempt used shared ports occupied by other checkout
+  fixtures and received a stale-fixture 404; those processes were left alone.
+- `uv run --with playwright python browser_checks/nonconsecutive_sample.py` —
+  passed in real Chrome at desktop and 390px/320px mobile widths, preserving
+  main's merged sample, five saved sessions and report behavior.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5199 uv run --with playwright
+  python browser_checks/t22_demo.py` — passed against a fresh Vite instance on
+  the rebased head, retaining Gate C's read-only Demo and export behavior.
+- The Gate C Demo browser check previously passed against a fresh Vite instance
+  on port 5199. Its first invocation used an already-running process on port
+  5173 and saw a placeholder; that unrelated listener was left untouched.
+- `tests/cloud_research.py` — deterministic accounting, two-owner concurrency
+  and spend races, duplicate reservation, budget exhaustion, cancellation,
+  timeout, queued reconnect, simulated restart recovery, exact
+  `prepare_job()`/`_save()` crash injection, queue-capacity reclaim, valid-job
+  preservation, ambiguous call-hold preservation and cross-workspace isolation.
+- `tests/cloud_research_api.py` — production FastAPI start/status/idempotency
+  and cross-workspace status/control denial with deterministic fake provider.
+- No live Google or model-provider calls; no paid calls.
+
+
+INTEGRATION UPDATE — current main `803e655`
+
+- Current `main` had advanced from the referenced `40df3f4` to `803e655`, so
+  the PR branch integrates the newer head as well. This includes merged T37
+  research-context work and T30 sample changes. Reconciled conflicts in
+  `docs/STATUS.md` by retaining both main's T30/T37 records and the complete
+  Gate B status, and in `src/sigma/t39_evaluation.py` by preserving precise
+  invalid-session errors alongside main's type-error behavior. `src/sigma/api.py`
+  and `src/sigma/research_sessions.py` merged automatically; the full suite and
+  focused real-browser checks passed on the integrated tree.
+- T22.5 remains out of scope. Its cumulative per-user USD ceiling and owner
+  budget summary are specified by the ticket but remain unimplemented and are
+  not claimed as complete.
+- T39's imported formatting/lint changes are retained so repository checks
+  pass. Invalid-session errors distinguish a non-object session from a missing
+  or invalid session ID.
+
+LIMITATIONS / UNVERIFIED
+
+- No deployed cloud restart or paid provider smoke test was run. Browser
+  disconnect and hard local backend restart were tested with a fake provider.
+- Cloud deployment and live hosted Python/Sage isolation remain unverified;
+  those are tracked as release requirements in `tickets/t22.3.md`.
+- Cost is a conservative reservation and post-response estimate, not provider
+  invoice data. Unknown outcomes retain the full reserved amount.
+- Cloudflare deployment, Gate C read-only Demo and integrated public-release
+  gate are outside this Gate B implementation.
+
+REVIEW DISPOSITION
+
+- MET: exact admission/publication crash is fault-injected; only the proven
+  never-dispatched orphan is removed after simulated restart.
+- MET: same idempotency key retry creates one replacement session and sends
+  exactly one Investigator and one Skeptic fake-provider request; the crashed
+  attempt dispatched none.
+- MET: valid queued and running rows survive; unknown provider call and its
+  reserved cost survive even with a missing session record.
+- MET: recovered queue slot is reusable; owner A cannot reconcile owner B's
+  orphan.
+- UNVERIFIED: deployed hosting, actual cloud runtime Python/Sage sandbox
+  boundary, and paid provider smoke; no deployment or paid call was authorized.
+
+R4R. Green has not self-merged this branch.

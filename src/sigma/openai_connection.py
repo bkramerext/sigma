@@ -139,6 +139,20 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
 
 
 async def auth_context() -> dict[str, Any]:
+    # Google OIDC identifies a cloud workspace; it does not grant use of the
+    # local operator's account or API key. Cloud inference uses only the
+    # explicitly provisioned service credential and is bounded by the durable
+    # cloud research ledger. Local mode retains its existing account selection.
+    from sigma import cloud_workspaces
+
+    if cloud_workspaces.enabled():
+        token = os.environ.get("SIGMA_CLOUD_OPENAI_API_KEY", "").strip()
+        return {
+            "mode": "api_key",
+            "token": token,
+            "status": "connected" if token else "unconfigured",
+            "identity": "cloud_service_api_key" if token else "cloud_unconfigured",
+        }
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":
@@ -203,7 +217,19 @@ async def connection(refresh: bool = False, context: dict | None = None) -> dict
     global _identity, _pending, _cached, _known
     try:
         context = context or await auth_context()
-        prefs = await chatgpt_auth.preferences()
+        from sigma import cloud_workspaces
+
+        prefs = (
+            {
+                "mode": "api_key",
+                "active_account": None,
+                "accounts": [],
+                "welcome_pending": False,
+                "usage_url": None,
+            }
+            if cloud_workspaces.enabled()
+            else await chatgpt_auth.preferences()
+        )
     except ProjectError:
         return {
             "mode": "unknown",
