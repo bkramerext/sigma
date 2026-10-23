@@ -190,12 +190,9 @@
   margin: 0 0 8px; padding: 0;
 }
 
-/* Native button title tooltips are viewport-aware; suppress custom hints that can be clipped by narrow panes. */
-.workspace-page .sigma-render-tooltip { display: none !important; }
-
-/* Markdown logo: match the other icon buttons' neutral, active and copper hover states. */
+/* Markdown mark is a standalone symbol at pencil scale; the SVG has no enclosing box. */
 .workspace-page .text-view-controls .sigma-render-toggle .markdown-logo {
-  display: block; width: 22px; height: 18px; flex: 0 0 auto;
+  display: block; width: 26px; height: 22px; flex: 0 0 auto;
   color: #8b9296;
 }
 .workspace-page .text-view-controls .sigma-render-toggle.sigma-render-active .markdown-logo {
@@ -206,4 +203,13 @@
 }
 .workspace-page .text-view-controls .sigma-render-toggle:focus-visible .markdown-logo {
   color: #fff2e9;
+}
+
+/* One portal tooltip works outside clipped panes and dialog scroll regions. */
+.sigma-ui-tooltip {
+  position: fixed; z-index: 99999; max-width: min(260px, calc(100vw - 16px));
+  padding: 7px 10px; border: 1px solid #ac7054; border-radius: 5px;
+  background: #15212b; color: #fff2e9; box-shadow: 0 6px 20px #000b;
+  font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+  white-space: normal; overflow-wrap: anywhere; pointer-events: none;
 }

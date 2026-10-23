@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 from contextlib import nullcontext
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from sigma.projects import ROOT
@@ -67,9 +68,21 @@ def run_tooling(command: str) -> int:
         if command == "test"
         else nullcontext(None) as temporary_state
     ):
-        environment = (
-            {**os.environ, "SIGMA_STATE_DIR": str(temporary_state)} if temporary_state else None
-        )
+        if temporary_state:
+            test_root = Path(temporary_state)
+            state_root = test_root / "state"
+            projects_root = test_root / "projects"
+            auth_root = test_root / "auth"
+            for directory in (state_root, projects_root, auth_root):
+                directory.mkdir(mode=0o700)
+            environment = {
+                **os.environ,
+                "SIGMA_STATE_DIR": str(state_root),
+                "SIGMA_PROJECTS_ROOT": str(projects_root),
+                "SIGMA_AUTH_HOME": str(auth_root),
+            }
+        else:
+            environment = None
         for step in steps:
             print(f"\n> {shlex.join(step)}", flush=True)
             try:

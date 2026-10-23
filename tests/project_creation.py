@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
 from sigma.api import app

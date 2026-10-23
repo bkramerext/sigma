@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import test_environment as _test_environment  # noqa: F401
+
 from sigma.agentic_evidence import save as save_agentic_evidence
 
 

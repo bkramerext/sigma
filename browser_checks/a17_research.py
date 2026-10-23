@@ -23,6 +23,7 @@ with sync_playwright() as playwright:
     errors = []
     starts = []
     legacy_titleless = {"enabled": False}
+    fail_export = {"enabled": False}
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on(
         "request",
@@ -34,6 +35,9 @@ with sync_playwright() as playwright:
     )
 
     def forward(route):
+        if fail_export["enabled"] and "/api/projects/export" in route.request.url:
+            route.fulfill(status=503, json={"error": "fixture export failure"})
+            return
         response = route.fetch(url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8002"))
         if legacy_titleless["enabled"] and route.request.url.endswith("/api/projects/open"):
             data = response.json()
@@ -50,7 +54,22 @@ with sync_playwright() as playwright:
     ).click()
     page.wait_for_url("**/project?*")
     expect(page.get_by_role("heading", name="Project")).to_be_visible()
-    expect(page.get_by_role("button", name="Back to Home", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Back to home", exact=True)).to_be_visible()
+    header_title = page.locator(".project-header-title")
+    back_row = page.locator(".project-back-row")
+    title_box = header_title.bounding_box()
+    back_box = back_row.bounding_box()
+    assert title_box and back_box and back_box["y"] >= title_box["y"] + title_box["height"]
+    back_button_box = page.get_by_role("button", name="Back to home", exact=True).bounding_box()
+    back_label_box = page.get_by_text("Back to home", exact=True).bounding_box()
+    assert back_button_box and back_label_box
+    assert (
+        abs(
+            (back_button_box["y"] + back_button_box["height"] / 2)
+            - (back_label_box["y"] + back_label_box["height"] / 2)
+        )
+        < 2
+    )
     untitled_controls = page.locator(
         ".project-pane button, .strategies-pane button, .sessions-pane button"
     ).evaluate_all(
@@ -60,6 +79,26 @@ with sync_playwright() as playwright:
         f"Actionable workspace buttons need native hover titles: {untitled_controls}"
     )
     project_header = page.locator(".project-pane-heading")
+    edit_pencil = page.locator(".project-title-pencil")
+    project_gear = project_header.get_by_role("button", name="Project settings", exact=True)
+    project_gear.hover()
+    tooltip = page.get_by_role("tooltip")
+    expect(tooltip).to_have_text("Project settings")
+    tooltip_box = tooltip.bounding_box()
+    assert tooltip_box and tooltip_box["x"] >= 0 and tooltip_box["x"] + tooltip_box["width"] <= 1440
+    gear_hover = project_gear.evaluate(
+        "element => { const s = getComputedStyle(element); return [s.backgroundImage, s.color, s.borderTopColor, s.boxShadow]; }"
+    )
+    edit_pencil.hover()
+    expect(page.get_by_role("tooltip")).to_have_text("Edit project title")
+    page.wait_for_timeout(150)
+    pencil_hover = edit_pencil.evaluate(
+        "element => { const s = getComputedStyle(element); return [s.backgroundImage, s.color, s.borderTopColor, s.boxShadow]; }"
+    )
+    assert gear_hover == pencil_hover, (gear_hover, pencil_hover)
+    page.screenshot(path="/tmp/sigma-a177-after-icon-tooltip.png")
+    edit_pencil.focus()
+    expect(page.get_by_role("tooltip")).to_have_text("Edit project title")
     project_disclosure = project_header.get_by_role("button", name="Project", exact=True)
     project_disclosure.click()
     expect(page.locator("#project-pane-content")).to_be_hidden()
@@ -68,9 +107,15 @@ with sync_playwright() as playwright:
     expect(first_export).to_be_visible()
     expect(first_export.get_by_role("radio", name="Project Audit")).to_be_checked()
     expect(first_export.get_by_label("Format")).to_be_disabled()
+    expect(first_export.get_by_label("Format")).to_have_value("json")
+    expect(first_export.get_by_label("Format").locator("option")).to_have_count(1)
     expect(first_export.get_by_label("Open in browser tab")).not_to_be_checked()
     expect(first_export.get_by_label("Filename")).to_be_focused()
-    page.screenshot(path="/tmp/sigma-a175-export-desktop.png")
+    stem_visible = first_export.get_by_label("Filename").evaluate(
+        "e => { const c=document.createElement('canvas').getContext('2d'); const s=getComputedStyle(e); c.font=`${s.fontSize} ${s.fontFamily}`; return c.measureText(e.value).width <= e.clientWidth - 24; }"
+    )
+    assert stem_visible, "The complete project-derived filename stem must fit beside its extension."
+    page.screenshot(path="/tmp/sigma-a177-after-export-desktop.png")
     page.keyboard.press("Escape")
     expect(first_export).to_be_hidden()
     expect(project_header.get_by_role("button", name="Export project", exact=True)).to_be_focused()
@@ -78,6 +123,8 @@ with sync_playwright() as playwright:
     first_export = page.get_by_role("dialog", name="Export Project")
     page.get_by_role("button", name="Cancel", exact=True).click()
     expect(page.locator("#project-pane-content")).to_be_hidden()
+    page.evaluate("window.scrollTo(0, 400)")
+    page.set_viewport_size({"width": 520, "height": 430})
     page.get_by_role("button", name="Project settings", exact=True).click()
     settings = page.get_by_role("dialog", name="Settings")
     main_box = settings.bounding_box()
@@ -88,6 +135,8 @@ with sync_playwright() as playwright:
     expect(settings.get_by_role("tabpanel", name="Limits")).to_be_visible()
     expect(settings.get_by_label("Research rounds")).to_have_value("3")
     expect(settings.get_by_label("Model calls")).to_have_value("6")
+    page.screenshot(path="/tmp/sigma-a177-after-settings-short-desktop.png")
+    locked_scroll = page.evaluate("window.scrollY")
     rounds_input = settings.get_by_label("Research rounds")
     assert rounds_input.evaluate("element => getComputedStyle(element).appearance") == "textfield"
     rounds_input.fill("4")
@@ -101,6 +150,17 @@ with sync_playwright() as playwright:
         settings.get_by_role("alert").filter(has_text="whole number from 1 to 10")
     ).to_be_visible()
     rounds_input.fill("3")
+    limits_panel = settings.locator("#settings-panel-limits")
+    limits_panel_box = limits_panel.bounding_box()
+    assert limits_panel_box
+    page.mouse.move(
+        limits_panel_box["x"] + limits_panel_box["width"] / 2,
+        limits_panel_box["y"] + limits_panel_box["height"] / 2,
+    )
+    page.mouse.wheel(0, 1500)
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.scrollY") == locked_scroll
+    assert limits_panel.evaluate("e => e.scrollTop") > 0
     cost_input = settings.get_by_label("Maximum estimated session cost (USD)")
     cost_input.fill("0")
     expect(settings.get_by_role("alert").filter(has_text="$0.01 to $100.00")).to_be_visible()
@@ -114,7 +174,30 @@ with sync_playwright() as playwright:
         and abs(main_box["width"] - limits_box["width"]) < 1
         and abs(main_box["height"] - limits_box["height"]) < 1
     )
+    page.set_viewport_size({"width": 390, "height": 420})
+    limits_panel_box = limits_panel.bounding_box()
+    assert limits_panel_box
+    page.mouse.move(
+        limits_panel_box["x"] + limits_panel_box["width"] / 2,
+        limits_panel_box["y"] + limits_panel_box["height"] / 2,
+    )
+    page.mouse.wheel(0, 1500)
+    page.wait_for_timeout(100)
+    assert page.evaluate("window.scrollY") == locked_scroll
+    page.screenshot(path="/tmp/sigma-a177-after-settings-mobile.png")
+    mobile_settings_box = settings.bounding_box()
+    assert (
+        mobile_settings_box
+        and mobile_settings_box["x"] >= 0
+        and mobile_settings_box["x"] + mobile_settings_box["width"] <= 390
+    )
+    save_box = save_settings.bounding_box()
+    assert save_box and save_box["y"] >= 0 and save_box["y"] + save_box["height"] <= 420
+    settings.get_by_role("tab", name="Main", exact=True).click()
+    page.screenshot(path="/tmp/sigma-a177-after-settings-main-mobile.png")
     settings.get_by_role("button", name="Cancel", exact=True).click()
+    assert page.evaluate("getComputedStyle(document.documentElement).overflow") != "hidden"
+    page.set_viewport_size({"width": 1440, "height": 900})
     expect(page.locator("#project-pane-content")).to_be_hidden()
     project_disclosure.click()
     expect(page.locator("#project-pane-content")).to_be_visible()
@@ -375,6 +458,21 @@ with sync_playwright() as playwright:
         re.compile("connection-active")
     )
     expect(first_session.locator(".session-outcome-inline")).to_contain_text("Mixed")
+    expect(first_session.locator(".session-status-row")).to_have_count(0)
+    expect(first_session.locator(".session-row-content .session-status")).to_have_count(0)
+    title_rect = first_session.locator(".session-row-title").evaluate(
+        "e => e.getBoundingClientRect().left"
+    )
+    for summary_selector in (
+        ".session-status",
+        ".session-outcome-inline",
+        ".session-progress-inline",
+    ):
+        summary_rect = first_session.locator(summary_selector).evaluate(
+            "e => e.getBoundingClientRect().left"
+        )
+        assert abs(summary_rect - title_rect) < 1.5, (summary_selector, title_rect, summary_rect)
+    page.screenshot(path="/tmp/sigma-a177-after-session-card.png")
     expect(research).to_contain_text("Cycle 3 of 3")
     expect(research).to_contain_text("6/6 calls")
     expect(first_session.locator(".session-status")).to_have_text("ended")
@@ -452,6 +550,20 @@ with sync_playwright() as playwright:
     pause_row.get_by_role("button", name="Stop", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
     expect(pause_row.get_by_role("button", name="Remove", exact=True)).to_be_visible()
+    page.set_viewport_size({"width": 390, "height": 844})
+    actions_box = pause_row.locator(".session-heading-actions")
+    resume_box = actions_box.get_by_role("button", name="Resume", exact=True).bounding_box()
+    remove_box = actions_box.get_by_role("button", name="Remove", exact=True).bounding_box()
+    assert resume_box and remove_box and resume_box["y"] < remove_box["y"]
+    assert (
+        abs((resume_box["x"] + resume_box["width"]) - (remove_box["x"] + remove_box["width"])) < 2
+    )
+    actions_box.get_by_role("button", name="Resume", exact=True).hover()
+    expect(page.get_by_role("tooltip")).to_have_text("Resume Session 2")
+    pause_row.locator(".session-row-heading").screenshot(
+        path="/tmp/sigma-a177-after-session-stopped-actions-mobile.png"
+    )
+    page.set_viewport_size({"width": 1440, "height": 900})
 
     # A background provider failure is reconciled into the history and a toast.
     page.get_by_role(
@@ -541,14 +653,19 @@ with sync_playwright() as playwright:
     expect(export_dialog).to_be_visible()
     filename_field = export_dialog.get_by_label("Filename")
     filename_field.fill("")
-    export_dialog.get_by_role("button", name="Create", exact=True).click()
+    export_dialog.get_by_role("button", name="Download", exact=True).click()
     expect(export_dialog.get_by_role("alert")).to_have_text(
         "Enter a filename stem without path separators or reserved characters."
     )
     filename_field.fill("a17-audit.json")
     expect(filename_field).to_have_value("a17-audit")
+    fail_export["enabled"] = True
+    export_dialog.get_by_role("button", name="Download", exact=True).click()
+    expect(export_dialog.get_by_role("alert")).to_have_text("fixture export failure")
+    expect(export_dialog).to_be_visible()
+    fail_export["enabled"] = False
     with page.expect_download() as download_info:
-        export_dialog.get_by_role("button", name="Create", exact=True).click()
+        export_dialog.get_by_role("button", name="Download", exact=True).click()
     export_data = json.loads(Path(download_info.value.path()).read_text(encoding="utf-8"))
     assert download_info.value.suggested_filename == "a17-audit.json"
     assert export_data["export_version"] == 2
@@ -556,6 +673,10 @@ with sync_playwright() as playwright:
     assert export_data["research_sessions"][0]["artifacts"]
     assert export_data["research_sessions"][0]["outcome"]["assessment"] == "mixed"
     assert "fixture-token" not in json.dumps(export_data)
+    for toast in page.locator(".request-toast").all():
+        dismiss = toast.get_by_role("button", name="Dismiss request error")
+        if dismiss.is_visible():
+            dismiss.click()
     expect(export_dialog).to_be_hidden()
     expect(page.locator("#project-pane-content")).to_be_hidden()
 
@@ -573,10 +694,20 @@ with sync_playwright() as playwright:
     format_select.select_option("html")
     expect(filename_field).to_have_value("a17 unsafe-report")
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".html")
+    export_dialog.get_by_role("radio", name="Project Audit").check()
+    expect(format_select).to_be_disabled()
+    expect(format_select).to_have_value("json")
+    expect(format_select.locator("option")).to_have_count(1)
+    expect(filename_field).to_have_value("a17 unsafe-report")
+    expect(export_dialog.locator(".export-filename-field span")).to_have_text(".json")
+    export_dialog.get_by_role("radio", name="Research Report").check()
+    expect(format_select).to_be_enabled()
+    expect(format_select).to_have_value("html")
+    expect(export_dialog.locator(".export-filename-field span")).to_have_text(".html")
     format_select.select_option("txt")
     expect(export_dialog.get_by_label("Open in browser tab")).not_to_be_checked()
     with page.expect_download() as report_download:
-        export_dialog.get_by_role("button", name="Create", exact=True).click()
+        export_dialog.get_by_role("button", name="Download", exact=True).click()
     assert report_download.value.suggested_filename == "a17 unsafe-report.txt"
     text_report = Path(report_download.value.path()).read_text(encoding="utf-8")
     assert "Research sessions" in text_report and "Session #1" in text_report
@@ -589,7 +720,7 @@ with sync_playwright() as playwright:
     export_dialog.get_by_label("Format").select_option("html")
     export_dialog.get_by_label("Open in browser tab").check()
     with page.expect_popup() as report_tab, page.expect_download() as html_download:
-        export_dialog.get_by_role("button", name="Create", exact=True).click()
+        export_dialog.get_by_role("button", name="Download", exact=True).click()
     popup = report_tab.value
     popup.wait_for_load_state("domcontentloaded")
     assert "a17-html.html" == html_download.value.suggested_filename
@@ -606,7 +737,7 @@ with sync_playwright() as playwright:
     export_dialog.get_by_label("Open in browser tab").check()
     page.evaluate("() => { window.__originalOpen = window.open; window.open = () => null; }")
     with page.expect_download() as blocked_download:
-        export_dialog.get_by_role("button", name="Create", exact=True).click()
+        export_dialog.get_by_role("button", name="Download", exact=True).click()
     page.evaluate("() => { window.open = window.__originalOpen; delete window.__originalOpen; }")
     assert blocked_download.value.suggested_filename == "a17-blocked-tab.txt"
     expect(export_dialog).to_be_visible()
@@ -621,7 +752,7 @@ with sync_playwright() as playwright:
     export_dialog.get_by_label("Filename").fill("a17-latex")
     export_dialog.get_by_label("Format").select_option("tex")
     with page.expect_download() as tex_download:
-        export_dialog.get_by_role("button", name="Create", exact=True).click()
+        export_dialog.get_by_role("button", name="Download", exact=True).click()
     assert tex_download.value.suggested_filename == "a17-latex.tex"
     tex_report = Path(tex_download.value.path()).read_text(encoding="utf-8")
     assert "\\documentclass" in tex_report and "\\begin{document}" in tex_report
@@ -635,14 +766,20 @@ with sync_playwright() as playwright:
         )
         == "0px"
     )
-    expect(page.get_by_role("button", name="Back to Home", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Back to home", exact=True)).to_be_visible()
     page.get_by_role("button", name="Export project", exact=True).click()
     mobile_export = page.get_by_role("dialog", name="Export Project")
     mobile_box = mobile_export.bounding_box()
     assert mobile_box and mobile_box["x"] >= 0 and mobile_box["y"] >= 0
     assert mobile_box["x"] + mobile_box["width"] <= 390
     assert mobile_box["y"] + mobile_box["height"] <= 844
-    page.screenshot(path="/tmp/sigma-a175-export-mobile.png")
+    mobile_stem_visible = mobile_export.get_by_label("Filename").evaluate(
+        "e => { const c=document.createElement('canvas').getContext('2d'); const s=getComputedStyle(e); c.font=`${s.fontSize} ${s.fontFamily}`; return c.measureText(e.value).width <= e.clientWidth - 24; }"
+    )
+    assert mobile_stem_visible, (
+        "The complete project-derived filename stem must fit at mobile width."
+    )
+    page.screenshot(path="/tmp/sigma-a177-after-export-mobile.png")
     page.keyboard.press("Escape")
     expect(mobile_export).to_be_hidden()
     connection.locator("summary").click()
@@ -656,13 +793,14 @@ with sync_playwright() as playwright:
     expect(mobile_dialog).to_be_hidden()
     page.screenshot(path="/tmp/sigma-a174-mobile.png", full_page=True)
     page.set_viewport_size({"width": 1440, "height": 900})
-    page.get_by_role("button", name="Back to Home", exact=True).click()
+    page.get_by_role("button", name="Back to home", exact=True).click()
     page.wait_for_url("http://127.0.0.1:5173/")
     page.get_by_role("tab", name="Samples", exact=True).click()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
     ).click()
     page.wait_for_url("**/project?*")
+    max_regions_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     max_regions_strategy = page.locator("li[data-strategy-id]").first
     max_regions_strategy.locator(".strategy-row-disclosure").click()
     page.get_by_role("button", name="Start research session", exact=True).click()
@@ -675,6 +813,10 @@ with sync_playwright() as playwright:
     expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
     expect(max_session.locator(".strategy-assessments")).to_contain_text("Artifact 1")
     expect(max_session.locator(".solution-review")).to_contain_text("R(n) = 1 + n(n+1)/2")
+    page.mouse.move(1435, 895)
+    page.wait_for_timeout(150)
+    page.screenshot(path="/tmp/sigma-a177-after-maximum-regions.png", full_page=True)
+    max_session.screenshot(path="/tmp/sigma-a177-after-session-card.png")
     page.reload()
     max_session = page.locator("li[data-session-id]").first
     expect(max_session.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
@@ -690,7 +832,40 @@ with sync_playwright() as playwright:
     maximum_strategy.get_by_role("button", name="Enable", exact=True).click()
     expect(maximum_strategy.locator(".strategy-disabled-label")).to_have_count(0)
     expect(page.get_by_role("button", name="Start research session")).to_be_enabled()
-    expect(page.locator("li[data-session-id]").first.locator(".strategy-assessments")).to_contain_text("Contributed to solution")
+    expect(
+        page.locator("li[data-session-id]").first.locator(".strategy-assessments")
+    ).to_contain_text("Contributed to solution")
+    max_record = page.evaluate(
+        "async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions[0]",
+        max_regions_path,
+    )
+    assert max_record["terminal_reason"] == "stop_productive_conclusion", max_record[
+        "terminal_reason"
+    ]
+    assert max_record["artifacts"][-1]["next_question"] == ""
+    assert max_record["outcome"]["assessment"] == "positive"
+    assert (
+        max_record["outcome"]["solution_review"]["verification_status"] == "convincing_unverified"
+    )
+    audit = page.evaluate(
+        "async path => await (await fetch('/api/projects/export?' + new URLSearchParams({path}))).json()",
+        max_regions_path,
+    )
+    exported_max = audit["research_sessions"][0]
+    assert exported_max["outcome"]["assessment"] == "positive"
+    assert exported_max["strategy_assessments"][0]["assessment"] == "contributed_to_solution"
+    assert exported_max["strategy_assessments"][0]["basis_artifact_ids"] == [
+        max_record["artifacts"][0]["id"]
+    ]
+    report = page.evaluate(
+        "async path => await (await fetch('/api/projects/export/report?' + new URLSearchParams({path,format:'txt'}))).text()",
+        max_regions_path,
+    )
+    assert (
+        "Positive" in report
+        and "Contributed to solution" in report
+        and "unverified" in report.lower()
+    )
     assert not errors, errors
     assert len(starts) == 4, starts
     print(

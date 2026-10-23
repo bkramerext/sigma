@@ -484,7 +484,7 @@
 .workspace-page .strategy-assessments h3 { margin: 0 0 5px; color: #ead0ae; font-size: 14px; }
 .workspace-page .strategy-assessments > p { margin: 0 0 8px; color: #9eacb7; font-size: 12px; }
 .workspace-page .strategy-assessments-scroll { overflow-x: auto; }
-.workspace-page .strategy-assessments table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.workspace-page .strategy-assessments table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 12px; }
 .workspace-page .strategy-assessments th, .workspace-page .strategy-assessments td { padding: 7px 8px; border-top: 1px solid #303b45; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .workspace-page .strategy-assessments th:first-child { min-width: 140px; color: #d7e0e8; font-weight: 500; }
 .workspace-page .strategy-assessments td:nth-child(2) { min-width: 145px; color: #e7be8d; white-space: nowrap; }
@@ -676,17 +676,55 @@
 
 .workspace-page .session-progress-inline {
   display: block;
-  margin: 3px 0 0 24px;
+  margin: 0;
   color: var(--muted, #a7a7a7);
   font-size: 0.78rem;
   line-height: 1.35;
 }
 
-/* Align session outcome and progress with the Session title, not the chevron. */
-.workspace-page .session-row-disclosure { gap: 5px; }
-.workspace-page .session-row-heading > .session-outcome-inline,
-.workspace-page .session-row-heading > .session-progress-inline {
-  display: block;
-  margin-left: 21px;
+/* Session summary columns share one title anchor; actions remain in their own column. */
+.workspace-page .session-row-heading {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px;
 }
-.workspace-page .session-row-heading > .session-progress-inline { margin-top: 0; }
+.workspace-page .session-summary { display: grid; grid-template-columns: 13px minmax(0, 1fr); gap: 4px 7px; align-content: start; min-width: 0; }
+.workspace-page .session-summary > .session-row-disclosure { grid-column: 1 / -1; display: grid; grid-template-columns: 13px minmax(0, 1fr); gap: 7px; justify-self: start; width: 100%; max-width: 100%; min-width: 0; }
+.workspace-page .session-summary > .session-row-disclosure .session-row-title { min-width: 0; overflow-wrap: anywhere; }
+.workspace-page .session-row-disclosure .session-row-title { margin-left: 0; }
+.workspace-page .session-summary > .session-status,
+.workspace-page .session-summary > .session-outcome-inline,
+.workspace-page .session-summary > .session-progress-inline { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+.workspace-page .session-heading-actions { display: grid; justify-items: end; align-content: start; gap: 4px; min-width: max-content; }
+.workspace-page .session-heading-actions .session-remove-link { margin: 0; padding: 1px 0; }
+.workspace-page .session-heading-actions .session-remove-actions { grid-column: 1; width: min(240px, calc(100vw - 40px)); }
+.workspace-page .session-heading-actions .research-stop-confirm { position: static; width: 100%; }
+.workspace-page .session-row-content { min-width: 0; }
+
+/* Shared hover/focus state for all workspace icon buttons, including pane actions. */
+.workspace-page .workspace-icon-button { transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
+.workspace-page .workspace-icon-button:hover:not(:disabled),
+.workspace-page .workspace-icon-button:focus-visible,
+.workspace-page .project-pane-actions .text-view-icon:hover:not(:disabled),
+.workspace-page .project-pane-actions .text-view-icon:focus-visible {
+  color: #fff2e9 !important; background: var(--copper-gradient) !important; border-color: #ac7054 !important;
+  text-shadow: 0 1px 1px #24120d; box-shadow: inset 0 1px 0 #ecc0a535, 0 8px 22px #0004 !important; filter: none;
+}
+.workspace-page .workspace-icon-button:hover:not(:disabled) svg,
+.workspace-page .workspace-icon-button:focus-visible svg,
+.workspace-page .project-pane-actions .text-view-icon:hover:not(:disabled) svg,
+.workspace-page .project-pane-actions .text-view-icon:focus-visible svg { color: #fff2e9; }
+.workspace-page .workspace-icon-button:disabled { transition: none; }
+
+/* Dialog chrome stays visible while the selected panel scrolls inside the viewport. */
+.project-settings-dialog { width: min(520px, calc(100vw - 24px)); height: min(760px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); overflow: hidden; overscroll-behavior: contain; }
+.project-settings-dialog > form { height: 100%; max-height: 100%; min-height: 0; }
+.project-settings-dialog .settings-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.project-settings-dialog .settings-tabs { flex: 0 0 auto; }
+.project-settings-dialog .research-limits-panel { max-height: none; }
+.workspace-page .edit-project-dialog .research-limits-panel { max-height: none; overflow-y: auto; overscroll-behavior: contain; }
+.project-settings-dialog .settings-footer { flex: 0 0 auto; padding: 12px 24px 18px; border-top: 1px solid #35404a; }
+.project-settings-dialog .settings-footer .settings-actions { margin: 0; }
+@media (max-width: 700px) {
+ .workspace-page .session-row { grid-template-columns: minmax(0, 1fr); }
+ .workspace-page .session-row-content { grid-column: 1; grid-row: auto; }
+ .project-settings-dialog .settings-footer { padding-inline: 18px; }
+}

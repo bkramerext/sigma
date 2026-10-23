@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
 from sigma.api import app
@@ -21,6 +22,7 @@ from sigma.projects import (
     remove_strategy,
     set_strategy_enabled,
 )
+from sigma.recents import recent_projects
 
 
 def rejects(action) -> None:
@@ -82,6 +84,26 @@ def main() -> None:
         assert removed.project.events[-1].kind == "strategy.removed"
         assert open_project(path) == removed
         assert (path / "project.v2.json").read_bytes() == before
+        external_state = root / "external-state"
+        external_sigma = external_state / "sigma"
+        external_sigma.mkdir(parents=True)
+        sentinel = external_sigma / "recents.json"
+        sentinel_contents = b'{"version":1,"entries":[],"bootstrapped_roots":{}}\n'
+        sentinel.write_bytes(sentinel_contents)
+        isolated_state = root / "isolated-test-state"
+        isolated_state.mkdir(mode=0o700)
+        with patch.dict(
+            "os.environ",
+            {
+                "XDG_STATE_HOME": str(external_state),
+                "SIGMA_STATE_DIR": str(isolated_state),
+                "SIGMA_PROJECTS_ROOT": str(root),
+            },
+        ):
+            assert open_project(path) == removed
+            assert recent_projects()["projects"][0]["path"] == str(path.resolve())
+            assert sentinel.read_bytes() == sentinel_contents
+        print("PASS isolated strategy workflow leaves external Recent index byte-for-byte intact")
         snapshot = (path / STATE).read_bytes()
         rejects(lambda: remove_strategy(path, strategy.id))
         rejects(lambda: edit_strategy(path, strategy.id, "No", "Removed"))

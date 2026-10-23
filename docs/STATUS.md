@@ -1,5 +1,83 @@
 # SIGMA status
 
+## A17.7 UI corrections and regression hardening (2026-10-22)
+
+Corrected the project header so its full title occupies its own row and the
+Back arrow and caption sit together below it. Actionable icon controls now share
+a body-portal tooltip that follows pointer and keyboard focus and stays inside
+the viewport. Project export/settings icons share the edit-pencil hover and
+focus treatment. The Markdown control is a larger standalone mark without the
+old enclosing rectangle.
+
+Settings now keeps its heading, tabs and Save/Cancel footer reachable while the
+Limits panel scrolls inside a viewport-sized dialog. Opening Settings or Export
+locks the page behind it and restores prior scroll styles on close. Session
+summary uses one grid anchor for `Session #N`, lifecycle status, outcome and
+cycle/call progress; status no longer repeats in Details. Resume/Stop/Remove
+actions occupy a right-aligned vertical column, with Resume above Remove. The
+research-assessment table keeps a usable minimum width on narrow screens and
+scrolls horizontally instead of squeezing its rationale column.
+
+Export Project now shows JSON (.json) while Audit is selected and exposes only
+Text, HTML and LaTeX for Research Report. Cancel shares the title baseline;
+Download is the copper footer action. The edited filename stem is preserved
+across type/format switches, with its selected extension shown separately. The
+compact responsive dialog was exercised for successful downloads, blocked-tab
+recovery, request failure recovery, Escape, filename sanitization and all four
+output types.
+
+Recent-project isolation now applies to the test runner and standalone
+scenarios that open projects, to browser fixtures, and to their subprocesses.
+The runner supplies private temporary app-state, managed-project and auth
+directories. The affected `edits.sigma` workflow has a regression that opens a
+project while a sentinel external Recent index is present, checks that the
+project appears only in isolated state, and verifies the sentinel bytes remain
+unchanged. No existing Recent entries were deleted or rewritten.
+
+The final A17.6 integrated check ran against the A17.7 build. Maximum Regions
+ended with `stop_productive_conclusion`, an empty next question, a positive
+`achieved` objective and a convincing-but-unverified caveat. The session's
+artifact-linked **Contributed to solution** assessment persisted after reload
+and strategy disable/enable, and matched both Project Audit and Research Report
+exports. Session lifecycle stayed separate from outcome. The source-controlled
+research-session scenarios also cover budget exhaustion, recoverable assessment
+errors with saved artifacts, and stop/resume behavior; the browser fixture
+exercised pause/stop, an ambiguous interrupted-call state, and visible error
+recovery. The existing 2026-10-22 real-agent Maximum Regions evaluation remains
+the live quality result; this UI verification made no live or paid calls.
+
+Verification:
+
+- `./sigma test` passed all scenarios, Ruff check/format, Pyright (zero errors),
+  frontend typecheck and Vite production build. Starlette emitted its existing
+  non-failing TestClient/httpx deprecation warning.
+- `uv run --locked --no-sync ruff check browser_checks/a17_research.py` and
+  `uv run --locked --no-sync ruff format --check browser_checks/a17_research.py`
+  passed.
+- `uv run --with playwright python browser_checks/a17_research.py` passed in
+  real Chrome with the isolated mock provider. It covered 1440×900 desktop,
+  520×430 short desktop, 390×420 mobile and 390×844 narrow workspace layouts;
+  hover/focus tooltips and shared icon states; header geometry; Settings scroll
+  containment and background lock; narrow session action placement and exact
+  summary alignment; Audit/Report downloads, format/filename switching, popup
+  and request failures; and the integrated A17.6 Maximum Regions reload/export
+  checks. No live provider calls were made.
+- Before/after screenshots were captured and reviewed. Baseline screenshots
+  from clean commit `788fb00` are `/tmp/sigma-a177-before-workspace.png`,
+  `/tmp/sigma-a177-before-export.png`,
+  `/tmp/sigma-a177-before-settings-limits.png`, and
+  `/tmp/sigma-a177-before-session-card.png`; the pre-change header is also at
+  `/tmp/sigma-a177-before-header.png`. Final captures are
+  `/tmp/sigma-a177-after-icon-tooltip.png`,
+  `/tmp/sigma-a177-after-export-desktop.png`,
+  `/tmp/sigma-a177-after-export-mobile.png`,
+  `/tmp/sigma-a177-after-settings-short-desktop.png`,
+  `/tmp/sigma-a177-after-settings-mobile.png`,
+  `/tmp/sigma-a177-after-settings-main-mobile.png`,
+  `/tmp/sigma-a177-after-session-card.png`,
+  `/tmp/sigma-a177-after-session-stopped-actions-mobile.png`, and
+  `/tmp/sigma-a177-after-maximum-regions.png`.
+
 ## A17.6 Research outcomes and strategy attribution (2026-10-22)
 
 Separated research-objective assessment from execution status and strategy
@@ -1637,4 +1715,7 @@ User-requested lifecycle distinction: Stop now preserves a resumable `stopped` s
 
 A deterministic context assembler supplies the current strategy, question, two most recent full artifacts, the accumulated obligation ledger and prior artifact IDs to each role. Skeptic also receives the pending Investigator output. It refuses oversized context instead of silently dropping objections; each step records source artifact IDs and obligation count. This is an initial bounded implementation, not semantic retrieval.
 
-**Verification outstanding:** These direct GitHub edits were not executed in a local SIGMA checkout. Run `./sigma test`, frontend typecheck/build and real-browser lifecycle checks before treating this increment as verified. No paid calls were made.
+The direct lifecycle/context-continuation edits were included in the A17.7 local
+verification above. They were exercised by the full source-controlled scenario
+suite and the real-Chrome pause/stop/error workflow using the mock provider; no
+paid calls were made.
