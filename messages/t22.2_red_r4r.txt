@@ -58,3 +58,29 @@ the tree in final commit `ed5ff0e`:
 The corrected head is pushed to PR #37. T22.2 is updated in place; no follow-up
 ticket was created. PR remains open and unmerged for coordinator review. R4R;
 do not self-merge.
+
+## PR #37 conflict-resolution handoff (2026-10-23)
+
+Fetched current `main` at `6b6d1e458495d93dec0f78b2b983cf3b3acf39cc` and merged
+it into the PR branch. The prior PR head was `bd26aba46abf58ffaaf6ac6ff39d2807e8ee2012`;
+integration commit `e8ccb8e21b5bc87d738b67cc190a3bf5f2d54bd2` has that prior head
+and current main as parents. The only conflict was `docs/STATUS.md`, resolved by
+keeping the full T29 intervention verification section and T22.2 account-switch
+correction section. T29 frontend/API/session changes merged automatically and
+were retained alongside T22.2 cloud auth; no functional conflict hunk was
+discarded.
+
+Verification on the integrated tree:
+- `./sigma test` — passed, including 10 cloud-auth tests, T29 research-session
+  regressions, Ruff, formatting, Pyright, frontend typecheck, and production build.
+- `uv run --with playwright python browser_checks/t22_access_denied.py` — passed
+  in real Chrome for denial, request prefill, Demo handoff, local unrestricted
+  mode, and administrator session summary.
+- `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8003 uv run --with playwright
+  python browser_checks/t29_intervention.py` — passed in real Chrome for
+  intervention delivery, no extra call, audit acknowledgment, and mobile layout.
+
+Port 8002 was already occupied by a fixture from another checkout; it was not
+stopped or modified. T29's isolated fixture ran on port 8003. No external worker
+or collaborator was contacted. The updated branch is pushed to PR #37. R4R;
+leave the PR open for coordinator review and do not self-merge.

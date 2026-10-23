@@ -3824,3 +3824,25 @@ errors/warnings, frontend typecheck, and production build) and
 Chrome. The browser check covers the denied screen and request, account switch,
 Demo handoff, unrestricted local Home, and administrator session summary. No
 live Google or model-provider calls were made.
+
+### PR #37 refresh against main (2026-10-23)
+
+Fetched main at `6b6d1e458495d93dec0f78b2b983cf3b3acf39cc` and merged it into
+T22.2 at `e8ccb8e21b5bc87d738b67cc190a3bf5f2d54bd2`. The only textual conflict
+was `docs/STATUS.md`: retained T29's new intervention evidence and the existing
+T22.2 auth correction evidence together. `TICKET_TRACKING.md` and the T29 API,
+research-session service/tests, and frontend UI merged automatically; no
+functional hunk was discarded. T22.2 account-switch invalidation, admin
+session summary, cloud API protection, and local unrestricted mode remain in
+the integrated tree.
+
+On the integrated tree, `./sigma test` passed all backend scenarios, including
+10 cloud-auth tests, Ruff, format check, Pyright (zero diagnostics), frontend
+typecheck, and production build. Real Chrome checks also passed:
+`browser_checks/t22_access_denied.py` covered denied-account actions, request
+prefill, Demo handoff, local unrestricted Home, and Access Management session
+summary; `browser_checks/t29_intervention.py` covered intervention submission,
+no extra provider call, acknowledgment provenance, and mobile layout. T29's
+isolated fixture ran on port 8003 because port 8002 was already occupied by a
+different checkout; that listener was left untouched. No live provider calls
+were made.
