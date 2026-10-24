@@ -50,6 +50,21 @@ def fixture() -> dict:
                     "solution_review": {
                         "claim": "Candidate formula",
                         "argument_summary": "Upper bound and attaining construction.",
+                        "argument_steps": [
+                            {
+                                "number": 1,
+                                "title": "Insertion recurrence",
+                                "argument": "The nth line has at most n-1 crossings and therefore creates at most n regions.",
+                                "epistemic_status": "deduction",
+                                "basis_artifact_ids": ["artifact-1"],
+                                "research_artifact_id": "artifact-1",
+                                "review": {
+                                    "disposition": "accepted",
+                                    "rationale": "The crossing count partitions the line into at most n pieces.",
+                                    "basis_artifact_ids": ["artifact-1"],
+                                },
+                            }
+                        ],
                         "assumptions": ["Euclidean lines"],
                         "proof_obligations": ["Verify n=0"],
                         "verification_status": "convincing_unverified",
@@ -157,6 +172,52 @@ def test_unequal_metric_groups() -> None:
         assert html_report.count('<dl class="report-outcome-metrics">') == bool(ops) + bool(
             research
         )
+
+
+def test_report_retains_reviewed_argument_steps() -> None:
+    data = fixture()
+    data["research_sessions"][0]["outcome"]["solution_review"]["strategy_findings"] = [
+        {
+            "strategy_title": "Branch A",
+            "status": "partial",
+            "claim": "A partial bound.",
+            "research_artifact_id": "artifact-1",
+            "reasoning_steps": [
+                {
+                    "number": 1,
+                    "title": "Partial lemma",
+                    "argument": "The finite bound follows under the stated condition.",
+                    "epistemic_status": "deduction",
+                    "review": {
+                        "disposition": "unresolved",
+                        "rationale": "The other direction is missing.",
+                        "objection": "No attainment argument.",
+                    },
+                }
+            ],
+            "objections": ["No attainment argument."],
+            "open_obligations": ["Construct an attaining case."],
+        },
+        {
+            "strategy_title": "Branch B",
+            "status": "achieved",
+            "claim": "A separate reviewed result.",
+            "research_artifact_id": "artifact-2",
+            "reasoning_steps": [],
+            "objections": [],
+            "open_obligations": [],
+        },
+    ]
+    plain, _ = render_report(data, "txt")
+    html_report, _ = render_report(data, "html")
+    assert isinstance(plain, str) and isinstance(html_report, str)
+    assert "Insertion recurrence" in plain
+    assert "at most n pieces" in plain
+    assert "Skeptic rationale: The crossing count" in plain
+    assert "Insertion recurrence" in html_report
+    assert "at most n pieces" in html_report
+    assert "Branch A · partial" in plain
+    assert "No attainment argument." in plain
 
 
 def test_context_manifest_is_reported() -> None:

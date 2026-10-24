@@ -300,6 +300,73 @@ async def handler(request):
                     "computational_citations": [],
                 }
             )
+        if body["text"]["format"]["name"] == "research_investigator":
+            result["reasoning_steps"] = (
+                [
+                    {
+                        "title": "Assumptions and domain",
+                        "argument": "The lines are distinct straight lines in the Euclidean plane. The attaining arrangement uses no parallel pairs and no triple intersections.",
+                        "epistemic_status": "assumption",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Insertion upper bound",
+                        "argument": "The kth line has at most k−1 distinct intersections with earlier lines, giving at most k pieces; each piece can split at most one old region, so at most k new regions are added.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Distinct regions are split",
+                        "argument": "Old regions are convex intersections of open half-planes. Two pieces separated by an earlier-line crossing cannot lie in one old region, and openness gives points on both sides of each crossing, so each met region splits.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Attainment construction",
+                        "argument": "For L_k:y=kx+k², intersections with L_i occur at x=−(i+k), distinct for each i<k. There are no triple intersections, so insertion k creates k pieces in k distinct old regions.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Recurrence and base case",
+                        "argument": "The upper bound and attaining family give R(k)=R(k−1)+k. With no lines the plane is one region, so R(0)=1.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Closed form",
+                        "argument": "Induction on the recurrence yields R(n)=1+Σ(k=1…n)k=1+n(n+1)/2.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                ]
+                if maximum_regions
+                else [
+                    {
+                        "title": "Bounded fixture finding",
+                        "argument": "This fixture makes a local consequence under its stated premise; it does not establish the project's full objective.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    }
+                ]
+            )
+        else:
+            result["reasoning_assessments"] = [
+                {
+                    "step_number": index,
+                    "disposition": "accepted",
+                    "rationale": (
+                        "The stated geometric step follows from the explicit intersections and convexity argument."
+                        if maximum_regions
+                        else "The limited consequence follows from its recorded premise; it does not resolve the full objective."
+                    ),
+                    "objection": "",
+                    "basis_artifact_ids": [],
+                }
+                for index, _ in enumerate(
+                    context.get("investigator_output", {}).get("reasoning_steps", []), 1
+                )
+            ]
         result["human_guidance_reviews"] = [
             {
                 "intervention_id": item["intervention_id"],

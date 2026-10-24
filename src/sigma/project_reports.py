@@ -135,15 +135,66 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             lines += [
                 f"Solution claim: {_value(review.get('claim'))}",
                 f"Argument: {_value(review.get('argument_summary'))}",
+                f"Skeptic response: {_value(review.get('skeptic_response'))}",
                 f"Assumptions reviewed: {'; '.join(_items(review.get('assumptions'))) or 'Not recorded'}",
-                f"Proof obligations: {'; '.join(_items(review.get('proof_obligations'))) or 'Not recorded'}",
+                f"Proof obligations considered: {'; '.join(_items(review.get('proof_obligations'))) or 'Not recorded'}",
+                f"Still open: {'; '.join(_items(review.get('open_obligations'))) or 'None recorded'}",
                 f"Solution evidence references: {'; '.join(_items(review.get('basis_artifact_ids'))) or 'Not recorded'}",
                 f"Unresolved objections: {'; '.join(_items(review.get('unresolved_objections'))) or 'None recorded'}",
                 f"Resolved review notes: {'; '.join(_items(review.get('resolved_objections'))) or 'None recorded'}",
                 "",
             ]
+            lines += [
+                f"Skeptic objection: {item}" for item in _items(review.get("skeptic_objections"))
+            ]
+            if _items(review.get("skeptic_objections")):
+                lines.append("")
             if review.get("verification_status", "unknown") != "unknown":
                 lines.insert(-1, f"Verification status: {_value(review['verification_status'])}")
+            argument_steps = _rows(review.get("argument_steps"))
+            if argument_steps:
+                lines += ["Reviewed reasoning", "~~~~~~~~~~~~~~~~~"]
+                for step in argument_steps:
+                    lines += [
+                        f"Step {step.get('number', '?')}: {_value(step.get('title'))}",
+                        f"Epistemic status: {_value(step.get('epistemic_status'))}",
+                        _value(step.get("argument")),
+                        f"Research artifact: {_value(step.get('research_artifact_id'))}",
+                        f"Source artifacts: {'; '.join(_items(step.get('basis_artifact_ids'))) or 'Current research artifact'}",
+                    ]
+                    step_review = step.get("review")
+                    if isinstance(step_review, dict):
+                        lines += [
+                            f"Skeptic disposition: {_value(step_review.get('disposition'))}",
+                            f"Skeptic rationale: {_value(step_review.get('rationale'))}",
+                        ]
+                    lines.append("")
+            for finding in _rows(review.get("strategy_findings")):
+                if len(_rows(review.get("strategy_findings"))) <= 1:
+                    break
+                lines += [
+                    f"Strategy finding: {_value(finding.get('strategy_title'))} · {_value(finding.get('status'))}",
+                    f"Claim: {_value(finding.get('claim'))}",
+                    f"Source artifact: {_value(finding.get('research_artifact_id'))}",
+                ]
+                for step in _rows(finding.get("reasoning_steps")):
+                    lines += [
+                        f"Step {step.get('number', '?')}: {_value(step.get('title'))} ({_value(step.get('epistemic_status'))})",
+                        _value(step.get("argument")),
+                    ]
+                    step_review = step.get("review")
+                    if isinstance(step_review, dict):
+                        lines.append(
+                            f"Skeptic review: {_value(step_review.get('disposition'))} · {_value(step_review.get('rationale'))}"
+                        )
+                        if step_review.get("objection"):
+                            lines.append(f"Objection: {_value(step_review.get('objection'))}")
+                for label, key in (
+                    ("Objection", "objections"),
+                    ("Open obligation", "open_obligations"),
+                ):
+                    lines += [f"{label}: {item}" for item in _items(finding.get(key))]
+                lines.append("")
         assessments = _rows(session.get("strategy_assessments"))
         if assessments:
             lines += ["Strategy Assessments", "--------------------"]
