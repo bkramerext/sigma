@@ -33,7 +33,8 @@ VERIFICATION
 - `tests/cloud_auth.py`: PASS (11 tests).
 - `tests/cloud_research.py`: PASS.
 - Ruff check/format and Pyright: PASS after fixing formatting and loop-terminal assertions.
-- `./sigma test`: PASS on the final T41 scope (all executable scenarios, Ruff check/format, Pyright with zero diagnostics, frontend typecheck and production build). Initial attempts identified missing worktree frontend dependencies and test formatting/type-flow issues; ran `./sigma setup`, fixed the test, and reran the entire gate successfully. The final rerun includes missing-credential, denial, and timeout checks.
+- Current-main rebase: PR #58 targets main at `087196ef475261f09ec041d4318290fc5df03ee0`; T40 files are unchanged relative to that base.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`: PASS on the rebased T41 scope (all executable scenarios, Ruff check/format, Pyright with zero diagnostics, frontend typecheck and production build). The exported bootstrap-email variable was present without matching OAuth client settings, so plain `./sigma test` stopped in a T40 launcher fixture before the rerun with that unrelated variable unset. No T40 source/test changes were made.
 - No paid provider calls or cloud provisioning.
 
 R4R: requested on PR #58. Do not self-merge.

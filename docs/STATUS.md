@@ -84,10 +84,14 @@ changes were made. Real-browser verification is not applicable to this
 backend-test-only change. Hosted deployment and live provider behavior remain
 unverified.
 
-Verification: `tests/cloud_research_api.py` PASS; `tests/cloud_research.py`
-PASS; `tests/cloud_auth.py` PASS (11 tests); Ruff check/format, Pyright,
-frontend typecheck/build, and `./sigma test` all PASS. The initial clean
-worktree lacked `node_modules`; `./sigma setup` installed locked local deps.
+After the T40 merge, the rebased T41 tree passed
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`, including all cloud
+scenarios, Ruff check/format, Pyright, frontend typecheck, and production build.
+The exported bootstrap-email variable was set in this runner without its
+corresponding OAuth client settings. The first unmodified-environment run
+therefore stopped in T40's launcher test; no T40 source or tests were changed.
+The initial clean worktree lacked `node_modules`; `./sigma setup` installed
+locked local deps.
 
 
 ## Lean toolbar color feedback (2026-10-23)
