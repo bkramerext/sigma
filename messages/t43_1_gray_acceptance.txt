@@ -114,6 +114,7 @@ were performed. PR #63 remains open for coordinator review; do not merge.
 Strategy picker and Human Guidance follow-up (2026-10-23)
 --------------------------------------------------------
 Continued on the same `gray/t43-1-operator-followups` branch and PR #63.
+Implementation and validation head: `c7dd19ac14fbe21d87d715d50430367c40bd59d6`.
 
 - Reworked multi-strategy selection into a compact list aligned with the left
   edge of the Strategies pane. Checkboxes use a fixed 16px size; strategy
@@ -143,4 +144,4 @@ Validation:
   later strategy-picker scenario; the dedicated check above covers that UI.
 
 No research provider calls or live OAuth were made. PR #63 remains open; do not
-merge. Final branch head SHA will be recorded after the update is pushed.
+merge. The final handoff-only commit records the latest branch head.
