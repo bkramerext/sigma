@@ -75,7 +75,7 @@ Validation for this follow-up:
 T43.1 Home-header and Administrator Settings polish
 ---------------------------------------------------
 Implemented on the same `gray/t43-1-operator-followups` branch and PR #63.
-Validation head: pending final commit.
+Implementation and verification head: `0d3d9e809ddb3290c28d13b715a28f277433c80e`.
 
 - Kept both Home account pills in the same position and with unchanged
   horizontal padding through the former 700px breakpoint. Their type scales
