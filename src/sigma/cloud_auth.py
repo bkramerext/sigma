@@ -371,7 +371,10 @@ async def middleware(request: Request, call_next):
         return response
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
-    if path.startswith("/api/ai/"):
+    # Local Google identity gates project access but does not replace the
+    # separate local ChatGPT account flow. Hosted SIGMA must never proxy a
+    # user's personal ChatGPT authorization through the service.
+    if path.startswith("/api/ai/") and not cfg.local:
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )
