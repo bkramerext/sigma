@@ -101,7 +101,9 @@ class ComputationCitation(BaseModel):
 class ResearchReasoningStep(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     title: str = Field(min_length=1, max_length=160)
-    argument: str = Field(min_length=1, max_length=3000)
+    # Keep substantial explanations intact. The provider prompt asks for a
+    # partial result with explicit gaps if even this per-step bound is too low.
+    argument: str = Field(min_length=1, max_length=12000)
     epistemic_status: str = Field(pattern="^(deduction|assumption|computation|conjecture)$")
     basis_artifact_ids: list[str] = Field(max_length=8)
 
@@ -120,6 +122,7 @@ class Investigator(BaseModel):
     claim: str = Field(min_length=1, max_length=3000)
     method: str = Field(min_length=1, max_length=6000)
     reasoning_steps: list[ResearchReasoningStep] = Field(max_length=24)
+    claim_is_conditional: bool
     assumptions: list[str] = Field(max_length=12)
     evidence_status: str = Field(min_length=1, max_length=500)
     open_obligations: list[str] = Field(max_length=12)
@@ -175,6 +178,7 @@ class Skeptic(BaseModel):
     solution_claim: str = Field(max_length=2000)
     argument_summary: str = Field(max_length=4000)
     reasoning_assessments: list[ReasoningAssessment] = Field(max_length=24)
+    claim_is_conditional: bool
     assumptions_reviewed: list[str] = Field(max_length=12)
     proof_obligations: list[str] = Field(max_length=12)
     unresolved_objections: list[str] = Field(max_length=12)
@@ -228,14 +232,74 @@ def _reviewed_argument(
     return reviewed
 
 
-def _argument_is_complete(steps: list[dict[str, Any]], *, mathematical_proof: bool = False) -> bool:
-    return bool(steps) and all(
-        item.get("review", {}).get("disposition") == "accepted"
-        and len(str(item.get("review", {}).get("rationale", "")).strip()) >= 24
-        and not str(item.get("review", {}).get("objection", "")).strip()
-        and (not mathematical_proof or item.get("epistemic_status") in {"deduction", "assumption"})
-        for item in steps
-    )
+def _argument_is_complete(
+    steps: list[dict[str, Any]],
+    *,
+    mathematical_proof: bool = False,
+    claim_is_conditional: bool = False,
+    declared_assumptions: list[str] | None = None,
+    reviewed_assumptions: list[str] | None = None,
+) -> bool:
+    declared = {" ".join(item.casefold().split()) for item in (declared_assumptions or [])}
+    reviewed = {" ".join(item.casefold().split()) for item in (reviewed_assumptions or [])}
+    if mathematical_proof and claim_is_conditional and not declared:
+        return False
+    # Listed assumptions are premises unless they are discharged as
+    # deductions. Never publish the claim as unconditional by omission.
+    if (
+        mathematical_proof
+        and declared
+        and (not claim_is_conditional or not declared.issubset(reviewed))
+    ):
+        return False
+    for item in steps:
+        if (
+            item.get("review", {}).get("disposition") != "accepted"
+            or len(str(item.get("review", {}).get("rationale", "")).strip()) < 24
+            or str(item.get("review", {}).get("objection", "")).strip()
+        ):
+            return False
+        kind = item.get("epistemic_status")
+        if not mathematical_proof:
+            continue
+        if kind == "deduction":
+            continue
+        # An assumption is a premise only for an explicitly conditional claim.
+        # It must be stated verbatim in the declared assumptions and reviewed
+        # there as well; reviewer agreement cannot turn it into a theorem.
+        assumption = " ".join(str(item.get("argument", "")).casefold().split())
+        if (
+            kind != "assumption"
+            or not claim_is_conditional
+            or assumption not in declared
+            or assumption not in reviewed
+        ):
+            return False
+    return bool(steps)
+
+
+def _claim_scope(investigation: dict[str, Any], skeptic: dict[str, Any]) -> str:
+    investigator_scope = investigation.get("claim_is_conditional")
+    skeptic_scope = skeptic.get("claim_is_conditional")
+    if investigator_scope is True and skeptic_scope is True:
+        return "conditional"
+    if investigator_scope is False and skeptic_scope is False:
+        return "unconditional"
+    return "disputed"
+
+
+def _claim_for_review(investigation: dict[str, Any], skeptic: dict[str, Any]) -> str:
+    claim = str(skeptic.get("solution_claim", ""))
+    scope = _claim_scope(investigation, skeptic)
+    if scope == "conditional":
+        assumptions = investigation.get("assumptions", [])
+        premises = "; ".join(
+            str(item).strip().rstrip(".; ") for item in assumptions if str(item).strip()
+        )
+        return f"Conditional on: {premises}. {claim}" if premises else f"Conditional claim: {claim}"
+    if scope == "disputed":
+        return f"Claim scope disputed by Investigator and Skeptic: {claim}"
+    return claim
 
 
 def _mathematical_session(record: dict[str, Any]) -> bool:
@@ -1609,7 +1673,7 @@ INVESTIGATOR_GUIDANCE = (
     "target assumptions and domains; a mismatch is a reason to reject or narrow the transfer, "
     "not to mark this strategy disproven. If peer evidence lists a withdrawn source artifact, "
     "do not rely on that artifact's old cross-strategy relation as current. "
-    "For substantive mathematical/scientific reasoning, populate reasoning_steps with an ordered argument, not an outline that omits the hard inference. Each step states its claim and why it follows, names epistemic_status (deduction, assumption, computation, or conjecture), and cites saved artifact IDs when used. Include definitions/scope, intermediate lemmas, derivation, upper/lower or soundness/completeness directions as applicable, base cases and edge cases. Computation is evidence, never a general proof. If you cannot justify a step, label it conjecture and record the missing obligation; never fill a gap by assertion. Preserve unsuccessful approaches as findings in method and open_obligations."
+    "For substantive mathematical/scientific reasoning, populate reasoning_steps with an ordered argument, not an outline that omits the hard inference. Each step states its claim and why it follows, names epistemic_status (deduction, assumption, computation, or conjecture), and cites saved artifact IDs when used. Include definitions/scope, intermediate lemmas, derivation, upper/lower or soundness/completeness directions as applicable, base cases and edge cases. Computation is evidence, never a general proof. An assumption step is a premise, not an established fact: set claim_is_conditional=true only when the claim itself is explicitly conditional on that exact listed premise. Otherwise prove the premise or leave the objective partial. If the complete explanation needs more than 24 steps or 12,000 characters in one step, do not compress or omit a needed inference to fit; save the strongest partial argument and state the omitted proof obligation explicitly. If you cannot justify a step, label it conjecture and record the missing obligation; never fill a gap by assertion. Preserve unsuccessful approaches as findings in method and open_obligations."
 )
 SKEPTIC_GUIDANCE = (
     "Independently examine the exact objective, selected strategy, current Investigator output, "
@@ -1680,7 +1744,7 @@ SKEPTIC_GUIDANCE = (
     "objection remains, use partial/not_achieved. A complete argument without an independent "
     "proof checker is convincing_unverified; never claim verified. An empty next-step list is not "
     "evidence of failure. "
-    "For every current Investigator reasoning_steps entry, return exactly one reasoning_assessments entry with its 1-based step_number. Independently check each inference against the supplied argument and cited artifacts. Accept only if the justification entails the step under explicit assumptions; otherwise use challenged or unresolved, explain the precise gap in objection, and do not promote the objective to achieved. Accepted rationale must explain the check, not merely agree. If a complete proof is not supported, preserve the strongest partial derivation, failed approaches, counterexamples and remaining proof obligations. The outcome is agent-reviewed and unverified, not independently verified; computation does not prove a universal statement."
+    "For every current Investigator reasoning_steps entry, return exactly one reasoning_assessments entry with its 1-based step_number. Independently check each inference against the supplied argument and cited artifacts. Accept only if the justification entails the step under explicit assumptions; otherwise use challenged or unresolved, explain the precise gap in objection, and do not promote the objective to achieved. Accepted rationale must explain the check, not merely agree. Set claim_is_conditional=true only if the solution_claim is explicitly conditional on the Investigator's listed assumptions; it must equal the Investigator's value. An accepted assumption step is a premise, never an established theorem: allow it only when the claim is explicitly conditional on that exact premise and assumptions_reviewed includes it. If the explanation appears compressed, a material inference is missing, or the 24-step/12,000-character bounds would hide work, identify the exact omitted obligation and keep the result partial. If a complete proof is not supported, preserve the strongest partial derivation, failed approaches, counterexamples and remaining proof obligations. The outcome is agent-reviewed and unverified, not independently verified; computation does not prove a universal statement."
 )
 
 HUMAN_INTERVENTION_GUIDANCE = (
@@ -5145,8 +5209,13 @@ def _commit_portfolio_review(
         and bool(output["solution_claim"].strip())
         and bool(output["argument_summary"].strip())
         and bool(output["proof_obligations"])
+        and _claim_scope(investigation, output) != "disputed"
         and _argument_is_complete(
-            reviewed_argument, mathematical_proof=_mathematical_session(record)
+            reviewed_argument,
+            mathematical_proof=_mathematical_session(record),
+            claim_is_conditional=_claim_scope(investigation, output) == "conditional",
+            declared_assumptions=investigation.get("assumptions", []),
+            reviewed_assumptions=output.get("assumptions_reviewed", []),
         )
         and not output["unresolved_objections"]
         and not output["remaining_obligations"]
@@ -5262,7 +5331,8 @@ def _commit_portfolio_review(
     }
     artifact["objective_review"] = {
         "status": "achieved" if objective_complete else output["objective_status"],
-        "claim": output["solution_claim"],
+        "claim": _claim_for_review(investigation, output),
+        "claim_scope": _claim_scope(investigation, output),
         "argument_summary": output["argument_summary"],
         "argument_steps": artifact["reasoning_steps"],
         "assumptions": output["assumptions_reviewed"],
@@ -6059,6 +6129,9 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     branch["reason"] = (
                         "Shared call budget cannot fund another complete Investigator/Skeptic pair."
                     )
+                # The portfolio ends with a partial result if any sibling
+                # completed or reached a bounded terminal state. Only an
+                # all-branches failure makes the whole session failed.
                 record["status"] = (
                     "failed"
                     if runs and all(item["status"] == "failed" for item in runs)
@@ -6834,8 +6907,13 @@ async def _worker(session_id: str, path: str) -> None:
                 and bool(output["solution_claim"].strip())
                 and bool(output["argument_summary"].strip())
                 and bool(proof_obligations)
+                and _claim_scope(investigation, output) != "disputed"
                 and _argument_is_complete(
-                    reviewed_argument, mathematical_proof=_mathematical_session(record)
+                    reviewed_argument,
+                    mathematical_proof=_mathematical_session(record),
+                    claim_is_conditional=_claim_scope(investigation, output) == "conditional",
+                    declared_assumptions=investigation.get("assumptions", []),
+                    reviewed_assumptions=output.get("assumptions_reviewed", []),
                 )
                 and not output["unresolved_objections"]
                 and not output["remaining_obligations"]
@@ -6955,7 +7033,8 @@ async def _worker(session_id: str, path: str) -> None:
             argument_summary = output["argument_summary"]
             artifact["objective_review"] = {
                 "status": "achieved" if objective_complete else output["objective_status"],
-                "claim": output["solution_claim"],
+                "claim": _claim_for_review(investigation, output),
+                "claim_scope": _claim_scope(investigation, output),
                 "argument_summary": argument_summary,
                 "argument_steps": artifact["reasoning_steps"],
                 "assumptions": all_assumptions,

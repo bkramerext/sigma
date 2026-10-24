@@ -41,6 +41,18 @@ incomplete rather than silently upgrading them.
   review with a substantive rationale, plus the existing objective, obligation,
   counterexample, and evidence checks. A missing or challenged step remains
   visible but prevents complete status.
+- Mathematical `assumption` steps are premises, never proven facts. They can
+  support only a claim explicitly marked conditional by both Investigator and
+  Skeptic, and only when the exact premise appears in both the declared and
+  reviewed assumptions. The saved claim and report say “Conditional on …”. A
+  disagreement about scope blocks completion. The Maximum Regions theorem is
+  conditional on the ordinary domain premise of distinct Euclidean lines; its
+  attaining construction must still establish general position rather than
+  assume it for every arrangement.
+- A reasoning step can preserve 12,000 characters. The 24-step bound remains a
+  schema and context safety ceiling. Prompts require an explicit partial result
+  and named omitted obligation when these bounds are insufficient; validation
+  rejects over-bound output rather than truncating it into apparent support.
 - The artifact stores both role outputs and their joined, source-linked
   reasoning. The outcome projection, JSON export, text/HTML project reports,
   and paper evidence snapshot retain the same material. Context compaction keeps
@@ -65,6 +77,14 @@ proof from a formula, sample-value agreement, a `stop` decision, or agreement
 between agents. Do not fill missing steps in synthesis or paper generation.
 
 ## Showcase interpretation
+
+For a multi-strategy session, the session-level lifecycle status is `failed`
+only when every selected branch fails. If one branch fails while another
+produces findings or ends at its budget, the session ends as `ended`; its
+portfolio decision retains the failed branch as `hold_after_failure` and keeps
+the sibling evidence. This represents a completed portfolio execution with a
+mixed branch result. A17's browser check now asserts this behavior instead of
+expecting one provider failure to erase successful sibling work.
 
 The Maximum Regions sample is the positive mathematical acceptance case: a
 complete candidate must state the domain and general-position construction,

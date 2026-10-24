@@ -213,6 +213,7 @@ async def handler(request):
                     "claim": "The maximum is R(n) = 1 + n(n+1)/2 for every n >= 0.",
                     "method": "Each region is a nonempty intersection of open half-planes with one chosen side of each line, hence convex and connected; different pieces of an inserted line lie in different old regions. Insert lines one at a time. The kth line has at most k-1 distinct intersections and is split into at most k pieces, each increasing the region count by at most one. The lines y=kx+k^2 have pairwise distinct intersections along each newly added line, so each of its k pieces lies in a distinct convex prior region and attains the bound. For n=0 there is one region.",
                     "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
+                    "claim_is_conditional": True,
                     "evidence_status": "Complete unverified mathematical argument; no proof checker was run.",
                     "open_obligations": [],
                     "python_code": None,
@@ -226,6 +227,7 @@ async def handler(request):
                     "claim": f"Fixture claim {cycle}: a candidate consequence follows from the saved strategy.",
                     "method": f"Use the stated mechanism to derive consequence {cycle}.",
                     "assumptions": [f"Fixture assumption {cycle}"],
+                    "claim_is_conditional": False,
                     "evidence_status": "Unverified model derivation; no tool was run.",
                     "open_obligations": [f"Check obligation {cycle}"],
                     "python_code": None,
@@ -272,6 +274,7 @@ async def handler(request):
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
                     "obligation_reviews": [],
+                    "claim_is_conditional": True,
                     "computational_citations": [],
                 }
                 if maximum_regions
@@ -297,6 +300,7 @@ async def handler(request):
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
                     "obligation_reviews": [],
+                    "claim_is_conditional": False,
                     "computational_citations": [],
                 }
             )
@@ -305,7 +309,7 @@ async def handler(request):
                 [
                     {
                         "title": "Assumptions and domain",
-                        "argument": "The lines are distinct straight lines in the Euclidean plane. The attaining arrangement uses no parallel pairs and no triple intersections.",
+                        "argument": "Lines are distinct straight lines in the Euclidean plane.",
                         "epistemic_status": "assumption",
                         "basis_artifact_ids": [],
                     },
@@ -367,6 +371,9 @@ async def handler(request):
                     context.get("investigator_output", {}).get("reasoning_steps", []), 1
                 )
             ]
+            result["assumptions_reviewed"] = context.get("investigator_output", {}).get(
+                "assumptions", []
+            )
         result["human_guidance_reviews"] = [
             {
                 "intervention_id": item["intervention_id"],

@@ -5398,8 +5398,9 @@ Investigator responses now include ordered, typed reasoning steps with explicit
 justifications and evidence references. Skeptics return a numbered assessment
 for every step, including a concrete objection when a step is challenged or
 unresolved. An achieved mathematical candidate now requires a complete set of
-accepted reviews with explanatory rationales, deductive/assumption steps, and
-the existing objective, evidence, obligation, and counterexample checks. Missing
+accepted reviews with explanatory rationales, supported deductions, and the
+existing objective, evidence, obligation, and counterexample checks. Unproven
+assumptions are conditional premises, not established steps. Missing
 or mismatched reviews cannot close the argument. The source artifact preserves
 the original role outputs plus the joined reasoning; an incomplete argument
 retains its challenged steps and objections. Historical achieved records without
@@ -5415,15 +5416,33 @@ already include complete session artifacts and now receive the structured
 reasoning through that saved artifact path. No changes were made to T45's paper
 generation implementation or Blue's branch.
 
+Follow-up review closed the assumption-scope gap: mathematical assumption steps
+can contribute only to a claim marked conditional by both roles, and the exact
+premise must be declared and included in the Skeptic's reviewed assumptions.
+The claim is serialized with a visible “Conditional on …” scope. Scope
+disagreement blocks completion. Step arguments can now carry 12,000 characters;
+the 24-step bound remains, and prompts require an explicit partial result and
+named missing obligation rather than compression when a bound is insufficient.
+
+The A17 lifecycle rule is intentional: a portfolio's overall session status is
+`failed` only when every selected branch fails. If a branch fails while a sibling
+produces evidence or reaches a bounded terminal state, the overall session is
+`ended` and the portfolio decision records the failed branch as
+`hold_after_failure`; successful sibling artifacts remain available. The
+updated real-Chrome assertion verifies this mixed result.
+
 Added `docs/OUTCOME-QUALITY.md` to document the contract and pipeline diagnosis.
-The Maximum Regions deterministic case covers assumptions, the insertion upper
+The Maximum Regions deterministic case covers conditional domain assumptions, the insertion upper
 bound, why pieces split distinct regions, a general-position attaining family,
 recurrence/base case, and closed form. It verifies persistence/reload, report
 generation, and downstream paper evidence. A negative session supplies an
 `achieved` summary but a Skeptic challenge to the distinct-region inference with
 no other open-obligation signal; the saved outcome must preserve the precise
-objection and remain partial. A separate portfolio projection test verifies
-partial findings survive alongside another branch's result.
+objection and remain partial. A >3,000-character argument fixture verifies the
+schema and reviewed projection preserve long text while the missing inference
+still blocks completion. A separate portfolio projection test verifies partial
+findings survive alongside another branch's result; ordinary bounded non-math
+sessions remain covered by the shared session scenarios.
 
 The RH showcase is seed material only and has no saved session history in this
 checkout. Its bounded objective, scoped strategy obligations, and T39
@@ -5444,11 +5463,9 @@ Starlette/httpx deprecation warnings remain.
 Real Chrome `browser_checks/t17_8_saved_session.py` passed against an isolated
 copy with a deterministic six-step argument fixture; it confirmed the current
 Outcome view displays the derivation, challenge/review status and source
-references, with no provider requests. A broader
-`browser_checks/a17_research.py` run against the local deterministic provider
-passed the generated session's outcome and artifact assertions, then stopped at
-its existing expectation that a multi-strategy run with one failed branch must
-have terminal session status `failed`. Current portfolio execution ended after
-the sibling branch completed. That lifecycle expectation is outside this
-outcome correction and was not changed. No live or paid provider calls were
-made.
+references, with no provider requests. The updated
+`browser_checks/a17_research.py` passed in real Chrome against the local
+deterministic provider, including the mixed portfolio lifecycle case and the
+current export/outcome contracts. Its stale export-count, artifact-count, and
+terminal-status assertions were corrected to match the implemented UI and
+coordinator semantics. No live or paid provider calls were made.

@@ -31,6 +31,7 @@ def provider_response(value):
     value = dict(value)
     if "claim" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("claim_is_conditional", False)
         value.setdefault(
             "reasoning_steps",
             [
@@ -44,6 +45,7 @@ def provider_response(value):
         )
     if "assessment" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("claim_is_conditional", False)
         value.setdefault("obligation_reviews", [])
         value.setdefault(
             "reasoning_assessments",
@@ -82,6 +84,7 @@ def investigation(n):
                 "basis_artifact_ids": [],
             }
         ],
+        "claim_is_conditional": False,
         "assumptions": [f"Assumption {n}"],
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
@@ -113,6 +116,7 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
                 "basis_artifact_ids": [],
             }
         ],
+        "claim_is_conditional": False,
         "assumptions_reviewed": [f"Assumption {n}"],
         "proof_obligations": [f"Check obligation {n}"],
         "unresolved_objections": [],
@@ -2694,6 +2698,22 @@ def test_outcome_classification():
 
 
 def test_deliberate_argument_gap_is_preserved_and_not_complete():
+    long_gap = (
+        "At most n−1 crossings give at most n pieces; the argument asserts that every piece contributes a new region. "
+        * 48
+    )
+    assert len(long_gap) > 3000
+    assert (
+        research_sessions.ResearchReasoningStep.model_validate(
+            {
+                "title": "Extended insertion claim",
+                "argument": long_gap,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+        ).argument
+        == long_gap
+    )
     investigation_record = {
         "reasoning_steps": [
             {
@@ -2704,7 +2724,7 @@ def test_deliberate_argument_gap_is_preserved_and_not_complete():
             },
             {
                 "title": "Each piece adds a new region",
-                "argument": "The pieces are asserted to create n new regions.",
+                "argument": long_gap,
                 "epistemic_status": "deduction",
                 "basis_artifact_ids": [],
             },
@@ -2730,6 +2750,7 @@ def test_deliberate_argument_gap_is_preserved_and_not_complete():
     }
     argument = research_sessions._reviewed_argument(investigation_record, skeptic_record)
     assert len(argument) == 2
+    assert argument[1]["argument"] == long_gap
     assert argument[1]["review"]["disposition"] == "challenged"
     assert "distinct old region" in argument[1]["review"]["objection"]
     assert not research_sessions._argument_is_complete(argument)
@@ -2745,6 +2766,57 @@ def test_deliberate_argument_gap_is_preserved_and_not_complete():
     ]
     assert research_sessions._argument_is_complete(conjectured)
     assert not research_sessions._argument_is_complete(conjectured, mathematical_proof=True)
+    accepted_assumption = [
+        {
+            "argument": "The equation holds under premise P.",
+            "epistemic_status": "assumption",
+            "review": {
+                "disposition": "accepted",
+                "rationale": "This premise is explicitly stated as a condition of the claim.",
+                "objection": "",
+            },
+        }
+    ]
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=[],
+        reviewed_assumptions=[],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=[],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["A different premise."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert (
+        research_sessions._claim_scope(
+            {"claim_is_conditional": True}, {"claim_is_conditional": False}
+        )
+        == "disputed"
+    )
 
 
 async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
@@ -2774,7 +2846,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "reasoning_steps": [
             {
                 "title": "Scope and assumptions",
-                "argument": "The arrangement consists of n distinct straight lines in the Euclidean plane. A maximizing arrangement is in general position: no two lines are parallel and no three meet at one point.",
+                "argument": "Lines are distinct straight lines in the Euclidean plane.",
                 "epistemic_status": "assumption",
                 "basis_artifact_ids": [],
             },
@@ -2810,6 +2882,7 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             },
         ],
         "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
+        "claim_is_conditional": True,
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
@@ -2871,7 +2944,8 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
                 "basis_artifact_ids": [],
             },
         ],
-        "assumptions_reviewed": ["Distinct straight lines in the Euclidean plane."],
+        "claim_is_conditional": True,
+        "assumptions_reviewed": ["Lines are distinct straight lines in the Euclidean plane."],
         "proof_obligations": [
             "Insertion lemma splits each affected region into two [cycle 1].",
             "The insertion bound proves the upper bound [cycle 1].",
@@ -2968,6 +3042,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert "Attaining every increment" in json.dumps(paper_snapshot, ensure_ascii=False)
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
+        assert finished["outcome"]["solution_review"]["claim_scope"] == "conditional"
+        assert finished["outcome"]["solution_review"]["claim"].startswith(
+            "Conditional on: Lines are distinct straight lines in the Euclidean plane."
+        )
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
         assert finished["artifacts"][0]["coordinator_decision"] == "stop_productive_conclusion"
         assert any(

@@ -133,6 +133,7 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
         review = solution_review
         if isinstance(review, dict):
             lines += [
+                f"Claim scope: {_value(review.get('claim_scope', 'not recorded'))}",
                 f"Solution claim: {_value(review.get('claim'))}",
                 f"Argument: {_value(review.get('argument_summary'))}",
                 f"Skeptic response: {_value(review.get('skeptic_response'))}",

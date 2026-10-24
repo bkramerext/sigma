@@ -49,6 +49,7 @@ def fixture() -> dict:
                     },
                     "solution_review": {
                         "claim": "Candidate formula",
+                        "claim_scope": "conditional",
                         "argument_summary": "Upper bound and attaining construction.",
                         "argument_steps": [
                             {
@@ -297,6 +298,7 @@ def main() -> None:
         "Research-quality metrics",
         "Verification: Convincing, unverified",
         "Solution claim: Candidate formula",
+        "Claim scope: conditional",
         "Verification status: convincing_unverified",
         "Strategy Assessments",
         "Productive: The linked counterexample attempt clarified the boundary case.",
