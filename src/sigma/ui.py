@@ -74,7 +74,7 @@ def ready(url: str, instance_id: str | None = None) -> bool:
         return False
 
 
-def run_ui(*, navigate: bool = False) -> int:
+def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
         return 2
@@ -112,6 +112,11 @@ def run_ui(*, navigate: bool = False) -> int:
                 ]
                 instance_id = uuid4().hex
                 child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
+                # Simulate identity only in the loopback Vite middleware, not the API.
+                child_env.pop("SIGMA_ADMIN_PREVIEW", None)
+                if admin_preview:
+                    child_env["SIGMA_ADMIN_PREVIEW"] = "true"
+                    child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "false"
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -120,14 +125,17 @@ def run_ui(*, navigate: bool = False) -> int:
                             env={
                                 key: value
                                 for key, value in child_env.items()
-                                if command[0] != "npm"
-                                or key
-                                not in {
+                                if (command[0] == "npm" or key != "SIGMA_ADMIN_PREVIEW")
+                                and (
+                                    command[0] != "npm"
+                                    or key
+                                    not in {
                                     "OPENAI_API_KEY",
                                     "ACCESS_TOKEN",
                                     "REFRESH_TOKEN",
                                     "ID_TOKEN",
-                                }
+                                    }
+                                )
                             },
                             start_new_session=True,
                             stdin=subprocess.PIPE,
@@ -148,6 +156,11 @@ def run_ui(*, navigate: bool = False) -> int:
                             and ready(URL + "/api/ui-instance", instance_id)
                             and ready(URL)
                         ):
+                            if admin_preview:
+                                print(
+                                    "LOCAL ADMIN PREVIEW: temporary fake accounts, no real authorizations.",
+                                    flush=True,
+                                )
                             print(
                                 "\nSIGMA servers ready:\n"
                                 f"  FastAPI API server: {API_URL}\n"
