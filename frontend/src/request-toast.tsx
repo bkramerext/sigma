@@ -50,7 +50,10 @@ export function installRequestErrorToasts() {
     const isApi = new URL(url, window.location.href).pathname.startsWith('/api/');
     try {
       const response = await originalFetch(input, init);
-      if (isApi && !response.ok) reportRequestFailure(await responseError(response));
+      const requestPath = new URL(url, window.location.href).pathname;
+      const expectedSignedOutCheck = response.status === 401 && requestPath === '/api/ai/connection' &&
+        (await response.clone().json().catch(() => null) as { error?: unknown } | null)?.error === 'Authentication required.';
+      if (isApi && !response.ok && !expectedSignedOutCheck) reportRequestFailure(await responseError(response));
       return response;
     } catch (error) {
       const aborted = init?.signal?.aborted || (input instanceof Request && input.signal.aborted)

@@ -315,6 +315,18 @@ class CloudAuthTests(TestCase):
             )
             self.assertNotEqual(self.client.get("/api/ai/connection").status_code, 401)
 
+    def test_hosted_google_auth_still_blocks_personal_chatgpt_auth(self):
+        signed_in = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        response = self.client.get("/api/ai/connection")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["error"],
+            "AI provider authorization is unavailable in cloud mode.",
+        )
+
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
         admin_client = admin_context.__enter__()
@@ -543,6 +555,12 @@ class CloudAuthTests(TestCase):
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["target"], "local")
             self.assertEqual(status["user"]["role"], "admin")
+            provider_status = self.client.get("/api/ai/connection")
+            self.assertEqual(provider_status.status_code, 200, provider_status.text)
+            self.assertNotEqual(
+                provider_status.json().get("guidance"),
+                "AI provider authorization is unavailable in cloud mode.",
+            )
             self.assertFalse((self.root / "workspaces" / "workspaces.sqlite3").exists())
             self.assertEqual(self.client.get("/api/projects/recent").status_code, 200)
         with patch.dict(

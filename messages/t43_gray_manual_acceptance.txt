@@ -1,0 +1,28 @@
+T43 — Manual acceptance fixes
+Owner: Gray
+Branch: gray/t43-manual-acceptance-fixes
+Base: main at bd0429ef404b27b08fbcb6e4789dd353816cf9e1
+Status: R4R — [PR #62](https://github.com/bkramerext/sigma/pull/62)
+
+Acceptance findings
+- MET — Sign-in page copy and typography now use the approved Gmail sentence and restrained New Project-scale hierarchy.
+- MET — Google and ChatGPT header pills share the same copper/dark control styling and have distinct, nonredundant labels.
+- MET — Google account popover uses the anchored connection-panel pattern with keyboard dismissal and focus restoration.
+- MET — Only the expected exact signed-out GET /api/ai/connection 401 is suppressed; genuine request errors still surface.
+- MET — Administrator terminology is “Built-in administrator” and “Authorized users”.
+- MET — New authorization is a labeled action in a dedicated left-aligned row for both populated and empty lists.
+- MET — Account usage is a separate keyboard-navigable tab and its table remains available.
+- MET — Diagnosed local ChatGPT HTTP 403: middleware applied the hosted personal-provider prohibition to loopback local Google-auth mode too. Local mode now uses the separate local ChatGPT account flow; hosted cloud mode still returns 403. Project/session authorization checks are unchanged.
+- MET — ChatGPT connection uses the copper primary action and underlined Retry and Separately billed API Key actions.
+- UNVERIFIED — Real Google OAuth callback and real ChatGPT OAuth handoff were not exercised. Browser auth states used deterministic fixtures; no paid model calls or cloud provisioning occurred.
+
+Verification
+- `uv run --locked --no-sync python tests/cloud_auth.py` — 14 tests passed, including local ChatGPT access and hosted 403 denial.
+- `uv run --with playwright python browser_checks/t40_cloud_ui.py` — passed sign-in, toast, Google popover, administrator/member, tabs, New/Add/edit/Save/Revoke, and responsive checks.
+- `uv run --with playwright python browser_checks/t43_manual_acceptance.py` — passed ChatGPT action styling, API key expansion, keyboard dismissal/focus, hosted service-only state, and 1280/390/320px layouts.
+- `npm --prefix frontend run typecheck` — passed.
+- `ruff check browser_checks/t40_cloud_ui.py browser_checks/t43_manual_acceptance.py` — passed.
+- `./sigma test` — passed all backend scenarios, Ruff, format check, Pyright (0 diagnostics), frontend typecheck and production build. Existing Starlette/httpx deprecation warnings remain.
+- Browser checks used isolated Vite/API ports 5189/8011. Existing listeners on 5173/8000 were left untouched. Screenshots: `/tmp/sigma-t43-signin-1440.png`, `/tmp/sigma-t43-signin-390.png`, `/tmp/sigma-t40-admin-home-1440.png`, `/tmp/sigma-t40-admin-dialog-390.png`, `/tmp/sigma-t43-chatgpt-320.png`.
+
+Changes are limited to T43 UI, auth-mode handling, regression checks, and acceptance documentation. Published PR head before this handoff update: `eee05dc0bcd40b8446932cb8c4038611a0e28949`.
