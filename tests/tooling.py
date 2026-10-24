@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, Mock, call, patch
 
+from sigma.cli import main as cli_main
 from sigma.projects import ROOT
 from sigma.tooling import run_tooling
 from sigma.ui import run_shutdown, run_ui, stop_servers
@@ -36,6 +37,29 @@ def check_failures() -> None:
         patch("sigma.tooling.subprocess.run", side_effect=OSError("cannot launch")),
     ):
         assert run_tooling("setup") == 2
+
+
+def check_start_cli() -> None:
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "start", "--help"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("start --help did not exit")
+    help_text = output.getvalue()
+    assert "--nav" in help_text and "--navigate" in help_text
+    assert "--admin" not in help_text and "--google-auth" not in help_text
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "start", "--admin"]), redirect_stderr(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:
+            raise AssertionError("removed admin option was accepted")
+    assert "unrecognized arguments" in output.getvalue()
 
 
 def check_ui() -> None:
@@ -102,6 +126,51 @@ def check_ui() -> None:
     child.wait.assert_called_once_with(timeout=8)
 
 
+def check_local_google_startup() -> None:
+    backend, frontend = Mock(), Mock()
+    backend.poll.return_value = None
+    frontend.poll.return_value = None
+    owner = MagicMock()
+    owner.__enter__.return_value.replacement_request.return_value = None
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+                "GOOGLE_OIDC_CLIENT_ID": "client-id",
+                "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+                "SIGMA_CLOUD_AUTH_ENABLED": "false",
+            },
+            clear=True,
+        ),
+        patch("sigma.ui.Instance", return_value=owner),
+        patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans"),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.wait_for_ports"),
+        patch("sigma.ui.subprocess.Popen", side_effect=[backend, frontend]) as launch,
+        patch("sigma.ui.ready", return_value=True),
+        patch("sigma.ui.webbrowser.open", return_value=True),
+        patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
+        patch("sigma.ui.stop_servers"),
+    ):
+        assert run_ui(navigate=True) == 0
+    backend_env = launch.call_args_list[0].kwargs["env"]
+    frontend_env = launch.call_args_list[1].kwargs["env"]
+    for key, value in {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_AUTH_LOCAL": "true",
+        "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+    }.items():
+        assert backend_env[key] == value
+    assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+    assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" not in frontend_env
+    assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+
+
 def check_shutdown_and_suspended() -> None:
     # SIGKILL verified dormant launchers directly, so they cannot wake
     # simultaneously and compete to start servers. No real signals are sent.
@@ -148,7 +217,7 @@ def check_shutdown_and_suspended() -> None:
             send.assert_not_called()
             processes[123456]["command"] = command.removesuffix(" start") + " ui"
             assert len(instance._legacy_lock_owners()) == 2
-            processes[123456]["command"] = command + " --navigate"
+            processes[123456]["command"] = command + " --nav"
             assert len(instance._legacy_lock_owners()) == 2
             processes[123456]["command"] = command
             processes[123457]["command"] = "/usr/bin/unrelated ui"
@@ -176,7 +245,9 @@ def main() -> None:
     output = StringIO()
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
+        check_start_cli()
         check_ui()
+        check_local_google_startup()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()

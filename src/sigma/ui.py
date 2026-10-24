@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import webbrowser
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 from uuid import uuid4
@@ -74,7 +75,7 @@ def ready(url: str, instance_id: str | None = None) -> bool:
         return False
 
 
-def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
+def run_ui(*, navigate: bool = False) -> int:
     if not (ROOT / "frontend/node_modules/vite").is_dir():
         print("UI dependencies are missing. Run ./sigma setup first.", file=sys.stderr)
         return 2
@@ -90,6 +91,20 @@ def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
+        local_google_auth = bool(os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip())
+        if local_google_auth:
+            if not os.environ.get("GOOGLE_OIDC_CLIENT_ID") or not os.environ.get(
+                "GOOGLE_OIDC_CLIENT_SECRET"
+            ):
+                raise RuntimeError(
+                    "Local Google sign-in needs GOOGLE_OIDC_CLIENT_ID and "
+                    "GOOGLE_OIDC_CLIENT_SECRET configured."
+                )
+            if not os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"):
+                raise RuntimeError(
+                    "Local Google sign-in needs SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "
+                    "set to the operator's actual Google account."
+                )
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:
@@ -112,11 +127,20 @@ def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
                 ]
                 instance_id = uuid4().hex
                 child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
-                # Simulate identity only in the loopback Vite middleware, not the API.
-                child_env.pop("SIGMA_ADMIN_PREVIEW", None)
-                if admin_preview:
-                    child_env["SIGMA_ADMIN_PREVIEW"] = "true"
-                    child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "false"
+                if local_google_auth:
+                    child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
+                    child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
+                    child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
+                    child_env.setdefault(
+                        "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
+                    )
+                    child_env.setdefault(
+                        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+                        child_env["SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"],
+                    )
+                else:
+                    child_env.pop("SIGMA_CLOUD_AUTH_LOCAL", None)
+                    child_env.pop("SIGMA_CLOUD_AUTH_ENABLED", None)
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -125,8 +149,7 @@ def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
                             env={
                                 key: value
                                 for key, value in child_env.items()
-                                if (command[0] == "npm" or key != "SIGMA_ADMIN_PREVIEW")
-                                and (
+                                if (
                                     command[0] != "npm"
                                     or key
                                     not in {
@@ -134,6 +157,10 @@ def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
                                         "ACCESS_TOKEN",
                                         "REFRESH_TOKEN",
                                         "ID_TOKEN",
+                                        "GOOGLE_OIDC_CLIENT_SECRET",
+                                        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
+                                        "SIGMA_CLOUD_AUTH_HOME",
+                                        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
                                     }
                                 )
                             },
@@ -156,11 +183,6 @@ def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
                             and ready(URL + "/api/ui-instance", instance_id)
                             and ready(URL)
                         ):
-                            if admin_preview:
-                                print(
-                                    "LOCAL ADMIN PREVIEW: temporary fake accounts, no real authorizations.",
-                                    flush=True,
-                                )
                             print(
                                 "\nSIGMA servers ready:\n"
                                 f"  FastAPI API server: {API_URL}\n"
