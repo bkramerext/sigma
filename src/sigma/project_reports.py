@@ -842,16 +842,22 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
     return "\n".join(output) + "\n"
 
 
-def _compile_pdf(tex: str) -> bytes:
+def _compile_pdf(
+    tex: str,
+    *,
+    max_source_bytes: int = 2_000_000,
+    timeout_seconds: int = 45,
+    max_pdf_bytes: int = 20_000_000,
+) -> bytes:
     executable = shutil.which(os.environ.get("SIGMA_TECTONIC", "tectonic"))
     if not executable:
         raise RuntimeError(
             "PDF export requires Tectonic. Install Tectonic and retry; no file was downloaded."
         )
     with tempfile.TemporaryDirectory(prefix="sigma-report-") as directory:
-        if len(tex.encode("utf-8")) > 2_000_000:
+        if len(tex.encode("utf-8")) > max_source_bytes:
             raise RuntimeError(
-                "Research report is too large to typeset (2 MB limit). No file was downloaded."
+                f"Research report is too large to typeset ({max_source_bytes} byte source limit). No file was downloaded."
             )
         source = os.path.join(directory, "report.tex")
         with open(source, "w", encoding="utf-8") as file:
@@ -876,12 +882,12 @@ def _compile_pdf(tex: str) -> bytes:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                timeout=45,
+                timeout=timeout_seconds,
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(
-                "PDF compilation exceeded 45 seconds. No file was downloaded."
+                f"PDF compilation exceeded {timeout_seconds} seconds. No file was downloaded."
             ) from exc
         pdf_path = os.path.join(directory, "report.pdf")
         if result.returncode != 0 or not os.path.isfile(pdf_path):
@@ -890,10 +896,10 @@ def _compile_pdf(tex: str) -> bytes:
                 "Tectonic could not compile this report. No PDF was downloaded. " + detail
             )
         with open(pdf_path, "rb") as file:
-            pdf = file.read(20_000_001)
-        if not pdf.startswith(b"%PDF-") or len(pdf) > 20_000_000:
+            pdf = file.read(max_pdf_bytes + 1)
+        if not pdf.startswith(b"%PDF-") or len(pdf) > max_pdf_bytes:
             raise RuntimeError(
-                "PDF compiler output was invalid or exceeded 20 MB. No file was downloaded."
+                f"PDF compiler output was invalid or exceeded {max_pdf_bytes} bytes. No file was downloaded."
             )
         return pdf
 
