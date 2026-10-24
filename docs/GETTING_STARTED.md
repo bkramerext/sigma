@@ -33,7 +33,7 @@ Review the **Outcome** and its conclusion alongside detailed findings, objection
 
 ## Reports and exports
 
-Use the workspace's **Report / Export** actions to produce audit data or readable reports in the formats offered by the dialog. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots, with a preflight showing provider-call ceilings and explicit confirmation. Progress, cancellation, and resumable checkpoints are available; inspect omissions, objections, and verification limits before treating the paper as complete. Reports communicate findings, not independent verification.
+Use the workspace's **Report / Export** actions to produce audit data or readable reports in the formats offered by the dialog. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots, with a preflight showing provider-call ceilings and explicit confirmation. Progress, cancellation, and resumable checkpoints are available. A paper preserves the exported Outcome and underlying research records, including any saved reasoning and optional conclusion. Review its omission warnings, objections, limitations, and verification status before relying on it. When material evidence is omitted, the paper marks conclusions provisional and does not leave affected claims established. Missing Outcome conclusions are not invented. Reports communicate findings, not independent verification.
 
 ## Optional computational experiments
 
@@ -43,7 +43,7 @@ Research agents can execute scientific Python in a locally prepared, isolated Do
 docker build -t sigma-research-python:0.1 sandbox-poc
 ```
 
-The runtime does not pull images during a research call. Computations run without network access or host project mounts and retain code, output, status, and provenance. For execution limits and security assumptions, see [Research Python Execution](RESEARCH_PYTHON_EXECUTION.md). SageMath requires separate optional setup; see [Sage Execution](SAGE-EXECUTION.md).
+The runtime does not pull images during a research call. Computations run without network access or host project mounts and retain code, output, status, and provenance. For execution limits and security assumptions, see [Research Python Execution](RESEARCH_PYTHON_EXECUTION.md). SageMath requires separate optional setup; see [Sage Execution](SAGE_EXECUTION.md).
 
 ## Useful commands and troubleshooting
 

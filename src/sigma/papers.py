@@ -1014,6 +1014,12 @@ def _reconcile_obligations(draft: PaperDraft, package: dict[str, Any]) -> list[d
 
 
 _RESEARCH_RECORD_KEYS = {
+    "outcome",
+    "conclusion",
+    "limitations",
+    "caveats",
+    "verification_status",
+    "basis_artifact_ids",
     "reasoning_steps",
     "argument_steps",
     "reasoning_assessments",

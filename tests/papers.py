@@ -690,6 +690,13 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert saved["generation"]["provider_calls_prior_runs"] == papers.MAX_LONG_PAPER_CALLS
         assert saved["generation"]["omitted_evidence"][0]["field_ref"]
         assert saved["generation"]["omitted_evidence"][0]["reason"]
+        assert saved["generation"]["material_evidence_omissions"]
+        assert saved["draft"]["claims"][0]["status"] == "unresolved"
+        assert saved["draft"]["abstract"].startswith("Material evidence coverage limitation:")
+        assert any(
+            "Material evidence coverage limitation" in warning
+            for warning in saved["author_review_warnings"]
+        )
         assert any("potential conflict" in warning for warning in saved["author_review_warnings"])
         assert provider_calls > 3
         assert provider_calls - calls_at_restart > 2
@@ -753,7 +760,52 @@ def main() -> None:
         "research_sessions": [
             {
                 "id": "session-1",
-                "artifacts": [{"id": "artifact-1", "claim": "A saved finding."}],
+                "outcome": {
+                    "summary": "A partial, agent-reviewed result.",
+                    "conclusion": "## Conditional conclusion\nThe result holds under assumption A.",
+                    "caveats": ["The argument remains unverified."],
+                    "solution_review": {
+                        "status": "partial",
+                        "limitations": ["The base case has not been independently checked."],
+                        "reasoning_steps": [
+                            {
+                                "number": 1,
+                                "argument": "The recurrence follows under assumption A.",
+                                "epistemic_status": "assumption",
+                                "review": {
+                                    "disposition": "challenged",
+                                    "rationale": "The cited artifact does not cover the base case.",
+                                    "objection": "Check the base case.",
+                                },
+                            }
+                        ],
+                        "reasoning_assessments": [
+                            {
+                                "step_number": 1,
+                                "disposition": "challenged",
+                                "rationale": "The base case is not included.",
+                                "objection": "Check the base case.",
+                            }
+                        ],
+                        "unresolved_objections": ["Check the base case."],
+                        "basis_artifact_ids": ["artifact-1"],
+                    },
+                },
+                "artifacts": [
+                    {
+                        "id": "artifact-1",
+                        "claim": "A saved finding.",
+                        "reasoning_steps": [
+                            {
+                                "argument": "The recurrence follows under assumption A.",
+                                "epistemic_status": "assumption",
+                            }
+                        ],
+                        "skeptic_response": "The base case remains unresolved.",
+                        "objections": ["Check the base case."],
+                        "open_obligations": ["Verify the base case."],
+                    }
+                ],
             }
         ],
         "agentic_runs": [
@@ -768,7 +820,11 @@ def main() -> None:
     source_map = {source["id"]: source for source in normalized["sources"]}
     assert source_map["project:pid"]["data"] == {"id": "pid", "title": "A project"}
     assert source_map["strategy:strat-1"]["data"] == evidence_export["project"]["strategies"][0]
-    assert source_map["session:session-1"]["data"] == {"id": "session-1"}
+    session_source = source_map["session:session-1"]["data"]
+    assert session_source == {
+        "id": "session-1",
+        "outcome": evidence_export["research_sessions"][0]["outcome"],
+    }
     assert (
         source_map["artifact:session-1:artifact-1"]["data"]
         == evidence_export["research_sessions"][0]["artifacts"][0]
@@ -776,6 +832,23 @@ def main() -> None:
     assert source_map["run:run-1"]["data"] == {"run_id": "run-1"}
     assert source_map["step:run-1:step-1"]["data"] == evidence_export["agentic_runs"][0]["steps"][0]
     assert normalized["schema"] == "sigma-paper-evidence-v2" and len(fingerprint) == 64
+    outcome_records = papers._research_integrity_records(normalized)
+    session_outcome = next(
+        item
+        for item in outcome_records
+        if item["source_ref"] == "session:session-1" and item["field"] == "outcome"
+    )
+    assert session_outcome["content"] == evidence_export["research_sessions"][0]["outcome"]
+    outcome_tex = papers._tex(draft(), [], "c" * 64, integrity_records=outcome_records)
+    for outcome_text in (
+        "Conditional conclusion",
+        "The result holds under assumption A.",
+        "The argument remains unverified.",
+        "The base case is not included.",
+        "Check the base case.",
+        "Verify the base case.",
+    ):
+        assert outcome_text in outcome_tex
 
     # Cross-domain contract fixture: the paper retains the published reasoning
     # and review shape from PR #70, alongside experimental negative findings.
@@ -906,6 +979,11 @@ def main() -> None:
     assert "Material evidence coverage limitation" in limited.abstract
     assert limited.abstract.startswith("Material evidence coverage limitation:")
     assert "Material evidence coverage limitation" in limited.conclusions[0]
+    limited_math_tex = papers._tex(
+        limited, [], "d" * 64, math_style=True, material_omissions=material
+    )
+    assert "C1 -- Unresolved" in limited_math_tex
+    assert "Important evidence coverage limitation" in limited_math_tex
 
     large_export = {
         "project": {"id": "pid", "problem": "x" * 81_900},
