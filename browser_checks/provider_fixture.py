@@ -458,6 +458,7 @@ async def handler(request):
     elif agentic:
         draft = {
             **draft,
+            "prior_finding_ids": [],
             "mechanism": "Euler's formula turns the line arrangement into a planar face count."
             if regions
             else "A position-shift bijection converts the spacing condition into an ordinary subset count."

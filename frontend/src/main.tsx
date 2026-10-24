@@ -2150,7 +2150,7 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point (optional)</summary>
     <label htmlFor="proposal-seed" className="sr-only">Starting point (optional)</label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
-    <p id="seed-help" className="hint">An optional idea or proposed mechanism, not an assumption to accept uncritically. Leave empty for an independent solution.</p>
+    <p id="seed-help" className="hint">An optional idea or mechanism to investigate, not an assumption to accept uncritically. Leave empty for an independent research direction.</p>
     <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Cancelling disconnects the active run; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
     {(busy || activities.length > 0 || currentActivity) && <section className="agentic-activity" aria-label="Generation progress" aria-live="polite">

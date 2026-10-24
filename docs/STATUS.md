@@ -1,5 +1,34 @@
 # SIGMA status
 
+## Strategy-generation architecture correction (2026-10-24)
+
+The earlier Operation Narrow Passage repair correctly removed hard-coded call
+and storage ceilings, but its solution-oriented prompt encouraged generation
+of complete plans and consumed the configured call budget as a practical
+target. This follow-up restores the project/strategy/research-session/outcome
+separation: generation proposes a bounded direction for investigation, while
+research sessions perform and preserve the actual reasoning and evidence.
+
+Normal generation uses one Explore and one independent Challenge. It can make
+one targeted revision per run when a material issue is fixable from supplied
+context, then review the revision; it can try at most one alternate direction
+when the first is overlapping or unconvincing. A run uses at most six calls.
+The project `model_calls`
+setting remains a ceiling. The generation prompts call for concise actionable
+strategies and leave research-dependent questions unresolved. Terminal
+session artifacts are retrieved as up to six relevance-ranked compact
+findings (8 KB maximum), with finding/session/strategy IDs retained for
+traceability; transcripts are not sent.
+
+Verification on 2026-10-24: the full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` run passed all scenarios, Ruff, formatting, Pyright, frontend typecheck and production build. Focused
+proposal and agentic scenarios passed, including terminal-session finding
+retrieval and exact draft traceability. Real Chrome
+`browser_checks/a16_agentic.py` passed against the isolated deterministic
+provider, including generation, independent review, cancellation, editable
+unsaved draft, explicit acceptance, export, and unchanged Sample sources. No
+live provider calls were made. The prior section below describes the earlier
+behavior and its result, not the current strategy-generation contract.
+
 ## Operation Narrow Passage strategy-generation repair (2026-10-24)
 
 Investigated the existing Operation Narrow Passage working copy from the

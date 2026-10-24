@@ -207,8 +207,7 @@ async def checks():
             payload = json.loads(request.content)
             assert payload["model"] == "gpt-6-luna" and payload["reasoning"] == {"effort": "xhigh"}
             assert (
-                payload["max_output_tokens"] == 25000
-                and payload["text"]["format"]["strict"] is True
+                payload["max_output_tokens"] == 8000 and payload["text"]["format"]["strict"] is True
             )
             request_started.set()
             await release.wait()

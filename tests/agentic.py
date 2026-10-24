@@ -30,6 +30,7 @@ CANDIDATE = {
     "failure_modes": "A wrong base case or overlooking the forced predecessor invalidates the recurrence.",
     "mechanism": "A disjoint terminal-symbol decomposition maps the two classes to shorter valid strings.",
     "evidence_boundary": "The recurrence is proposed and requires a bijection proof; small cases are only checks.",
+    "prior_finding_ids": [],
 }
 ALTERNATIVE = {
     **CANDIDATE,
@@ -94,11 +95,11 @@ async def exercise(
         assert payload["text"]["format"]["name"].startswith("strategy_")
         role = payload["text"]["format"]["name"]
         if role == "strategy_explore":
-            assert "candidate SOLUTION" in payload["instructions"]
-            assert "rather than proposing to study" in payload["instructions"]
+            assert "bounded STRATEGY" in payload["instructions"]
+            assert "not a complete solution" in payload["instructions"]
         elif role == "strategy_revise":
-            assert "Revise the actual solution" in payload["instructions"]
-            assert "rather than substituting a plan" in payload["instructions"]
+            assert "targeted revision" in payload["instructions"]
+            assert "bounded approach" in payload["instructions"]
         elif role == "strategy_challenge":
             assert "not an established solution" in payload["instructions"]
             assert "external evidence" in payload["instructions"]
@@ -116,7 +117,7 @@ async def exercise(
     assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
     assert len({event["run_id"] for event in events}) == 1
     assert events[0]["type"] == "run.started" and events[0]["max_calls"] == call_limit
-    assert len(calls) <= call_limit and not outputs
+    assert len(calls) <= call_limit and not outputs, (calls, outputs)
     return events, calls
 
 
@@ -225,6 +226,42 @@ async def main_async(root: Path):
         CANDIDATE["approach"]
     )
     assert events[-1]["draft"]["title"] == ALTERNATIVE["title"]
+    research_sessions._save(
+        path,
+        {
+            "id": "session-history",
+            "session_number": 1,
+            "project_path": str(Path(path).resolve()),
+            "status": "completed",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "strategy_title": "Boundary counterexample",
+            "artifacts": [
+                {
+                    "id": "finding-history",
+                    "sequence": 1,
+                    "strategy_id": "strategy-history",
+                    "claim_or_question": "A binary strings counterexample appears at the boundary.",
+                    "method": "Compare shifted positions at the smallest boundary case.",
+                    "evidence_status": "Finite counterexample reproduced; general explanation open.",
+                    "objections": ["The example may not generalize."],
+                    "open_obligations": ["Explain the boundary behavior."],
+                    "coordinator_decision": "continue",
+                    "next_question": "Why does the position shift fail at the boundary?",
+                }
+            ],
+        },
+    )
+    history_candidate = {
+        **ALTERNATIVE,
+        "prior_finding_ids": ["finding-history"],
+    }
+    events, calls = await exercise(path, [history_candidate, DISTINCT], before)
+    assert (
+        calls[0]["context"]["project"]["prior_research_findings"][0]["session_id"]
+        == "session-history"
+    )
+    assert "finding-history" in events[-1]["draft"]["approach"]
+    assert "session-history" in events[-1]["draft"]["approach"]
     events, calls = await exercise(path, [CANDIDATE, DISTINCT, ALTERNATIVE, DISTINCT], before)
     assert [call["role"] for call in calls] == [
         "strategy_explore",
@@ -276,27 +313,18 @@ async def main_async(root: Path):
     assert len(calls) == 6
     assert len(inspect_project(path).project.strategies) == 1
 
-    # A settings-backed eight-call budget can finish the targeted revision and
-    # independent review that the old hard-coded six-call cap prevented.
+    # A large configured ceiling does not become a target; the reviewer can
+    # trigger one targeted revision and a fresh independent review.
     events, calls = await exercise(
         path,
-        [
-            ALTERNATIVE,
-            review_revision,
-            ALTERNATIVE,
-            review_revision,
-            ALTERNATIVE,
-            review_revision,
-            ALTERNATIVE,
-            DISTINCT,
-        ],
+        [ALTERNATIVE, review_revision, ALTERNATIVE, DISTINCT],
         before,
-        call_limit=8,
+        call_limit=30,
     )
     assert events[-1]["type"] == "run.completed"
-    assert len(calls) == 8
+    assert len(calls) == 4
     assert calls[-1]["role"] == "strategy_challenge"
-    assert get_run(path, events[-1]["run_id"])["steps"][-1]["call_index"] == 8
+    assert get_run(path, events[-1]["run_id"])["steps"][-1]["call_index"] == 4
 
     # Strategy length grows well beyond the legacy limit, with room for
     # reviewer-facing mechanism and evidence notes in the assembled field.
@@ -319,7 +347,9 @@ async def main_async(root: Path):
     assert (
         agentic.Proposal.model_validate(
             {
-                **long_candidate.model_dump(exclude={"mechanism", "evidence_boundary"}),
+                **long_candidate.model_dump(
+                    exclude={"mechanism", "evidence_boundary", "prior_finding_ids"}
+                ),
                 "approach": assembled,
             }
         ).approach
@@ -328,13 +358,12 @@ async def main_async(root: Path):
 
     events, calls = await exercise(
         path,
-        [item for _ in range(15) for item in (CANDIDATE, OVERLAP)],
+        [CANDIDATE, OVERLAP, CANDIDATE, OVERLAP],
         before,
         call_limit=30,
     )
-    assert events[-1]["type"] == "run.stopped" and len(calls) == 30
+    assert events[-1]["type"] == "run.stopped" and len(calls) == 4
     assert "passed independent review" in events[-1]["summary"]
-    assert events[-1]["sequence"] > 32
     assert events[-1]["sequence"] <= agentic.MAX_EVENTS
 
     narrow_path = open_sample_project("operation-narrow-passage").path
@@ -348,17 +377,13 @@ async def main_async(root: Path):
             ALTERNATIVE,
             review_revision,
             ALTERNATIVE,
-            review_revision,
-            ALTERNATIVE,
-            review_revision,
-            ALTERNATIVE,
             DISTINCT,
         ],
         narrow_before,
         call_limit=30,
         expected_problem_prefix="OPERATION NARROW PASSAGE",
     )
-    assert events[-1]["type"] == "run.completed" and len(calls) == 8
+    assert events[-1]["type"] == "run.completed" and len(calls) == 4
     assert inspect_project(narrow_path).project.strategies == ()
     print(
         "PASS settings-backed call budgets, extended candidate fields, narrow-passage sample flow, skeptical revision and no mutation"
