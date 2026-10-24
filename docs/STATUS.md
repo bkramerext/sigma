@@ -5622,3 +5622,26 @@ passed on the reconciled implementation; and real Chrome
 `browser_checks/a17_research.py` passed against the restarted deterministic
 provider fixture, including mixed-portfolio lifecycle and failed-branch outcome
 presentation. No live or paid provider calls were made.
+
+## T45 provisional synthesis under material omissions (2026-10-24)
+
+Material omission disclosures now state that omitted fields were not reviewed
+for the paper. The abstract retains its substantive synthesis where it fits,
+qualifies that synthesis as provisional, and limits it to covered evidence. Each
+conclusion is preserved and explicitly qualified; claims previously marked
+`established` remain downgraded to `unresolved`. The TeX limitation section
+repeats that omitted fields were not reviewed and that no conclusion is drawn
+from omitted evidence or its absence. Regression checks cover persisted preview
+content, author-review warnings, qualified conclusions, TeX disclosure, and
+claim status.
+
+Rebased PR #68 onto current `main` at `b69cedd` after PR #70 merged. The outcome
+snapshot contract now applies to the merged Outcome producer and preserves its
+saved structured evidence and optional conclusion.
+
+**Checks:** `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+scenarios, Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and
+production build. Focused `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run
+--locked --no-sync python tests/papers.py` passed. The focused cloud-auth suite
+passed all 15 tests. Existing Starlette/httpx deprecation warnings remain. No
+live or paid provider calls were made.

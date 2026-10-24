@@ -18,6 +18,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from sigma import cloud_auth
 from sigma.api import app
+from sigma.projects import initialize_project
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 CLIENT_ID = "sigma-test.apps.googleusercontent.com"

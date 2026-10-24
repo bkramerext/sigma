@@ -1125,15 +1125,25 @@ def _apply_omission_limits(draft: PaperDraft, omissions: list[dict[str, Any]]) -
     if not omissions:
         return draft
     disclosure = (
-        f"Material evidence coverage limitation: the evidence index omitted {len(omissions)} "
-        "saved research field fragment(s). Conclusions are provisional, and claims that would "
-        "depend on the omitted material are not established by this paper. Consult the complete "
-        "frozen evidence snapshot and omission ledger before relying on these findings."
+        f"IMPORTANT EVIDENCE COVERAGE LIMITATION: {len(omissions)} saved research field "
+        "fragment(s) were omitted during indexing and were not reviewed for this paper. "
+        "The synthesis below is provisional and reflects covered evidence only; no conclusion "
+        "is drawn from omitted material or its absence. Consult the complete frozen evidence "
+        "snapshot and omission ledger before relying on these findings."
     )
-    draft.abstract = disclosure
+    abstract_prefix = disclosure + "\n\nProvisional synthesis from covered evidence only: "
+    abstract_room = max(0, 1600 - len(abstract_prefix))
+    abstract_body = draft.abstract
+    if len(abstract_body) > abstract_room:
+        abstract_body = abstract_body[:abstract_room].rsplit(" ", 1)[0].rstrip() + "…"
+    draft.abstract = abstract_prefix + abstract_body
     draft.limitations = [disclosure, *draft.limitations[:11]]
     draft.validation_warnings = [disclosure, *draft.validation_warnings[:11]]
-    draft.conclusions = [disclosure]
+    draft.conclusions = [
+        "PROVISIONAL — based only on covered evidence; omitted material was not reviewed: "
+        + conclusion
+        for conclusion in draft.conclusions
+    ]
     for claim in draft.claims:
         if claim.status == "established":
             claim.status = "unresolved"
@@ -1205,10 +1215,12 @@ def _tex(
             r"\section*{Important evidence coverage limitation}",
             prose(
                 f"The evidence index omitted {len(material_omissions)} material saved research "
-                f"field fragment(s) across {len(affected_sources)} source(s). Conclusions are "
-                "provisional, and claims that depend on omitted evidence are not established. "
-                "Review the complete frozen snapshot and its omission ledger before relying on "
-                "the interpretation. Affected source records: "
+                f"field fragment(s) across {len(affected_sources)} source(s), and those fields "
+                "were not reviewed for this paper. The synthesis is provisional and describes "
+                "covered evidence only; no conclusion is drawn from omitted material or its "
+                "absence. Claims that depend on omitted evidence are not established. Review "
+                "the complete frozen snapshot and its omission ledger before relying on the "
+                "interpretation. Affected source records: "
                 + ", ".join(affected_sources[:80])
                 + (
                     "; additional sources are listed in generation metadata."

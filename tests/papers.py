@@ -692,9 +692,18 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert saved["generation"]["omitted_evidence"][0]["reason"]
         assert saved["generation"]["material_evidence_omissions"]
         assert saved["draft"]["claims"][0]["status"] == "unresolved"
-        assert saved["draft"]["abstract"].startswith("Material evidence coverage limitation:")
+        assert saved["draft"]["abstract"].startswith("IMPORTANT EVIDENCE COVERAGE LIMITATION:")
+        assert "exploratory record and its limitations" in saved["draft"]["abstract"]
+        assert "provisional" in saved["draft"]["abstract"].casefold()
+        assert "were not reviewed" in saved["draft"]["abstract"]
+        assert len(saved["draft"]["abstract"]) <= 1600
+        assert saved["draft"]["conclusions"][0].startswith("PROVISIONAL —")
+        assert (
+            "Only claims tied to the recorded snapshot are presented."
+            in saved["draft"]["conclusions"][0]
+        )
         assert any(
-            "Material evidence coverage limitation" in warning
+            "IMPORTANT EVIDENCE COVERAGE LIMITATION" in warning
             for warning in saved["author_review_warnings"]
         )
         assert any("potential conflict" in warning for warning in saved["author_review_warnings"])
@@ -986,16 +995,28 @@ def main() -> None:
         ]
     )
     assert len(material) == 1
-    limited = papers._apply_omission_limits(draft().model_copy(deep=True), material)
+    substantive = draft().model_copy(deep=True)
+    original_abstract = substantive.abstract
+    original_conclusions = list(substantive.conclusions)
+    limited = papers._apply_omission_limits(substantive, material)
     assert limited.claims[0].status == "unresolved"
-    assert "Material evidence coverage limitation" in limited.abstract
-    assert limited.abstract.startswith("Material evidence coverage limitation:")
-    assert "Material evidence coverage limitation" in limited.conclusions[0]
+    assert limited.abstract.startswith("IMPORTANT EVIDENCE COVERAGE LIMITATION:")
+    assert original_abstract in limited.abstract
+    assert "Provisional synthesis from covered evidence only" in limited.abstract
+    assert "were not reviewed for this paper" in limited.abstract
+    assert limited.conclusions[0].startswith("PROVISIONAL —")
+    assert original_conclusions[0] in limited.conclusions[0]
+    assert "omitted material was not reviewed" in limited.conclusions[0]
+    assert "IMPORTANT EVIDENCE COVERAGE LIMITATION" in limited.limitations[0]
+    assert "IMPORTANT EVIDENCE COVERAGE LIMITATION" in limited.validation_warnings[0]
     limited_math_tex = papers._tex(
         limited, [], "d" * 64, math_style=True, material_omissions=material
     )
     assert "C1 -- Unresolved" in limited_math_tex
     assert "Important evidence coverage limitation" in limited_math_tex
+    assert "were not reviewed for this paper" in limited_math_tex
+    assert original_abstract in limited_math_tex
+    assert original_conclusions[0] in limited_math_tex
 
     large_export = {
         "project": {"id": "pid", "problem": "x" * 81_900},
