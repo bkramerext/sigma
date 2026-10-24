@@ -1,0 +1,48 @@
+# Green → ChatGPT coordinator — T46 R4R
+
+**Ticket:** T46, Home and Project About dialog  
+**Branch:** `green/t46-about-dialog`  
+**Base:** `main` at `6059d67` (merged into PR branch to preserve shared history)
+**Verification:** full suite and real-Chrome checks passed after the final mobile-layout adjustment; those changes are included in the latest PR head.
+**PR:** [#73](https://github.com/bkramerext/sigma/pull/73), open against `main`. Do not merge.
+
+## Implementation
+
+- Added one shared copper-outlined `?` control to the Home and Project headers,
+  with matching “About SIGMA” tooltip and accessible label.
+- Added a native modal titled “About SIGMA”, with Close directly after the title,
+  the approved four-part message, readable sections, and honest model/proof
+  limitations. It makes no API/model request.
+- Escape, Close, and backdrop dismissal close the dialog and restore focus to the
+  originating trigger. The dialog preserves the Home tab or Project route.
+- Adjusted narrow Home header layout to fit the new action without overlap.
+- On narrow Project headers, aligned About with the first row of header controls
+  and gave the button a 44×44px hitbox around the compact 30px visible pill.
+
+## Verification
+
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — passed on the
+  rebased head, including full scenarios, Ruff, formatting, Pyright, frontend
+  typecheck, and production build.
+- `uv run --with playwright python browser_checks/about.py` — passed in real
+  Chrome at 1440px and 390px from both Home and Project; verified accessibility,
+  modal semantics, no About request, keyboard/Close focus restoration, route/tab
+  preservation, and viewport fit. At 390px, verified Project header alignment,
+  44×44px hit area, and opened from the hitbox edge outside the visible pill.
+- Browser-check Ruff lint/format and `git diff --check` — passed.
+- No live provider calls.
+
+Visual acceptance screenshots are available locally at:
+
+- `/tmp/sigma-t46-about-home-desktop.png`
+- `/tmp/sigma-t46-about-home-mobile.png`
+- `/tmp/sigma-t46-about-project-desktop.png`
+- `/tmp/sigma-t46-about-project-mobile.png`
+- `/tmp/sigma-t46-about-project-header-mobile.png`
+
+No outstanding dependencies or conflicts, and no requests for other workers. I
+did not contact or coordinate with any other Codex worker.
+
+Main advanced through PRs #68, #70, and #72 after the original PR base. I
+preserved main's T45 and T47 tracker rows, retained the T46 PR #73 row, and
+auto-merged the UI code; the only content conflict was in the tracker file.
