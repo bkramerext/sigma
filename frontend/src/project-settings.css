@@ -200,7 +200,40 @@
 .ai-paper-preview ul { padding-left: 22px; }
 .ai-paper-preview .settings-hint { overflow-wrap: anywhere; }
 .ai-paper-warning { border-left: 3px solid #d4a16a; padding: 7px 10px; background: #d4a16a12; }
+.project-settings-dialog.about-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(88dvh, 840px);
+  padding: 0;
+  overflow: hidden;
+}
+.project-settings-dialog.about-dialog:not([open]) { display: none; }
+.project-settings-dialog.about-dialog .settings-header { flex-wrap: nowrap; }
+.project-settings-dialog.about-dialog .settings-header h2 { width: auto; flex: 0 1 auto; }
+.about-body { display: grid; gap: 18px; color: #d5dfe7; font-size: 13px; line-height: 1.65; }
+.about-body > p, .about-body section > p { margin: 0; }
+.about-lede { max-width: 660px; color: #e5d4c0; font: 400 17px/1.65 Georgia, serif; }
+.about-message { color: #e8bb8a; font: 400 clamp(18px, 2.5vw, 24px)/1.35 Georgia, serif; letter-spacing: .005em; }
+.about-principles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.about-principles section { min-width: 0; padding: 13px 14px; border: 1px solid #604832; border-radius: 6px; background: linear-gradient(145deg, #171714bd, #0b131cdd); }
+.about-body h3 { margin: 0 0 6px; color: #edc38d; font: 400 17px/1.35 Georgia, serif; }
+.about-principles p { margin: 0; color: #b9c5cf; font-size: 12px; line-height: 1.6; }
+.about-start { border-top: 1px solid #35404a; padding-top: 15px; }
+.about-start ol { display: grid; gap: 5px; margin: 7px 0 0; padding-left: 20px; color: #c4cfd8; font-size: 12px; }
+.about-boundary { padding: 12px 14px; border-left: 2px solid #b98149; background: #b9814912; color: #b9c5cf; font-size: 11px; }
+.about-dialog::backdrop { background: #01050bba; backdrop-filter: blur(3px); }
+.about-dialog :focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 @media (max-width: 560px) {
+  .project-settings-dialog.about-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+  .project-settings-dialog.about-dialog .settings-header { padding: 15px 16px 12px; gap: 12px; }
+  .project-settings-dialog.about-dialog .settings-header h2 { font-size: 22px; }
+  .project-settings-dialog.about-dialog .settings-header .settings-actions { width: auto; flex: 0 0 auto; }
+  .project-settings-dialog.about-dialog .settings-body { padding: 15px 16px 18px; }
+  .about-body { gap: 14px; }
+  .about-lede { font-size: 15px; }
+  .about-principles { grid-template-columns: 1fr; gap: 8px; }
+  .about-principles section { padding: 11px 12px; }
   .project-settings-dialog.export-project-dialog .settings-header { gap: 10px; padding: 16px 18px 12px; }
   .project-settings-dialog.export-project-dialog .settings-header h2 { width: auto; font-size: 22px; }
   .project-settings-dialog.export-project-dialog .settings-body { padding: 16px 18px; }

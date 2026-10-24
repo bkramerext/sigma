@@ -39,3 +39,7 @@ separately decide whether to authorize a budgeted live quality trial.
 Do not coordinate or communicate directly with other Codex workers. Report
 dependencies, conflicts, and requests for other workers to your ChatGPT
 coordinator through the human.
+
+Integration: merged main e7fa678 (T46 About) after the study; resolved only
+STATUS by preserving upstream content plus the study entry. Scored browser
+evidence remains at 6059d67; About is not retroactively assessed.

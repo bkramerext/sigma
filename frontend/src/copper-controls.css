@@ -32,6 +32,29 @@
 }
 :is(.home-page, .workspace-page) .copper-button:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 
+/* About is the same compact header action on Home and in project workspaces. */
+:is(.home-page, .workspace-page) .about-action {
+  display: inline-grid;
+  flex: 0 0 32px;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid #a96548;
+  border-radius: 999px;
+  background: #07111ee8;
+  box-shadow: inset 0 1px 0 #cd92702b;
+  color: #e6af92;
+  font: 500 15px/1 Inter, ui-sans-serif, system-ui, sans-serif;
+}
+:is(.home-page, .workspace-page) .about-action:hover:not(:disabled) {
+  border-color: #cd9270;
+  background: linear-gradient(#0005, #0005), linear-gradient(115deg, #75402f, #cd9270 48%, #a96548 72%, #593428);
+  color: #fff2e9;
+}
+:is(.home-page, .workspace-page) .about-action:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+
 .api-connection { position: relative; color: #afbdc8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-transform: none; letter-spacing: 0; z-index: 30; min-width: 190px; max-width: 240px; }
 .api-connection > summary { display: flex; align-items: center; gap: 7px; width: max-content; max-width: 100%; min-height: 34px; margin-left: auto; padding: 7px 12px; list-style: none; cursor: pointer; text-align: left; border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; transition: background-color .15s, border-color .15s, box-shadow .15s; }
 .api-connection > summary:hover, .api-connection[open] > summary { background: #172536fa; border-color: #cd9270; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
@@ -63,5 +86,8 @@
 .api-connection :focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 @media (max-width: 700px) {
   .api-connection > summary { min-height: 28px; padding: 4px 9px; font-size: 10px; line-height: 1.2; align-items: flex-start; }
+  :is(.home-page, .workspace-page) .about-action { position: relative; flex-basis: 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; border-color: transparent; background: transparent; box-shadow: none; color: transparent; font-size: 0; }
+  :is(.home-page, .workspace-page) .about-action::before { position: absolute; inset: 7px; display: grid; place-items: center; border: 1px solid #a96548; border-radius: 999px; background: #07111ee8; box-shadow: inset 0 1px 0 #cd92702b; color: #e6af92; content: "?"; font: 500 15px/1 Inter, ui-sans-serif, system-ui, sans-serif; pointer-events: none; }
+  :is(.home-page, .workspace-page) .about-action:hover:not(:disabled)::before { border-color: #cd9270; background: linear-gradient(#0005, #0005), linear-gradient(115deg, #75402f, #cd9270 48%, #a96548 72%, #593428); color: #fff2e9; }
   .connection-dot { margin-top: 3px; }
 }
