@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import fcntl
 import hashlib
 import json
@@ -10,8 +11,10 @@ import math
 import os
 import re
 import threading
+import zlib
 from collections.abc import Sequence
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -98,7 +101,7 @@ class ComputationCitation(BaseModel):
 class Investigator(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     claim: str = Field(min_length=1, max_length=3000)
-    method: str = Field(min_length=1, max_length=2000)
+    method: str = Field(min_length=1, max_length=6000)
     assumptions: list[str] = Field(max_length=12)
     evidence_status: str = Field(min_length=1, max_length=500)
     open_obligations: list[str] = Field(max_length=12)
@@ -146,7 +149,7 @@ class Skeptic(BaseModel):
     stop_reason: str = Field(
         pattern="^(decisive_counterexample|productive_conclusion|no_progress|recoverable_objection|unresolved)$"
     )
-    response: str = Field(min_length=1, max_length=2500)
+    response: str = Field(min_length=1, max_length=6000)
     objections: list[str] = Field(max_length=12)
     remaining_obligations: list[str] = Field(max_length=12)
     next_question: str = Field(max_length=1000)
@@ -1666,6 +1669,187 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
     )
 
 
+_SECRET_LIKE_INPUT = re.compile(
+    r"(?i)(?:authorization\s*:\s*bearer\s+\S+|bearer\s+[a-z0-9._~+/=-]{12,}|"
+    r"(?:sk-(?:proj-)?[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{20,}|"
+    r"xox[baprs]-[a-z0-9-]{12,}|AKIA[0-9A-Z]{16}|"
+    r"eyJ[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]{10,})|"
+    r"(?:access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|api[_ -]?key|password|passwd|secret)"
+    r"\s*[=:]\s*['\"]?[a-z0-9._~+/=-]{8,})"
+)
+
+
+def _role_request_payload(
+    record: dict[str, Any], role: str, context: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the exact non-header request body used by a single agent call."""
+    schema_model = Investigator if role == "investigator" else Skeptic
+    input_text = json.dumps(context, ensure_ascii=False)
+    if len(input_text.encode("utf-8")) > MAX_AGENT_CONTEXT_BYTES:
+        raise ResearchContextLimitError(
+            "Research context exceeded the 256 KB UTF-8 byte limit; no provider call was made."
+        )
+    payload: dict[str, Any] = {
+        "model": record["model"],
+        "store": False,
+        "max_output_tokens": record.get("output_token_limit", 4000),
+        "reasoning": {"effort": record["reasoning_effort"]},
+        "instructions": _role_instructions(role, context),
+        "input": input_text,
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": f"research_{role}",
+                "strict": True,
+                "schema": _research_schema(schema_model),
+            }
+        },
+    }
+    if record.get("mode") == "chatgpt":
+        payload.pop("max_output_tokens")
+        payload["stream"] = True
+        payload["input"] = [{"role": "user", "content": input_text}]
+    return payload
+
+
+def _assert_safe_role_request(payload: dict[str, Any], credential_token: str | None = None) -> None:
+    """Fail closed before persistence/dispatch if a prompt resembles or contains a secret."""
+    serialized = json.dumps(payload, ensure_ascii=False)
+    if (credential_token and credential_token in serialized) or _SECRET_LIKE_INPUT.search(
+        serialized
+    ):
+        raise ProjectError(
+            "Research input contains credential-like material; no request was saved or sent."
+        )
+
+
+def _role_input_audit(
+    record: dict[str, Any], role: str, context: dict[str, Any], credential_token: str | None
+) -> dict[str, Any]:
+    payload = _role_request_payload(record, role, context)
+    _assert_safe_role_request(payload, credential_token)
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    encoded = serialized.encode("utf-8")
+    return {
+        "version": 1,
+        "kind": "exact_provider_request_body",
+        "status": "prepared_before_dispatch",
+        "headers_included": False,
+        "encoding": "zlib+base64-json",
+        "request_body_sha256": hashlib.sha256(encoded).hexdigest(),
+        "request_body_compressed": base64.b64encode(zlib.compress(encoded, 9)).decode("ascii"),
+    }
+
+
+def _expand_role_input_audit(audit: dict[str, Any]) -> None:
+    """Expand the bounded compressed audit into an API/export response copy."""
+    compressed = audit.get("request_body_compressed")
+    expected = audit.get("request_body_sha256")
+    if not isinstance(compressed, str) or len(compressed) > 2_000_000:
+        audit["status"] = "audit_unavailable_or_corrupt"
+        return
+    try:
+        raw = base64.b64decode(compressed, validate=True)
+        inflater = zlib.decompressobj()
+        expanded = inflater.decompress(raw, 1_000_000)
+        if inflater.unconsumed_tail or not inflater.eof:
+            raise ValueError("request audit exceeds the expansion bound")
+        if hashlib.sha256(expanded).hexdigest() != expected:
+            raise ValueError("request audit integrity check failed")
+        body = json.loads(expanded)
+        if not isinstance(body, dict):
+            raise TypeError("request audit is not an object")
+    except (TypeError, ValueError, zlib.error, json.JSONDecodeError):
+        audit["status"] = "audit_unavailable_or_corrupt"
+        return
+    audit["request_body"] = body
+
+
+def _assert_saved_role_input_matches(
+    record: dict[str, Any], role: str, payload: dict[str, Any], step_id: str | None
+) -> None:
+    if not record.get("steps"):
+        return
+    step = next(
+        (item for item in record["steps"] if isinstance(item, dict) and item.get("id") == step_id),
+        None,
+    )
+    if not isinstance(step_id, str) or not isinstance(step, dict):
+        raise ProjectError("Exact provider input audit is missing; no provider request was sent.")
+    if step.get("status") != "running" or step.get("role") != role:
+        raise ProjectError("Exact provider input audit is missing; no provider request was sent.")
+    audit = step.get("provider_input_audit") if isinstance(step, dict) else None
+    if not isinstance(audit, dict):
+        raise ProjectError("Exact provider input audit is missing; no provider request was sent.")
+    decoded = dict(audit)
+    _expand_role_input_audit(decoded)
+    if (
+        decoded.get("status") == "audit_unavailable_or_corrupt"
+        or decoded.get("request_body") != payload
+    ):
+        raise ProjectError(
+            "Exact provider input audit did not match the request; no provider request was sent."
+        )
+
+
+def _potential_truncation_fields(role: str, output: dict[str, Any]) -> list[str]:
+    """Flag structured strings that reached a schema maxLength boundary."""
+    schema = _research_schema(Investigator if role == "investigator" else Skeptic)
+    definitions = schema.get("$defs", {})
+    flagged: list[str] = []
+
+    def visit(value: Any, shape: dict[str, Any], path: str) -> None:
+        reference = shape.get("$ref")
+        if isinstance(reference, str) and reference.startswith("#/$defs/"):
+            shape = definitions.get(reference.rsplit("/", 1)[-1], shape)
+        maximum = shape.get("maxLength")
+        if isinstance(value, str) and isinstance(maximum, int) and len(value) >= maximum:
+            flagged.append(path)
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                child_shape = shape.get("properties", {}).get(key)
+                if isinstance(child_shape, dict):
+                    visit(child, child_shape, f"{path}.{key}" if path else key)
+        elif isinstance(value, list) and isinstance(shape.get("items"), dict):
+            for index, child in enumerate(value):
+                visit(child, shape["items"], f"{path}[{index}]")
+
+    visit(output, schema, "")
+    return flagged
+
+
+def _refresh_token_accounting(record: dict[str, Any]) -> None:
+    """Aggregate call usage without presenting missing usage as a zero total."""
+    steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
+    completed = [step for step in steps if step.get("status") == "completed"]
+    known = [
+        step["token_usage"]
+        for step in completed
+        if isinstance(step.get("token_usage"), dict)
+        and type(step["token_usage"].get("input_tokens")) is int
+        and type(step["token_usage"].get("output_tokens")) is int
+    ]
+    incomplete_steps = any(
+        step.get("status") != "completed"
+        or not isinstance(step.get("token_usage"), dict)
+        or type(step["token_usage"].get("input_tokens")) is not int
+        or type(step["token_usage"].get("output_tokens")) is not int
+        for step in steps
+    )
+    record["tokens_used"] = (
+        sum(item["input_tokens"] + item["output_tokens"] for item in known) if known else None
+    )
+    record["token_usage_status"] = (
+        "unavailable"
+        if not known and (steps or record.get("status") in {"ended", "failed"})
+        else "partial"
+        if incomplete_steps
+        else "complete"
+        if known
+        else "pending"
+    )
+
+
 def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) -> float | None:
     prices = TOKEN_PRICES_PER_MILLION.get(record["model"])
     if prices is None:
@@ -1810,6 +1994,16 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         for k, v in record.items()
         if k not in {"project_path", "guard_hash", "identity_hash", "idempotency_key"}
     }
+    if isinstance(record.get("steps"), list):
+        result["steps"] = [dict(step) for step in record["steps"] if isinstance(step, dict)]
+        for step in result["steps"]:
+            audit = step.get("provider_input_audit")
+            if isinstance(audit, dict):
+                audit = dict(audit)
+                step["provider_input_audit"] = audit
+                _expand_role_input_audit(audit)
+                audit.pop("request_body_compressed", None)
+    _refresh_token_accounting(result)
     if record.get("started_at"):
         try:
             start = datetime.fromisoformat(record["started_at"])
@@ -2360,7 +2554,8 @@ async def start_session(
                 "output_token_limit": limits["output_tokens_per_call"],
                 "total_token_limit": limits["model_calls"]
                 * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
-                "tokens_used": 0,
+                "tokens_used": None,
+                "token_usage_status": "pending",
                 "tokens_reserved": 0,
                 "maximum_estimated_cost_usd": limits["maximum_estimated_cost_usd"],
                 "estimated_cost_usd": 0.0 if credential["mode"] == "api_key" else None,
@@ -2663,6 +2858,7 @@ async def _call(
     role: str,
     context: dict[str, Any],
     timeout_seconds: float | None = None,
+    step_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None] | None]:
     credential = await auth_context()
     if (
@@ -2673,32 +2869,11 @@ async def _call(
             "AI account or billing identity changed; session paused before another call"
         )
     schema_model = Investigator if role == "investigator" else Skeptic
-    input_text = json.dumps(context, ensure_ascii=False)
-    if len(input_text.encode("utf-8")) > MAX_AGENT_CONTEXT_BYTES:
-        raise ResearchContextLimitError(
-            "Research context exceeded the 256 KB UTF-8 byte limit; no provider call was made."
-        )
-    payload: dict[str, Any] = {
-        "model": record["model"],
-        "store": False,
-        "max_output_tokens": record.get("output_token_limit", 4000),
-        "reasoning": {"effort": record["reasoning_effort"]},
-        "instructions": _role_instructions(role, context),
-        "input": input_text,
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": f"research_{role}",
-                "strict": True,
-                "schema": _research_schema(schema_model),
-            }
-        },
-    }
+    payload = _role_request_payload(record, role, context)
+    _assert_safe_role_request(payload, credential.get("token"))
+    _assert_saved_role_input_matches(record, role, payload, step_id)
     headers = {"Authorization": "Bearer " + credential["token"]}
     if credential["mode"] == "chatgpt":
-        payload.pop("max_output_tokens")
-        payload["stream"] = True
-        payload["input"] = [{"role": "user", "content": input_text}]
         headers["Accept"] = "text/event-stream"
     timeout_seconds = min(
         timeout_seconds if timeout_seconds is not None else float(CALL_TIMEOUT),
@@ -3312,16 +3487,18 @@ def _obligation_ledger(
         objective_review = objective_review if isinstance(objective_review, dict) else {}
         skeptic = artifact.get("skeptic_output")
         skeptic = skeptic if isinstance(skeptic, dict) else {}
+        investigator = artifact.get("investigator_output")
+        investigator = investigator if isinstance(investigator, dict) else {}
         source_project_id, source_strategy_id, assumptions = note_scope(
             artifact, objective_review, skeptic
         )
         note_fields = (
+            investigator.get("open_obligations"),
             artifact.get("open_obligations"),
             artifact.get("objections"),
             objective_review.get("unresolved_objections"),
             skeptic.get("unresolved_objections"),
             skeptic.get("remaining_obligations"),
-            skeptic.get("proof_obligations"),
         )
         for notes in note_fields:
             for note in notes if isinstance(notes, list) else []:
@@ -3344,6 +3521,19 @@ def _obligation_ledger(
         reviews = skeptic.get("obligation_reviews")
         if isinstance(reviews, list):
             dispositions.extend(reviews)
+        coordinator_closures = skeptic.get("coordinator_closed_obligations")
+        if isinstance(coordinator_closures, list):
+            dispositions.extend(
+                {
+                    "obligation_id": item.get("obligation_id"),
+                    "status": "addressed",
+                    "basis_artifact_ids": [],
+                    "basis_step_ids": item.get("basis_step_ids", []),
+                    "rationale": item.get("rationale", ""),
+                }
+                for item in coordinator_closures
+                if isinstance(item, dict)
+            )
         for disposition in dispositions:
             if not isinstance(disposition, dict):
                 continue
@@ -3445,6 +3635,155 @@ def _obligation_ledger(
         len(omitted),
         [item["obligation_id"] for item in omitted[:MAX_CONTEXT_OMISSION_POINTERS]],
     )
+
+
+def _reconcile_artifact_open_obligations(record: dict[str, Any], artifact: dict[str, Any]) -> None:
+    """Persist only unresolved obligations after applying this artifact's Skeptic review."""
+    ledger, _, _ = _obligation_ledger(
+        record.get("artifacts", []),
+        project_id=record.get("project_id"),
+        strategy_id=artifact.get("strategy_id"),
+        prior_obligations=record.get("prior_session_obligations", []),
+    )
+    strategy_id = artifact.get("strategy_id")
+    unresolved = []
+    for item in ledger:
+        if item.get("status") != "unresolved":
+            continue
+        refs = item.get("source_refs", [])
+        if strategy_id and not any(
+            isinstance(ref, dict) and ref.get("strategy_id") == strategy_id for ref in refs
+        ):
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text.strip():
+            unresolved.append(text)
+    artifact["open_obligations"] = list(dict.fromkeys(unresolved))
+
+
+def _reconcile_skeptic_obligations(
+    record: dict[str, Any],
+    investigation: dict[str, Any],
+    skeptic: dict[str, Any],
+    strategy_id: str,
+    cycle: int,
+) -> None:
+    """Retain Investigator obligations unless the Skeptic explicitly disposes of them."""
+    branch_artifacts = [
+        item
+        for item in record.get("artifacts", [])
+        if isinstance(item, dict) and item.get("strategy_id") == strategy_id
+    ]
+    investigator_step_id = next(
+        (
+            step.get("id")
+            for step in reversed(record.get("steps", []))
+            if step.get("role") == "investigator"
+            and step.get("cycle") == cycle
+            and step.get("strategy_id", strategy_id) == strategy_id
+        ),
+        None,
+    )
+    ledger, _, _ = _obligation_ledger(
+        branch_artifacts,
+        investigation,
+        investigator_step_id,
+        project_id=record.get("project_id"),
+        strategy_id=strategy_id,
+        prior_obligations=record.get("prior_session_obligations", []),
+    )
+    review_status = {
+        item.get("obligation_id"): item.get("status")
+        for item in skeptic.get("obligation_reviews", [])
+        if isinstance(item, dict)
+    }
+    raw_remaining = list(skeptic.get("remaining_obligations", []))
+    global_closure = (
+        skeptic.get("objective_status") == "achieved"
+        and skeptic.get("verification_status") == "convincing_unverified"
+        and not raw_remaining
+        and not skeptic.get("unresolved_objections")
+    )
+    skeptic_step_id = next(
+        (
+            step.get("id")
+            for step in reversed(record.get("steps", []))
+            if step.get("role") == "skeptic"
+            and step.get("cycle") == cycle
+            and step.get("strategy_id", strategy_id) == strategy_id
+        ),
+        None,
+    )
+    closed_current_investigator_obligations = [
+        {
+            "obligation_id": item["obligation_id"],
+            "basis_step_ids": [skeptic_step_id] if isinstance(skeptic_step_id, str) else [],
+            "rationale": "Coordinator accepted the Skeptic's explicit achieved review with no remaining obligations or unresolved objections; this is a model-reported, unverified closure.",
+        }
+        for item in ledger
+        if global_closure
+        and item.get("status") == "unresolved"
+        and (
+            not item.get("source_refs")
+            or any(
+                isinstance(ref, dict) and ref.get("strategy_id") == strategy_id
+                for ref in item["source_refs"]
+            )
+        )
+    ]
+    skeptic["coordinator_global_closure"] = {
+        "accepted": global_closure,
+        "basis": "objective achieved; no remaining obligations; no unresolved objections"
+        if global_closure
+        else "not established",
+    }
+    skeptic["coordinator_closed_obligations"] = closed_current_investigator_obligations
+    unresolved_investigator_notes = [
+        item["text"]
+        for item in ledger
+        if item.get("status") == "unresolved"
+        and not any(
+            closed.get("obligation_id") == item.get("obligation_id")
+            for closed in closed_current_investigator_obligations
+        )
+        and isinstance(item.get("text"), str)
+        and review_status.get(item.get("obligation_id"))
+        not in {"addressed", "superseded", "retracted"}
+        and (
+            not item.get("source_refs")
+            or any(
+                isinstance(ref, dict) and ref.get("strategy_id") == strategy_id
+                for ref in item["source_refs"]
+            )
+        )
+    ]
+    removed = [
+        note
+        for note in raw_remaining
+        if any(
+            item.get("text") == note
+            and review_status.get(item.get("obligation_id"))
+            in {"addressed", "superseded", "retracted"}
+            for item in ledger
+        )
+    ]
+    reconciled_remaining = [note for note in raw_remaining if note not in removed]
+    added = [
+        note
+        for note in unresolved_investigator_notes
+        if _normalized_obligation_text(note)
+        not in {_normalized_obligation_text(item) for item in reconciled_remaining}
+    ]
+    skeptic["model_remaining_obligations"] = raw_remaining
+    skeptic["coordinator_removed_obligations"] = removed
+    skeptic["coordinator_added_obligations"] = added
+    skeptic["remaining_obligations"] = list(dict.fromkeys(reconciled_remaining + added))
+    if added and not raw_remaining and skeptic.get("stop_reason") == "productive_conclusion":
+        skeptic["model_assessment"] = skeptic.get("assessment")
+        skeptic["model_stop_reason"] = skeptic.get("stop_reason")
+        skeptic["assessment"] = "revise"
+        skeptic["stop_reason"] = "recoverable_objection"
+        skeptic["next_question"] = skeptic.get("next_question", "").strip() or added[0]
 
 
 def _artifact_is_critical(artifact: dict[str, Any]) -> bool:
@@ -3978,9 +4317,36 @@ def _attach_artifact_inspections(
 def _execution_with_inspections(
     execution: dict[str, Any], project_path_value: str, research_artifact_id: str | None = None
 ) -> dict[str, Any]:
-    result = dict(execution)
+    permitted = {
+        "schema_version",
+        "id",
+        "project_id",
+        "created_at",
+        "finished_at",
+        "status",
+        "exit_code",
+        "source",
+        "source_sha256",
+        "cycle",
+        "session_id",
+        "strategy_id",
+        "agent",
+        "runtime",
+        "runtime_version",
+        "syntax",
+        "environment",
+        "artifact_error",
+        "artifacts",
+        "stdout",
+        "stderr",
+        "duration_ms",
+        "stdout_base64",
+        "stderr_base64",
+        "interruption_reason",
+    }
+    result = {key: value for key, value in execution.items() if key in permitted}
     result["artifact_inspections"] = inspect_execution_artifacts(
-        project_path_value, execution, research_artifact_id
+        project_path_value, result, research_artifact_id
     )
     return result
 
@@ -4507,6 +4873,9 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
             rationale = (
                 "The branch stopped at its configured budget; effectiveness remains undetermined."
             )
+        elif branch.get("last_decision") == "stop_productive_conclusion":
+            action = "completed_productive_conclusion"
+            rationale = "The Skeptic and coordinator ended this strategy on a productive conclusion; its evidence remains unverified."
         else:
             action = "review_terminal"
             rationale = "The branch ended; retain its evidence and review before changing the strategy pool."
@@ -4529,6 +4898,17 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
             for branch in record.get("strategy_runs", [])
             if branch.get("status") in {"queued", "running"}
         ],
+        "completed_strategies": [
+            {
+                "strategy_id": branch["strategy_id"],
+                "strategy_title": branch["strategy_title"],
+                "reason": branch.get("reason"),
+                "artifact_ids": list(branch.get("artifacts", [])),
+            }
+            for branch in record.get("strategy_runs", [])
+            if branch.get("status") == "ended"
+            and branch.get("last_decision") == "stop_productive_conclusion"
+        ],
         "stopped_strategies": [
             {
                 "strategy_id": branch["strategy_id"],
@@ -4538,6 +4918,7 @@ def _portfolio_decision(record: dict[str, Any]) -> dict[str, Any]:
             }
             for branch in record.get("strategy_runs", [])
             if branch.get("status") in {"ended", "failed"}
+            and branch.get("last_decision") != "stop_productive_conclusion"
         ],
         "basis_artifact_ids": [item["id"] for item in artifacts],
         "strategy_actions": actions,
@@ -4573,6 +4954,7 @@ def _commit_portfolio_review(
 ) -> dict[str, Any]:
     investigation = branch.pop("pending_investigation")
     output = branch.pop("pending_skeptic")
+    _reconcile_skeptic_obligations(record, investigation, output, branch["strategy_id"], cycle)
     branch_artifacts = [
         item for item in record["artifacts"] if item.get("strategy_id") == branch["strategy_id"]
     ]
@@ -4700,9 +5082,7 @@ def _commit_portfolio_review(
         "evidence_status": investigation["evidence_status"],
         "skeptic_response": output["response"],
         "objections": output["objections"],
-        "open_obligations": list(
-            dict.fromkeys(investigation["open_obligations"] + output["remaining_obligations"])
-        ),
+        "open_obligations": list(output["remaining_obligations"]),
         "investigator_output": investigation,
         "skeptic_output": output,
         "peer_handoffs_prompted": list(branch.get("active_peer_handoffs", [])),
@@ -4738,6 +5118,7 @@ def _commit_portfolio_review(
         "basis_artifact_ids": referenced_ids,
     }
     record["artifacts"].append(artifact)
+    _reconcile_artifact_open_obligations(record, artifact)
     branch["artifacts"].append(artifact_id)
     branch["cycle"] = cycle
     branch["current_question"] = next_question
@@ -4899,7 +5280,7 @@ async def _portfolio_role_call(
                 + int(record.get("output_token_limit", 4000))
             )
             if cloud_workspaces.enabled() and (
-                int(record.get("tokens_used", 0))
+                int(record.get("tokens_used") or 0)
                 + int(record.get("tokens_reserved", 0))
                 + token_reserve
                 > int(record.get("total_token_limit", 0))
@@ -4932,6 +5313,7 @@ async def _portfolio_role_call(
                     _save(path, record)
                     return False
                 record["estimated_cost_reserved_usd"] = reserved_cost + reserve
+            request_audit = _role_input_audit(record, role, context, credential.get("token"))
             record["calls_used"] += 1
             branch["calls_used"] += 1
             branch["status"] = "running"
@@ -5004,6 +5386,7 @@ async def _portfolio_role_call(
                 "global_cost_reservation_usd": reserve if cloud_workspaces.enabled() else None,
                 "token_reservation": token_reserve if cloud_workspaces.enabled() else None,
             }
+            step["provider_input_audit"] = request_audit
             _record_guidance_delivery(
                 record,
                 strategy_id=strategy_id,
@@ -5032,6 +5415,7 @@ async def _portfolio_role_call(
                     step.update(
                         {
                             "status": "failed",
+                            "token_usage_status": "unavailable",
                             "attempt_status": "not_dispatched",
                             "failure_kind": "budget_denied",
                             "finished_at": _now(),
@@ -5045,6 +5429,7 @@ async def _portfolio_role_call(
                     record["current_steps"] = [
                         item["id"] for item in record["steps"] if item.get("status") == "running"
                     ]
+                    _refresh_token_accounting(record)
                     _save(path, record)
                     return False
                 record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
@@ -5053,7 +5438,9 @@ async def _portfolio_role_call(
                 _save(path, record)
             call_record = record
         try:
-            output, usage = await _call(call_record, role, context, timeout_seconds)
+            output, usage = await _call(
+                call_record, role, context, timeout_seconds, step_id=step_id
+            )
             _validate_guidance_acknowledgments(human_guidance, output)
         except asyncio.CancelledError:
             if cloud_workspaces.enabled():
@@ -5071,8 +5458,17 @@ async def _portfolio_role_call(
                 if cloud_workspaces.enabled():
                     cloud_research.mark_call_unknown(session_id, step_id)
                     step["attempt_status"] = "unknown"
+                step["token_usage_status"] = "unavailable"
+                if isinstance(step.get("provider_input_audit"), dict):
+                    step["provider_input_audit"]["status"] = "call_failed_dispatch_unknown"
                 timeout_failure = isinstance(exc, (TimeoutError, httpx.TimeoutException))
-                step.update({"status": "failed", "finished_at": _now()})
+                step.update(
+                    {
+                        "status": "failed",
+                        "finished_at": _now(),
+                        "token_usage_status": "unavailable",
+                    }
+                )
                 if timeout_failure:
                     step["failure_kind"] = "timeout"
                 else:
@@ -5114,6 +5510,7 @@ async def _portfolio_role_call(
                 record["current_step"] = (
                     record["current_steps"][-1] if record["current_steps"] else None
                 )
+                _refresh_token_accounting(record)
                 _save(path, record)
             return False
         async with state_lock:
@@ -5139,9 +5536,6 @@ async def _portfolio_role_call(
                     record["tokens_reserved"] = max(
                         0, int(record.get("tokens_reserved", 0)) - token_reserve
                     )
-                    record["tokens_used"] = int(record.get("tokens_used", 0)) + int(
-                        input_tokens + output_tokens
-                    )
                 cloud_research.settle_call(
                     session_id,
                     step_id,
@@ -5152,6 +5546,19 @@ async def _portfolio_role_call(
                 step["attempt_status"] = "usage_estimated" if estimate is not None else "unknown"
             if usage is not None:
                 step["token_usage"] = usage
+                step["token_usage_status"] = (
+                    "reported"
+                    if type(usage.get("input_tokens")) is int
+                    and type(usage.get("output_tokens")) is int
+                    else "unavailable"
+                )
+            else:
+                step["token_usage_status"] = "unavailable"
+            step["potential_truncation_fields"] = _potential_truncation_fields(role, output)
+            audit = step.get("provider_input_audit")
+            if isinstance(audit, dict):
+                audit["status"] = "provider_response_received"
+            _refresh_token_accounting(record)
             if record.get("mode") == "api_key":
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 if step.get("cost_reserve") is not None:
@@ -5637,11 +6044,14 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
             record["current_action"] = "Comparing strategy evidence"
             record["portfolio_decision"] = _portfolio_decision(record)
             active_titles = record["portfolio_decision"]["active_strategies"]
+            completed = record["portfolio_decision"]["completed_strategies"]
             stopped = record["portfolio_decision"]["stopped_strategies"]
             combinations = record["portfolio_decision"]["combination_candidates"]
             record["message"] = (
                 "Coordinator made unverified, evidence-linked recommendations. Continuing: "
                 + (", ".join(active_titles) if active_titles else "none")
+                + ". Completed: "
+                + (", ".join(item["strategy_title"] for item in completed) if completed else "none")
                 + ". Stopped or failed: "
                 + (", ".join(item["strategy_title"] for item in stopped) if stopped else "none")
                 + f". Reciprocal combination candidates: {len(combinations)}. "
@@ -6109,6 +6519,7 @@ async def _worker(session_id: str, path: str) -> None:
                     )
                     _save(path, record)
                     return
+                request_audit = _role_input_audit(record, role, context, credential.get("token"))
                 maximum_cost = record.get("maximum_estimated_cost_usd")
                 if record.get("mode") == "api_key" and maximum_cost is not None:
                     reserve = _reserve_cost(record, context, role)
@@ -6158,6 +6569,7 @@ async def _worker(session_id: str, path: str) -> None:
                     "context_obligation_count": len(context["outstanding_obligations"]),
                     "human_intervention_ids": [item["intervention_id"] for item in guidance],
                 }
+                step["provider_input_audit"] = request_audit
                 record["steps"].append(step)
                 _record_guidance_delivery(
                     record,
@@ -6168,7 +6580,7 @@ async def _worker(session_id: str, path: str) -> None:
                     guidance=guidance,
                 )
                 _save(path, record)
-                output, usage = await _call(record, role, context)
+                output, usage = await _call(record, role, context, step_id=step["id"])
             finally:
                 for gate in reversed(gates):
                     gate.release()
@@ -6180,6 +6592,19 @@ async def _worker(session_id: str, path: str) -> None:
             step.update({"status": "completed", "finished_at": _now(), "output": output})
             if usage is not None:
                 step["token_usage"] = usage
+                step["token_usage_status"] = (
+                    "reported"
+                    if type(usage.get("input_tokens")) is int
+                    and type(usage.get("output_tokens")) is int
+                    else "unavailable"
+                )
+            else:
+                step["token_usage_status"] = "unavailable"
+            step["potential_truncation_fields"] = _potential_truncation_fields(role, output)
+            audit = step.get("provider_input_audit")
+            if isinstance(audit, dict):
+                audit["status"] = "provider_response_received"
+            _refresh_token_accounting(record)
             if record.get("mode") == "api_key":
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
                 if estimate is None:
@@ -6206,6 +6631,10 @@ async def _worker(session_id: str, path: str) -> None:
                 _save(path, record)
                 continue
             investigation = record.pop("pending_investigation")
+            step["output"] = deepcopy(output)
+            _reconcile_skeptic_obligations(
+                record, investigation, output, record["strategy_id"], cycle_num
+            )
             record["current_action"] = "Coordinator"
             _event(
                 record,
@@ -6312,11 +6741,7 @@ async def _worker(session_id: str, path: str) -> None:
                 "evidence_status": investigation["evidence_status"],
                 "skeptic_response": output["response"],
                 "objections": output["objections"],
-                "open_obligations": list(
-                    dict.fromkeys(
-                        investigation["open_obligations"] + output["remaining_obligations"]
-                    )
-                ),
+                "open_obligations": list(output["remaining_obligations"]),
                 "investigator_output": investigation,
                 "skeptic_output": output,
                 "coordinator_decision": decision,
@@ -6383,6 +6808,7 @@ async def _worker(session_id: str, path: str) -> None:
                 "basis_artifact_ids": referenced_ids,
             }
             record["artifacts"].append(artifact)
+            _reconcile_artifact_open_obligations(record, artifact)
             record["strategy_assessments"] = _strategy_assessments(record)
             _event(record, "artifact.saved", f"Cycle {cycle_num} research artifact committed.")
             record["cycle"] = cycle_num
@@ -6430,6 +6856,9 @@ async def _worker(session_id: str, path: str) -> None:
             ]
             for step in running_steps:
                 step["status"] = "interrupted"
+                step["token_usage_status"] = "unavailable"
+                if isinstance(step.get("provider_input_audit"), dict):
+                    step["provider_input_audit"]["status"] = "call_interrupted_dispatch_unknown"
                 if cloud_workspaces.enabled() and step.get("attempt_id"):
                     step["attempt_status"] = "unknown"
                     try:
@@ -6516,6 +6945,9 @@ async def _worker(session_id: str, path: str) -> None:
             for step in record.get("steps", []):
                 if step.get("status") == "running":
                     step["status"] = "interrupted" if record["status"] == "paused" else "failed"
+                    step["token_usage_status"] = "unavailable"
+                    if isinstance(step.get("provider_input_audit"), dict):
+                        step["provider_input_audit"]["status"] = "call_failed_dispatch_unknown"
                     _record_guidance_interruption(
                         record,
                         step,
@@ -6530,6 +6962,7 @@ async def _worker(session_id: str, path: str) -> None:
                     _event(record, "call.failed", record["message"], step["role"])
             record["current_step"] = None
             record["current_steps"] = []
+            _refresh_token_accounting(record)
             record["updated_at"] = _now()
             _save(path, record)
         except (ProjectError, OSError):

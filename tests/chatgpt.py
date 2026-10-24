@@ -89,6 +89,16 @@ async def checks(root):
         before_prefs = await auth.preferences()
         started, result = await sign_in(fixture)
         assert result["status"] == "connected"
+        internal_context = await connection.auth_context()
+        assert internal_context["token"] in fixture.tokens
+        assert all(token not in repr(internal_context) for token in fixture.tokens)
+        assert "token" not in dict(internal_context)
+        try:
+            json.dumps(internal_context)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("AuthContext must not be JSON serializable")
         state = await connection.connection()
         assert (
             state["mode"] == "chatgpt"

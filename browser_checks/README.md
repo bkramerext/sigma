@@ -169,6 +169,16 @@ desktop/mobile layout, and unchanged strategy data. It makes no live provider
 call. Screenshots are written to `/tmp/sigma-a171-desktop.png` and
 `/tmp/sigma-a171-mobile.png`.
 
+## T17.8 archived answer-free session projection
+
+Run `uv run --with playwright python browser_checks/t17_8_saved_session.py`.
+The check starts its own API and Vite servers on dynamically selected local
+ports, mounts a temporary copy of the archived T17.8 project/session export,
+and opens it in real Chrome. It verifies the ended session, provisional
+positive/unverified outcome, mathematical solution review, verification caveat,
+and saved artifacts. It sends no session-start or provider request and removes
+only its own temporary files and processes.
+
 ## T29 Human intervention during research
 
 With the normal UI on port 5173 and a fresh isolated `provider_fixture:app` on

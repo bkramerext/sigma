@@ -2,7 +2,6 @@
 
 import codecs
 import json
-import re
 from typing import Any
 
 import httpx
@@ -52,50 +51,6 @@ KNOWN_ERRORS = {
 }
 
 
-def safe_error_detail(raw: Any) -> str | None:
-    """Display short provider diagnostics only when they cannot echo private input."""
-    if not isinstance(raw, dict):
-        return None
-    nested = raw.get("error")
-    values = [
-        raw.get("detail"),
-        nested.get("message") if isinstance(nested, dict) else None,
-        raw.get("message"),
-    ]
-    for value in values:
-        if not isinstance(value, str) or not 1 <= len(value) <= 180:
-            continue
-        if (
-            re.fullmatch(r"[A-Za-z0-9 .,:;()/_-]+", value)
-            and any(
-                word in re.findall(r"[a-z]+", value.lower())
-                for word in (
-                    "invalid",
-                    "unsupported",
-                    "missing",
-                    "required",
-                    "unknown",
-                    "exceeded",
-                    "malformed",
-                    "request",
-                    "schema",
-                    "field",
-                    "parameter",
-                    "format",
-                    "model",
-                    "usage",
-                    "quota",
-                    "limit",
-                    "permission",
-                )
-            )
-            and not re.search(r"(?i)bearer|token|secret|password|authorization", value)
-            and not re.search(r"[A-Za-z0-9_-]{36,}", value)
-        ):
-            return value
-    return None
-
-
 def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
     error = raw.get("error") if isinstance(raw, dict) else None
     code = error.get("code") if isinstance(error, dict) else None
@@ -138,28 +93,12 @@ def failure(status: int, raw: Any, mode: str, guard: str | None = None) -> None:
             ),
         )
         inference_failure(state, guard)
-        # For unknown provider failures, show only bounded machine-readable
-        # metadata. Provider freeform messages may contain echoed user input,
-        # credentials, or other sensitive material, so never forward them.
+        # Provider fields can echo credentials or user data, including fields
+        # that look like machine metadata. Report only locally derived status
+        # and response shape.
         if state == "unavailable" and message.startswith("ChatGPT request could not complete"):
-            safe_code = (
-                code
-                if isinstance(code, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", code)
-                else "unspecified"
-            )
-            details = [f"HTTP {status}", f"code: {safe_code}", f"shape: {shape}"]
-            explanation = safe_error_detail(raw)
-            if explanation is not None:
-                details.append(f"detail: {explanation}")
-            if isinstance(error, dict):
-                for key in ("type", "param"):
-                    value = error.get(key)
-                    if isinstance(value, str) and re.fullmatch(
-                        r"[A-Za-z][A-Za-z0-9_.:-]{0,79}", value
-                    ):
-                        details.append(f"{key}: {value}")
             raise ProjectError(
-                f"ChatGPT rejected the request ({', '.join(details)}). "
+                f"ChatGPT rejected the request (HTTP {status}, response shape: {shape}). "
                 "Account retained; no automatic billing fallback occurred."
             )
         raise ProjectError(f"{message} No strategy was saved.")

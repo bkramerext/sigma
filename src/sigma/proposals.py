@@ -9,6 +9,7 @@ import re
 import secrets
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Any
 
@@ -89,12 +90,15 @@ class Proposal(BaseModel):
 
 
 async def configuration(
-    path: str | None = None, view: ProjectView | None = None, context: dict | None = None
+    path: str | None = None,
+    view: ProjectView | None = None,
+    context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot = view or (inspect_project(path) if path else None)
     model = snapshot.project.ai_model if snapshot else DEFAULT_MODEL
     effort = snapshot.project.reasoning_effort if snapshot else "high"
-    context = context or await auth_context()
+    if context is None:
+        context = await auth_context()
     discovery = await models(context=context)
     available = False
     message = discovery["connection"]["guidance"]

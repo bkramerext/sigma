@@ -1,0 +1,74 @@
+T17.8 — answer-free acceptance preparation
+Status: deterministic work complete; live quality gate pending; A17.8 not accepted
+
+Prior evidence
+- Preserved the October 22 A17.8 evaluation in docs/STATUS.md. Its positive
+  Maximum Regions session is useful evidence for Skeptic review and sound
+  coordination, but its original Sample strategy exposed the formula, upper
+  bound, construction, and proof outline. It does not count for independent
+  solution quality.
+
+Fresh participant inputs
+- Project: projects/maximum-regions-answer-free-t17-8.sigma
+- Project ID: 9018b1fe-83a9-4027-a755-8f997b4f46b5
+- Strategy ID: 8dda06ce-c931-42a8-a2b8-a68f1220e848
+- project.json SHA-256: 62e3a34afe9f9710124a2c945688e89083ea88a2f21b42de69123a6cba256aad
+- Inputs match docs/evaluations/a17-8-independent-acceptance-packet.md; one
+  answer-free line-insertion strategy, no copied Sample history, no sessions.
+- Limits saved: 3 cycles, 6 calls, 10 minutes, 4,000 output tokens/call.
+- Exact project export and limits are preserved in
+  docs/evaluations/fixtures/t17-8-answer-free/; export hash matches local copy.
+- Production Investigator/Skeptic contexts: 3,284 / 3,313 UTF-8 bytes. They
+  contain no prior evidence/history and no answer formula/construction. The
+  manifest includes only the fresh project’s strategy snapshot.
+
+Deterministic changes and checks
+- Strengthened tests/research_sessions.py::test_answer_free_maximum_regions_prompt
+  to use the exact packet text and inspect the full normal-flow Investigator
+  request, history fields, manifest, formula variants, and construction terms.
+  A synthetic whitespace/Unicode formula and construction is caught by the
+  normalized audit; the old literal-space assertion missed that variant.
+- `uv run --locked --no-sync python tests/research_sessions.py` — PASS.
+- `uv run --locked --no-sync python tests/project_reports.py` — PASS.
+- `./sigma test` — PASS, including Ruff, format (72 files), Pyright (0),
+  frontend typecheck, and production build.
+- Real Chrome:
+  `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5174 SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8003 uv run --with playwright --locked python browser_checks/a17_research.py`
+  — PASS at 1440, 1280, 390, and 320px. Screenshots were inspected at
+  /tmp/sigma-a18-coordinator-review-desktop.png and
+  /tmp/sigma-a18-coordinator-review-mobile.png. This is a mock-provider UI
+  check, not a real research run.
+
+Latest-main revalidation
+- Integrated `origin/main` at 703442cfef6be004e8ed28e46f211ecf151e3f6e
+  (Gate B durable research) in merge commit
+  7808430c99562cddfbe53fb906a55757e096eb46. Resolved the sole STATUS conflict
+  while preserving both records.
+- After integration, `./sigma test` — PASS, including Ruff, format (76 files),
+  Pyright (0), frontend typecheck, and production build.
+- After adding the synthetic formula-leak case, `./sigma test` was rerun and
+  all steps passed again.
+- The real-Chrome A17.7/A17.6 fixture journey passed again at 1440/1280/390/320px.
+- No provider calls; independent-discovery criterion remains unverified.
+
+Live provider status
+- No provider call was dispatched. A local connection-discovery command
+  inadvertently printed a stored OAuth credential into tool output. Provider
+  work stopped immediately; I advised the user to revoke that session and
+  reconnect before any live experiment. No credential was written to files.
+- The live experiment remains pending safe ChatGPT-plan reconnection and
+  explicit availability. No API-key or paid fallback will be used.
+
+Criteria
+1 Unverified: no clean live solution attempt yet.
+2 Met under the prior contaminated run plus deterministic adversarial cases.
+3 Met under prior no-next-step evidence and deterministic coordination tests.
+4 Met under prior calibrated outcome and deterministic countercases.
+5 Met under deterministic artifact-linked attribution; old live attribution
+  remains model-reported.
+6 Met, deterministic only: binary-string proof mechanism; no second live run.
+7 Met, deterministic/browser evidence; no new live provider behavior tested.
+8 Met for offline artifacts/commands/screenshots; no new live session IDs exist.
+
+Recommendation: hold A17.8 and A17 completion until a bounded answer-free
+Maximum Regions run is performed safely and a human reviews the argument.
