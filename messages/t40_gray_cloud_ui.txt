@@ -1,6 +1,7 @@
 T40 coordinator handoff — R4R
 Branch: gray/t40-cloud-ui-admin
 Base: current main c44a4fe
+PR: https://github.com/bkramerext/sigma/pull/57 (open, mergeable; for coordinator review)
 
 Implemented the coordinator clarification. The user-facing fake administrator
 switch, preview middleware, preview documentation and fake-preview browser test
