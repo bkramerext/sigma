@@ -171,12 +171,12 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
                         ]
                     lines.append("")
             for finding in _rows(review.get("strategy_findings")):
-                if len(_rows(review.get("strategy_findings"))) <= 1:
-                    break
                 lines += [
                     f"Strategy finding: {_value(finding.get('strategy_title'))} · {_value(finding.get('status'))}",
+                    f"Strategy execution status: {_value(finding.get('execution_status'))}",
+                    f"Strategy failure detail: {_value(finding.get('failure_reason'))}",
                     f"Claim: {_value(finding.get('claim'))}",
-                    f"Source artifact: {_value(finding.get('research_artifact_id'))}",
+                    f"Source artifacts: {'; '.join(_items(finding.get('research_artifact_ids'))) or _value(finding.get('research_artifact_id'))}",
                 ]
                 for step in _rows(finding.get("reasoning_steps")):
                     lines += [

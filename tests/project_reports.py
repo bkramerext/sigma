@@ -201,12 +201,15 @@ def test_report_retains_reviewed_argument_steps() -> None:
         },
         {
             "strategy_title": "Branch B",
-            "status": "achieved",
-            "claim": "A separate reviewed result.",
-            "research_artifact_id": "artifact-2",
+            "status": "execution_failed",
+            "execution_status": "failed",
+            "failure_reason": "Provider timed out before a complete cycle.",
+            "claim": "No research artifact was saved for this strategy.",
+            "research_artifact_id": "",
+            "research_artifact_ids": [],
             "reasoning_steps": [],
             "objections": [],
-            "open_obligations": [],
+            "open_obligations": ["Provider timed out before a complete cycle."],
         },
     ]
     plain, _ = render_report(data, "txt")
@@ -218,7 +221,30 @@ def test_report_retains_reviewed_argument_steps() -> None:
     assert "Insertion recurrence" in html_report
     assert "at most n pieces" in html_report
     assert "Branch A · partial" in plain
+    assert "Branch B · execution_failed" in plain
+    assert "Strategy execution status: failed" in plain
+    assert "Provider timed out before a complete cycle." in plain
     assert "No attainment argument." in plain
+
+    single_failure = fixture()
+    single_failure["research_sessions"][0]["outcome"]["solution_review"]["strategy_findings"] = [
+        {
+            "strategy_title": "Only selected route",
+            "status": "execution_failed",
+            "execution_status": "failed",
+            "failure_reason": "Provider unavailable.",
+            "claim": "No research artifact was saved for this strategy.",
+            "research_artifact_id": "",
+            "research_artifact_ids": [],
+            "reasoning_steps": [],
+            "objections": [],
+            "open_obligations": ["Provider unavailable."],
+        }
+    ]
+    single_report, _ = render_report(single_failure, "txt")
+    assert isinstance(single_report, str)
+    assert "Only selected route · execution_failed" in single_report
+    assert "Provider unavailable." in single_report
 
 
 def test_context_manifest_is_reported() -> None:

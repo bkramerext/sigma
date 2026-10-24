@@ -5469,3 +5469,31 @@ deterministic provider, including the mixed portfolio lifecycle case and the
 current export/outcome contracts. Its stale export-count, artifact-count, and
 terminal-status assertions were corrected to match the implemented UI and
 coordinator semantics. No live or paid provider calls were made.
+
+## PR #70 reconciliation with current main (2026-10-24)
+
+Reconciled `red/substantive-research-outcomes` with current `main` at
+`254cfd4`. The merge had no unresolved file conflicts. Current-main documentation
+consolidation and removals were retained; no deleted documentation or placeholder
+files were restored. The contract document is named `docs/OUTCOME_QUALITY.md`.
+
+Outcome synthesis now includes each selected strategy, even if it failed before
+producing an artifact. Such a branch is explicitly marked as an execution
+failure, retains its reason, and has no invented evidence reference. Branches
+with research artifacts retain all artifact IDs and the latest attributed
+argument, review, objections, and obligations. The existing outcome display and
+reports show execution status, failure detail, and source references. This does
+not change mixed-portfolio lifecycle semantics: a failed branch does not make
+the session fail when a sibling completes; a wholly failed portfolio remains
+failed.
+
+Regression coverage checks no-artifact failure attribution, multi-branch source
+IDs, and report rendering. Conditional-premise completeness, 12,000-character
+step support, and the agent-reviewed/unverified distinction remain unchanged.
+
+**Reconciliation verification:** focused research-session and project-report
+tests passed; the full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed on the reconciled implementation; and real Chrome
+`browser_checks/a17_research.py` passed against the restarted deterministic
+provider fixture, including mixed-portfolio lifecycle and failed-branch outcome
+presentation. No live or paid provider calls were made.

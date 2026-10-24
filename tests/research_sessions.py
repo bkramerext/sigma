@@ -2493,6 +2493,25 @@ def test_outcome_classification():
     )
     pending = research_sessions._outcome({"status": "running", "artifacts": []})
     assert pending["assessment"] == "pending" and pending["provisional"]
+    failed_portfolio = research_sessions._outcome(
+        {
+            "status": "failed",
+            "artifacts": [],
+            "strategy_runs": [
+                {
+                    "strategy_id": "failed-route",
+                    "strategy_title": "Failed route",
+                    "status": "failed",
+                    "reason": "Provider failed before a complete cycle.",
+                }
+            ],
+        }
+    )
+    failed_finding = failed_portfolio["solution_review"]["strategy_findings"][0]
+    assert failed_finding["strategy_id"] == "failed-route"
+    assert failed_finding["status"] == "execution_failed"
+    assert failed_finding["failure_reason"] == "Provider failed before a complete cycle."
+    assert failed_finding["research_artifact_ids"] == []
     partial = research_sessions._outcome(
         {
             "status": "ended",
@@ -2542,6 +2561,21 @@ def test_outcome_classification():
             "status": "ended",
             "strategy_id": "s1",
             "strategy_title": "Branch one",
+            "strategy_runs": [
+                {"strategy_id": "s1", "strategy_title": "Branch one", "status": "ended"},
+                {
+                    "strategy_id": "s2",
+                    "strategy_title": "Branch two",
+                    "status": "ended",
+                },
+                {
+                    "strategy_id": "s3",
+                    "strategy_title": "Failed before first artifact",
+                    "status": "failed",
+                    "reason": "Provider timed out before a complete research cycle.",
+                    "artifacts": [],
+                },
+            ],
             "artifacts": [
                 {
                     **artifact,
@@ -2571,12 +2605,23 @@ def test_outcome_classification():
         }
     )
     findings = portfolio["solution_review"]["strategy_findings"]
-    assert [item["strategy_title"] for item in findings] == ["Branch one", "Branch two"]
+    assert [item["strategy_title"] for item in findings] == [
+        "Branch one",
+        "Branch two",
+        "Failed before first artifact",
+    ]
     assert (
         findings[0]["reasoning_steps"][0]["review"]["objection"]
         == "The bound is not yet established."
     )
     assert findings[0]["status"] == "partial"
+    assert findings[0]["research_artifact_ids"] == ["a1"]
+    assert findings[1]["research_artifact_ids"] == ["a2"]
+    assert findings[2]["status"] == "execution_failed"
+    assert findings[2]["execution_status"] == "failed"
+    assert findings[2]["research_artifact_ids"] == []
+    assert "timed out" in findings[2]["failure_reason"]
+    assert "timed out" in findings[2]["open_obligations"][0]
     # A reported assertion without a completed evidence review cannot become success.
     unsupported = research_sessions._outcome(
         {

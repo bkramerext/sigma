@@ -731,10 +731,86 @@ def _retracted_counterexample(response: str) -> bool:
     )
 
 
+def _strategy_findings(
+    record: dict[str, Any], artifacts: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    findings: dict[str, dict[str, Any]] = {}
+    branches = record.get("strategy_runs", [])
+    if isinstance(branches, list):
+        for branch in branches:
+            if not isinstance(branch, dict):
+                continue
+            strategy_id = str(branch.get("strategy_id") or "").strip()
+            if not strategy_id:
+                continue
+            findings[strategy_id] = {
+                "strategy_id": strategy_id,
+                "strategy_title": str(branch.get("strategy_title") or "Strategy"),
+                "status": "execution_failed" if branch.get("status") == "failed" else "no_result",
+                "execution_status": str(branch.get("status") or "unknown"),
+                "failure_reason": str(branch.get("reason") or ""),
+                "claim": "No research artifact was saved for this strategy.",
+                "research_artifact_id": "",
+                "research_artifact_ids": [],
+                "reasoning_steps": [],
+                "skeptic_response": "",
+                "objections": [],
+                "open_obligations": (
+                    [str(branch.get("reason") or "Execution failed before a result was saved.")]
+                    if branch.get("status") == "failed"
+                    else ["No research artifact was saved for this strategy."]
+                ),
+            }
+    for artifact in artifacts:
+        strategy_id = str(artifact.get("strategy_id") or record.get("strategy_id") or "legacy")
+        finding = findings.setdefault(
+            strategy_id,
+            {
+                "strategy_id": strategy_id,
+                "strategy_title": str(
+                    artifact.get("strategy_title") or record.get("strategy_title") or "Strategy"
+                ),
+                "status": "partial",
+                "execution_status": "unknown",
+                "failure_reason": "",
+                "claim": "",
+                "research_artifact_id": "",
+                "research_artifact_ids": [],
+                "reasoning_steps": [],
+                "skeptic_response": "",
+                "objections": [],
+                "open_obligations": [],
+            },
+        )
+        artifact_id = str(artifact.get("id", ""))
+        if artifact_id and artifact_id not in finding["research_artifact_ids"]:
+            finding["research_artifact_ids"].append(artifact_id)
+        finding.update(
+            {
+                "strategy_title": str(
+                    artifact.get("strategy_title") or finding.get("strategy_title") or "Strategy"
+                ),
+                "status": str((artifact.get("objective_review") or {}).get("status") or "partial"),
+                "claim": str(
+                    (artifact.get("objective_review") or {}).get("claim")
+                    or artifact.get("claim_or_question")
+                    or ""
+                ),
+                "research_artifact_id": artifact_id,
+                "reasoning_steps": list(artifact.get("reasoning_steps", [])),
+                "skeptic_response": str(artifact.get("skeptic_response", "")),
+                "objections": list(artifact.get("objections", [])),
+                "open_obligations": list(artifact.get("open_obligations", [])),
+            }
+        )
+    return list(findings.values())
+
+
 def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     artifacts = record.get("artifacts", [])
     status = record.get("status")
     if not artifacts:
+        branch_findings = _strategy_findings(record, artifacts)
         if status in {"queued", "running"}:
             assessment, label = "pending", "Pending"
             summary = "No Investigator/Skeptic cycle has produced a saved artifact yet."
@@ -751,7 +827,17 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             "caveats": ["No complete research artifact is available."],
             "basis_artifact_ids": [],
             "provisional": assessment == "pending",
-            "solution_review": None,
+            "solution_review": {
+                "status": "not_achieved",
+                "claim": "No objective result was established in this session.",
+                "argument_summary": "No complete research artifact was saved.",
+                "argument_steps": [],
+                "strategy_findings": branch_findings,
+                "verification_status": "incomplete",
+                "basis_artifact_ids": [],
+            }
+            if branch_findings
+            else None,
         }
     decisive = next(
         (
@@ -871,30 +957,19 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             solution_review["skeptic_response"] = str(review_artifact.get("skeptic_response", ""))
             solution_review["skeptic_objections"] = list(review_artifact.get("objections", []))
             solution_review["open_obligations"] = list(review_artifact.get("open_obligations", []))
-        latest_by_strategy: dict[str, dict[str, Any]] = {}
-        for artifact in artifacts:
-            strategy_id = str(artifact.get("strategy_id") or record.get("strategy_id") or "legacy")
-            latest_by_strategy[strategy_id] = artifact
-        solution_review["strategy_findings"] = [
-            {
-                "strategy_id": strategy_id,
-                "strategy_title": str(
-                    item.get("strategy_title") or record.get("strategy_title") or "Strategy"
-                ),
-                "status": str((item.get("objective_review") or {}).get("status") or "partial"),
-                "claim": str(
-                    (item.get("objective_review") or {}).get("claim")
-                    or item.get("claim_or_question")
-                    or ""
-                ),
-                "research_artifact_id": str(item.get("id", "")),
-                "reasoning_steps": list(item.get("reasoning_steps", [])),
-                "skeptic_response": str(item.get("skeptic_response", "")),
-                "objections": list(item.get("objections", [])),
-                "open_obligations": list(item.get("open_obligations", [])),
+        solution_review["strategy_findings"] = _strategy_findings(record, artifacts)
+    if solution_review is None:
+        branch_findings = _strategy_findings(record, artifacts)
+        if branch_findings:
+            solution_review = {
+                "status": "partial",
+                "claim": "No objective-level conclusion was recorded for this session.",
+                "argument_summary": "The strategy branches retain their own evidence and execution results below.",
+                "argument_steps": [],
+                "strategy_findings": branch_findings,
+                "verification_status": "incomplete",
+                "basis_artifact_ids": [str(item.get("id", "")) for item in artifacts],
             }
-            for strategy_id, item in latest_by_strategy.items()
-        ]
     return {
         "assessment": assessment,
         "label": label,

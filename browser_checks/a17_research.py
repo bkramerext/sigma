@@ -994,7 +994,9 @@ with sync_playwright() as playwright:
     expect(research.locator(".section-count")).to_have_text("2 sessions, 0 running")
     page.get_by_role("button", name="Start a new research session", exact=True).click()
     page.get_by_role("button", name="Start new session #3", exact=True).click()
-    failure_row = research.locator("li[data-session-id]").filter(has_text="Session #3")
+    failure_row = research.locator("li[data-session-id]").filter(
+        has=page.get_by_role("button", name="Session #3", exact=True)
+    )
     # A portfolio fails terminally only when every selected strategy branch
     # fails. One failed branch remains visible while successful siblings retain
     # their findings and the session ends with a portfolio-level result.
@@ -1010,6 +1012,18 @@ with sync_playwright() as playwright:
         action["action"] == "hold_after_failure"
         for action in mixed_result["portfolio_decision"]["strategy_actions"]
     )
+    failed_branch = next(
+        branch for branch in mixed_result["strategy_runs"] if branch["status"] == "failed"
+    )
+    findings = mixed_result["outcome"]["solution_review"]["strategy_findings"]
+    failed_finding = next(
+        (finding for finding in findings if finding["strategy_id"] == failed_branch["strategy_id"]),
+        None,
+    )
+    assert failed_finding is not None, (mixed_result["strategy_runs"], findings)
+    assert failed_finding["execution_status"] == "failed"
+    assert failed_finding["status"] == "execution_failed"
+    assert failed_finding["research_artifact_ids"] == []
     expect(research.locator(".section-count")).to_have_text("3 sessions, 0 running")
     assert research.locator(".session-row-title").all_text_contents() == [
         "Session #1",
@@ -1017,6 +1031,10 @@ with sync_playwright() as playwright:
         "Session #3",
     ]
     expect(failure_row).to_contain_text("Failure fixture strategy")
+    failure_row.get_by_role("button", name=re.compile("Session #3")).click()
+    failed_review_text = "\n".join(failure_row.locator(".solution-review").all_text_contents())
+    assert "Execution status: failed" in failed_review_text, failed_review_text
+    assert "No research artifact was saved for this strategy." in failed_review_text
 
     saved_before_fallback = project_file.read_bytes()
     legacy_titleless["enabled"] = True
