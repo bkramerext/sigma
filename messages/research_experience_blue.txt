@@ -1,6 +1,7 @@
 BLUE — SIGMA End-to-End Research Experience Study
 
-Status: R4R; one documentation-only PR, no merge authorized/performed.
+Status: R4R; PR #74 https://github.com/bkramerext/sigma/pull/74
+One documentation-only PR; no merge authorized/performed.
 Branch: blue/research-experience-study; base main at 6059d67.
 Primary handoff: docs/evaluations/RESEARCH_EXPERIENCE/SYNTHESIS.md.
 All 17 actual samples reconciled and covered in individual reports.

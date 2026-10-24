@@ -2,7 +2,8 @@
 
 ## Blue: end-to-end research experience study (2026-10-24)
 
-Documentation-only study on `blue/research-experience-study`, based on current
+Documentation-only study, R4R in [PR #74](https://github.com/bkramerext/sigma/pull/74),
+on `blue/research-experience-study`, based on current
 `main` at `6059d67`. [Cross-sample synthesis](evaluations/RESEARCH_EXPERIENCE/SYNTHESIS.md)
 links substantive assessments of all 17 actual stock samples; inventory exactly
 matches the assignment. No implementation changes or new point tickets.
