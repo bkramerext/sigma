@@ -5507,3 +5507,32 @@ settings. The full rerun as
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including
 Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production
 build. Existing Starlette/httpx deprecation warnings remain.
+
+## T47 session Conclusion (2026-10-24)
+
+Added a persisted Markdown Conclusion as the first, expanded section of each
+Research Session Outcome. New sessions derive a bounded conclusion from their
+saved reviewed findings; complete reviewed candidate answers remain explicitly
+unverified, while partial, failed, active, unresolved, and divergent
+multi-strategy findings have separate wording. Conclusions include strategy
+dispositions, unresolved points, caveats, and saved evidence references. Older
+sessions without saved conclusions show an explicit historical fallback.
+Detailed Outcome sections remain intact. Project reports include Conclusion
+text, and TeX paper source snapshots retain it alongside the separate session
+artifacts. Exported/imported sample sessions preserve saved Conclusion text.
+
+**Checks:** focused research-session, report, paper snapshot, and sample
+round-trip scenarios passed. Real Chrome passed the saved-session interaction
+at 1440px and 375px: Conclusion is first and expanded, Markdown rendering and
+source toggling work, reload retains the saved text, and detailed evidence
+remains accessible. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed all scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend
+typecheck, and production build. No provider calls were made.
+
+**Integration dependencies:** PR #70 changes the same session outcome,
+frontend, and report surfaces. On integration, retain this Conclusion field and
+reconcile synthesis with PR #70's per-strategy finding schema. PR #68 changes
+the TeX paper and report pipeline; retain `outcome.conclusion` in its frozen
+paper sources/checkpoints while retaining all detailed evidence. This branch
+does not modify either PR. TeX session-selection UI remains deferred by policy.
+T47 handoff: `messages/t47_gray_conclusion.txt`.

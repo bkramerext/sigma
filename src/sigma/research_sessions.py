@@ -43,6 +43,7 @@ MAX_DEFERRED_PEER_HANDOFFS = 24
 MAX_RECORDED_HANDOFF_OVERFLOW = 8
 MAX_AGENT_CONTEXT_BYTES = 256_000
 MAX_CONTEXT_ARTIFACTS = 24
+MAX_CONCLUSION_CHARACTERS = 20_000
 MAX_CONTEXT_STRATEGIES = 24
 MAX_PEER_CONTEXT_ARTIFACTS = 12
 MAX_CONTEXT_OBLIGATIONS = 64
@@ -587,6 +588,260 @@ def _retracted_counterexample(response: str) -> bool:
     )
 
 
+def _conclusion_strategy_rows(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Summarize one saved finding per participating strategy, without blending claims."""
+    branches = record.get("strategy_runs")
+    artifact_values = record.get("artifacts", [])
+    artifacts = (
+        [item for item in artifact_values if isinstance(item, dict)]
+        if isinstance(artifact_values, list)
+        else []
+    )
+    if not isinstance(branches, list) or len(branches) < 2:
+        return []
+    assessments = record.get("strategy_assessments", [])
+    if not isinstance(assessments, list):
+        assessments = []
+    rows: list[dict[str, Any]] = []
+    for branch in branches:
+        if not isinstance(branch, dict) or not isinstance(branch.get("strategy_id"), str):
+            continue
+        identifier = branch["strategy_id"]
+        branch_artifact_values = branch.get("artifacts", [])
+        branch_artifact_ids = (
+            set(branch_artifact_values) if isinstance(branch_artifact_values, list) else set()
+        )
+        linked = [
+            item
+            for item in artifacts
+            if item.get("strategy_id") == identifier or item.get("id") in branch_artifact_ids
+        ]
+        review = next(
+            (
+                item.get("objective_review")
+                for item in reversed(linked)
+                if isinstance(item.get("objective_review"), dict)
+            ),
+            None,
+        )
+        assessment = next(
+            (
+                item
+                for item in assessments
+                if isinstance(item, dict) and item.get("strategy_id") == identifier
+            ),
+            {},
+        )
+        claim = ""
+        finding_status = "unresolved"
+        if isinstance(review, dict):
+            claim = str(review.get("claim") or review.get("argument_summary") or "").strip()
+            finding_status = str(review.get("status") or "unresolved")
+        if not claim and linked:
+            claim = str(linked[-1].get("claim_or_question") or "").strip()
+        if not claim:
+            claim = str(branch.get("reason") or assessment.get("rationale") or "").strip()
+        rows.append(
+            {
+                "title": str(
+                    branch.get("strategy_title") or assessment.get("strategy_title") or "Strategy"
+                ),
+                "branch_status": str(branch.get("status") or "unknown"),
+                "finding_status": finding_status,
+                "assessment": str(assessment.get("assessment") or "unknown"),
+                "claim": claim,
+                "artifact_ids": [str(item.get("id")) for item in linked if item.get("id")],
+            }
+        )
+    return rows
+
+
+def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
+    """Build bounded Markdown that answers only as far as saved reviewed findings allow."""
+    status = str(record.get("status") or "unknown")
+    artifact_values = record.get("artifacts", [])
+    artifacts = (
+        [item for item in artifact_values if isinstance(item, dict)]
+        if isinstance(artifact_values, list)
+        else []
+    )
+    review = outcome.get("solution_review")
+    review = review if isinstance(review, dict) else {}
+    claim = str(review.get("claim") or "").strip()
+    argument = str(review.get("argument_summary") or "").strip()
+    summary = str(outcome.get("summary") or "").strip()
+    assessment = outcome.get("assessment")
+    review_status = review.get("status")
+    strategy_rows = _conclusion_strategy_rows(record)
+    achieved_strategy_claims = [
+        row["claim"]
+        for row in strategy_rows
+        if row["finding_status"] == "achieved" and row["claim"]
+    ]
+    conflicting_strategy_claims = (
+        len({" ".join(value.casefold().split()) for value in achieved_strategy_claims}) > 1
+    )
+
+    if not artifacts:
+        if status == "failed":
+            lines = [
+                "### Failed investigation",
+                "",
+                "The session failed before it saved a complete Investigator/Skeptic finding. It establishes no answer to the project question.",
+            ]
+        elif status in {"queued", "running", "paused", "stopped"}:
+            lines = [
+                "### Unresolved investigation",
+                "",
+                f"The session is {status} and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet.",
+            ]
+        else:
+            lines = [
+                "### Unresolved investigation",
+                "",
+                "The session ended without a complete saved finding. No answer to the project question is established.",
+            ]
+    elif status == "failed":
+        lines = ["### Failed investigation", ""]
+        if claim:
+            lines.append(f"Saved findings include this candidate claim: {claim}")
+        else:
+            lines.append(summary or "Some research findings were saved before execution failed.")
+        lines += [
+            "",
+            "The session failed, so the saved work does not establish a complete answer to the project question.",
+        ]
+        if argument:
+            lines += ["", argument]
+    elif status in {"queued", "running", "paused", "stopped"}:
+        lines = ["### Preliminary finding", ""]
+        lines.append(claim or summary or "No reviewed answer is available yet.")
+        lines += ["", f"The investigation is {status}; this is not a completed conclusion."]
+        if argument:
+            lines += ["", argument]
+    elif conflicting_strategy_claims:
+        lines = [
+            "### Conflicting candidate findings",
+            "",
+            "Participating strategies produced different candidate answers. The session does not establish which, if either, is correct; the project question remains unresolved.",
+        ]
+    elif assessment == "positive" and review_status == "achieved" and claim:
+        lines = ["### Complete reviewed candidate answer", "", claim]
+        if argument:
+            lines += ["", argument]
+    elif assessment == "negative":
+        lines = [
+            "### Counterexample reported",
+            "",
+            summary or "The Skeptic reported a counterexample in the saved findings.",
+            "",
+            "This agent-reported counterexample has not been independently verified; the session does not establish a complete answer beyond the claim it challenges.",
+        ]
+    elif review_status == "partial" or claim or argument:
+        lines = ["### Partial finding", ""]
+        lines.append(claim or summary or "The saved evidence does not settle the project question.")
+        if argument:
+            lines += ["", argument]
+        lines += [
+            "",
+            "The saved review does not establish a complete answer to the project question.",
+        ]
+    else:
+        lines = [
+            "### Unresolved investigation",
+            "",
+            summary or "The session saved findings but no reviewed answer to the project question.",
+            "",
+            "The available findings do not establish a complete answer.",
+        ]
+
+    if strategy_rows:
+        lines += ["", "### Findings across strategies"]
+        for row in strategy_rows:
+            if row["branch_status"] == "failed":
+                disposition = "failed"
+            elif row["finding_status"] == "achieved":
+                disposition = "candidate finding (unverified)"
+            elif row["finding_status"] == "partial":
+                disposition = "partial finding"
+            elif row["assessment"] in {"productive", "contributed_to_solution"}:
+                disposition = "productive finding; objective not fully established"
+            elif row["branch_status"] in {"ended", "stopped", "paused"} and not row["claim"]:
+                disposition = f"{row['branch_status']}; no finding recorded"
+            else:
+                disposition = "unresolved"
+            entry = f"- **{row['title']} — {disposition}.**"
+            if row["claim"]:
+                entry += f" {row['claim']}"
+            if row["artifact_ids"]:
+                sequences = [
+                    str(item.get("sequence", "?"))
+                    for item in artifacts
+                    if item.get("id") in row["artifact_ids"]
+                ]
+                entry += (
+                    " (Evidence: " + ", ".join(f"Artifact {value}" for value in sequences) + ")"
+                )
+            lines.append(entry)
+
+    unresolved_values = review.get("unresolved_objections", [])
+    unresolved = list(unresolved_values) if isinstance(unresolved_values, list) else []
+    open_obligations = review.get("open_obligations", [])
+    unresolved.extend(
+        str(item)
+        for item in (open_obligations if isinstance(open_obligations, list) else [])
+        if str(item).strip()
+    )
+    if not unresolved and outcome.get("assessment") == "mixed":
+        unresolved = [
+            str(item)
+            for artifact in artifacts
+            for item in artifact.get("open_obligations", [])
+            if str(item).strip()
+        ]
+    unresolved = list(
+        dict.fromkeys(item.strip() for item in unresolved if isinstance(item, str) and item.strip())
+    )
+    if unresolved:
+        lines += ["", "### Unresolved points"]
+        lines.extend(f"- {item}" for item in unresolved[:8])
+        if len(unresolved) > 8:
+            lines.append(
+                f"- {len(unresolved) - 8} additional unresolved point(s) remain in the saved evidence."
+            )
+
+    caveat_values = outcome.get("caveats", [])
+    caveats = [
+        str(item).strip()
+        for item in (caveat_values if isinstance(caveat_values, list) else [])
+        if isinstance(item, str) and item.strip()
+    ]
+    if caveats:
+        lines += ["", "### Session caveats"]
+        lines.extend(f"- {item}" for item in list(dict.fromkeys(caveats))[:8])
+    basis_ids = outcome.get("basis_artifact_ids", [])
+    if isinstance(basis_ids, list) and basis_ids:
+        sequences = [
+            str(item.get("sequence", "?")) for item in artifacts if item.get("id") in basis_ids
+        ]
+        if sequences:
+            lines += ["", "**Evidence:** " + ", ".join(f"Artifact {value}" for value in sequences)]
+
+    lines += [
+        "",
+        "### Verification and scope",
+        "",
+        "This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.",
+    ]
+    conclusion = "\n".join(lines).strip()
+    if len(conclusion) > MAX_CONCLUSION_CHARACTERS:
+        conclusion = (
+            conclusion[: MAX_CONCLUSION_CHARACTERS - 150].rsplit("\n", 1)[0]
+            + "\n\nAdditional strategy detail is retained in the detailed Outcome and saved evidence; this Conclusion is bounded."
+        )
+    return conclusion
+
+
 def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     artifacts = record.get("artifacts", [])
     status = record.get("status")
@@ -600,7 +855,7 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         else:
             assessment, label = "mixed", "Mixed · no saved result"
             summary = "The session ended before a complete research cycle was saved."
-        return {
+        outcome = {
             "assessment": assessment,
             "label": label,
             "summary": summary,
@@ -609,6 +864,8 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             "provisional": assessment == "pending",
             "solution_review": None,
         }
+        outcome["conclusion"] = _outcome_conclusion(record, outcome)
+        return outcome
     decisive = next(
         (
             a
@@ -698,7 +955,7 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         # Older session records predate this field. Default only in the public
         # derived outcome so reading legacy data never rewrites the record.
         solution_review.setdefault("verification_status", "unknown")
-    return {
+    outcome = {
         "assessment": assessment,
         "label": label,
         "summary": summary[:1600],
@@ -707,6 +964,8 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         "provisional": status in {"queued", "running", "paused"},
         "solution_review": solution_review,
     }
+    outcome["conclusion"] = _outcome_conclusion(record, outcome)
+    return outcome
 
 
 def _metric_text(items: list[Any], *, limit: int = 2) -> str:
@@ -1918,6 +2177,8 @@ def _project_manager_lock(path: str):
 
 
 def _save(path: str, record: dict[str, Any]) -> None:
+    if record.get("outcome_conclusion_version") == 1:
+        record["outcome"] = _outcome(record)
     directory = _directory(path)
     encoded = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
     if len(encoded) > MAX_RECORD:
@@ -1992,7 +2253,14 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
     result = {
         k: v
         for k, v in record.items()
-        if k not in {"project_path", "guard_hash", "identity_hash", "idempotency_key"}
+        if k
+        not in {
+            "project_path",
+            "guard_hash",
+            "identity_hash",
+            "idempotency_key",
+            "outcome_conclusion_version",
+        }
     }
     if isinstance(record.get("steps"), list):
         result["steps"] = [dict(step) for step in record["steps"] if isinstance(step, dict)]
@@ -2023,6 +2291,19 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         except (ValueError, TypeError):
             result["elapsed_seconds"] = None
     outcome = _outcome(record)
+    saved_outcome = record.get("outcome")
+    saved_conclusion = saved_outcome.get("conclusion") if isinstance(saved_outcome, dict) else None
+    if isinstance(saved_conclusion, str):
+        # Public project exports retain this Markdown but intentionally omit
+        # the private version flag; imported copies must preserve it verbatim.
+        outcome["conclusion"] = saved_conclusion
+    else:
+        # Old session records retain their historical projection. Never infer a
+        # new answer for a session that predates persisted Conclusions.
+        outcome["conclusion"] = (
+            "### Historical session\n\n"
+            "No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below."
+        )
     outcome["metrics"] = _outcome_metrics(record, outcome)
     result["outcome"] = outcome
     assessments = record.get("strategy_assessments")
@@ -2541,6 +2822,7 @@ async def start_session(
                 "guard_hash": guard,
                 "idempotency_key": idempotency_key,
                 "status": "queued",
+                "outcome_conclusion_version": 1,
                 "created_at": _now(),
                 "updated_at": _now(),
                 "started_at": _now(),

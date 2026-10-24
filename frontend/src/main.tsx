@@ -87,7 +87,7 @@ type PortfolioRelation = { source_strategy_id: string; source_artifact_id: strin
 type PortfolioDecision = { status?: string; strategy_actions?: PortfolioStrategyAction[]; combination_candidates?: PortfolioCombination[]; conflict_candidates?: PortfolioRelation[]; overlap_warnings?: PortfolioRelation[]; limitations?: string[] };
 type OutcomeMetric = { label: string; value: string; detail?: string };
 type ResearchOutcomeMetrics = { operational: OutcomeMetric[]; research_quality: OutcomeMetric[]; sources: { session_id: string | null; step_ids: string[]; artifact_ids: string[]; execution_ids: string[]; strategy_ids: string[] } };
-type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
+type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { id: string; project_id?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
@@ -98,18 +98,7 @@ function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchS
 }
 
 function researchOutcomeMarkdown(session: ResearchSession): string {
-  const outcome = session.outcome;
-  const lines = [outcome.summary || 'No outcome summary was recorded.'];
-  if (outcome.basis_artifact_ids?.length) lines.push('', `**Outcome evidence:** ${outcomeArtifactReferences(outcome.basis_artifact_ids, session)}`);
-  const review = outcome.solution_review;
-  if (review) {
-    lines.push('', '### Solution review', '', `**Solution claim:** ${review.claim || 'No solution claim recorded.'}`, '', `**Argument:** ${review.argument_summary || 'No argument summary recorded.'}`, '', `**Assumptions:** ${review.assumptions?.join(' · ') || 'None recorded'}`, '', `**Proof obligations:** ${review.proof_obligations?.join(' · ') || 'None recorded'}`, '', `**Evidence:** ${outcomeArtifactReferences(review.basis_artifact_ids, session)}`);
-    if (review.resolved_objections?.length) lines.push('', `**Resolved review notes:** ${review.resolved_objections.join(' · ')}`);
-    if (review.unresolved_objections?.length) lines.push('', `**Unresolved objections:** ${review.unresolved_objections.join(' · ')}`);
-    if (review.verification_status && review.verification_status !== 'unknown') lines.push('', `**Verification:** ${review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}`);
-  }
-  if (outcome.caveats?.length) lines.push('', '### Caveats', '', ...outcome.caveats.map(caveat => `- ${caveat}`));
-  return lines.join('\n');
+  return session.outcome.conclusion || '### Historical session\n\nNo Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.';
 }
 
 function researchArtifactMarkdown(artifact: ResearchArtifact): string {
@@ -295,7 +284,7 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
       reportRequestFailure(errorMessage(cause));
     } finally { setInterventionBusy(false); }
   }
-  const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
+  const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} title={outcomeMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
@@ -303,7 +292,16 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
-      {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-general"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids?.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>{!!session.outcome.caveats?.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
+      <div className="outcome-subsections">
+        <details className="outcome-subsection outcome-conclusion" open>
+          <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
+          <div className="outcome-subsection-content outcome-conclusion-content">
+            {outcomeMarkdown
+              ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.conclusion || 'No Conclusion was saved for this historical session.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
+              : <div className="outcome-conclusion-source">{researchOutcomeMarkdown(session)}</div>}
+          </div>
+        </details>
+      </div>
 
       {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <details className="human-interventions outcome-subsection" aria-label="Human research feedback" open>
         <summary><DisclosureChevron expanded={false}/>Human feedback</summary>
@@ -385,7 +383,17 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
         {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection">
           <summary><DisclosureChevron expanded={false}/>Citations, Evidence &amp; Obligations</summary>
           <div className="outcome-subsection-content">
-            {review && !outcomeMarkdown && <div className="solution-review"><h4>Solution review</h4><p><strong>Solution claim:</strong> {review.claim || 'No solution claim recorded.'}</p><p><strong>Argument:</strong> {review.argument_summary || 'No argument summary recorded.'}</p><p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(review.basis_artifact_ids, session)}</p>{!!review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {review.resolved_objections.join(' · ')}</p>}{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{review.verification_status && review.verification_status !== 'unknown' && <p><strong>Verification:</strong> {review.verification_status === 'verified' ? 'Verified (session record)' : 'Convincing but unverified'}</p>}</div>}
+            {review && <div className="solution-review">
+              <h4>Solution review</h4>
+              <p><strong>Solution claim:</strong> {review.claim || 'No solution claim recorded.'}</p>
+              <p><strong>Argument:</strong> {review.argument_summary || 'No argument summary recorded.'}</p>
+              <p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p>
+              <p><strong>Proof obligations:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p>
+              <p><strong>Evidence:</strong> {outcomeArtifactReferences(review.basis_artifact_ids, session)}</p>
+              {!!review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {review.resolved_objections.join(' · ')}</p>}
+              {!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}
+              {review.verification_status && review.verification_status !== 'unknown' && <p><strong>Verification:</strong> {review.verification_status === 'verified' ? 'Verified (session record)' : 'Convincing but unverified'}</p>}
+            </div>}
             {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h4>Research artifacts</h4><button type="button" className="sigma-render-toggle" aria-label={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} aria-pressed={artifactsMarkdown} data-tooltip={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} title={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} onClick={() => setArtifactsMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div><ol>{session.artifacts.map(artifact => {
               const sage = !!artifact.investigator_output.sage_execution;
               const executionField = sage ? 'sage_execution' : 'python_execution';
