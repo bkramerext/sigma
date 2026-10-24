@@ -60,6 +60,15 @@ def check_start_cli() -> None:
         else:
             raise AssertionError("removed admin option was accepted")
     assert "unrecognized arguments" in output.getvalue()
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "--help"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("shutdown --help did not exit")
+    assert "identifiable local SIGMA UI servers" in output.getvalue()
 
 
 def check_ui() -> None:
@@ -68,7 +77,8 @@ def check_ui() -> None:
     with (
         patch("sigma.ui.Instance", return_value=MagicMock()),
         patch("sigma.ui.load_local_config"),
-        patch("sigma.ui.recover_orphans"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
         patch("pathlib.Path.is_dir", return_value=True),
         patch("sigma.ui.shutil.which", return_value="npm"),
         patch("sigma.ui.wait_for_ports", side_effect=RuntimeError("port occupied")),
@@ -95,7 +105,8 @@ def check_ui() -> None:
         with (
             patch("sigma.ui.Instance", return_value=owner),
             patch("sigma.ui.load_local_config"),
-            patch("sigma.ui.recover_orphans"),
+            patch("sigma.ui.recover_orphans", return_value=[]),
+            patch("sigma.ui.stop_registered_instances", return_value=[]),
             patch("pathlib.Path.is_dir", return_value=True),
             patch("sigma.ui.shutil.which", return_value="npm"),
             patch("sigma.ui.wait_for_ports"),
@@ -145,7 +156,8 @@ def check_local_google_startup() -> None:
         ),
         patch("sigma.ui.Instance", return_value=owner),
         patch("sigma.ui.load_local_config"),
-        patch("sigma.ui.recover_orphans"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
         patch("pathlib.Path.is_dir", return_value=True),
         patch("sigma.ui.shutil.which", return_value="npm"),
         patch("sigma.ui.wait_for_ports"),
@@ -229,16 +241,13 @@ def check_shutdown_and_suspended() -> None:
                 raise AssertionError("Unrelated process holding lock was trusted")
             send.assert_not_called()
 
-    owner = MagicMock()
     with (
-        patch("sigma.ui.Instance", return_value=owner) as factory,
-        patch("sigma.ui.recover_orphans") as cleanup,
+        patch("sigma.ui.stop_registered_instances", return_value=[]) as cleanup_all,
+        patch("sigma.ui.recover_orphans", return_value=[]) as cleanup,
     ):
         assert run_shutdown() == 0
-        factory.assert_called_once_with(shutdown_only=True)
-        cleanup.assert_called_once_with(ROOT)
-        owner.__enter__.assert_called_once()
-        owner.__exit__.assert_called_once()
+        cleanup_all.assert_called_once_with()
+        cleanup.assert_called_once_with()
 
 
 def main() -> None:

@@ -1,5 +1,32 @@
 # SIGMA status
 
+## Local launcher and shutdown reliability (2026-10-23)
+
+Launcher recovery now discovers owner records in the private per-user SIGMA
+registry, so `./sigma shutdown` and `./sigma start --nav` can request a clean
+shutdown across checkout directories. Older records without an explicit root
+are resolved from their recorded launcher command and checked against the
+canonical checkout identity. Dead owner metadata, refused control sockets, and
+partial temporary records are removed while holding the checkout lock. The
+kernel releases `flock` ownership when a process exits; the lock file remains as
+a stable synchronization inode to avoid an unlink/recreate race.
+
+Orphan recovery searches fixed-port listeners across checkout roots. It signals
+only processes whose user, checkout structure, exact server command, process
+birth identity, environment launch marker, and HTTP-served instance marker
+agree. Unknown listeners are left running and reported with port, PID,
+executable, and working directory when available. Startup stops registered
+instances and identified orphan servers before binding the ports.
+
+Verification on current `main` `2f1dbc3`: `./sigma test` passed, including the new `tests/ui_registry.py`
+cross-checkout/stale-state coverage, updated `tests/ui_orphans.py` ownership and
+occupied-port checks, Ruff, formatting, Pyright, frontend typecheck, and build.
+The opt-in `tests/ui_lifecycle.py` real-process scenario remains **UNVERIFIED**:
+ports 8000 and 5173 were occupied by an active SIGMA instance in the Red
+checkout, and its preflight correctly refuses to disturb those ports. No other
+checkout was stopped. Deterministic ownership/control tests are **MET**. No
+paid provider calls or cloud provisioning were performed.
+
 ## A18 follow-up — Concurrent preflight failure audit attribution (2026-10-23)
 
 Local research portfolio preflight failures now append a `call.preflight_failed`
