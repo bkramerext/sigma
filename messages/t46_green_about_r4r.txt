@@ -3,7 +3,7 @@
 **Ticket:** T46, Home and Project About dialog  
 **Branch:** `green/t46-about-dialog`  
 **Base:** `main` at `b69cedd` (latest fetched main; PR #70 merge)  
-**PR head:** updated with mobile-header correction (SHA to be recorded after commit)
+**Tested implementation commit:** `6837408` (mobile header and acceptance correction)
 **PR:** [#73](https://github.com/bkramerext/sigma/pull/73), open against `main`. Do not merge.
 
 ## Implementation
