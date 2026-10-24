@@ -1,8 +1,8 @@
 # SIGMA brainstorm and roadmap
 
-Dated ideas for future SIGMA work, not implementation commitments.
+Open ideas and possible follow-up work, not implementation commitments. Completed work and historical decisions belong in [DECISIONS](DECISIONS.md), [STATUS](STATUS.md), and the ticket tracker.
 
-**Times:** Approximate local times reconstructed from discussions. Add new dated entries; preserve earlier ideas.
+**Times:** Approximate local times reconstructed from discussions. Preserve timestamps for retained ideas.
 
 ## Core research model
 
@@ -28,20 +28,6 @@ Dated ideas for future SIGMA work, not implementation commitments.
 - **2026-10-20 9:00 AM** — Web, CLI, and scenarios share one typed application interface.
 - **2026-10-20 10:30 AM** — Show strategy lineage, evidence, priorities, and uncertainty clearly.
 
-## Projects and persistence
-
-- **2026-10-20 9:00 AM** — Projects live in portable `.sigma/` directories.
-- **2026-10-20 9:00 AM** — Potential layout: config, SQLite state, artifacts, scenarios; not mandated.
-- **2026-10-20 9:00 AM** — Keep credentials outside project data.
-
-## Verification and implementation approach
-
-- **2026-10-20 9:00 AM** — Prefer readable executable scenarios over extensive brittle tests.
-- **2026-10-20 9:00 AM** — Use deterministic fake agents, clocks, and budgets for offline scenarios.
-- **2026-10-20 9:30 AM** — Test false confidence, contradictions, trivialities, budget exhaustion, and invalid forks.
-- **2026-10-20 9:30 AM** — Specs define contracts and acceptance; implementation follows bounded slices.
-- **2026-10-20 10:00 AM** — Keep scenario runner minimal; defer elaborate orchestration.
-
 ## Agent runtime and public presentation
 
 - **2026-10-20 10:00 AM** — Agent runtime needs model, role, retry, timeout, concurrency, and cost controls.
@@ -50,7 +36,7 @@ Dated ideas for future SIGMA work, not implementation commitments.
 
 ## Configuration, spending, and progress notifications
 
-Deferred until agent execution work.
+Some base settings and limits now exist. The entries below concern additional strategy-level controls, spending presentation, and notifications.
 
 - **2026-10-20 1:00 PM** — Project settings: model, budget, agent limits, reporting, rubric, notifications.
 - **2026-10-20 1:00 PM** — Strategy settings: priority, scheduling state, spending ceiling; inherit project defaults.
@@ -65,19 +51,6 @@ Deferred until agent execution work.
 - **2026-10-20 2:00 PM** — Explain accomplishments and failures equally well; never invent evidence, discoveries, or certainty.
 - **2026-10-20 2:00 PM** — Original illustrations clarify ideas; claims trace to research artifacts. Show Me communicates, not verifies.
 - **2026-10-20 2:00 PM** — Place Show Me under a strategy's Report artifact actions, alongside Audit.
-
-## Documentation reconciliation
-
-Implemented storage uses versioned JSON; SQLite remains a future option. See [DECISIONS](DECISIONS.md).
-
-## UI process management and startup diagnostics
-
-- **2026-10-21** — User reports that `./sigma ui` sometimes produces no visible result, even after manually killing listeners on ports 8000 and 5173. Investigate the launcher/instance-replacement path and make startup failures and waits explicit and actionable; do not silently hang. Current launcher intends to replace a verified same-checkout SIGMA instance, so verify and fix that behavior rather than assume it works.
-- **2026-10-21** — Add an explicit `./sigma stop-ui` (or similarly discoverable) command to cleanly stop *only* a verified SIGMA-owned instance and its supervised child servers. Do not kill unrelated services using the same ports. Add real startup/restart/stop/crash scenarios and accurate CLI guidance.
-
-## Test suite organization
-
-- **Completed 2026-10-21** — Renamed the executable workflow checks from `scenarios/` to `tests/`. Updated the CLI test runner, Python tooling scopes, browser-check fixture import, and documentation. The files remain readable end-to-end workflows over shared application services; only their directory name changed.
 
 ## Network failure UX and state consistency (deferred)
 
