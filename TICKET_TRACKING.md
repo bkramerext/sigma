@@ -83,7 +83,7 @@ Provide persisted, structured outcome measurements for T25's collapsible **Metri
 | Strategy preview and Home tab persistence | Done |
 | Candidate-solution generation | Done |
 | Session controls, elapsed time and reports | Done |
-| T43 manual acceptance fixes | R4R PR pending; deterministic real-Chrome acceptance passed; live Google/ChatGPT OAuth remains unverified |
+| T43 manual acceptance fixes | [PR #62](https://github.com/bkramerext/sigma/pull/62) R4R; deterministic real-Chrome acceptance passed; live Google/ChatGPT OAuth remains unverified |
 | UI shutdown and orphan-process recovery | **Done (user confirmed)** |
 | Network-bound failure toast and safe recovery | Implemented in tested paths ([PR #1](https://github.com/bkramerext/sigma/pull/1)); broader error coverage remains to validate |
 | Live cross-strategy research validation | Open (T17.8) |

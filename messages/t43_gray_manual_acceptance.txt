@@ -2,7 +2,7 @@ T43 — Manual acceptance fixes
 Owner: Gray
 Branch: gray/t43-manual-acceptance-fixes
 Base: main at bd0429ef404b27b08fbcb6e4789dd353816cf9e1
-Status: R4R
+Status: R4R — [PR #62](https://github.com/bkramerext/sigma/pull/62)
 
 Acceptance findings
 - MET — Sign-in page copy and typography now use the approved Gmail sentence and restrained New Project-scale hierarchy.
@@ -25,4 +25,4 @@ Verification
 - `./sigma test` — passed all backend scenarios, Ruff, format check, Pyright (0 diagnostics), frontend typecheck and production build. Existing Starlette/httpx deprecation warnings remain.
 - Browser checks used isolated Vite/API ports 5189/8011. Existing listeners on 5173/8000 were left untouched. Screenshots: `/tmp/sigma-t43-signin-1440.png`, `/tmp/sigma-t43-signin-390.png`, `/tmp/sigma-t40-admin-home-1440.png`, `/tmp/sigma-t40-admin-dialog-390.png`, `/tmp/sigma-t43-chatgpt-320.png`.
 
-Changes are limited to T43 UI, auth-mode handling, regression checks, and acceptance documentation. PR URL and final head will be added after publication.
+Changes are limited to T43 UI, auth-mode handling, regression checks, and acceptance documentation. Published PR head before this handoff update: `eee05dc0bcd40b8446932cb8c4038611a0e28949`.
