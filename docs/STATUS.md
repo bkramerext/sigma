@@ -4601,4 +4601,46 @@ found. The fixture-server and Vite logs were scanned the same way and had no
 matches. Browser output contained only the passing summary. The browser script
 passed Ruff checks and formatting. Other checkouts' listeners were not stopped
 or changed; this check used separate ports and its own server processes. No
-Google Auth code was modified and no live T17.8 trial was started.
+No Google Auth code was modified; the browser preflight itself made no inference calls.
+
+## T17.8 answer-free live trial (2026-10-23 Pacific)
+
+The human authorized one bounded Maximum Regions run. Preflight verified the
+answer-free fixture SHA-256 against its packet, one saved strategy, zero prior
+sessions, 3-cycle/6-call/10-minute/4,000-output-token limits, connected ChatGPT
+plan mode, and the selected `gpt-6.1-sol` / High configuration. The run used
+ChatGPT plan mode only; no API-key fallback or separate API billing was used.
+
+Session `91e96112-27ce-412e-841f-5cbf67cbba75` ended productively after 2 of 3
+cycles and 4 of 6 calls (about 2m29s); no retry, provider error, or tool
+execution occurred. Investigator and Skeptic completed both cycles. The first
+Skeptic identified the actual missing attainability argument. In cycle 2, the
+Investigator calculated pairwise intersections, and the Skeptic wrote the
+complete proof, resolved all obligations, and stopped with no next question.
+The coordinator recorded `objective_review=achieved`,
+`terminal_reason=stop_productive_conclusion`, a positive outcome labeled
+**solution candidate (unverified)**, and credited the sole strategy from both
+saved artifacts. Direct mathematical review confirms the upper bound,
+intersection-distinct construction, and `n=0` base case are correct. No formal
+proof checker or claim of literature novelty was made.
+
+The complete version-2 project export is preserved at
+[`live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json`](evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json)
+and the detailed evaluation, artifact IDs, step usage, rubric scores, and
+limitations are in
+[`t17-8-live-trial-2026-10-23.md`](evaluations/t17-8-live-trial-2026-10-23.md).
+Four step-level usage records sum to 32,042 input and 6,549 output tokens;
+plan cost is unavailable. The aggregate session `tokens_used` field is 0
+despite those step totals. The live run used the shared research-session
+service, not a browser-driven start; the earlier Chrome preflight checked auth
+UI, not the live session's UI projection. In addition, the Investigator's
+2,000-character method field reached its limit in both cycles and ended
+mid-word; the final
+Skeptic's 2,500-character response also reached its cap. The Skeptic caught the
+missing proof and persisted the complete reasoning in the final structured
+review, but the silent field caps reduce reviewability and merit follow-up.
+
+No application code was changed after the live run. T17.8's bounded quality
+gate is met on this trial's rubric evidence; final A17/T17.8 acceptance remains
+for human sign-off. This run does not establish formal verification, billing
+cost, or reliability on other problems.
