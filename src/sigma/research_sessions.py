@@ -836,8 +836,10 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
     conclusion = "\n".join(lines).strip()
     if len(conclusion) > MAX_CONCLUSION_CHARACTERS:
         conclusion = (
-            conclusion[: MAX_CONCLUSION_CHARACTERS - 150].rsplit("\n", 1)[0]
-            + "\n\nAdditional strategy detail is retained in the detailed Outcome and saved evidence; this Conclusion is bounded."
+            "### Conclusion truncated\n\n"
+            "The generated Conclusion exceeded the display limit. Its substantive claims and strategy detail are omitted here so claims are not separated from their qualifications. See the detailed Outcome and saved evidence for the complete findings.\n\n"
+            "### Verification and scope\n\n"
+            "This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it."
         )
     return conclusion
 

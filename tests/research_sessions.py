@@ -2535,6 +2535,34 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
     assert "for every n ≥ 0" in success["conclusion"]
     assert "not independently verified" in success["conclusion"].lower()
 
+    oversized_artifact = {
+        **artifact,
+        "argument_summary": "Long supporting detail. "
+        * (research_sessions.MAX_CONCLUSION_CHARACTERS // 10),
+    }
+    oversized = research_sessions._outcome_conclusion(
+        {"status": "ended", "artifacts": [oversized_artifact]},
+        {
+            "assessment": "positive",
+            "solution_review": {
+                "status": "achieved",
+                "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
+                "argument_summary": oversized_artifact["argument_summary"],
+                "unresolved_objections": [],
+                "open_obligations": [],
+            },
+            "caveats": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    )
+    assert len(oversized) <= research_sessions.MAX_CONCLUSION_CHARACTERS
+    assert oversized.startswith("### Conclusion truncated\n\n")
+    assert "### Verification and scope" in oversized
+    assert "not independently verified" in oversized.lower()
+    assert "exceeded the display limit" in oversized
+    assert "R(n) = 1 + n(n+1)/2" not in oversized
+    assert oversized.endswith("before relying on it.")
+
     partial_artifact = {
         **artifact,
         "objective_review": {
