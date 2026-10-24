@@ -5535,4 +5535,5 @@ reconcile synthesis with PR #70's per-strategy finding schema. PR #68 changes
 the TeX paper and report pipeline; retain `outcome.conclusion` in its frozen
 paper sources/checkpoints while retaining all detailed evidence. This branch
 does not modify either PR. TeX session-selection UI remains deferred by policy.
-T47 handoff: `messages/t47_gray_conclusion.txt`.
+T47 handoff: `messages/t47_gray_conclusion.txt`. R4R PR:
+[PR #72](https://github.com/bkramerext/sigma/pull/72).
