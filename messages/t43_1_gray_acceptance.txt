@@ -29,3 +29,44 @@ Verification
 - Existing listeners on 8000/5173 were left untouched. Screenshots are recorded in `docs/STATUS.md` under T43.1.
 
 No live Google/ChatGPT OAuth, paid model calls, or cloud provisioning were used. A third operator-led manual acceptance pass remains required.
+
+T43.1 consolidated sign-in-pill follow-up
+-----------------------------------------
+Updated the same branch and PR #63; no new branch or PR was created.
+
+- Connected Google uses the single visible label “Google account connected” and
+  a static green dot. Disconnected Google uses “Sign into Google”; incomplete
+  OAuth configuration still shows “Google sign-in setup required” and opens
+  the existing actionable setup diagnostic. The redundant “Signed in” suffix
+  is removed.
+- Google and ChatGPT pills no longer expose hover tooltips or native title
+  tooltips. Their status dots are static. Research-progress dots elsewhere
+  retain their existing activity animation.
+- Google pill padding, height, typography, border, and spacing now match the
+  ChatGPT pill in Home and project headers at desktop and narrow widths.
+- Removed the “Local SIGMA” / “Hosted SIGMA service” target label from the
+  Google account dialog. Administrator Settings continues to state its
+  authorization scope explicitly.
+
+Validation for this follow-up:
+
+- `./sigma test` passed after the final code and browser-regression changes,
+  including all backend scenarios, Ruff, formatting, Pyright (zero diagnostics),
+  frontend typecheck, and production build. The existing Starlette/httpx
+  deprecation warnings remain.
+- Real Chrome passed `browser_checks/t43_1_manual_acceptance.py`,
+  `browser_checks/t40_cloud_ui.py`, `browser_checks/t23_1_google_signin.py`, and
+  `browser_checks/header.py` against isolated ports 8014/5190. The established
+  paper/export check `browser_checks/a20_paper.py` also passed using its mock
+  provider fixture on 8015 and Vite on 5174. Coverage includes actual local
+  setup diagnostics, deterministic connected/member/admin identity states,
+  desktop and narrow layouts, matching pill geometry, static dots, absence of
+  tooltips, account dialogs, keyboard dismissal/focus, and no external OAuth
+  handoff.
+- The first `header.py` run was blocked by this checkout's missing local Google
+  bootstrap configuration, which correctly disabled the ChatGPT control. The
+  check now uses a deterministic authenticated-member fixture for header
+  interaction coverage; real setup diagnostics remain exercised separately.
+- Real Google OAuth remains UNVERIFIED and still requires the operator's
+  third manual acceptance pass. No live OAuth or paid provider calls were
+  made.

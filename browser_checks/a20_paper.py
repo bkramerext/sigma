@@ -81,16 +81,17 @@ with sync_playwright() as playwright:
         expect(action_buttons.nth(1)).to_have_attribute("data-tooltip", "Generate Lean proof (coming soon)")
         expect(page.locator(".project-difficulty-badge")).to_have_attribute("title", "This project is considered easy. Click to cycle through easy, medium, and hard.")
         expect(page.locator(".project-difficulty-badge")).to_have_attribute("data-tooltip", "This project is considered easy. Click to cycle through easy, medium, and hard.")
-        expect(page.locator(".project-google-signin")).to_have_attribute("aria-label", "Open Google sign-in setup")
-        expect(page.locator(".project-google-signin")).to_have_attribute("data-tooltip", "Open Google sign-in setup")
-        expect(page.locator(".project-google-signin")).to_contain_text("Google sign-in")
-        expect(page.locator(".project-google-signin")).to_contain_text("Setup required")
+        expect(page.locator(".project-google-signin")).to_have_attribute("aria-label", "Google sign-in setup required")
+        expect(page.locator(".project-google-signin")).to_have_attribute("data-tooltip-disabled", "")
+        expect(page.locator(".project-google-signin")).not_to_have_attribute("data-tooltip")
+        expect(page.locator(".project-google-signin")).to_have_text("Google sign-in setup required")
         expect(page.locator(".project-google-signin")).to_be_enabled()
         model_tooltip = page.locator(".project-model-pill").get_attribute("data-tooltip")
         assert model_tooltip and model_tooltip.startswith("The selected model is ") and ". Its relative published API token cost is " in model_tooltip and model_tooltip.endswith(" Click to cycle through available models."), model_tooltip
         expect(page.locator(".project-thinking-pill")).to_have_attribute("data-tooltip", "The thinking level is set to high. Click to cycle through levels supported by this model.")
-        expect(page.locator(".project-chatgpt-signin summary")).to_have_attribute("title", "OpenAI API connected; open AI connection settings")
-        expect(page.locator(".project-chatgpt-signin summary")).to_have_attribute("data-tooltip", "OpenAI API connected; open AI connection settings")
+        expect(page.locator(".project-chatgpt-signin summary")).to_have_attribute("data-tooltip-disabled", "")
+        expect(page.locator(".project-chatgpt-signin summary")).not_to_have_attribute("title")
+        expect(page.locator(".project-chatgpt-signin summary")).not_to_have_attribute("data-tooltip")
         expect(actions.locator(".latex-wordmark")).to_have_text("TEX")
         logo = actions.locator(".project-lean-button img")
         expect(logo).to_have_attribute("src", "/lean-logo.svg")
@@ -130,7 +131,10 @@ with sync_playwright() as playwright:
     google_pill_box = page.locator(".project-google-signin").bounding_box()
     assert difficulty_box and model_pill_box and google_pill_box
     assert abs(difficulty_box["y"] - model_pill_box["y"]) <= 1, (difficulty_box, model_pill_box, google_pill_box)
-    assert abs(difficulty_box["y"] - google_pill_box["y"]) <= 1, (difficulty_box, model_pill_box, google_pill_box)
+    assert abs(
+        difficulty_box["y"] + difficulty_box["height"] / 2
+        - google_pill_box["y"] - google_pill_box["height"] / 2
+    ) <= 1, (difficulty_box, model_pill_box, google_pill_box)
     assert abs(model_pill_box["x"] - difficulty_box["x"] - difficulty_box["width"] - 8) <= 1, (difficulty_box, model_pill_box, google_pill_box)
     assert abs(google_pill_box["x"] - model_pill_box["x"] - model_pill_box["width"] - 8) <= 1, (difficulty_box, model_pill_box, google_pill_box)
     latex_button.hover()
@@ -139,16 +143,18 @@ with sync_playwright() as playwright:
     lean_button.hover()
     expect(page.get_by_role("tooltip")).to_have_text("Generate Lean proof (coming soon)")
     page.locator(".project-google-signin").hover()
-    expect(page.get_by_role("tooltip")).to_have_text("Open Google sign-in setup")
+    expect(page.get_by_role("tooltip")).to_have_count(0)
     page.locator(".project-google-signin").click()
     expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_be_visible()
-    expect(page.locator(".google-setup-missing code")).to_contain_text(
-        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in " ".join(
+        page.locator(".google-setup-missing code").all_text_contents()
     )
+    page.keyboard.press("Escape")
+    expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_have_count(0)
     page.locator(".project-difficulty-badge").hover()
     expect(page.get_by_role("tooltip")).to_have_text("This project is considered easy. Click to cycle through easy, medium, and hard.")
     page.locator(".project-chatgpt-signin summary").hover()
-    expect(page.get_by_role("tooltip")).to_have_text("OpenAI API connected; open AI connection settings")
+    expect(page.get_by_role("tooltip")).to_have_count(0)
     page.locator(".project-thinking-pill").hover()
     expect(page.get_by_role("tooltip")).to_have_text("The thinking level is set to high. Click to cycle through levels supported by this model.")
     model_tooltip = page.locator(".project-model-pill").get_attribute("data-tooltip")

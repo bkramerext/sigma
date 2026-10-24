@@ -183,9 +183,8 @@ def main() -> None:
             ).to_be_visible()
             expect(page.locator(".request-toast")).to_have_count(0)
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-            google = page.get_by_role("button", name="Open Google sign-in")
-            expect(google).to_contain_text("Google sign-in")
-            assert "Sign in" not in google.inner_text()
+            google = page.get_by_role("button", name="Sign into Google")
+            expect(google).to_have_text("Sign into Google")
             expect(page.locator(".home-topline .api-connection > summary")).to_be_visible()
             expect(page.locator(".home-topline .api-connection > summary")).to_contain_text(
                 "Google sign-in required"
@@ -243,7 +242,7 @@ def main() -> None:
             expect(account).to_be_visible()
             assert account.evaluate("element => getComputedStyle(element).position") == "fixed"
             assert account.evaluate("element => element.getBoundingClientRect().width") <= 300
-            expect(account.get_by_text("Local SIGMA", exact=True)).to_be_visible()
+            expect(account.locator(".google-account-target")).to_have_count(0)
             page.keyboard.press("Escape")
             expect(google).to_be_focused()
             google.click()
@@ -255,9 +254,15 @@ def main() -> None:
             status.update(authenticated=True, user={"email": BOOTSTRAP, "role": "admin"})
             page.goto(URL, wait_until="networkidle")
             expect(page.get_by_role("link", name="Administrator Settings")).to_be_visible()
-            expect(page.locator(".home-topline .project-google-signin")).to_contain_text(
-                "Signed in"
+            expect(page.locator(".home-topline .project-google-signin")).to_have_text(
+                "Google account connected"
             )
+            expect(page.locator(".home-topline .project-google-signin .connection-dot")).to_have_css(
+                "background-color", "rgb(117, 177, 140)"
+            )
+            assert page.locator(".home-topline .project-google-signin .connection-dot").evaluate(
+                "e => getComputedStyle(e).animationName"
+            ) == "none"
             expect(page.get_by_text(BOOTSTRAP, exact=True)).to_have_count(0)
             page.locator(".home-topline .project-google-signin").click()
             account = page.get_by_role("dialog", name="Connect your Google account")
@@ -358,8 +363,8 @@ def main() -> None:
             member.route("**/api/**", forward)
             member.route("**/api/cloud-auth/status", cloud_status)
             member.goto(URL, wait_until="networkidle")
-            expect(member.locator(".home-topline .project-google-signin")).to_contain_text(
-                "Signed in"
+            expect(member.locator(".home-topline .project-google-signin")).to_have_text(
+                "Google account connected"
             )
             expect(member.get_by_role("link", name="Administrator Settings")).to_have_count(0)
             expect(member.get_by_text("member@example.org", exact=True)).to_have_count(0)

@@ -33,6 +33,17 @@ credits display in Title Case and sit 5px from the bottom-right viewport edge.
 Unmapped legacy Recent project types are grouped under Other instead of showing
 an “Unavailable” category; the projects themselves remain in Recent.
 
+The operator's consolidated pill feedback is also implemented on the same
+branch: connected Google now shows one “Google account connected” label with a
+static green dot; disconnected Google uses “Sign into Google”, while incomplete
+OAuth setup retains the actionable diagnostic and setup label. The redundant
+“Signed in” suffix and Google/ChatGPT hover tooltips are gone. The Google
+account panel no longer labels the auth target as “Local SIGMA” or “Hosted SIGMA
+service”. Both Home and project-header Google pills match their ChatGPT peers'
+height, typography, internal spacing, border and surface at desktop and narrow
+widths. ChatGPT's animated request indicator remains available outside the
+header; both account-pill dots stay static.
+
 Verification:
 
 - `./sigma test` passed, including `tests/cloud_auth.py` (15 tests), launcher
@@ -56,6 +67,15 @@ Verification:
   administrator and member flows, Google controls, account management, and
   desktop/mobile layout. The existing live listeners on 8000/5173 were left
   untouched; browser checks used ports 8014/5190.
+- Updated Chrome `browser_checks/t43_1_manual_acceptance.py`,
+  `browser_checks/t40_cloud_ui.py`, `browser_checks/t23_1_google_signin.py`,
+  `browser_checks/header.py`, and `browser_checks/a20_paper.py` — passed.
+  Coverage includes Google connected and setup-required states, static green/
+  gray dots, no pill tooltips, matching desktop/mobile project-header
+  dimensions, keyboard dialog dismissal, deterministic member/admin behavior,
+  and the existing paper/export workflow. `header.py` uses an authenticated
+  member fixture for account/header interactions; the actual local setup
+  diagnostic remains covered separately by `t43_1_manual_acceptance.py`.
 - Deterministic local Google OIDC tests cover state, nonce, PKCE, ID-token,
   bootstrap email/subject binding, and authorization. No paid provider calls or
   cloud provisioning were made.

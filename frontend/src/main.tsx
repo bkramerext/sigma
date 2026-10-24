@@ -2627,7 +2627,6 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
     window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', escape);
     return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', escape); };
   }, [open]);
-  const target = cloud?.target === 'hosted' ? 'Hosted SIGMA service' : 'Local SIGMA';
   function close() { setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
   function dismissBackdrop(event: ReactPointerEvent<HTMLDivElement>) { if (event.target === event.currentTarget) close(); }
   async function signOut() {
@@ -2640,10 +2639,10 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   }
   const canSignIn = !!cloud?.enabled && cloud.ready;
   const setupMissing = cloud?.local_setup_missing ?? [];
-  const description = cloud?.authenticated ? 'Open Google account settings' : canSignIn ? 'Open Google sign-in' : 'Open Google sign-in setup';
+  const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign into Google' : 'Google sign-in setup required';
   return <>
-    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google sign-in</span>{cloud?.authenticated && <small>Signed in</small>}{!cloud?.authenticated && !canSignIn && <small>Setup required</small>}
+    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ''}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign into Google' : 'Google sign-in setup required'}</span>
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
@@ -2660,7 +2659,6 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
         <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
       </> : <>
         <h2 id="google-account-title">Connect your Google account</h2>
-        <p className="google-account-target">{target}</p>
         {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
         {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
         {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a>}

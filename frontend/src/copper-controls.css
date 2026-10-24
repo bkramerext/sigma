@@ -46,6 +46,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .connection-dot.connection-active { animation: connection-dot-pulse 1.2s ease-in-out infinite; }
+  .project-chatgpt-signin .connection-dot.connection-active { animation: none; }
 }
 .connection-unconfigured, .connection-limited, .connection-unavailable, .connection-stale { background: #c6a064; }
 .connection-unauthorized, .connection-forbidden { background: #d38578; }
