@@ -4547,3 +4547,43 @@ frontend typecheck and build. Real Chrome checks passed for
 `browser_checks/a17_research.py` (isolated Vite/provider fixture ports), and
 `browser_checks/nonconsecutive_sample.py` (desktop and 390px/320px mobile).
 No paid provider calls were made.
+
+## T17.8 credential-safe trial preparation (2026-10-23)
+
+Hardened `auth_context()` so its bearer token remains available only through
+explicit internal `context["token"]` access. Its `AuthContext` mapping excludes
+the token from iteration, ordinary representation, `dict()` conversion, and JSON
+serialization. Updated typed consumers to accept the redacted mapping without
+copying it into a serializable dictionary.
+
+Audited the trial paths through ChatGPT session refresh/storage, connection and
+model-catalog diagnostics, proposal request/error handling, and structured plan
+stream failures. The auth store reports generic storage errors; connection checks
+discard response bodies on non-success and expose only classified status; proposal
+exceptions use fixed safe messages; plan failures expose only local HTTP status
+and response shape, never provider error fields or freeform bodies. No
+auth/provider path in this audit logs headers, credentials, or raw
+credential-store contents.
+
+Added fixture-only regression coverage proving synthetic ChatGPT/API credentials
+are omitted from auth-context diagnostics and public connection output, and that
+a synthetic credential echoed in a provider error body is absent from the raised
+error. Existing OIDC, refresh/restart, connection, proposal, and plan-stream
+scenarios also ran with controlled transports and generated credentials.
+
+Verification: targeted `tests/model_connection.py`, `tests/chatgpt.py`, and
+`tests/proposals.py` passed using local fixtures; `./sigma test` passed all
+scenarios, Ruff/lint and format checks, Pyright (0 diagnostics), frontend
+typecheck and production build. No credential-store values were read or printed;
+no live provider endpoint, inference request, or paid usage was invoked.
+The real-Chrome `browser_checks/chatgpt.py` check was not run because ports
+8000/5173 were occupied by another checkout and 8001 by a third checkout; those
+processes were left untouched.
+
+Residual boundary: this prevents accidental serialization/representation of the
+auth snapshot and verifies SIGMA's own error paths. Code deliberately reaching
+the private `_token` slot or explicitly requesting `context["token"]` can still
+read it, as required to make provider requests; malicious code or debugging
+instrumentation already running in the same process/account remains outside this
+protection. T17.8 is ready for a separately authorized bounded live trial; none
+was started in this preparation.
