@@ -61,6 +61,12 @@ async def handler(request):
                     for reference in refs
                 ],
                 "conflicts_or_gaps": [],
+                "covered_field_refs": (
+                    [field["field_ref"] for field in context["fields"]]
+                    if schema_name == "sigma_paper_evidence_batch"
+                    else []
+                ),
+                "omitted_fields": [],
             }
         elif schema_name == "sigma_long_paper_plan":
             reference = context["indexed_source_ids"][0]

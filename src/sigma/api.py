@@ -252,15 +252,50 @@ class PaperGenerateRequest(OpenRequest):
     long_form: bool = False
 
 
+class PaperRestartRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+    expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirm_restart: Literal[True]
+
+
 @app.get("/api/projects/papers")
 def papers_view(path: str):
     return {"papers": papers.list_papers(path)}
 
 
 @app.get("/api/projects/papers/preflight")
-def papers_preflight_view(path: str, long_form: bool = False):
+def papers_preflight_view(
+    path: str,
+    long_form: bool = False,
+    expected_project_id: str | None = None,
+    expected_binding: str | None = None,
+    mode: str | None = None,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+):
     require_cloud_research_inference()
-    return papers.preflight(path, force_long_form=long_form)
+    return papers.preflight(
+        path,
+        force_long_form=long_form,
+        expected_project_id=expected_project_id,
+        expected_binding=expected_binding,
+        mode=mode,
+        model=model,
+        reasoning_effort=reasoning_effort,
+    )
+
+
+@app.post("/api/projects/papers/restart")
+async def papers_restart_view(body: PaperRestartRequest):
+    require_cloud_research_inference()
+    return await papers.restart_work(
+        body.path,
+        body.expected_project_id,
+        body.expected_binding,
+        body.expected_snapshot_sha256,
+        body.confirm_restart,
+    )
 
 
 @app.get("/api/projects/papers/{paper_id}")

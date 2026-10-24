@@ -796,7 +796,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
-type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; long_form?: boolean; evidence_batch_count?: number } };
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
@@ -808,6 +808,8 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   const [binding, setBinding] = useState('');
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
+  const [effort, setEffort] = useState('');
+  const [checkpoint, setCheckpoint] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [longForm, setLongForm] = useState(false);
   const [phase, setPhase] = useState('');
@@ -825,8 +827,17 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       const list = await listResponse.json(); const config = await configResponse.json();
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); }
-      else { setBinding(config.binding); setModel(config.model); setMode(config.mode); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpoint(null); }
+      else {
+        setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
+        const params = new URLSearchParams({
+          path, long_form: String(longForm), expected_project_id: projectId, expected_binding: config.binding,
+          mode: config.mode, model: config.model, reasoning_effort: config.reasoning_effort,
+        });
+        const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
+        const preflight = await preflightResponse.json();
+        if (preflightResponse.ok) setCheckpoint(preflight);
+      }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store' });
@@ -844,6 +855,31 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
   }
+  async function restartCheckpoint() {
+    if (busy || !checkpoint?.checkpoint_can_restart || !binding) return;
+    const prior = Number(checkpoint.provider_calls_previous_runs ?? 0) + Number(checkpoint.provider_calls_attempted ?? 0);
+    const restartCostCeiling = mode === 'api_key'
+      ? ' At 12,000 requested output tokens per call, a fresh run may request up to ' + Number(checkpoint.maximum_fresh_run_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar quote.'
+      : ' The new run is subject to your ChatGPT-plan allowance.';
+    if (!window.confirm(
+      `Restart long-form authoring from the beginning? This discards the current checkpointed work and can repeat up to ${Number(checkpoint.maximum_provider_calls).toLocaleString()} provider calls. The ${prior.toLocaleString()} calls already attempted will remain recorded. ${restartCostCeiling} ${mode === 'api_key' ? 'Additional calls can incur API-key charges.' : ''}`
+    )) return;
+    setBusy(true); setError(''); setPhase('Resetting the long-form checkpoint…');
+    try {
+      const response = await fetch('/api/projects/papers/restart', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path, expected_project_id: projectId, expected_binding: binding,
+          expected_snapshot_sha256: checkpoint.snapshot_sha256, confirm_restart: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
+      setPhase(`Checkpoint reset. ${Number(result.provider_calls_previous_runs).toLocaleString()} previous provider call attempts remain recorded.`);
+      await refresh(selected?.paper_id);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
   async function generatePaper() {
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
@@ -851,11 +887,27 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
     let finishProvider = () => {};
     let timer = 0;
     try {
-      const preflightResponse = await fetch(`/api/projects/papers/preflight?${new URLSearchParams({ path, long_form: String(longForm) })}`, { cache: 'no-store', signal: controller.signal });
+      const preflightParams = new URLSearchParams({
+        path, long_form: String(longForm), expected_project_id: projectId, expected_binding: binding,
+        mode, model, reasoning_effort: effort,
+      });
+      const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal });
       const preflight = await preflightResponse.json();
       if (!preflightResponse.ok) throw new Error(preflight.error ?? 'Could not size the evidence snapshot.');
+      if (preflight.checkpoint_exists && !preflight.resume_available) {
+        throw new Error('A checkpoint exists for different project or provider settings. Use Restart checkpoint to preserve its attempt history before generating.');
+      }
+      const resumeDisclosure = preflight.resume_available
+        ? ' This resumes after ' + Number(preflight.completed_batches).toLocaleString() + ' completed evidence batches, ' + Number(preflight.reduction_groups_completed).toLocaleString() + ' index-reduction groups' + (preflight.outline_complete ? ', with the outline saved' : '') + ', and ' + Number(preflight.completed_sections).toLocaleString() + ' sections. ' + Number(preflight.provider_calls_attempted).toLocaleString() + ' calls were already attempted in this run; ' + Number(preflight.provider_calls_previous_runs).toLocaleString() + ' in prior runs. Up to ' + Number(preflight.provider_calls_remaining).toLocaleString() + ' more calls may be made.'
+        : '';
+      const callBreakdown = preflight.long_form
+        ? ' Call ceiling by stage: ' + preflight.maximum_evidence_calls + ' evidence, up to ' + preflight.maximum_index_reduction_calls + ' index reduction, 1 outline, and up to ' + preflight.maximum_section_calls + ' sections.'
+        : ' This uses one provider call.';
+      const tokenCeiling = ' Structured stage-input limits total up to ' + (Number(preflight.maximum_structured_input_bytes) / 1_000_000).toFixed(1) + ' MB.' + (mode === 'api_key'
+        ? ' At 12,000 requested output tokens per API-key call, the run could request up to ' + Number(preflight.maximum_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar estimate.'
+        : ' ChatGPT-plan use is subject to provider allowance; this client cannot convert it to a dollar estimate.');
       if (preflight.long_form && !window.confirm(
-        `This frozen snapshot is ${Number(preflight.snapshot_bytes).toLocaleString()} bytes across ${Number(preflight.source_count).toLocaleString()} saved sources. Long-form authoring will use ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then a plan and separate section calls. The run may make up to ${Number(preflight.maximum_provider_calls).toLocaleString()} provider calls. ${mode === 'api_key' ? 'API-key mode can incur separate usage charges.' : 'ChatGPT-plan usage is subject to provider allowance.'} Continue?`
+        'This frozen snapshot is ' + Number(preflight.snapshot_bytes).toLocaleString() + ' bytes across ' + Number(preflight.source_count).toLocaleString() + ' saved sources. Long-form authoring will use ' + Number(preflight.evidence_batches).toLocaleString() + ' evidence batches, then a plan and separate section calls. The run may use up to ' + Number(preflight.maximum_provider_calls).toLocaleString() + ' calls.' + callBreakdown + tokenCeiling + resumeDisclosure + ' ' + (mode === 'api_key' ? 'API-key mode can incur separate usage charges.' : 'ChatGPT-plan usage is subject to provider allowance.') + ' Continue?'
       )) {
         setPhase('Large paper generation was not started; no provider calls were made.');
         return;
@@ -907,6 +959,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
     } catch (cause) {
       if (controller.signal.aborted) setPhase('Generation cancelled. No new version was published.');
       else { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+      await refresh(selected?.paper_id);
     } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
@@ -917,7 +970,12 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
       <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
       <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
+      {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
+        {checkpoint.resume_available
+          ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
+          : `A checkpoint exists but does not match current settings. It records ${checkpoint.provider_calls_attempted} calls in its current run and ${checkpoint.provider_calls_previous_runs} in earlier runs; restart to keep this accounting before authoring.`}
+      </p>}
+      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
       {(busy || phase.startsWith('Generation cancelled.')) && <p role="status" aria-live="polite">{phase}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
@@ -932,7 +990,10 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
         <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
         <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
         <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
-        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} provider call attempts` : ''}</p>
+        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} calls this run · ${selected.generation.provider_calls_prior_runs} prior-run calls · ${selected.generation.provider_calls_lifetime_total} lifetime calls` : ''}</p>
+        {!!selected.generation.omitted_evidence?.length && <details><summary>Evidence fields omitted from the generated index ({selected.generation.evidence_fields_omitted})</summary>{selected.generation.omitted_evidence.map(item => <p className="ai-paper-warning" key={item.field_ref}><code>{item.source_ref}{item.field}</code>: {item.reason}</p>)}</details>}
+        {!!selected.generation.reduction_source_refs_omitted?.length && <details><summary>Sources omitted during index reduction ({selected.generation.reduction_source_refs_omitted.length})</summary>{selected.generation.reduction_source_refs_omitted.map(source => <p className="ai-paper-warning" key={source}><code>{source}</code></p>)}<p className="settings-hint">The complete original source records remain in the archived snapshot.</p></details>}
+        {!!selected.generation.evidence_conflicts?.length && <details><summary>Potential conflicts and gaps identified by the evidence index ({selected.generation.evidence_conflict_note_count})</summary>{selected.generation.evidence_conflicts.map((conflict, index) => <p className="ai-paper-warning" key={`conflict-${index}`}>{conflict.statement} <strong>Sources:</strong> {conflict.evidence_refs.map(source => <code key={source}>{source} </code>)}</p>)}</details>}
         {selected.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
         {(selected.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
         {selected.draft.sections.map(section => <section key={section.heading}><h4>{section.heading}</h4>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}

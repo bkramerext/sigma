@@ -204,6 +204,179 @@ def test_api_paper_stream_reports_progress_and_completion() -> None:
     asyncio.run(check())
 
 
+def test_long_index_reduction_resumes_and_preserves_session_conflicts() -> None:
+    async def check() -> None:
+        project_id = "fixture-project"
+        package = {
+            "schema": "sigma-paper-evidence-v2",
+            "project_id": project_id,
+            "sources": [
+                {"id": f"project:{project_id}", "kind": "project", "data": {"title": "Fixture"}},
+                {
+                    "id": "session:positive",
+                    "kind": "session",
+                    "data": {"finding": "Condition A showed regeneration after treatment."},
+                },
+                {
+                    "id": "session:negative",
+                    "kind": "session",
+                    "data": {"finding": "Condition B showed no regeneration after treatment."},
+                },
+            ],
+        }
+        state = papers._new_work("a" * 64, project_id, "b" * 64, "gpt-fixture", "high")
+        config = {"model": "gpt-fixture"}
+        reductions = 0
+        cancel_second_reduction = True
+        batch_count = len(papers._evidence_batches(package))
+        assert batch_count == 1
+
+        async def fake_structured(input_value, _binding, _config, *, response_model, **kwargs):
+            nonlocal reductions, cancel_second_reduction
+            schema_name = kwargs.get("schema_name")
+            if response_model is papers.EvidenceBatchResult:
+                if schema_name == "sigma_paper_evidence_reduction":
+                    reductions += 1
+                    if reductions == 2 and cancel_second_reduction:
+                        cancel_second_reduction = False
+                        raise asyncio.CancelledError()
+                    refs = list(
+                        dict.fromkeys(ref for note in input_value for ref in note["evidence_refs"])
+                    )
+                    return (
+                        papers.EvidenceBatchResult(
+                            notes=[]
+                            if "session:negative" in refs
+                            else [
+                                papers.EvidenceNote(
+                                    statement=("Reduced while preserving source identities. " * 12)[
+                                        :450
+                                    ],
+                                    kind="context",
+                                    evidence_refs=refs[:12],
+                                )
+                            ],
+                            conflicts_or_gaps=[],
+                        ),
+                        config["model"],
+                    )
+                fields = input_value["fields"]
+                batch_refs = list(dict.fromkeys(field["source_ref"] for field in fields))
+                refs = batch_refs[:3]
+                return (
+                    papers.EvidenceBatchResult(
+                        notes=[
+                            papers.EvidenceNote(
+                                statement=(f"Distinct saved finding from {ref}. " * 10)[:450],
+                                kind="negative" if ref.endswith("negative") else "result",
+                                evidence_refs=[ref],
+                            )
+                            for ref in refs
+                        ],
+                        conflicts_or_gaps=(
+                            [
+                                papers.EvidenceConflict(
+                                    statement="Separate sessions report positive regeneration and no regeneration under different recorded conditions.",
+                                    evidence_refs=["session:positive", "session:negative"],
+                                )
+                            ]
+                            if {"session:positive", "session:negative"}.issubset(batch_refs)
+                            else []
+                        ),
+                        covered_field_refs=[field["field_ref"] for field in fields],
+                    ),
+                    config["model"],
+                )
+            if response_model is papers.LongPaperPlan:
+                ref = f"project:{project_id}"
+                base = draft(ref)
+                return (
+                    papers.LongPaperPlan(
+                        title="Contrasting Session Evidence",
+                        abstract=base.abstract,
+                        abstract_claim_ids=["C1"],
+                        problem_framing=base.problem_framing,
+                        problem_framing_claim_ids=["C1"],
+                        methods=base.methods,
+                        methods_claim_ids=["C1"],
+                        claims=base.claims,
+                        sections=[
+                            papers.LongSectionPlan(
+                                heading="Positive session",
+                                purpose="Describe the recorded positive finding and its context.",
+                                evidence_refs=[ref],
+                                claim_ids=["C1"],
+                            ),
+                            papers.LongSectionPlan(
+                                heading="Negative session",
+                                purpose="Describe the recorded negative finding and its context.",
+                                evidence_refs=[ref],
+                                claim_ids=["C1"],
+                            ),
+                        ],
+                        limitations=base.limitations,
+                        open_obligations=base.open_obligations,
+                        conclusions=base.conclusions,
+                        conclusion_claim_ids=["C1"],
+                        validation_warnings=[],
+                    ),
+                    config["model"],
+                )
+            return papers.LongSectionDraft(
+                paragraphs=["Source-linked section fixture prose."]
+            ), config["model"]
+
+        saved = []
+
+        async def run():
+            return await papers._generate_long_draft(
+                package,
+                {"mode": "chatgpt", "identity": "fixture", "token": "unused"},
+                config,
+                state,
+                lambda current: saved.append(json.loads(papers._json(current))),
+            )
+
+        with (
+            patch.object(papers, "_provider_structured", new=fake_structured),
+            patch.object(papers, "MAX_PLANNER_INDEX_BYTES", 1_000),
+            patch.object(papers, "MAX_REDUCTION_GROUP_BYTES", 1_500),
+        ):
+            try:
+                await run()
+            except asyncio.CancelledError:
+                pass
+            else:
+                raise AssertionError("The second reduction group should be interrupted")
+            assert state["reduction_next_group"] == 1
+            extracted = [
+                papers.EvidenceNote.model_validate(item) for item in state["reduction_input"]
+            ]
+            assert any(
+                note.kind == "result" and note.evidence_refs == ["session:positive"]
+                for note in extracted
+            )
+            assert any(
+                note.kind == "negative" and note.evidence_refs == ["session:negative"]
+                for note in extracted
+            )
+            reductions_before_resume = reductions
+            draft_result, calls, _ = await run()
+        assert reductions - reductions_before_resume == 1
+        assert calls == state["provider_calls"]
+        assert state["reduction_source_refs_omitted"] == ["session:negative"]
+        assert state["reduction_note_compaction_events"] >= 1
+        assert any("potential conflict" in item for item in draft_result.validation_warnings)
+        assert any(
+            "omitted notes covering 1 saved source" in item
+            for item in draft_result.validation_warnings
+        )
+        assert len(draft_result.sections) == 2
+        assert saved
+
+    asyncio.run(check())
+
+
 def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
     sample_path = (
         Path(__file__).resolve().parents[1] / "samples/xenopus-tail-regeneration/project.json"
@@ -225,6 +398,18 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
                 {"run_id": "large-experiment", "steps": [{"step_id": "step-1", "output": ""}]}
             ],
         }
+        base_export["research_sessions"] = [
+            {
+                "id": "session-positive",
+                "status": "completed",
+                "finding": "A trial group showed tail regeneration under the recorded condition.",
+            },
+            {
+                "id": "session-negative",
+                "status": "completed",
+                "finding": "A separate trial group showed no tail regeneration under its recorded condition.",
+            },
+        ]
         with patch("sigma.api.export_project_view", return_value=base_export):
             empty_snapshot, _ = papers._snapshot(str(path))
         target_bytes = 483_485
@@ -275,24 +460,54 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
             else:
                 raise AssertionError("Changed research must invalidate the preflight confirmation")
         provider_calls = 0
+        batch_invocations: dict[str, int] = {}
+        cancel_second_batch_once = True
         fail_first_section = True
         ref = f"project:{project_view.project.id}"
 
         async def fake_structured(input_value, _binding, _config, *, response_model, **_kwargs):
-            nonlocal provider_calls, fail_first_section
+            nonlocal provider_calls, fail_first_section, cancel_second_batch_once
             provider_calls += 1
             if response_model is papers.EvidenceBatchResult:
+                batch_id = input_value["batch_id"]
+                batch_invocations[batch_id] = batch_invocations.get(batch_id, 0) + 1
+                if input_value.get("batch_id") == "E2" and cancel_second_batch_once:
+                    cancel_second_batch_once = False
+                    raise asyncio.CancelledError()
                 batch_refs = sorted({field["source_ref"] for field in input_value["fields"]})
+                batch_fields = input_value["fields"]
+                session_refs = [ref for ref in batch_refs if ref.startswith("session:")]
                 return (
                     papers.EvidenceBatchResult(
                         notes=[
                             papers.EvidenceNote(
-                                statement="The saved record contains an experiment transcript.",
+                                statement=f"The saved record in {source_ref} contains a distinct experimental finding.",
                                 kind="context",
-                                evidence_refs=[batch_refs[0]],
+                                evidence_refs=[source_ref],
                             )
+                            for source_ref in batch_refs[:3]
                         ],
-                        conflicts_or_gaps=[],
+                        conflicts_or_gaps=(
+                            [
+                                papers.EvidenceConflict(
+                                    statement="Separate sessions report a positive regeneration finding and a negative no-regeneration finding; retain both conditions and source identities.",
+                                    evidence_refs=session_refs[:2],
+                                )
+                            ]
+                            if len(session_refs) > 1
+                            else [],
+                        )[0],
+                        covered_field_refs=[field["field_ref"] for field in batch_fields[1:]],
+                        omitted_fields=(
+                            [
+                                papers.OmittedEvidenceField(
+                                    field_ref=batch_fields[0]["field_ref"],
+                                    reason="The fixture marks one field as omitted for coverage-ledger regression.",
+                                )
+                            ]
+                            if batch_fields
+                            else []
+                        ),
                     ),
                     config["model"],
                 )
@@ -351,15 +566,108 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         ):
             try:
                 asyncio.run(papers.generate(str(path), credential["identity"]))
+            except asyncio.CancelledError:
+                pass
+            else:
+                raise AssertionError("The second evidence batch should be cancelled")
+            partial_batch_checkpoint = papers._load_work(str(path))
+            assert partial_batch_checkpoint is not None
+            assert partial_batch_checkpoint["next_batch"] == 1
+            completed_batch_calls = partial_batch_checkpoint["provider_calls"]
+            try:
+                asyncio.run(papers.generate(str(path), credential["identity"]))
             except ProjectError as exc:
                 assert "fixture interruption" in str(exc)
             else:
                 raise AssertionError("The fixture should interrupt after saving a section plan")
-            calls_before_resume = provider_calls
             checkpoint = papers._load_work(str(path))
             assert checkpoint is not None and checkpoint["plan"]
             assert checkpoint["next_batch"] == len(papers._evidence_batches(snapshot))
+            assert batch_invocations["E1"] == 1
+            assert batch_invocations["E2"] == 2
             assert papers.list_papers(str(path)) == []
+            resume = papers.preflight(
+                str(path),
+                force_long_form=True,
+                expected_project_id=project_view.project.id,
+                expected_binding=credential["identity"],
+                mode=credential["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert resume["resume_available"] is True
+            assert resume["completed_batches"] == batch_count
+            assert resume["outline_complete"] is True
+            assert resume["completed_sections"] == 0
+            assert resume["provider_calls_attempted"] == checkpoint["provider_calls"]
+
+            checkpoint["provider_calls"] = papers.MAX_LONG_PAPER_CALLS
+            checkpoint["provider_calls_total"] = papers.MAX_LONG_PAPER_CALLS
+            papers._save_work(str(path), checkpoint)
+            exhausted_call_count = provider_calls
+            try:
+                asyncio.run(papers.generate(str(path), credential["identity"]))
+            except ProjectError as exc:
+                assert "bounded provider-call budget" in str(exc)
+            else:
+                raise AssertionError("An exhausted checkpoint must stop before another call")
+            assert provider_calls == exhausted_call_count
+
+            restarted = asyncio.run(
+                papers.restart_work(
+                    str(path),
+                    project_view.project.id,
+                    credential["identity"],
+                    papers._snapshot(str(path))[1],
+                    True,
+                )
+            )
+            assert restarted["provider_calls_previous_runs"] == papers.MAX_LONG_PAPER_CALLS
+            reset_preflight = papers.preflight(
+                str(path),
+                force_long_form=True,
+                expected_project_id=project_view.project.id,
+                expected_binding=credential["identity"],
+                mode=credential["mode"],
+                model=config["model"],
+                reasoning_effort=config["reasoning_effort"],
+            )
+            assert reset_preflight["resume_available"] is True
+            assert reset_preflight["provider_calls_attempted"] == 0
+            assert reset_preflight["provider_calls_previous_runs"] == papers.MAX_LONG_PAPER_CALLS
+            calls_at_restart = provider_calls
+            compile_attempts = 0
+
+            def fail_compile_once(_tex, **_kwargs):
+                nonlocal compile_attempts
+                compile_attempts += 1
+                if compile_attempts == 1:
+                    raise RuntimeError("fixture TeX compilation failure")
+                return b"%PDF-fixture"
+
+            try:
+                with patch.object(papers, "_compile_pdf", new=fail_compile_once):
+                    asyncio.run(papers.generate(str(path), credential["identity"]))
+            except ProjectError as exc:
+                assert "fixture TeX compilation failure" in str(exc)
+            else:
+                raise AssertionError("The injected TeX compilation failure must be reported")
+            calls_after_compile_failure = provider_calls
+            authored_checkpoint = papers._load_work(str(path))
+            assert authored_checkpoint is not None
+            assert len(authored_checkpoint["section_drafts"]) == 2
+
+            try:
+                with patch.object(
+                    papers, "_save", side_effect=ProjectError("fixture publication failure")
+                ):
+                    asyncio.run(papers.generate(str(path), credential["identity"]))
+            except ProjectError as exc:
+                assert "fixture publication failure" in str(exc)
+            else:
+                raise AssertionError("The injected publication failure must be reported")
+            assert provider_calls == calls_after_compile_failure
+            assert papers._load_work(str(path)) is not None
             result = asyncio.run(papers.generate(str(path), credential["identity"]))
 
         saved = papers.get_paper(str(path), result["paper_id"])
@@ -367,9 +675,26 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert len(papers._json(saved["snapshot"])) == target_bytes
         assert saved["generation"]["long_form"] is True
         assert saved["generation"]["call_limit"] == papers.MAX_LONG_PAPER_CALLS
-        assert saved["generation"]["provider_calls_attempted"] == provider_calls
+        assert saved["generation"]["provider_calls_attempted"] == provider_calls - calls_at_restart
+        assert saved["generation"]["evidence_fields_omitted"] == batch_count
+        assert len(saved["generation"]["omitted_evidence"]) == batch_count
+        assert saved["generation"]["evidence_conflict_note_count"] >= 1
+        assert any(
+            conflict["evidence_refs"] == ["session:positive", "session:negative"]
+            for conflict in saved["generation"]["evidence_conflicts"]
+        )
+        assert (
+            saved["generation"]["provider_calls_lifetime_total"]
+            == papers.MAX_LONG_PAPER_CALLS + provider_calls - calls_at_restart
+        )
+        assert saved["generation"]["provider_calls_prior_runs"] == papers.MAX_LONG_PAPER_CALLS
+        assert saved["generation"]["omitted_evidence"][0]["field_ref"]
+        assert saved["generation"]["omitted_evidence"][0]["reason"]
+        assert any("potential conflict" in warning for warning in saved["author_review_warnings"])
         assert provider_calls > 3
-        assert provider_calls - calls_before_resume == 2
+        assert provider_calls - calls_at_restart > 2
+        assert completed_batch_calls < checkpoint["provider_calls"]
+        assert provider_calls == calls_after_compile_failure
         assert papers._load_work(str(path)) is None
         assert len(saved["draft"]["sections"]) == 2
 
@@ -378,6 +703,7 @@ def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
     test_long_tex_compiler_source_bound_is_configurable()
     test_api_paper_stream_reports_progress_and_completion()
+    test_long_index_reduction_resumes_and_preserves_session_conflicts()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")

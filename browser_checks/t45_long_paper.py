@@ -61,7 +61,7 @@ with sync_playwright() as playwright:
     expect(dialog).to_contain_text("Long-Form Experimental Research Synthesis", timeout=60_000)
     expect(dialog.get_by_role("link", name="Download compiled PDF")).to_be_visible()
     expect(dialog).to_contain_text("evidence batches")
-    expect(dialog).to_contain_text("provider call attempts")
+    expect(dialog).to_contain_text("calls this run")
     expect(dialog).to_contain_text("Experimental question and prior context")
     pdf_link = dialog.get_by_role("link", name="Download compiled PDF")
     pdf_result = page.evaluate(
@@ -72,7 +72,7 @@ with sync_playwright() as playwright:
     assert pdf_result["status"] == 200 and "application/pdf" in pdf_result["type"]
     assert pdf_bytes.startswith(b"%PDF-") and len(pdf_bytes) > 1000
     Path("/tmp/sigma-t45-xenopus.pdf").write_bytes(pdf_bytes)
-    assert confirmations and "provider calls" in confirmations[0]
+    assert confirmations and "calls" in confirmations[0]
     assert not errors, errors
     browser.close()
 
