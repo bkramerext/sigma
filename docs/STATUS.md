@@ -29,6 +29,12 @@ unsaved draft, explicit acceptance, export, and unchanged Sample sources. No
 live provider calls were made. The prior section below describes the earlier
 behavior and its result, not the current strategy-generation contract.
 
+After reconciling this branch with `main` at `254cfd4`, `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed again, including all
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build.
+Real Chrome `browser_checks/a16_agentic.py` also passed against the isolated
+provider and UI on ports 8025 and 5192; existing listeners were left untouched.
+
 ## Operation Narrow Passage strategy-generation repair (2026-10-24)
 
 Investigated the existing Operation Narrow Passage working copy from the
