@@ -1,6 +1,6 @@
 # SIGMA status
 
-## T41 — Concurrent preflight failure audit attribution (2026-10-23)
+## A18 follow-up — Concurrent preflight failure audit attribution (2026-10-23)
 
 Local research portfolio preflight failures now append a `call.preflight_failed`
 event before dispatch with the strategy ID/title, role, preflight stage, safe

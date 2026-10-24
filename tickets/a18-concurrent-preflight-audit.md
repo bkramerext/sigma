@@ -1,4 +1,4 @@
-# T41 — Attribute concurrent research preflight failures
+# A18 follow-up — Attribute concurrent research preflight failures
 
 Status: **implemented and verified offline**.
 

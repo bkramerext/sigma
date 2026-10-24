@@ -1,4 +1,4 @@
-R4R — T41 Concurrent Branch Preflight Audit — Green
+R4R — A18 Concurrent Branch Preflight Audit — Green
 Date: 2026-10-23
 Status: implemented; ready for independent review.
 
@@ -18,8 +18,8 @@ completed persisted output, and exactly one counted dispatch. Existing
 configuration preflight failure and timeout/resume regressions now assert the
 new metadata as well.
 
-Ticket: `tickets/t41-concurrent-preflight-audit.md`.
-Status evidence: `docs/STATUS.md`, section “T41 — Concurrent preflight failure audit attribution”.
+Ticket: `tickets/a18-concurrent-preflight-audit.md`.
+Status evidence: `docs/STATUS.md`, section “A18 follow-up — Concurrent preflight failure audit attribution”.
 
 ## Verification
 
