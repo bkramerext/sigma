@@ -109,6 +109,9 @@ def main() -> None:
             google = page.locator(".home-topline .project-google-signin")
             expect(google).to_be_enabled()
             expect(google).to_have_text("Google sign-in setup required")
+            expect(google.locator(".connection-dot")).to_have_css(
+                "background-color", "rgb(198, 160, 100)"
+            )
             expect(google).to_have_attribute("aria-label", "Google sign-in setup required")
             expect(google).to_have_attribute("data-tooltip-disabled", "")
             expect(google).not_to_have_attribute("data-tooltip")
@@ -118,7 +121,7 @@ def main() -> None:
             expect(setup.locator(".google-setup-missing code")).to_contain_text(
                 "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"
             )
-            expect(setup.get_by_role("link", name="Continue with Google")).to_have_count(0)
+            expect(setup.get_by_role("link", name="Sign in with Google")).to_have_count(0)
             expect(setup).to_contain_text("source ~/.bashrc")
             page.keyboard.press("Escape")
             expect(setup).to_have_count(0)
@@ -142,12 +145,35 @@ def main() -> None:
                 page.screenshot(path=f"/tmp/sigma-t43-1-google-setup-{width}.png", full_page=True)
                 page.keyboard.press("Escape")
                 credit = page.locator(".home-art-credit")
-                expect(credit).to_have_text("By Brian Kramer, ChatGPT & CodexOctober 2026")
+                expect(credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")).to_have_text(
+                    ["Brian Kramer", "& OpenAI Models"]
+                )
+                expect(credit.locator("time")).to_have_count(0)
+                assert credit.evaluate("e => getComputedStyle(e).textAlign") == "right"
                 box = credit.bounding_box()
                 assert box is not None
                 assert abs(width - (box["x"] + box["width"]) - 5) <= 1, (width, box)
                 assert abs(height - (box["y"] + box["height"]) - 5) <= 1, (height, box)
                 assert credit.evaluate("e => getComputedStyle(e).fontVariant") == "normal"
+                google_box = google.bounding_box()
+                chatgpt = page.locator(".home-topline .api-connection > summary")
+                chatgpt_box = chatgpt.bounding_box()
+                assert google_box and chatgpt_box
+                expected_gap = 12 if width > 700 else 8
+                assert abs(chatgpt_box["x"] - google_box["x"] - google_box["width"] - expected_gap) <= 1
+                google_style = google.evaluate(
+                    "e => { const s = getComputedStyle(e); return [s.height, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight]; }"
+                )
+                chatgpt_style = chatgpt.evaluate(
+                    "e => { const s = getComputedStyle(e); return [s.height, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight]; }"
+                )
+                assert google_style == chatgpt_style, (google_style, chatgpt_style)
+                assert google.evaluate(
+                    "e => [...e.children].every(child => getComputedStyle(child).marginLeft === '0px')"
+                )
+                assert google.evaluate(
+                    "e => Math.abs(e.children[0].getBoundingClientRect().left - e.getBoundingClientRect().left - parseFloat(getComputedStyle(e).paddingLeft) - 1) < 1"
+                )
                 page.screenshot(path=f"/tmp/sigma-t43-1-home-{width}.png", full_page=True)
 
             page.get_by_role("tab", name="Recent", exact=True).click()
@@ -212,6 +238,13 @@ def main() -> None:
             trigger.click()
             dialog = popup_page.get_by_role("dialog", name="AI connection settings")
             expect(dialog).to_be_visible()
+            account_label = dialog.locator(".account-label")
+            expect(account_label).to_have_text("reviewer@gmail.com")
+            assert account_label.evaluate("e => getComputedStyle(e).color") == "rgb(240, 204, 160)"
+            assert account_label.evaluate("e => getComputedStyle(e).fontSize") == "15px"
+            chatgpt_email_style = account_label.evaluate(
+                "e => { const s = getComputedStyle(e); return [s.color, s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight, s.margin]; }"
+            )
             expect(dialog.get_by_text("Using ChatGPT plan", exact=True)).to_have_count(0)
             expect(dialog).to_contain_text("plan allowance or credits")
             expect(dialog).to_contain_text("remaining usage are not verified")
@@ -233,6 +266,22 @@ def main() -> None:
             expect(api_key).to_be_visible()
             expect(api_key).to_have_class("connection-text-action")
             popup_page.screenshot(path="/tmp/sigma-t43-1-connected-popup-390.png", full_page=True)
+            popup_page.keyboard.press("Escape")
+            google_pill = popup_page.locator(".home-topline .project-google-signin")
+            google_pill.click()
+            google_dialog = popup_page.get_by_role("dialog", name="Google account")
+            google_email = google_dialog.locator(".google-account-email")
+            expect(google_email).to_have_text("reviewer@gmail.com")
+            google_email_style = google_email.evaluate(
+                "e => { const s = getComputedStyle(e); return [s.color, s.fontFamily, s.fontSize, s.fontWeight, s.lineHeight, s.margin]; }"
+            )
+            assert google_email_style == chatgpt_email_style, (
+                google_email_style,
+                chatgpt_email_style,
+            )
+            expect(google_dialog.get_by_role("heading", name="Google account")).to_have_count(0)
+            expect(google_dialog.get_by_role("button", name="Use another Google account")).to_have_count(0)
+            expect(google_dialog.get_by_role("button", name="Sign out", exact=True)).to_be_visible()
             popup_page.keyboard.press("Escape")
 
             # Keep the sign-in attempt local and deterministic; verify Cancel sign-in styling.

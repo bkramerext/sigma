@@ -1807,7 +1807,7 @@ function Home({ initialPath, onOpen }: {
   const nextCreditPlunk = useRef(0);
   const turbulenceAnimation = useRef<SVGAnimateElement>(null);
   const displacementAnimation = useRef<SVGAnimateElement>(null);
-  const [creditStreaks, setCreditStreaks] = useState<number[]>([]);
+  const [creditStreaks, setCreditStreaks] = useState<Array<{ id: number; line: 'name' | 'models' }>>([]);
   const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
   useEffect(() => {
@@ -1837,11 +1837,12 @@ function Home({ initialPath, onOpen }: {
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
   }
   function launchCreditStreak() {
-    const id = ++nextCreditStreak.current;
-    setCreditStreaks(current => [...current, id]);
+    const nameId = ++nextCreditStreak.current;
+    const modelsId = ++nextCreditStreak.current;
+    setCreditStreaks(current => [...current, { id: nameId, line: 'name' }, { id: modelsId, line: 'models' }]);
   }
   function removeCreditStreak(id: number) {
-    setCreditStreaks(current => current.filter(streak => streak !== id));
+    setCreditStreaks(current => current.filter(streak => streak.id !== id));
   }
   function launchCreditPlunk() {
     const id = ++nextCreditPlunk.current;
@@ -1871,7 +1872,7 @@ function Home({ initialPath, onOpen }: {
         <HomeCatalog onOpen={onOpen}/>
       </section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={launchCreditStreak} onClick={launchCreditPlunk}><span>By Brian Kramer, ChatGPT &amp; Codex</span><time dateTime="2026-10">October 2026</time>{creditStreaks.map(id => <span key={id} className="home-credit-streak" aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
     </div>
@@ -2578,7 +2579,7 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
   }, []);
   const project = audit?.project;
   return <main className="cloud-demo-page">
-    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Continue with Google</a>}</nav></header>
+    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Sign in with Google</a>}</nav></header>
     <section className="cloud-demo-intro"><p className="cloud-auth-kicker">Public read-only preview</p><h1>Explore a SIGMA research project</h1><p>Inspect a curated saved project, its strategies, research sessions, outcomes, computational evidence and report exports. This shared Demo does not create a workspace or run agents.</p></section>
     {error && <section className="cloud-demo-state" role="alert"><h2>Demo unavailable</h2><p>{error}</p></section>}
     {!audit && !error && <p className="cloud-demo-state" role="status">Loading saved Demo data…</p>}
@@ -2639,14 +2640,14 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   }
   const canSignIn = !!cloud?.enabled && cloud.ready;
   const setupMissing = cloud?.local_setup_missing ?? [];
-  const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign into Google' : 'Google sign-in setup required';
+  const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
     <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ''}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign into Google' : 'Google sign-in setup required'}</span>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
-      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby="google-account-title" tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
+      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
       {!cloud ? <>
         <h2 id="google-account-title">Checking Google sign-in</h2>
         <p>SIGMA is checking the local Google authentication configuration.</p>
@@ -2658,11 +2659,11 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
         <p>Set the missing values in the environment used to start SIGMA. Put the Google OAuth client ID and secret in this checkout’s <code>.env</code>. Set <code>SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL</code> to the operator’s actual Gmail address. If that value is in <code>~/.bashrc</code>, run <code>source ~/.bashrc</code> in the launching shell, then restart with <code>./sigma start --nav</code>.</p>
         <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
       </> : <>
-        <h2 id="google-account-title">Connect your Google account</h2>
+        {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
         {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
         {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a>}
-        {cloud?.authenticated && <><button type="button" className="google-text-action" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button></>}
+        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Sign in with Google</a>}
+        {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
       </>}
       {error && <p role="alert">{error}</p>}
       </div>
@@ -2670,8 +2671,8 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   </>;
 }
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
-function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, error, busy, onClose, onAdd, onSave, onRevoke }: {
-  target: 'local' | 'hosted'; bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, error, busy, onClose, onAdd, onSave, onRevoke }: {
+  bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   error: string; busy: boolean; onClose: () => void;
   onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
   onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
@@ -2684,13 +2685,97 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
   const [newValue, setNewValue] = useState('');
   const [newRole, setNewRole] = useState<'member' | 'admin'>('member');
   const [newAllowance, setNewAllowance] = useState('');
+  const addButton = useRef<HTMLButtonElement>(null);
+  const newEntryPanel = useRef<HTMLDivElement>(null);
+  const [newEntryPosition, setNewEntryPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  const [confirmRemoveKey, setConfirmRemoveKey] = useState('');
+  const [removeConfirmationPosition, setRemoveConfirmationPosition] = useState<{ left: number; top: number } | null>(null);
+  const removeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const removeConfirmation = useRef<HTMLDivElement>(null);
+  const removeConfirmButton = useRef<HTMLButtonElement>(null);
   const [message, setMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'access' | 'usage'>('access');
   useEffect(() => {
     setDrafts(Object.fromEntries(grants.map(grant => [`${grant.kind}:${grant.value}`, { role: grant.role, allowance: allowanceInput(grant.allowance_usd) }])));
   }, [grants]);
   useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
-  const ordered = [...grants].sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
+  useEffect(() => {
+    if (!addOpen) {
+      setNewEntryPosition(null);
+      return;
+    }
+    const place = () => {
+      const panel = newEntryPanel.current?.getBoundingClientRect();
+      const parent = dialog.current?.getBoundingClientRect();
+      if (!parent) return;
+      const width = panel?.width ?? Math.min(340, parent.width - 24);
+      const height = panel?.height ?? 300;
+      const maxHeight = Math.max(140, Math.min(window.innerHeight - 16, parent.height - 24));
+      const left = parent.left + (parent.width - width) / 2;
+      const top = parent.top + (parent.height - Math.min(height, maxHeight)) / 2;
+      setNewEntryPosition({ left, top, maxHeight });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      newEntryPanel.current?.querySelector<HTMLInputElement>('input')?.focus();
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelAdd();
+      }
+    };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape, true);
+    };
+  }, [addOpen]);
+  useEffect(() => {
+    if (!confirmRemoveKey) {
+      setRemoveConfirmationPosition(null);
+      return;
+    }
+    const place = () => {
+      const anchor = removeButtons.current.get(confirmRemoveKey)?.getBoundingClientRect();
+      const popover = removeConfirmation.current?.getBoundingClientRect();
+      const parent = dialog.current?.getBoundingClientRect();
+      if (!anchor || !parent) return;
+      const width = popover?.width ?? Math.min(280, window.innerWidth - 24);
+      const height = popover?.height ?? 100;
+      const left = Math.max(parent.left + 12, Math.min(anchor.right - width, parent.right - width - 12));
+      const belowSpace = Math.max(0, parent.bottom - anchor.bottom - 8);
+      const aboveSpace = Math.max(0, anchor.top - parent.top - 8);
+      const below = height <= belowSpace || belowSpace >= aboveSpace;
+      const top = below ? Math.min(anchor.bottom + 8, parent.bottom - height - 8) : Math.max(parent.top + 8, anchor.top - height - 8);
+      setRemoveConfirmationPosition({ left, top });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      removeConfirmButton.current?.focus();
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setConfirmRemoveKey('');
+      }
+    };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape, true);
+      requestAnimationFrame(() => removeButtons.current.get(confirmRemoveKey)?.focus());
+    };
+  }, [confirmRemoveKey]);
+  const ordered = grants.filter(grant => grant.active === 1).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
   const changed = ordered.filter(grant => {
     const key = `${grant.kind}:${grant.value}`; const draft = drafts[key];
     return grant.active === 1 && draft && (draft.role !== grant.role || draft.allowance.trim() !== allowanceInput(grant.allowance_usd));
@@ -2699,7 +2784,7 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
   const draftsValid = changed.every(grant => validation(drafts[`${grant.kind}:${grant.value}`]?.allowance ?? ''));
   const hasDrafts = changed.length > 0;
   function requestClose() {
-    if (hasDrafts && !window.confirm('Discard only the unsaved role or allowance edits? Completed Add, Revoke, and Save actions remain in effect.')) return;
+    if (hasDrafts && !window.confirm('Discard only the unsaved role or allowance edits? Completed Add, Remove, and Save actions remain in effect.')) return;
     dialog.current?.close(); onClose();
   }
   async function addEntry() {
@@ -2707,8 +2792,13 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
     if (!value || !validation(newAllowance) || value.includes('@') !== (newKind === 'email')) return;
     try {
       await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newAllowance.trim() ? Number(newAllowance) : null });
-      setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('Authorization added.');
+      setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('');
+      requestAnimationFrame(() => addButton.current?.focus());
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
+  }
+  function cancelAdd() {
+    setNewValue(''); setNewAllowance(''); setNewKind('email'); setNewRole('member'); setAddOpen(false);
+    requestAnimationFrame(() => addButton.current?.focus());
   }
   async function saveUpdates() {
     if (!hasDrafts || !draftsValid) return;
@@ -2720,14 +2810,12 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Updates could not be saved.'); }
   }
   async function revoke(grant: CloudGrant) {
-    if (!window.confirm(`Revoke ${grant.value}? Recorded usage will be retained.`)) return;
-    try { await onRevoke(grant); setMessage(`Revoked ${grant.value}.`); }
+    try { await onRevoke(grant); setConfirmRemoveKey(''); setMessage(''); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be revoked.'); }
   }
   const currency = (value: number | null | undefined) => value === null || value === undefined ? '—' : `$${value.toFixed(2)}`;
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2><button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
-    <p className="admin-target">{target === 'local' ? 'Local SIGMA access rules' : 'Hosted SIGMA access rules'}</p>
     <div className="admin-tabs" role="tablist" aria-label="Administrator settings" onKeyDown={event => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
@@ -2741,24 +2829,19 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
       <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
       <div className="admin-table-heading"><h3>Authorized users</h3></div>
-      <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
+      <div className="admin-table-scroll"><table className="admin-grants-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
           const isBootstrap = grant.kind === 'email' && grant.value.toLowerCase() === bootstrapAdmin.toLowerCase();
           return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
-            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Revoked'}</small></th>
+            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Removed'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td><label className="admin-allowance-input"><span className="sr-only">ChatGPT allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></td>
-            <td>{grant.active === 1 && !isBootstrap && <button type="button" className="admin-text-action admin-revoke" disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
+            <td>{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
           </tr>;
         })}
         {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
-        {addOpen ? <tr className="admin-new-entry-row">
-          <th scope="row"><label><span className="sr-only">Entry type</span><select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label><input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></th>
-          <td>{newKind === 'domain' ? <span>Member</span> : <select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
-          <td><label className="admin-allowance-input"><span className="sr-only">New ChatGPT allowance</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></label><small>Blank uses the configured default</small></td>
-          <td><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button></td>
-        </tr> : <tr className="admin-add-row"><th scope="row"><button type="button" className="admin-text-action" aria-expanded="false" onClick={() => setAddOpen(true)}>New</button></th><td/><td/><td/></tr>}
+        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action" aria-expanded={addOpen} onClick={() => setAddOpen(true)}>New</button></td></tr>
       </tbody></table></div>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p><button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save Updates</button></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
@@ -2767,6 +2850,17 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
       <h3>Account usage</h3>
       {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
     </section>
+    {addOpen && createPortal(<div ref={newEntryPanel} className="admin-new-entry-panel" role="group" aria-label="Add authorized user" style={newEntryPosition ? { left: newEntryPosition.left, top: newEntryPosition.top, maxHeight: newEntryPosition.maxHeight } : { left: -10000, top: -10000 }}>
+      <h3>New Email or Domain</h3>
+      <div className="admin-new-entry-classification"><label>Entry type<select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label>{newKind === 'email' && <label>Role<select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select></label>}</div>
+      <label>{newKind === 'email' ? 'Email address' : 'Domain'}<input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></label>
+      <label>ChatGPT allowance<span className="admin-allowance-input"><span aria-hidden="true">$</span><input aria-label="New ChatGPT allowance" type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></span><small>Blank uses the configured default</small></label>
+      <div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><button type="button" className="admin-text-action" disabled={busy} onClick={cancelAdd}>Cancel</button></div>
+    </div>, dialog.current ?? document.body)}
+    {confirmRemoveKey && createPortal(<div ref={removeConfirmation} className="admin-remove-confirm" role="group" aria-label={`Confirm remove access for ${confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}`} style={removeConfirmationPosition ? { left: removeConfirmationPosition.left, top: removeConfirmationPosition.top } : { left: -10000, top: -10000 }}>
+      <p>Remove access for {confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}? Recorded usage will be retained.</p>
+      <div className="admin-remove-confirm-actions"><button ref={removeConfirmButton} type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => { const grant = grants.find(item => `${item.kind}:${item.value}` === confirmRemoveKey); if (grant) void revoke(grant); }}>Confirm</button><button type="button" className="admin-text-action" disabled={busy} onClick={() => setConfirmRemoveKey('')}>Cancel</button></div>
+    </div>, dialog.current ?? document.body)}
   </dialog>;
 }
 
@@ -2859,8 +2953,7 @@ function CloudAuthGate() {
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
-  const target = status.target ?? 'hosted';
-  return <CloudIdentityContext.Provider value={context}><AIProvider>{status.authenticated ? <App/> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}</AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog target={target} bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}><AIProvider>{status.authenticated ? <App/> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}</AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
 }
 
 function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {

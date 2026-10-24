@@ -79,12 +79,12 @@ with sync_playwright() as playwright:
     page.goto(UI + "/", wait_until="networkidle")
     expect(page.get_by_role("heading", name="Sign in with approved Gmail account to access projects.")).to_be_visible()
     expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-    google = page.get_by_role("button", name="Sign into Google")
-    expect(google).to_have_text("Sign into Google")
+    google = page.get_by_role("button", name="Sign in with Google")
+    expect(google).to_have_text("Sign in with Google")
     google.click()
     account = page.get_by_role("dialog", name="Connect your Google account")
     expect(account.locator(".google-account-target")).to_have_count(0)
-    account.get_by_role("link", name="Continue with Google", exact=True).click()
+    account.get_by_role("link", name="Sign in with Google", exact=True).click()
     expect(page.get_by_text("Google OAuth fixture route", exact=False)).to_be_visible()
     assert len(login_attempts) == 1
 
@@ -119,8 +119,8 @@ with sync_playwright() as playwright:
 
     for width, height in ((1280, 800), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
-        google_style = google.evaluate("e => { const s = getComputedStyle(e); return [s.height, s.padding, s.fontFamily, s.fontSize, s.lineHeight, s.borderRadius]; }")
-        chatgpt_style = chatgpt.evaluate("e => { const s = getComputedStyle(e); return [s.height, s.padding, s.fontFamily, s.fontSize, s.lineHeight, s.borderRadius]; }")
+        google_style = google.evaluate("e => { const s = getComputedStyle(e); return [s.minHeight, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight, s.borderRadius]; }")
+        chatgpt_style = chatgpt.evaluate("e => { const s = getComputedStyle(e); return [s.minHeight, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight, s.borderRadius]; }")
         assert google_style == chatgpt_style, (width, google_style, chatgpt_style)
         assert "connection-active" not in google.locator(".connection-dot").get_attribute("class")
         assert "connection-active" not in chatgpt.locator(".connection-dot").get_attribute("class")
@@ -128,9 +128,9 @@ with sync_playwright() as playwright:
         page.screenshot(path=f"/tmp/sigma-t23.1-cloud-header-{width}.png", full_page=True)
 
     google.click()
-    account = page.get_by_role("dialog", name="Connect your Google account")
+    account = page.get_by_role("dialog", name="Google account")
     expect(account.get_by_text("reviewer@example.org", exact=True)).to_be_visible()
-    expect(account.get_by_role("button", name="Use another Google account")).to_be_visible()
+    expect(account.get_by_role("button", name="Use another Google account")).to_have_count(0)
     account.get_by_role("button", name="Sign out", exact=True).click()
     expect(page).to_have_url(UI + "/")
     expect(page.get_by_role("heading", name="Sign in with approved Gmail account to access projects.")).to_be_visible()

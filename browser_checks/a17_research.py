@@ -147,8 +147,10 @@ with sync_playwright() as playwright:
 
     page.goto(browser_base_url)
     home_credit = page.locator(".home-art-credit")
-    expect(home_credit.locator("span")).to_have_text("By Brian Kramer, ChatGPT & Codex")
-    expect(home_credit.locator("time")).to_have_text("October 2026")
+    expect(
+        home_credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")
+    ).to_have_text(["Brian Kramer", "& OpenAI Models"])
+    expect(home_credit.locator("time")).to_have_count(0)
     credit_box = home_credit.bounding_box()
     assert credit_box and credit_box["x"] + credit_box["width"] <= 1440
     assert credit_box["y"] + credit_box["height"] <= 900

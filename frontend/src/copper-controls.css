@@ -40,6 +40,7 @@
 .api-connection > summary::-webkit-details-marker { display: none; }
 .connection-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 50%; background: #7f8c96; }
 .connection-connected { background: #75b18c; }
+.connection-disconnected { background: #c6a064; }
 @keyframes connection-dot-pulse {
   0%, 100% { opacity: .78; box-shadow: 0 0 0 0 #75b18c00; }
   50% { opacity: 1; box-shadow: 0 0 0 4px #75b18c30; }

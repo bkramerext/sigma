@@ -88,6 +88,43 @@ did not include the bootstrap Gmail, so it correctly stayed disabled; the
 operator must source the configured shell value and perform the requested
 third manual acceptance pass. No real ChatGPT OAuth handoff was performed.
 
+### T43.1 Administrator Settings interaction follow-up (2026-10-23)
+
+The administrator dialog keeps a fixed responsive frame across its
+Access Management and Account usage tabs; each tab scrolls within the same
+dialog bounds. Its desktop width is now 705px, down from 940px. The New action
+is in the Actions column. Its centered “New Email or Domain” panel and the
+account-removal confirmation overlay do not change the table's dimensions or
+column alignment. The form uses the established dark input treatment, places
+Cancel beside Add, and Cancel clears the draft and restores focus to New.
+Removing an account requires the established Confirm/Cancel action; the removed
+authorization row disappears from Authorized users while its persisted record
+and usage history remain intact. Add/Remove success toasts are omitted.
+
+The Home account pills no longer snap to a compact position or reduced padding
+at the 700px breakpoint. They keep shared padding and pill geometry, scale their
+type smoothly down to 9px at 360px, and may sit over the Home artwork. Below
+560px, the Administrator Settings link moves below the pills and Home reserves
+space so it and Projects do not overlap.
+
+Real Chrome `browser_checks/t40_cloud_ui.py` passed. Home header geometry was
+checked at 1440, 800, 700, 600, 520, 390, and 360px widths; administrator
+settings were checked at 1440px and 390px. Assertions cover pill dimensions and
+padding, viewport fit, no overlap with the admin link or Projects, centered form
+placement inside the parent dialog, stable table geometry, keyboard Cancel and
+focus restoration, and removal confirmation without table reflow. Screenshots:
+`/tmp/sigma-t40-admin-add-overlay.png`,
+`/tmp/sigma-t40-admin-remove-overlay.png`,
+`/tmp/sigma-t40-admin-add-overlay-390.png`,
+`/tmp/sigma-t40-home-header-700.png`, and
+`/tmp/sigma-t40-home-header-390.png`.
+
+`./sigma test` passed all backend/API/CLI scenarios, Ruff, formatting, Pyright
+(zero diagnostics), frontend typecheck, and production build. Existing
+Starlette/httpx deprecation warnings remain. Real Google OAuth remains
+UNVERIFIED pending the operator-led acceptance pass; no live OAuth, paid
+provider call, or cloud provisioning was used.
+
 ## T43 manual acceptance fixes (2026-10-23)
 
 Implemented on `gray/t43-manual-acceptance-fixes`, based on current `main`

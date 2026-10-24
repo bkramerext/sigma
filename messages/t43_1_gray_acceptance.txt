@@ -71,3 +71,42 @@ Validation for this follow-up:
 - Real Google OAuth remains UNVERIFIED and still requires the operator's
   third manual acceptance pass. No live OAuth or paid provider calls were
   made.
+
+T43.1 Home-header and Administrator Settings polish
+---------------------------------------------------
+Implemented on the same `gray/t43-1-operator-followups` branch and PR #63.
+Validation head: pending final commit.
+
+- Kept both Home account pills in the same position and with unchanged
+  horizontal padding through the former 700px breakpoint. Their type scales
+  smoothly on narrow viewports, and both pills remain fully visible at 360px.
+- Moved the Administrator Settings link below the pills at narrow widths and
+  reserved Home space so the link and Projects section do not collide with the
+  pills or each other.
+- Reduced the desktop Administrator Settings dialog width by 25% (940px to
+  705px). The dialog remains responsive on mobile and stable across tabs.
+- Moved New into the Actions column. Its “New Email or Domain” form now centers
+  within the parent dialog and includes a visible heading. Add/Cancel remains
+  side by side. Remove confirmation overlays the table, and neither form
+  interaction causes table reflow.
+
+Verification:
+- `./sigma test` passed after the implementation, including backend/API/CLI
+  scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and
+  production build. Existing Starlette/httpx deprecation warnings remain.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed against isolated local
+  ports 5190/8014. Home header checks covered 1440, 800, 700, 600, 520, 390,
+  and 360px widths, including style equality, viewport fit, no overlap with
+  Administrator Settings or Projects, and no snap in padding. Administrator
+  workflows passed at desktop and 390px, including stable dialog dimensions,
+  tabs, centered New form, table geometry, horizontal Cancel, focus restoration,
+  and confirmed removal without a success toast.
+- Screenshots: `/tmp/sigma-t40-admin-add-overlay.png`,
+  `/tmp/sigma-t40-admin-remove-overlay.png`,
+  `/tmp/sigma-t40-admin-add-overlay-390.png`,
+  `/tmp/sigma-t40-home-header-700.png`,
+  `/tmp/sigma-t40-home-header-390.png`.
+
+Real Google OAuth remains UNVERIFIED and requires the operator's third manual
+acceptance pass. No paid provider calls, live OAuth, or cloud provisioning
+were performed. PR #63 remains open for coordinator review; do not merge.
