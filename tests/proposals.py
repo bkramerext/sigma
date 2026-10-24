@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi.testclient import TestClient
 
-from sigma import chatgpt_auth, proposals
+from sigma import chatgpt_auth, openai_connection, proposals
 from sigma.api import app
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 
@@ -205,6 +205,40 @@ async def check(path):
             snapshot = (path / "project.json").read_bytes()
             await rejects(proposals.generate_proposal(str(path), consent=True))
             assert (path / "project.json").read_bytes() == snapshot
+
+    synthetic_credential = "synthetic-provider-credential-do-not-log"
+
+    async def credential_echo(request):
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+            )
+        assert request.headers["authorization"] == f"Bearer {synthetic_credential}"
+        return httpx.Response(
+            401,
+            json={"error": {"code": "unauthorized", "message": synthetic_credential}},
+        )
+
+    def credential_echo_client(**kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(credential_echo), **kwargs)
+
+    with (
+        patch.dict(os.environ, {"OPENAI_API_KEY": synthetic_credential}),
+        patch("sigma.proposals.httpx.AsyncClient", side_effect=credential_echo_client),
+    ):
+        try:
+            await proposals.generate_proposal(str(path), consent=True)
+        except ProjectError as exc:
+            assert synthetic_credential not in str(exc)
+        else:
+            raise AssertionError("Expected synthetic provider credential rejection")
+    openai_connection._identity = ""
+    openai_connection._cached = None
+    openai_connection._known = set()
+    openai_connection._pending = None
+    with patch("sigma.proposals.httpx.AsyncClient", side_effect=client):
+        await proposals.configuration(str(path))
 
     request_started = asyncio.Event()
 

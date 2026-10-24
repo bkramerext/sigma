@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import threading
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from dataclasses import asdict
 from typing import Any, Literal
 from uuid import uuid4
@@ -192,7 +192,7 @@ async def _invoke(
     role: Literal["explore", "challenge", "revise"],
     data: dict[str, Any],
     config: dict[str, Any],
-    binding: dict[str, Any],
+    binding: Mapping[str, Any],
     view: ProjectView,
 ) -> Candidate | Review:
     current = await auth_context()

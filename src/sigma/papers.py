@@ -8,6 +8,7 @@ import json
 import os
 import re
 import stat
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -677,7 +678,7 @@ def _tex(
 
 
 async def _provider(
-    context: dict[str, Any], binding: dict[str, Any], config: dict[str, Any]
+    context: dict[str, Any], binding: Mapping[str, Any], config: dict[str, Any]
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}

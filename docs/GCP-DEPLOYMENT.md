@@ -6,6 +6,13 @@ only hosting target in this plan is one Linux Compute Engine VM in Oregon
 billing activation, live Google OAuth exchange, or OpenAI request was performed
 for this readiness work.
 
+For the approved resource setup sequence, operator inputs, and commands, see
+the [GCP provisioning runbook](GCP-PROVISIONING-RUNBOOK.md). The selected,
+registered hostname is `sigma-research.duckdns.org`; update its DuckDNS A record
+to the reserved VM static IPv4 when allocated. VM preparation is independent
+of DNS propagation, and public ingress/app launch remain gated on OAuth, secret,
+and operator approvals.
+
 ## Package and runtime shape
 
 `Dockerfile` builds the Python 3.12 FastAPI service from `uv.lock`; the
@@ -36,6 +43,8 @@ its named `/data` volume and obtains/renews them after the DNS record points to
 the VM and inbound TCP 80/443 are reachable. Google OAuth's production origin
 is always `https://$SIGMA_DOMAIN`; its exact callback is
 `https://$SIGMA_DOMAIN/api/cloud-auth/callback`.
+For the selected host these are `https://sigma-research.duckdns.org` and
+`https://sigma-research.duckdns.org/api/cloud-auth/callback`.
 
 All private hosted state uses `$SIGMA_STATE_DISK_MOUNT/auth` on the attached
 state disk: Google auth/session SQLite, subject/workspace mappings, user project
@@ -85,38 +94,65 @@ Google Cloud Pricing Calculator before approval. Disk and snapshot rates are
 prorated by time. Snapshot size is compressed/changed data, so the 100 GiB is a
 budget allowance, not its provisioned disk size.
 
+The registered DuckDNS hostname has no Google Cloud DNS managed-zone or query
+charges. These estimates supersede the earlier Cloud DNS line in the T42
+readiness estimate. DuckDNS is a separate DNS service; no GCP DNS zone is
+planned.
+
+### Before public launch
+
+This is the always-on cost after the VM and static address exist but before
+public ingress, Compose launch, backups, or user traffic. It excludes variable
+outbound traffic for package/image downloads during host setup; actual transfer
+is not measured and should be monitored.
+
 | Google Cloud line item | Assumption and rate | Normalized month | 90 days |
 | --- | --- | ---: | ---: |
 | Compute Engine `e2-standard-4` | 4 vCPU, 16 GiB, 730/2,160 h at about $0.13402284/h | $97.84 | $289.49 |
 | Boot Persistent Disk | 100 GiB standard, about $0.0000548/GiB-h | $4.00 | $11.84 |
 | State Persistent Disk | 200 GiB balanced, about $0.00013699/GiB-h | $20.00 | $59.18 |
 | VM external IPv4 | One in-use standard-VM address at $0.005/h | $3.65 | $10.80 |
+| **Pre-public-launch baseline** | VM, both disks, and attached static IPv4 | **$125.49** | **$371.31** |
+
+At the always-on pre-launch baseline, $300 of trial credit lasts about 73 days;
+90 days would use about $71.31 beyond that credit if the VM and disks remain
+active. A VM stopped after setup avoids VM CPU/RAM charges, but disks and an
+attached static address continue to incur costs.
+
+### After public launch
+
+This adds planned backups and an illustrative small traffic allowance to the
+pre-launch baseline. Enable/retain snapshots and Cloud Storage backups only
+after their separate approval. No Cloud DNS charge is included because the
+selected host uses DuckDNS.
+
+| Additional Google Cloud line item | Assumption and rate | Normalized month | 90 days |
+| --- | --- | ---: | ---: |
 | Regional standard snapshots | Budget 100 GiB stored at $0.000068493/GiB-h | $5.00 | $14.79 |
 | Cloud Storage backup copy | 50 GiB single-region Standard at $0.02/GiB-month | $1.00 | $3.00 |
 | Internet egress | 10 GiB/month to North America; first 1 GiB/month free, then $0.12/GiB | $1.08 | $3.24 |
-| Cloud DNS | One managed zone (~$0.20/mo) and 500k queries (~$0.20/mo) | $0.40 | $1.20 |
 | Secret Manager | Two active versions and low-volume reads within current free limits | $0.00 | $0.00 |
 | Cloud Logging | Not enabled; Docker local log rotation, no GCP ingest | $0.00 | $0.00 |
-| **Estimated total** | Domain registration and OpenAI API usage excluded | **$132.97** | **$393.54** |
+| DuckDNS | Existing registered hostname; no Google Cloud DNS resource | $0.00 | $0.00 |
+| **Total after launch** | External OpenAI API usage excluded | **$132.57** | **$392.34** |
 
-At this deliberately always-on estimate, the $300 trial credit would be used up
-around day 69 of a 90-day trial. The remaining 21 days are about $93.54 of usage with no
-trial credit available; under Google's current trial rules resources stop when
-the credit is exhausted or 90 days elapse if the account is not upgraded. Do not
-assume unused time or free-tier eligibility offsets this bill. An existing
-domain/registrar is assumed; domain purchase or renewal is additional and
-requires a separate quote. A 10 GiB/month egress assumption is small, but
-downloads, artifacts, image builds, and unusual traffic can exceed it. If Cloud
-Logging is enabled, retention and ingest must be priced/approved separately.
+If the fully deployed post-launch model ran continuously, it would consume the
+$300 trial credit around day 69 and use about $92.34 beyond the credit over 90
+days. These are planning estimates, not quotes; actual egress, backup size,
+tax, regional pricing, and first-build transfer vary. If Cloud Logging is
+enabled, retention and ingest must be priced and approved separately. Google
+Cloud's free trial closes the account and stops associated resources when the
+credit is exhausted or 90 days elapse without a paid-account upgrade. Do not
+assume free-tier eligibility offsets these costs or upgrade automatically.
 
 Pricing references (official Google sources, checked 2026-10-23):
 
 - [E2 general-purpose Compute Engine pricing](https://cloud.google.com/products/compute/pricing/general-purpose)
 - [Persistent Disk and snapshot pricing](https://cloud.google.com/compute/disks-image-pricing)
 - [External IPv4 and internet egress pricing](https://cloud.google.com/vpc/pricing)
-- [Cloud DNS pricing](https://cloud.google.com/dns/pricing)
 - [Secret Manager pricing and free usage](https://cloud.google.com/secret-manager/pricing)
 - [Google Cloud $300/90-day trial terms](https://cloud.google.com/free/docs/free-cloud-features)
+- [DuckDNS service and update API](https://www.duckdns.org/spec.jsp)
 
 ## Google setup and operator commands
 
@@ -125,17 +161,20 @@ only in the operator's own approved terminal. The operator must approve each
 checkbox before the corresponding external action.
 
 1. Select an existing organization-owned Google Cloud project and confirm a
-   trial account is eligible. For the first week, enable only Compute Engine
-   and Secret Manager APIs. Set a budget notification; it is a notification,
-   not a hard spending cap. Review $393.54/90-day modeled usage against the
+   trial account is eligible. Enable only APIs listed in the
+   [provisioning runbook](GCP-PROVISIONING-RUNBOOK.md). Set a budget alert; it
+   is a notification, not a hard spending cap. Review the $371.31/90-day
+   pre-launch baseline and $392.34/90-day post-launch estimate against the
    $300 trial before starting it.
 2. Create a dedicated VM service account. Grant `roles/secretmanager.secretAccessor`
    only on the two named OAuth and OpenAI secrets. It needs no Owner, Editor,
    project-wide secret access, or service account key. Attach that account to
    the VM with the `cloud-platform` access scope; IAM remains the access control.
-3. Create a custom VPC/subnet and ingress rules. Permit TCP 80/443 from the
-   public internet. Permit TCP 22 only from IAP's `35.235.240.0/20` range, or
-   keep SSH closed and use an approved serial/management path. Do not create
+3. Create a custom VPC/subnet and ingress rules. Permit TCP 22 only from IAP's
+   `35.235.240.0/20` range, or keep SSH closed and use an approved
+   serial/management path. Open public TCP 80/443 only after the hostname's
+   DuckDNS A record resolves to the reserved static IP and OAuth/secrets and
+   launch approvals are ready. Do not create
    ingress rules for 8000, 5173, 2375, or 2376. Permit outbound DNS and HTTPS
    required for Google OIDC/JWKS, Secret Manager, OS/image updates, Let's
    Encrypt, and OpenAI. Restrict egress further only after accounting for the
@@ -161,8 +200,10 @@ checkbox before the corresponding external action.
    cannot access a rootful Docker socket. Set exact service limits from the
    approved env file. The example begins with one globally active research job,
    $2 default/user and $15 global inference ceilings.
-7. Point DNS to the VM's external address, allow Caddy to acquire HTTPS, and
-   verify production OAuth with two explicitly authorized test users, a denied
+7. Confirm `sigma-research.duckdns.org` points to the VM's static external
+   IPv4. After OAuth/secrets and launch approvals, open web ingress and allow
+   Caddy to acquire HTTPS. Verify production OAuth with two authorized test
+   users, a denied
    identity, administrator revocation, workspace isolation, budget exhaustion,
    and fake-provider failure/unknown-charge paths. No real inference is part of
    this readiness approval.
@@ -327,15 +368,16 @@ does not satisfy any checkbox.
   trial eligibility, and the exact trial-credit/billing terms with the account
   owner. Explicitly approve starting the trial; do not activate a paid account
   as an implicit continuation.
-- [ ] Approve the modeled ~$133 normalized month / ~$395 for 90 days, the
-  expected ~$95 beyond $300, external OpenAI spending as a separate budget,
-  domain renewal if applicable, backup retention, logging choice, and maximum
-  authorized recurring spend. Create a budget alert and verify it is not a hard
-  cap.
+- [ ] Approve the modeled ~$125.49 normalized month / $371.31 for 90 days
+  before public launch and ~$132.57 / $392.34 after launch, with the latter
+  using estimated backups and traffic; estimate ~$92 beyond $300 over 90 days.
+  Approve external OpenAI spending as a separate budget, backup retention,
+  logging choice, and maximum recurring spend. Create a budget alert and verify
+  it is not a hard cap.
 - [ ] Approve enabling Compute Engine and Secret Manager APIs, creating the
   dedicated service account, exact IAM bindings, OS Login/IAP grants, VPC,
-  firewall rules, public IP, VM, both disks, backup bucket, snapshots, DNS
-  zone/records, and all cleanup/retention policies individually.
+  firewall rules, public IP, VM, both disks, backup bucket, snapshots, the
+  DuckDNS record update, and all cleanup/retention policies individually.
 - [ ] Approve the dedicated `sigma-sandbox` host account, Docker Engine/rootless
   daemon layout, exact UID/GID/socket path, app-user socket access, and a target
   Linux security test proving runner isolation. Reject deployment if it requires
@@ -349,7 +391,7 @@ does not satisfy any checkbox.
   sponsored OpenAI project's independent billing/usage caps, $2 default/user
   allowance, $15 global ceiling, and one-job global concurrency.
 - [ ] Approve the initial administrator and each user's access role/allowance,
-  external DNS cutover, Caddy certificate issuance, real Google OAuth acceptance
+  DuckDNS record update to the reserved IP, Caddy certificate issuance, real Google OAuth acceptance
   test, backup restore test, and any public pilot invitation. Real inference
   requires a separate explicit approval after these checks.
 - [ ] Approve teardown or continued operation before trial expiration/credit

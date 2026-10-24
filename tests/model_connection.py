@@ -51,6 +51,17 @@ def client_factory(handler):
 
 async def checks():
     await chatgpt_auth.select("api_key")
+    with patch.dict(os.environ, {"OPENAI_API_KEY": KEY}):
+        auth_context = await connection.auth_context()
+        assert auth_context["token"] == KEY
+        assert KEY not in repr(auth_context)
+        assert "token" not in dict(auth_context)
+        try:
+            json.dumps(auth_context)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("AuthContext must not be JSON serializable")
     calls = []
 
     async def success(request):

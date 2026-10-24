@@ -479,9 +479,10 @@ async def main_async(root: Path):
     plan_binding = {"identity": "plan-fixture", "mode": "chatgpt", "token": "fixture-token"}
 
     # Connected model discovery does not prove a generation request can succeed.
-    # Unknown ChatGPT inference failures must expose only safe status/code metadata.
+    # Provider error fields can echo credentials, so expose local status/shape only.
     rejected_path = root / "rejected-plan.sigma"
     initialize_project(rejected_path, "Rejected plan", "Count a_n for n >= 0")
+    synthetic_credential = "synthetic-oauth-access-token-must-not-escape"
 
     def rejected_handler(request):
         payload = json.loads(request.content)
@@ -490,10 +491,10 @@ async def main_async(root: Path):
             400,
             json={
                 "error": {
-                    "code": "unsupported_text_format",
-                    "type": "invalid_request_error",
-                    "param": "text.format.schema",
-                    "message": "private research text must not appear in user errors",
+                    "code": synthetic_credential,
+                    "type": synthetic_credential,
+                    "param": synthetic_credential,
+                    "message": synthetic_credential,
                 }
             },
         )
@@ -512,26 +513,12 @@ async def main_async(root: Path):
             await convert_text(str(rejected_path), "project", "markdown")
         except ProjectError as exc:
             assert "HTTP 400" in str(exc)
-            assert "unsupported_text_format" in str(exc)
-            assert "type: invalid_request_error" in str(exc)
-            assert "param: text.format.schema" in str(exc)
-            assert "private research text" not in str(exc)
+            assert "response shape: responses-error" in str(exc)
+            assert synthetic_credential not in str(exc)
         else:
             raise AssertionError("Rejected ChatGPT request was accepted")
     assert not (rejected_path / "text-representations.json").exists()
-    print("PASS ChatGPT HTTP rejection preserves source and exposes safe diagnostic code")
-
-    # Admission may return top-level detail instead of error.code.
-    from sigma.plan_stream import safe_error_detail
-
-    assert safe_error_detail({"detail": "Unsupported request input format"}) == (
-        "Unsupported request input format"
-    )
-    assert safe_error_detail({"detail": "Bearer secret-that-must-stay-private"}) is None
-    assert safe_error_detail({"message": "private research: a_n = F_n"}) is None
-    assert safe_error_detail({"error": {"message": "Invalid schema format"}}) == (
-        "Invalid schema format"
-    )
+    print("PASS ChatGPT HTTP rejection preserves source and suppresses provider error fields")
 
     def plan_handler(request):
         payload = json.loads(request.content)

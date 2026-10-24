@@ -4721,6 +4721,114 @@ not demonstrate empirical model reasoning quality or establish any research
 claim as mathematically verified. T17.8 remains its separate research-quality
 gate. T37 introduces no T17.8 scope changes or migration requirement.
 
+## T17.8 answer-free acceptance preparation (2026-10-23)
+
+The prior 2026-10-22 A17.8 evidence and its limitations above are preserved.
+In particular, the live Maximum Regions result used the answer-bearing Sample
+strategy and does not establish independent discovery. This follow-up prepared
+the acceptance packet's fresh inputs, hardened its deterministic leak audit,
+and rechecked the integrated A17.6/A17.7 workflows without calling a provider.
+
+### Fresh answer-free project and prompt audit
+
+Prepared `projects/maximum-regions-answer-free-t17-8.sigma` through the shared
+project/strategy services. It has project ID
+`9018b1fe-83a9-4027-a755-8f997b4f46b5`, one human strategy ID
+`8dda06ce-c931-42a8-a2b8-a68f1220e848`, and no saved research-session files.
+The `project.json` SHA-256 is
+`62e3a34afe9f9710124a2c945688e89083ea88a2f21b42de69123a6cba256aad`. Its
+title, question, and sole strategy match the participant-facing answer-free
+task in `docs/evaluations/a17-8-independent-acceptance-packet.md`; no Sample
+project or Sample history was copied. The project research limits are set to
+3 cycles, 6 model calls, 10 minutes and 4,000 output tokens per call. No Recent
+index entry was written during preparation. The exact project export and saved
+limits are preserved in `docs/evaluations/fixtures/t17-8-answer-free/`; the
+export's SHA-256 matches the local project byte-for-byte.
+
+The Investigator and Skeptic contexts were assembled using the production
+`_agent_context` and `_role_instructions` paths. Their preflight inputs were
+3,284 and 3,313 UTF-8 context bytes. Both contained only the exact problem,
+the one generic line-insertion strategy, and its own bounded portfolio
+snapshot: no prior artifacts, session findings, obligations, failures, or
+Sample identifiers. Neither role context nor instructions contained the
+answer formula or the known attaining family. This is an input-leak audit,
+not a claim that the model does not know the problem from training.
+
+`tests/research_sessions.py::test_answer_free_maximum_regions_prompt` now uses
+the exact acceptance-packet inputs, starts a normal session with a deterministic
+mock transport, captures the full Investigator request, and checks exact input
+identity, source-manifest/history bounds, and normalized formula/construction
+leak patterns. The mock output is explicitly not scored as a research attempt.
+The first test edit incorrectly expected the manifest to contain no source at
+all; inspection showed it correctly contains the fresh project's own strategy
+snapshot. The test now asserts that exact snapshot and no historical evidence.
+It also feeds the audit a synthetic whitespace/Unicode rendering of the answer;
+the old literal-string assertion would have missed it, while the normalized
+check detects both formula and construction. No product-code correction was
+indicated by this audit.
+
+### Deterministic and browser verification
+
+- `uv run --locked --no-sync python tests/research_sessions.py` — passed after
+  the new answer-free request regression; this includes complete, incomplete,
+  material-objection, false-candidate/counterexample, productive no-next-step,
+  binary-string generalization, attribution, recovery, concurrency, and the
+  T37 history/context regressions.
+- `uv run --locked --no-sync python tests/project_reports.py` — passed; report
+  and Project Audit evidence remains consistent.
+- `./sigma test` — passed after the test change, including all scenarios,
+  Ruff, format check (72 files), Pyright (0 diagnostics), frontend typecheck
+  and production build. The existing Starlette/httpx deprecation warning is
+  non-failing.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5174 SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8003 uv run --with playwright --locked python browser_checks/a17_research.py`
+  — passed in real Chrome at 1440/1280/390/320 CSS-pixel widths against the
+  isolated provider fixture. Screenshots
+  `/tmp/sigma-a18-coordinator-review-desktop.png` and
+  `/tmp/sigma-a18-coordinator-review-mobile.png` were inspected. This verifies
+  the integrated workspace/export UI, not a live run of the prepared project.
+
+### Verification after latest-main integration
+
+Merged `origin/main` at `703442cfef6be004e8ed28e46f211ecf151e3f6e` in merge
+commit `7808430c99562cddfbe53fb906a55757e096eb46`, including Gate B durable
+research. Resolved the sole `docs/STATUS.md` conflict while retaining both the
+T17.8 evidence above and Gate B's status record. On this integrated tree,
+`./sigma test` passed all scenarios, Ruff, format check (76 files), Pyright
+(0 diagnostics), frontend typecheck and build. The real-Chrome
+`browser_checks/a17_research.py` check passed again at 1440/1280/390/320 widths.
+These checks exercise the integrated product through mock fixtures and do not
+constitute the required answer-free model run.
+
+After adding the synthetic leak-format regression, `./sigma test` was rerun on
+this same integrated tree and all steps passed again.
+
+No provider request or model call was made in this follow-up. During a local
+connection-discovery command, a stored OAuth credential was inadvertently
+printed into tool output. Provider work was stopped immediately, and the user
+was advised to revoke that session and reconnect before any live experiment.
+No credential was put in the project, source changes, or this record. The
+answer-free live trial is therefore still not run; it must use the connected
+ChatGPT plan only, after the connection is safe and explicitly available.
+
+### A17.8 criteria after this follow-up
+
+| Criterion | Status | Evidence and limit |
+|---|---|---|
+| 1. Genuine independent solution | **Unverified** | The prior positive session is contaminated by its answer-bearing strategy. The prepared project is answer-free and the exact role-input audit passes, but no live model session was run. |
+| 2. Meaningful criticism | **Met, scoped to prior run** | The prior Skeptic identified a real gap in small-case evidence and later accepted the completed argument. The false-candidate, material-objection, and supported-conclusion adversarial cases pass deterministically. No new live criticism result exists. |
+| 3. Sound coordination | **Met** | The prior session ended productively with an empty next path; no-next-step and unresolved-objection cases pass. This does not establish answer-free discovery. |
+| 4. Calibrated conclusions | **Met** | Prior result remained `convincing_unverified`; deterministic incomplete/false-proof cases do not become success. No independent verification claim is made. |
+| 5. Evidence-based attribution | **Met** | Existing deterministic session tests bind assessment to strategy-linked artifact references and preserve historical eligibility. The prior live run's assessment remains model-reported, not independent evidence. |
+| 6. Generalization | **Met, deterministic only** | The distinct binary-string partition scenario passes in the research-session suite. It is not a second live model trial. |
+| 7. Operational reliability | **Met, deterministic/browser evidence** | Full suite and fixture-backed Chrome checks pass; prior stop/resume, persistence, exports, outcome, and attribution evidence is preserved. No new live provider failure/recovery behavior was exercised. |
+| 8. Reproducible evidence | **Met for offline work** | Exact fresh project/strategy IDs, project hash, limits, prompt-audit path, commands, test results, and screenshots are recorded. The required fresh live session/artifacts do not exist yet. |
+
+**Decision: hold A17.8 and do not declare A17 complete.** The next valid
+quality result requires revocation/reconnection after the credential exposure,
+then one bounded normal-flow ChatGPT-plan run on this fresh project and an
+external human review of its proof. If no safe connected-plan session is
+available, keep criterion 1 unverified; do not substitute fixtures or the
+contaminated October 22 run.
 ## T22 Gate B durable bounded research (2026-10-23)
 
 Started `feature/t22-gate-b-durable-execution` from merged Gate A main at
@@ -4844,6 +4952,163 @@ frontend typecheck and build. Real Chrome checks passed for
 `browser_checks/nonconsecutive_sample.py` (desktop and 390px/320px mobile).
 No paid provider calls were made.
 
+## T17.8 credential-safe trial preparation (2026-10-23)
+
+Hardened `auth_context()` so its bearer token remains available only through
+explicit internal `context["token"]` access. Its `AuthContext` mapping excludes
+the token from iteration, ordinary representation, `dict()` conversion, and JSON
+serialization. Updated typed consumers to accept the redacted mapping without
+copying it into a serializable dictionary.
+
+Audited the trial paths through ChatGPT session refresh/storage, connection and
+model-catalog diagnostics, proposal request/error handling, and structured plan
+stream failures. The auth store reports generic storage errors; connection checks
+discard response bodies on non-success and expose only classified status; proposal
+exceptions use fixed safe messages; plan failures expose only local HTTP status
+and response shape, never provider error fields or freeform bodies. No
+auth/provider path in this audit logs headers, credentials, or raw
+credential-store contents.
+
+Added fixture-only regression coverage proving synthetic ChatGPT/API credentials
+are omitted from auth-context diagnostics and public connection output, and that
+a synthetic credential echoed in a provider error body is absent from the raised
+error. Existing OIDC, refresh/restart, connection, proposal, and plan-stream
+scenarios also ran with controlled transports and generated credentials.
+
+Verification: targeted `tests/model_connection.py`, `tests/chatgpt.py`, and
+`tests/proposals.py` passed using local fixtures; `./sigma test` passed all
+scenarios, Ruff/lint and format checks, Pyright (0 diagnostics), frontend
+typecheck and production build. No credential-store values were read or printed;
+no live provider endpoint, inference request, or paid usage was invoked.
+The real-Chrome `browser_checks/chatgpt.py` check was not run because ports
+8000/5173 were occupied by another checkout and 8001 by a third checkout; those
+processes were left untouched.
+
+Residual boundary: this prevents accidental serialization/representation of the
+auth snapshot and verifies SIGMA's own error paths. Code deliberately reaching
+the private `_token` slot or explicitly requesting `context["token"]` can still
+read it, as required to make provider requests; malicious code or debugging
+instrumentation already running in the same process/account remains outside this
+protection. T17.8 is ready for a separately authorized bounded live trial; none
+was started in this preparation.
+
+## T17.8 final browser preflight (2026-10-23)
+
+Ran `browser_checks/chatgpt.py` in real Chrome using isolated local UI/fixture
+ports 5174/8004. The browser scenario uses the signed local OAuth fixture and
+its private temporary auth/project roots. It covered disconnected status,
+cancelled and declined sign-in, successful ChatGPT connection, offline and
+limited states, missing plan permission, expiry/reconnect, and account details.
+The fixture reported zero inference calls. Browser console and visible errors
+were scanned for bearer/API/OAuth fixture credential shapes and no matches were
+found. The fixture-server and Vite logs were scanned the same way and had no
+matches. Browser output contained only the passing summary. The browser script
+passed Ruff checks and formatting. Other checkouts' listeners were not stopped
+or changed; this check used separate ports and its own server processes. No
+No Google Auth code was modified; the browser preflight itself made no inference calls.
+
+## T17.8 acceptance corrections (2026-10-23)
+
+Applied Green's acceptance corrections without starting another provider
+session. Each dispatched investigator/skeptic step now records its exact
+role-specific JSON request body (model, instructions, schema and complete
+input/context) in a compressed, hash-checked audit field. Authorization headers
+and credentials are excluded; pattern-like secrets or the active credential
+inside a prompt fail closed before dispatch. The request is checked against the
+saved audit immediately before provider submission. Public session/export data
+expands the exact body and identifies it as submitted input, rather than a
+reconstruction. Unknown execution-record fields are excluded from provider
+context while known execution provenance is retained.
+
+Investigator method and Skeptic response schema limits are now 6,000 characters.
+The system marks a string field that reaches its schema maximum as potentially
+truncated, persists the affected field names on the step, and displays a
+warning. This is a conservative boundary signal: it cannot prove that a
+provider actually truncated a response that happens to fill the limit.
+
+Both session worker paths now aggregate completed step input/output usage. The
+aggregate is explicitly `partial`, `unavailable`, or `pending` when a complete
+sum cannot be established; the API no longer represents missing usage as zero.
+Legacy session views derive the aggregate from saved step records. For the
+archived trial this reports 38,591 total tokens (32,042 input + 6,549 output).
+Obligation reconciliation now distinguishes the model's reported remaining
+items from canonical unresolved obligations, records coordinator closure and
+reconciliation decisions, and aligns artifact `open_obligations` with the
+review. Portfolio attribution now separates completed productive strategies
+from stopped or failed strategies.
+
+Added `browser_checks/t17_8_saved_session.py`, a real-Chrome projection check
+using the archived trial export and isolated local services. It verified the
+ended session, provisional positive outcome, mathematical review and both
+artifacts, and asserted that no session-start request occurred. Result:
+`T17.8 archived-session real Chrome projection passed; no provider calls made.`
+
+Verification completed: `./sigma test` passed all steps, including research
+session regressions, Ruff, formatting, Pyright (0 diagnostics), frontend
+typecheck and production build. The focused archived-session Chrome check
+passed. The full suite emitted existing Starlette `TestClient` deprecation
+warnings; they did not fail checks. No provider call or paid usage was made.
+
+The original live run predates exact-input auditing, so its archived transcript
+cannot establish from byte-for-byte submitted prompts whether answer-bearing
+material entered. Its pretrial fixture hash and context manifest are useful
+supporting evidence but not a substitute for exact prompt evidence. A new
+bounded live trial with the input audit in place is necessary to establish
+answer independence to Green's criterion. It was not started and requires
+separate authorization. PR #53 remains open and unmerged.
+
+## T17.8 answer-free live trial (2026-10-23 Pacific)
+
+The human authorized one bounded Maximum Regions run. Preflight verified the
+answer-free fixture SHA-256 against its packet, one saved strategy, zero prior
+sessions, 3-cycle/6-call/10-minute/4,000-output-token limits, connected ChatGPT
+plan mode, and the selected `gpt-6.1-sol` / High configuration. The run used
+ChatGPT plan mode only; no API-key fallback or separate API billing was used.
+
+Session `91e96112-27ce-412e-841f-5cbf67cbba75` ended productively after 2 of 3
+cycles and 4 of 6 calls (about 2m29s); no retry, provider error, or tool
+execution occurred. Investigator and Skeptic completed both cycles. The first
+Skeptic identified the actual missing attainability argument. In cycle 2, the
+Investigator calculated pairwise intersections, and the Skeptic wrote the
+complete proof, resolved all obligations, and stopped with no next question.
+The coordinator recorded `objective_review=achieved`,
+`terminal_reason=stop_productive_conclusion`, a positive outcome labeled
+**solution candidate (unverified)**, and credited the sole strategy from both
+saved artifacts. Direct mathematical review confirms the upper bound,
+intersection-distinct construction, and `n=0` base case are correct. No formal
+proof checker or claim of literature novelty was made.
+
+The complete version-2 project export is preserved at
+[`live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json`](evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json)
+and the detailed evaluation, artifact IDs, step usage, rubric scores, and
+limitations are in
+[`t17-8-live-trial-2026-10-23.md`](evaluations/t17-8-live-trial-2026-10-23.md).
+Four step-level usage records sum to 32,042 input and 6,549 output tokens;
+plan cost is unavailable. The aggregate session `tokens_used` field is 0
+despite those step totals. The live run used the shared research-session
+service, not a browser-driven start; the earlier Chrome preflight checked auth
+UI, not the live session's UI projection. In addition, the Investigator's
+2,000-character method field reached its limit in both cycles and ended
+mid-word; the final
+Skeptic's 2,500-character response also reached its cap. The Skeptic caught the
+missing proof and persisted the complete reasoning in the final structured
+review, but the silent field caps reduce reviewability and merit follow-up.
+
+No application code was changed after the live run. T17.8's bounded quality
+gate is met on this trial's rubric evidence; final A17/T17.8 acceptance remains
+for human sign-off. This run does not establish formal verification, billing
+cost, or reliability on other problems.
+
+## T17.8 final pre-review step binding (2026-10-24)
+
+Exact-input verification is bound to the caller's step ID and requires that
+exact saved step to be running under the expected role. Both worker paths pass
+their step ID; missing, wrong-role, non-running, or mismatched audits fail
+closed before dispatch. Regression coverage creates two simultaneous running
+Investigator steps with different inputs and proves one cannot validate against
+the other's audit. Offline worker/cloud test doubles assert the ID is
+propagated. `./sigma test` passed after this correction; no provider calls were
+made.
 ## T42 Google Cloud Compute Engine readiness (2026-10-23)
 
 Prepared a reproducible local Docker deployment package for the Python/FastAPI
@@ -4949,3 +5214,74 @@ to preserve visibility of the intervention form and history.
 
 No research provider calls were made. PR #63 remains open for coordinator
 review; no merge was performed.
+## T44 Google Cloud provisioning runbook (2026-10-23)
+
+Added `docs/GCP-PROVISIONING-RUNBOOK.md` as an operator-executable companion
+to the existing deployment guide. It separates preflight/budget/API preparation,
+IAM/network/disk/IP/VM resource creation, and post-VM deployment. It makes the
+VM and attached static IP independent of domain selection, keeps public web
+ingress and Compose startup gated on DNS/OAuth/secret approvals, and includes
+exact commands, human authorization points, trial cost assumptions, and
+post-provision checks. No deployment architecture, launcher, or UI code changed.
+
+**MET:** reviewed the existing GCE package and documented a custom VPC, IAP-only
+SSH, named operator roles, a keyless runtime service account with secret-level
+access, a separately retained state disk, static IPv4, required APIs, public
+firewall deferred to launch, budget notifications, and domain-later sequencing.
+Documented the existing estimated $132.97 normalized month / $393.54 over 90
+days and the $300/90-day trial closure behavior. The runbook discloses that
+budgets notify but do not cap spend, and that stopped VMs retain disk and
+attached-IP costs.
+
+**UNMET:** none for the requested documentation deliverables. Provisioning,
+production deployment, and real OAuth remain intentionally unperformed under
+the assignment's restrictions.
+
+**UNVERIFIED:** project ownership/billing link, trial eligibility and start/end
+dates, organization policy, actual `us-west1-b` quota/capacity, final price
+quote, alert delivery, API availability, target-VM security, production OAuth,
+and certificate issuance must be checked/approved by the operator. Documented
+`gcloud` commands were syntax-checked locally only and were not sent to Google.
+
+**Checks:** all shell code fences in the runbook passed `bash -n`; local
+assertions verified the staged phase headings, API/IAM/VM/disk/address/firewall
+commands, no-domain path, budget alert, trial caveat, and required validation
+checklist. `./sigma test` passed. No `gcloud` command, cloud resource,
+credential, or provider endpoint was used.
+
+### T44 selected-hostname and launch-gate follow-up
+
+Updated the existing T44 branch after the operator selected and registered
+`sigma-research.duckdns.org`. The runbook and deployment guide now require the
+DuckDNS A record to match the reserved static IPv4, specify the production
+OAuth origin/callback for that host, and defer public 80/443 ingress and
+Compose startup until DNS, OAuth, secrets, and operator approvals are ready.
+The Compose launch commands include `deploy/compose.gce.yaml`, which bind-mounts
+the attached state disk at `SIGMA_STATE_DISK_MOUNT`; the documented secret
+fetch path and runtime socket/env settings match the checked-in scripts and
+configuration. Costs now separate the pre-public baseline ($125.49/month;
+$371.31/90 days) from post-launch estimates ($132.57/month; $392.34/90 days),
+with no Cloud DNS charges. Image/package download egress before launch remains
+unmeasured and excluded. No application, launcher, or UI code changed.
+
+**MET:** selected hostname and DuckDNS-to-static-IP steps; no Cloud DNS zone;
+launch gates before public ingress/Compose; project/API/IAM/network/address/VM
+command review against official `gcloud` reference pages and the actual
+`deploy/compose.yaml`, `deploy/compose.gce.yaml`, `deploy/env.example`, and
+`deploy/fetch-secrets.sh`; updated staged estimates and approvals; local
+deployment/package validation and full project suite.
+
+**UNMET:** none for this documentation-only follow-up.
+
+**UNVERIFIED:** Google account/project/billing/trial state, actual reserved IP
+and DuckDNS record propagation, API quota/capacity, IAM changes, production
+OAuth, secrets, HTTPS certificate issuance, and actual GCP prices/charges remain
+operator checks. `gcloud` commands were reviewed as text and deliberately not
+executed. No cloud provisioning, billing/trial activation, purchases, or paid
+provider calls occurred.
+
+**Checks performed:** current `main` was fetched and matched this branch's
+base `042485464e2396b8b8497aed8883dbb71f03bbd8`; no rebase conflict. All shell
+fences in the edited runbook passed `bash -n`; deployment package and local
+Compose smoke checks passed; `./sigma test` passed. Coordinator handoff:
+`messages/t44_red_duckdns_update.txt`.
