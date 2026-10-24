@@ -123,6 +123,11 @@ def main() -> None:
     ui_command.add_argument(
         "--navigate", action="store_true", help="Open SIGMA in a browser tab after startup"
     )
+    ui_command.add_argument(
+        "--admin",
+        action="store_true",
+        help="Preview the cloud Access Management dialog locally using temporary fake data",
+    )
     commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
     args = parser.parse_args()
     if args.command == "make_sample":
@@ -170,7 +175,7 @@ def main() -> None:
             sys.exit(2)
         sys.exit(0)
     if args.command == "start":
-        sys.exit(run_ui(navigate=args.navigate))
+        sys.exit(run_ui(navigate=args.navigate, admin_preview=args.admin))
     if args.command == "shutdown":
         sys.exit(run_shutdown())
     if args.command in {"setup", "test"}:
