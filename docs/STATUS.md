@@ -18,7 +18,7 @@ agree. Unknown listeners are left running and reported with port, PID,
 executable, and working directory when available. Startup stops registered
 instances and identified orphan servers before binding the ports.
 
-Verification: `./sigma test` passed, including the new `tests/ui_registry.py`
+Verification on current `main` `2f1dbc3`: `./sigma test` passed, including the new `tests/ui_registry.py`
 cross-checkout/stale-state coverage, updated `tests/ui_orphans.py` ownership and
 occupied-port checks, Ruff, formatting, Pyright, frontend typecheck, and build.
 The opt-in `tests/ui_lifecycle.py` real-process scenario remains **UNVERIFIED**:

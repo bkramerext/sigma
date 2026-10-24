@@ -1,8 +1,8 @@
 SIGMA local launcher reliability — coordinator handoff
 
 Branch: gray/local-launcher-reliability
-Base: current main 83387aa
-PR: to be linked after push
+Base: current main 2f1dbc3
+PR: https://github.com/bkramerext/sigma/pull/60
 Status: R4R
 
 Changes
