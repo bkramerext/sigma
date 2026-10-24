@@ -69,7 +69,7 @@ cd "$root"
 for attempt in $(seq 1 60); do
   if curl --fail --silent -H 'Host: localhost' http://127.0.0.1:18080/ >/dev/null \
     && curl --fail --silent -H 'Host: localhost' http://127.0.0.1:18080/api/cloud-auth/status \
-      | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["enabled"] is True and d["ready"] is True'; then
+      | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["enabled"] is True and d["ready"] is True and d["target"] == "hosted"' 2>/dev/null; then
     break
   fi
   if [[ "$attempt" -eq 60 ]]; then
@@ -84,7 +84,7 @@ done
 "${compose[@]}" restart backend >/dev/null
 for attempt in $(seq 1 30); do
   if curl --fail --silent -H 'Host: localhost' http://127.0.0.1:18080/api/cloud-auth/status \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["enabled"] is True and d["ready"] is True'; then
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["enabled"] is True and d["ready"] is True and d["target"] == "hosted"' 2>/dev/null; then
     break
   fi
   if [[ "$attempt" -eq 30 ]]; then
@@ -99,7 +99,7 @@ done
 "${compose[@]}" up --no-build --detach
 for attempt in $(seq 1 30); do
   if curl --fail --silent -H 'Host: localhost' http://127.0.0.1:18080/api/cloud-auth/status \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["enabled"] is True and d["ready"] is True'; then
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["enabled"] is True and d["ready"] is True and d["target"] == "hosted"' 2>/dev/null; then
     break
   fi
   if [[ "$attempt" -eq 30 ]]; then

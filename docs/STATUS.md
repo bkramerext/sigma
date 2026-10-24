@@ -4773,3 +4773,26 @@ spend admission and deterministic fake-provider API cases), Ruff check/format,
 Pyright (0 diagnostics), frontend typecheck, and production build. Existing
 Starlette/httpx deprecation warnings remain. No Gray launcher/UI files were
 changed.
+
+### T42 refresh after T43 PR #62 merged (2026-10-23)
+
+Merged current `main` through `15a5b9d3d639cee7d87e912f2698633e959a6f76` into
+the T42 branch. PR #61 remains open against `main`. Its diff against the base
+contains the T42 deployment files and no Gray launcher or UI changes.
+
+Confirmed T43 local-versus-hosted Google auth behavior:
+
+- `tests/cloud_auth.py` passes 14 cases, including T43's explicit loopback-only
+  local Google mode retaining the local ChatGPT account flow, and hosted Google
+  auth returning 403 for personal `/api/ai/*` access.
+- `tests/deployment_package.py` asserts the hosted Compose configuration does
+  not set `SIGMA_CLOUD_AUTH_LOCAL`.
+- `deploy/validate-local.sh` checks that the running packaged service reports
+  `target: hosted`, then verifies auth SQLite persists across backend restart
+  and container recreation.
+
+The local Compose smoke passed with dummy secret files and only local HTTP
+requests. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed on the
+merged branch, including cloud auth/workspace/spending/fake-provider scenarios,
+Ruff/format, Pyright (0 diagnostics), frontend typecheck, and production build.
+No cloud resources, live Google OAuth, or paid provider calls were used.

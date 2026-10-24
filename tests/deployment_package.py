@@ -34,6 +34,7 @@ def main() -> None:
     assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" in compose
     assert "SIGMA_RESEARCH_DOCKER_HOST" in compose
     assert "GOOGLE_OIDC_CLIENT_SECRET_FILE" in compose
+    assert "SIGMA_CLOUD_AUTH_LOCAL" not in compose
     assert "SIGMA_SANDBOX_DOCKER_SOCKET" in compose
     assert ":443/tcp" in compose and ":80/tcp" in compose
     assert "reverse_proxy backend:8000" in caddy

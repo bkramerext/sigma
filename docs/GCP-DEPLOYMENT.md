@@ -50,6 +50,13 @@ either the existing direct environment setting or a `*_FILE` path; if both are
 set, the file is not a fallback and the configuration fails closed. The health
 check verifies Google auth config, presence of the sponsored service credential,
 and valid user/global spending ceilings without making any outbound request.
+The deployment does not set `SIGMA_CLOUD_AUTH_LOCAL`, so its hosted auth status
+must report `target: hosted`. T43's explicit local Google mode remains limited
+to loopback HTTP and retains its separate local ChatGPT flow; the hosted
+middleware blocks `/api/ai/*` after Google identity authorization. The package
+test asserts Compose does not enable local mode, the local deployment smoke
+asserts `target: hosted`, and `tests/cloud_auth.py` covers both local and hosted
+routes.
 Cloud workspace isolation, per-user/global USD reservations, token/concurrency
 limits, no-replay handling for unknown provider outcomes, and the sponsored
 inference route remain the existing T22/T41 services. Personal ChatGPT/API

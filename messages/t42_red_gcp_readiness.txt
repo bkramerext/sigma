@@ -27,3 +27,9 @@ TEST EVIDENCE
 - No Google Cloud billing/trial activation, cloud resource provisioning, remote deployment, paid provider calls, or real credentials were used.
 
 See `docs/GCP-DEPLOYMENT.md` and the T42 section in `docs/STATUS.md` for the deployment plan, full estimate, approval checklist, and test details.
+
+REFRESH AFTER T43 PR #62 MERGED
+- Merged current main through `15a5b9d3d639cee7d87e912f2698633e959a6f76`; PR #61 remains open against `main`.
+- Verified T43 auth separation: `tests/cloud_auth.py` passes 14 cases, including local Google mode retaining local ChatGPT auth and hosted Google mode denying personal `/api/ai/*`; package test asserts Compose does not set `SIGMA_CLOUD_AUTH_LOCAL`; local Compose smoke confirms `target: hosted` and restart/recreate persistence.
+- `./deploy/validate-local.sh` passed with dummy local secrets and local HTTP only. No Google or provider requests were made.
+- Passed after syncing current main: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (cloud auth/workspace/spending and deterministic fake-provider cases; Ruff/format; Pyright 0 diagnostics; frontend typecheck and production build).
