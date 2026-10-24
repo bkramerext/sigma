@@ -5109,6 +5109,26 @@ Investigator steps with different inputs and proves one cannot validate against
 the other's audit. Offline worker/cloud test doubles assert the ID is
 propagated. `./sigma test` passed after this correction; no provider calls were
 made.
+
+## Outcome panel spacing and Markdown state (2026-10-24)
+
+Human feedback is shown in a padded, collapsible Outcome subsection. Type and
+agent selection are unboxed vertical radio groups, aligned at their top; the
+form order is Type, For, Strategy, Feedback. The `Add` action is a yellow
+underlined link directly below the editor, followed by compact helper text.
+The Type radio group has an accessible name without a visible Type label.
+Strategy has no visible label, keeps its accessible name, and uses a 260–340px
+width rather than stretching across the available space.
+Feedback targets one selected agent (`For investigator` or `For skeptic`) and
+is added for a later call to the selected strategy; adding it starts no call
+and does not change saved findings. The
+The Research artifacts Markdown toggle uses the gold active color while
+`aria-pressed` is true. `./sigma test` passed. Real Chrome
+`browser_checks/t29_intervention.py` passed against isolated Vite and
+deterministic provider-fixture servers on ports 5198 and 8126, verifying the
+radio-group order, vertical layout, top alignment, Strategy width, feedback
+copy, single-agent delivery, and mobile layout. No live provider calls or paid
+usage were used.
 ## T42 Google Cloud Compute Engine readiness (2026-10-23)
 
 Prepared a reproducible local Docker deployment package for the Python/FastAPI
@@ -5298,3 +5318,32 @@ base `042485464e2396b8b8497aed8883dbb71f03bbd8`; no rebase conflict. All shell
 fences in the edited runbook passed `bash -n`; deployment package and local
 Compose smoke checks passed; `./sigma test` passed. Coordinator handoff:
 `messages/t44_red_duckdns_update.txt`.
+
+## Session controls and export UI follow-up (2026-10-24)
+
+The Play confirmation now snapshots the currently enabled strategy rows as the
+session's strategy set. It rejects enabled sets that cannot receive an
+Investigator/Skeptic pair within the configured model-call budget, and freezes
+strategy toggles while confirmation is open. The duplicate strategy picker was
+removed; confirmation actions remain in the Strategies heading slot. Human
+feedback terminology and controls were tightened, including vertical
+Priority/Objection/New Evidence and recipient radio groups, an `Add` action, and
+compact history. Expanded session summaries align their status/outcome/progress
+under the title text; expanded details have no extra divider, and a stable
+scrollbar gutter prevents the Sessions count shifting during expansion. The
+Export Project dialog no longer offers LaTeX reports; the separate LaTeX paper
+feature remains available.
+
+**Checks:** `./sigma test` passed, including Ruff, formatting, Pyright (0
+diagnostics), frontend typecheck and production build. Real Chrome checks passed
+for the archived T17.8 session, including stable Sessions-count position and no
+LaTeX export option; T29 feedback submission and mobile layout; and T43.1
+enabled-strategy selection/budget handling. These checks used archived data or
+local deterministic fixtures. The T43.1 start request was intercepted; no live
+session, provider inference call or paid usage occurred. Existing Starlette
+`TestClient` deprecation warnings remain.
+
+The archived-session browser check does not establish behavior for every
+viewport/OS scrollbar configuration. `scrollbar-gutter: stable` is supported by
+current Chrome; older browsers may not reserve the gutter. No live provider
+behavior was re-tested.

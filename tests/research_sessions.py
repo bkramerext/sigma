@@ -5586,7 +5586,7 @@ def test_intervention_recovery_supersession_and_rejection(path: Path):
             )
         )
     except ProjectError as exc:
-        assert "24-intervention limit" in str(exc)
+        assert "24-feedback limit" in str(exc)
     else:
         raise AssertionError("A session must reject guidance past its explicit bound")
     bounded = research_sessions.get_session(str(path), session_id)

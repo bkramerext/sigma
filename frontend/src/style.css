@@ -5,6 +5,7 @@
   font-synthesis: none;
 }
 * { box-sizing: border-box; }
+html { scrollbar-gutter: stable; }
 body { margin: 0; }
 main { max-width: 1000px; margin: 0 auto; padding: 30px 44px 60px; }
 .site-header { display: flex; align-items: flex-start; gap: 20px; justify-content: space-between; padding-bottom: 58px; }

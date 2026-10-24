@@ -137,8 +137,15 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
                 "solution candidate (unverified)"
             )
             disclosure = session_row.locator("button.session-row-disclosure")
+            count = page.locator(".sessions-pane-heading .section-count")
+            count_x_before = count.bounding_box()["x"]
             if disclosure.get_attribute("aria-expanded") != "true":
                 disclosure.click()
+            disclosure.click()
+            expect(session_row.locator(".session-row-content")).to_be_hidden()
+            assert abs(count.bounding_box()["x"] - count_x_before) <= 0.5
+            disclosure.click()
+            expect(session_row.locator(".session-row-content")).to_be_visible()
             outcome = session_row.get_by_role("region", name="Research outcome")
             expect(outcome).to_be_visible()
             review = session["outcome"]["solution_review"]
@@ -151,6 +158,12 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
             expect(artifacts.locator("li")).to_have_count(len(session["artifacts"]))
             for artifact in session["artifacts"]:
                 expect(artifacts).to_contain_text(artifact["claim_or_question"])
+            page.locator('.project-pane-actions [aria-label="Export project"]').click()
+            export_dialog = page.get_by_role("dialog", name="Export Project")
+            expect(export_dialog).to_be_visible()
+            expect(export_dialog.get_by_role("radio")).to_have_count(3)
+            expect(export_dialog).not_to_contain_text("LaTeX report")
+            export_dialog.get_by_role("button", name="Cancel").click()
             assert not starts, "The saved-session check must not start a research session"
             assert not errors, errors
             browser.close()

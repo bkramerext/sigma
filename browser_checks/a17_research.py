@@ -1649,9 +1649,9 @@ with sync_playwright() as playwright:
     )
     legacy_outcome["enabled"] = False
 
-    # Exercise the multi-strategy selection and live activity surface against
-    # the isolated provider. The second branch deliberately waits so that the
-    # concurrent running state is observable before the session is stopped.
+    # Enabled strategy rows determine the complete session portfolio. The
+    # second branch deliberately waits so that concurrent activity is
+    # observable before the session is stopped.
     created_strategy = page.evaluate(
         """async path => {
           const response = await fetch('/api/projects/strategies', {
@@ -1689,16 +1689,7 @@ with sync_playwright() as playwright:
         == 6
     )
     page.get_by_role("button", name="Start a new research session", exact=True).click()
-    selection = page.locator(".research-strategy-selection")
-    expect(selection).to_be_visible()
-    selection.locator("summary").click()
-    checkboxes = selection.get_by_role("checkbox")
-    expect(checkboxes).to_have_count(2)
-    expect(checkboxes.nth(0)).to_be_checked()
-    assert checkboxes.nth(1).is_enabled(), selection.inner_text()
-    checkboxes.nth(1).click()
-    expect(selection.locator("summary")).to_contain_text("2 selected", timeout=2000)
-    expect(selection.locator("summary")).to_contain_text("2 selected")
+    expect(page.locator(".research-strategy-selection")).to_have_count(0)
     page.get_by_role("button", name="Start new session #2", exact=True).click()
     portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
     open_session(portfolio)
@@ -1708,7 +1699,12 @@ with sync_playwright() as playwright:
         "Pause and stop fixture strategy"
     )
     expect(portfolio.locator(".research-strategy-activity")).to_contain_text("running")
-    assert len(start_payloads[-1]["strategy_ids"]) == 2, start_payloads[-1]
+    enabled_strategy_ids = [
+        strategy["id"]
+        for strategy in created_strategy["project"]["strategies"]
+        if strategy["enabled"] and not strategy.get("removed_at")
+    ]
+    assert start_payloads[-1]["strategy_ids"] == enabled_strategy_ids, start_payloads[-1]
     page.reload()
     portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
     open_session(portfolio)
