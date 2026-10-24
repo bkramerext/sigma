@@ -3,7 +3,8 @@
 **Ticket:** T46, Home and Project About dialog  
 **Branch:** `green/t46-about-dialog`  
 **Base:** `main` at `b69cedd` (latest fetched main; PR #70 merge)  
-**Head:** `e9cd95a04e6a5082e2498af39427a4daa3ad69cc`  
+**PR head:** `dc4cb3ccbf6f0633ec3b77ba9aa0ae2802c452aa`  
+**Tested implementation head:** `e9cd95a04e6a5082e2498af39427a4daa3ad69cc` (the final commit only adds PR links to ticket/handoff metadata)  
 **PR:** [#73](https://github.com/bkramerext/sigma/pull/73), open against `main`. Do not merge.
 
 ## Implementation
