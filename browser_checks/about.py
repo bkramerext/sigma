@@ -36,12 +36,12 @@ with sync_playwright() as playwright:
         expect(button).to_have_attribute("data-tooltip", "About SIGMA")
         return button
 
-    def open_about():
+    def open_about(click_position=None):
         button = about_button()
         before = len(api_requests)
         button.focus()
         expect(page.locator("#sigma-ui-tooltip")).to_have_text("About SIGMA")
-        button.click()
+        button.click(position=click_position)
         dialog = page.get_by_role("dialog", name="About SIGMA")
         expect(dialog).to_be_visible()
         expect(dialog.locator("#about-message")).to_have_text(
@@ -100,7 +100,25 @@ with sync_playwright() as playwright:
     ).to_be_visible()
 
     page.set_viewport_size({"width": 390, "height": 844})
-    button, dialog = open_about()
+    project_header = page.locator(".project-art-header")
+    project_controls = project_header.locator(".header-controls")
+    project_difficulty = project_controls.locator(".project-difficulty-badge")
+    about_box = about_button().bounding_box()
+    controls_box = project_controls.bounding_box()
+    difficulty_box = project_difficulty.bounding_box()
+    assert about_box is not None and controls_box is not None and difficulty_box is not None
+    assert about_box["width"] >= 44 and about_box["height"] >= 44, about_box
+    assert about_box["x"] + about_box["width"] <= controls_box["x"] + controls_box["width"]
+    assert (
+        abs(
+            (about_box["y"] + about_box["height"] / 2)
+            - (difficulty_box["y"] + difficulty_box["height"] / 2)
+        )
+        <= 8
+    ), "Mobile About action is not alongside the top-right header controls"
+    compact_pill = about_button().evaluate("element => getComputedStyle(element, '::before').inset")
+    assert compact_pill == "7px", compact_pill
+    button, dialog = open_about(click_position={"x": 2, "y": 22})
     assert_dialog_fits(390)
     page.screenshot(path=f"{screenshots}/sigma-t46-about-project-mobile.png", full_page=True)
     page.keyboard.press("Escape")
@@ -125,5 +143,5 @@ with sync_playwright() as playwright:
 print(
     "PASS About dialog from Home and Project at 1440px/390px; native modal semantics, "
     "exact tooltip/accessible label, no About API calls, Escape/Close focus restoration, "
-    "route/tab state preservation and viewport fit"
+    "route/tab state preservation, viewport fit, and 44px mobile Project hit area"
 )

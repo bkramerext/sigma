@@ -3,8 +3,7 @@
 **Ticket:** T46, Home and Project About dialog  
 **Branch:** `green/t46-about-dialog`  
 **Base:** `main` at `b69cedd` (latest fetched main; PR #70 merge)  
-**PR head:** `dc4cb3ccbf6f0633ec3b77ba9aa0ae2802c452aa`  
-**Tested implementation head:** `e9cd95a04e6a5082e2498af39427a4daa3ad69cc` (the final commit only adds PR links to ticket/handoff metadata)  
+**PR head:** updated with mobile-header correction (SHA to be recorded after commit)
 **PR:** [#73](https://github.com/bkramerext/sigma/pull/73), open against `main`. Do not merge.
 
 ## Implementation
@@ -17,6 +16,8 @@
 - Escape, Close, and backdrop dismissal close the dialog and restore focus to the
   originating trigger. The dialog preserves the Home tab or Project route.
 - Adjusted narrow Home header layout to fit the new action without overlap.
+- On narrow Project headers, aligned About with the first row of header controls
+  and gave the button a 44×44px hitbox around the compact 30px visible pill.
 
 ## Verification
 
@@ -26,7 +27,8 @@
 - `uv run --with playwright python browser_checks/about.py` — passed in real
   Chrome at 1440px and 390px from both Home and Project; verified accessibility,
   modal semantics, no About request, keyboard/Close focus restoration, route/tab
-  preservation, and viewport fit.
+  preservation, and viewport fit. At 390px, verified Project header alignment,
+  44×44px hit area, and opened from the hitbox edge outside the visible pill.
 - Browser-check Ruff lint/format and `git diff --check` — passed.
 - No live provider calls.
 

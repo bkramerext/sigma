@@ -188,7 +188,7 @@
   .workspace-page .project-art-back-row { left: auto; right: 40px; }
   .workspace-page .project-back-label { display: none; }
   .workspace-page .current-project { padding-top: 0; }
-  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "difficulty difficulty" "model google" "thinking chatgpt" "about about"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
+  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) 44px; grid-template-areas: "difficulty about" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
   .workspace-page .project-art-header .about-action { justify-self: end; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
   .workspace-page .expansion { font-size: 8px; letter-spacing: .06em; max-width: 240px; }

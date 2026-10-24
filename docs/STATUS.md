@@ -9,7 +9,9 @@ Close immediately after its heading, and uses native modal semantics. Escape,
 Close, and backdrop dismissal return focus to the trigger; opening About makes no
 API or model request and does not change the Home tab or Project route. The
 mobile Home header now lays out its existing Google and connection controls with
-the About action without overlap. Copy follows the approved four-part message
+the About action without overlap. On narrow Project pages, the About hit area is
+44×44px and shares the top header-controls row with Difficulty; a 30px copper
+pill remains visible. Copy follows the approved four-part message
 and states the limits of model-generated reasoning without claiming independent
 proof verification.
 
@@ -22,7 +24,8 @@ focus restoration, unchanged navigation/tab state, no API requests on open, and
 viewport fit. Visual screenshots are `/tmp/sigma-t46-about-home-desktop.png`,
 `/tmp/sigma-t46-about-home-mobile.png`,
 `/tmp/sigma-t46-about-project-desktop.png`, and
-`/tmp/sigma-t46-about-project-mobile.png`. The browser check used the local
+`/tmp/sigma-t46-about-project-mobile.png`; the mobile Project check also verifies
+the hit area and opens via its outer edge. The browser check used the local
 deterministic provider fixture; no live provider calls were made.
 
 ## Strategy-generation architecture correction (2026-10-24)
