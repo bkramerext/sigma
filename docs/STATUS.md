@@ -5347,3 +5347,38 @@ The archived-session browser check does not establish behavior for every
 viewport/OS scrollbar configuration. `scrollbar-gutter: stable` is supported by
 current Chrome; older browsers may not reserve the gutter. No live provider
 behavior was re-tested.
+
+## Maximum Regions v3 paused proof recovery (2026-10-24)
+
+Session `fe2eccd7-cae7-4cc9-a0d7-30c8f7dd3964` paused after its first
+Investigator/Skeptic cycle because the mandatory context extract truncated the
+2,691-character proof method at 2,400 characters. The saved proof itself was
+complete; the Skeptic requested only that the formula be stated prominently.
+The context guard correctly refused to pass incomplete evidence back to the
+model, but the small extract bound made this ordinary proof revision
+unresumable. Raised the full-method extract bound to 12,000 characters while
+retaining explicit truncation detection above that bound, with a regression for
+intact multi-step proof context and over-bound fail-closed behavior.
+
+Resumed the same saved session with its original ChatGPT plan mode,
+`gpt-6.1-sol`/High selection, and 30-call limit. The failed earlier resume had
+not dispatched a provider call. Cycle 2 completed with 4 of 30 calls total,
+`objective_review=achieved`, no unresolved objections, and terminal reason
+`stop_productive_conclusion`. The resulting claim is that the maximum number of
+regions is `1 + n(n + 1)/2` for every integer `n >= 0`; the saved proof covers
+the insertion lemma, upper bound, attaining line family, empty arrangement,
+and small-value checks. It remains a convincing, unverified candidate; no
+formal checker or independent external verification was used. Plan cost is
+unavailable. Generated the deterministic text report at
+`projects/maximum-regions-by-lines-3.sigma/Maximum-Regions-Formed-by-Lines-v3-report.txt`.
+
+**Checks:** the focused research-session scenarios passed, including the new
+regression. `browser_checks/t17_8_saved_session.py` passed in real Chrome; it
+uses an archived session and makes no provider calls. The generated report
+contains the full cycle-2 proof and the unverified-status caveat. The first
+`./sigma test` run failed in `tests/tooling.py` because the invoking shell sets
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` without the paired local Google OAuth
+settings. The full rerun as
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including
+Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production
+build. Existing Starlette/httpx deprecation warnings remain.

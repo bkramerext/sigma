@@ -1689,6 +1689,19 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         >= 100
     )
 
+    # A complete multi-step proof must survive the deterministic extract intact.
+    long_proof = {
+        "id": "long-proof",
+        "strategy_id": strategy,
+        "open_obligations": ["Resolve this proof obligation."],
+        "claim_or_question": "Claim",
+        "method": "Step 1. " + "A complete proof step. " * 200,
+        "evidence_status": "Unverified",
+    }
+    compact_proof = research_sessions._compact_context_artifact(long_proof, view.path)
+    assert compact_proof["method"] == long_proof["method"]
+    assert compact_proof["extract_truncated_fields"] == []
+
     # A required proof source with decisive content beyond the deterministic
     # extract bound must not be represented to a provider as supplied evidence.
     decisive = {
@@ -1696,7 +1709,7 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         "strategy_id": strategy,
         "open_obligations": ["Resolve this proof obligation."],
         "claim_or_question": "Claim",
-        "method": "M" * 2401 + " decisive final line",
+        "method": "M" * 12_001 + " decisive final line",
         "evidence_status": "Unverified",
     }
     before = json.dumps(decisive)

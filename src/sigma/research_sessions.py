@@ -3832,7 +3832,10 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
     }
     for key, limit in (
         ("claim_or_question", 1600),
-        ("method", 2400),
+        # Proof methods often need several thousand characters for a complete
+        # argument. Keep the whole method in resumed context instead of
+        # turning a modestly long proof into a permanently blocked session.
+        ("method", 12_000),
         ("evidence_status", 500),
         ("next_question", 700),
     ):
@@ -3842,7 +3845,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
         key
         for key, limit in (
             ("claim_or_question", 1600),
-            ("method", 2400),
+            ("method", 12_000),
             ("evidence_status", 500),
             ("next_question", 700),
         )
