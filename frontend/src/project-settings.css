@@ -48,12 +48,14 @@
 .project-settings-dialog a { color: #e4b87f; }
 /* Status uses existing header/empty sky space without moving Home's hero. */
 .home-page .home-topline { position: relative; }
-.home-page .home-topline > .api-connection { position: absolute; top: 24px; right: 0; width: 230px; }
+.home-page .home-topline { justify-content: flex-end; align-items: flex-start; gap: 9px; padding-top: 18px; }
+.home-page .home-topline > .api-connection { position: relative; top: 0; right: auto; width: auto; margin: 0; }
 @media (max-width: 700px) {
  .project-settings-dialog { padding: 22px; }
  .workspace-page .project-name-line { order: -2; }
  .workspace-page .project-name-line h1 { font-size: 30px; }
- .home-page .home-topline > .api-connection { top: 76px; width: 132px; min-width: 0; max-width: 150px; }
+ .home-page .home-topline { gap: 6px; padding-top: 10px; }
+ .home-page .home-topline > .api-connection { top: 0; width: auto; min-width: 0; max-width: 58%; }
 }
 /* A9: one form, persistent title/actions, one scrolling body. */
 .project-settings-dialog { padding: 0; overflow: hidden; }

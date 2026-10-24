@@ -218,3 +218,14 @@ browser. It also checks the narrow-screen dialog. It makes no live provider
 calls. Review captures are `/tmp/sigma-a20-paper-preview.png` and
 `/tmp/sigma-a20-paper-mobile.png`; the downloaded PDF is
 `/tmp/sigma-a20-paper.pdf`.
+
+## T40 Google account and administrator controls
+
+Run the normal SIGMA UI and then run
+`uv run --with playwright python browser_checks/t40_cloud_ui.py`. This real
+Chrome check intercepts Google identity and authorization APIs with deterministic
+test fixtures, so it makes no Google OAuth or provider calls. It exercises the
+signed-out, administrator and member screens, the Google account dialog,
+administrator add/edit/save/revoke actions, and desktop/mobile layout. Screenshots
+are written to `/tmp/sigma-t40-admin-home-{1440,390}.png` and
+`/tmp/sigma-t40-admin-dialog-{1440,390}.png`.

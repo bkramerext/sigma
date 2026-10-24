@@ -106,6 +106,8 @@ class CloudAuthTests(TestCase):
                 "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.org",
                 "SIGMA_CLOUD_AUTH_HOME": str(self.root),
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "access@example.org",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
                 "SIGMA_CLOUD_DEMO_AUDIT": str(
                     Path(__file__).resolve().parents[1] / "cloud-demo/handshake-demo-audit.json"
                 ),
@@ -313,6 +315,18 @@ class CloudAuthTests(TestCase):
             )
             self.assertNotEqual(self.client.get("/api/ai/connection").status_code, 401)
 
+    def test_hosted_google_auth_still_blocks_personal_chatgpt_auth(self):
+        signed_in = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        response = self.client.get("/api/ai/connection")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["error"],
+            "AI provider authorization is unavailable in cloud mode.",
+        )
+
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
         admin_client = admin_context.__enter__()
@@ -377,6 +391,186 @@ class CloudAuthTests(TestCase):
         )
         self.assertEqual(removed.status_code, 200)
         self.assertIsNone(cloud_auth.resolve_session(member_cookie))
+        accounts = admin_client.get("/api/cloud-auth/admin/grants").json()["sessions"]
+        revoked = next(item for item in accounts if item["email"] == "member@example.org")
+        self.assertEqual(revoked["status"], "revoked")
+        self.assertFalse(revoked["authorized"])
+        self.assertIn("held_usd", revoked["spending"])
+
+    def test_spending_allowance_admin_policy_and_email_precedence(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        admin_result = self.finish(client=admin)
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin_result.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        domain = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "domain", "value": "example.org", "allowance_usd": 5.0},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(domain.status_code, 200, domain.text)
+        user_context = TestClient(app)
+        user = user_context.__enter__()
+        self.addCleanup(user_context.__exit__, None, None, None)
+        signed = self.finish("member@example.org", "member-sub", client=user)
+        self.assertEqual(signed.status_code, 303)
+        self.assertEqual(cloud_auth.effective_spending_allowance("member@example.org", 2), 5.0)
+        # Domain policy is resolved for each verified email; a specific entry
+        # overrides it, including when that individual allowance is larger.
+        personal = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "email", "value": "member@example.org", "allowance_usd": 8.0},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(personal.status_code, 200, personal.text)
+        self.assertEqual(cloud_auth.effective_spending_allowance("member@example.org", 2), 8.0)
+        self.assertEqual(cloud_auth.effective_spending_allowance("other@example.org", 2), 5.0)
+        lowered = admin.put(
+            "/api/cloud-auth/admin/grants/email/member%40example.org/allowance",
+            json={"allowance_usd": 0.5},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(lowered.status_code, 200, lowered.text)
+        self.assertEqual(cloud_auth.effective_spending_allowance("member@example.org", 2), 0.5)
+        overview = admin.get("/api/cloud-auth/admin/grants")
+        self.assertEqual(overview.status_code, 200, overview.text)
+        records = overview.json()
+        member = next(item for item in records["sessions"] if item["email"] == "member@example.org")
+        self.assertEqual(member["allowance_usd"], 0.5)
+        self.assertIn("estimated_usage_usd", member["spending"])
+        self.assertIn("held_usd", member["spending"])
+        self.assertIn("remaining_usd", member["spending"])
+        email_grant = next(
+            item for item in records["grants"] if item["value"] == "member@example.org"
+        )
+        self.assertEqual(email_grant["effective_allowance_usd"], 0.5)
+        self.assertEqual(email_grant["allowance_usd"], 0.5)
+
+    def test_role_and_allowance_updates_are_atomic_and_domain_admin_is_rejected(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        signed = self.finish(client=admin)
+        admin.cookies.set(cloud_auth.SESSION_COOKIE, signed.cookies[cloud_auth.SESSION_COOKIE])
+        for kind, value in (("email", "member@example.org"), ("domain", "example.org")):
+            response = admin.post(
+                "/api/cloud-auth/admin/grants",
+                json={"kind": kind, "value": value, "allowance_usd": 2.0},
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+        invalid = admin.put(
+            "/api/cloud-auth/admin/grants/updates",
+            json={
+                "updates": [
+                    {
+                        "kind": "email",
+                        "value": "member@example.org",
+                        "role": "admin",
+                        "allowance_usd": 4.0,
+                    },
+                    {
+                        "kind": "domain",
+                        "value": "example.org",
+                        "role": "admin",
+                        "allowance_usd": 5.0,
+                    },
+                ]
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(invalid.status_code, 422, invalid.text)
+        snapshot = admin.get("/api/cloud-auth/admin/grants").json()["grants"]
+        self.assertEqual(
+            next(row for row in snapshot if row["value"] == "member@example.org")["role"], "member"
+        )
+        saved = admin.put(
+            "/api/cloud-auth/admin/grants/updates",
+            json={
+                "updates": [
+                    {
+                        "kind": "email",
+                        "value": "member@example.org",
+                        "role": "admin",
+                        "allowance_usd": 4.0,
+                    },
+                    {
+                        "kind": "domain",
+                        "value": "example.org",
+                        "role": "member",
+                        "allowance_usd": None,
+                    },
+                ]
+            },
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(saved.status_code, 200, saved.text)
+        snapshot = admin.get("/api/cloud-auth/admin/grants").json()["grants"]
+        self.assertEqual(
+            next(row for row in snapshot if row["value"] == "member@example.org")["role"], "admin"
+        )
+        self.assertEqual(
+            next(row for row in snapshot if row["value"] == "member@example.org")["allowance_usd"],
+            4.0,
+        )
+
+    def test_explicit_local_google_mode_accepts_only_loopback_http_and_preserves_local_projects(
+        self,
+    ):
+        local_origin = "http://127.0.0.1:5173"
+        with patch.dict(
+            os.environ,
+            {"SIGMA_CLOUD_AUTH_LOCAL": "true", "SIGMA_CLOUD_PUBLIC_ORIGIN": local_origin},
+        ):
+            cfg = cloud_auth.config()
+            self.assertTrue(cfg.local)
+            self.assertIsNone(cfg.error)
+            self.assertEqual(cfg.origin, local_origin)
+            response = self.client.get("/api/cloud-auth/login", follow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+            flow_name = "sigma_oidc_flow"
+            self.assertIn(flow_name, response.cookies)
+            self.assertNotIn("Secure", response.headers["set-cookie"])
+            query = parse_qs(urlsplit(response.headers["location"]).query)
+            state = query["state"][0]
+            self.assertEqual(query["redirect_uri"], [local_origin + "/api/cloud-auth/callback"])
+            with cloud_auth._db(cfg) as db:
+                nonce = db.execute(
+                    "SELECT nonce FROM flows WHERE state_hash=?", (cloud_auth._hash(state),)
+                ).fetchone()["nonce"]
+            GoogleClient.token = token(nonce=nonce)
+            self.client.cookies.set(flow_name, response.cookies[flow_name])
+            with patch.object(cloud_auth.httpx, "AsyncClient", GoogleClient):
+                signed = self.client.get(
+                    "/api/cloud-auth/callback",
+                    params={"state": state, "code": "fixture"},
+                    follow_redirects=False,
+                )
+            self.assertEqual(signed.status_code, 303, signed.text)
+            self.assertIn("sigma_session", signed.cookies)
+            self.assertNotIn("Secure", signed.headers["set-cookie"])
+            self.client.cookies.set("sigma_session", signed.cookies["sigma_session"])
+            status = self.client.get("/api/cloud-auth/status").json()
+            self.assertEqual(status["target"], "local")
+            self.assertEqual(status["user"]["role"], "admin")
+            provider_status = self.client.get("/api/ai/connection")
+            self.assertEqual(provider_status.status_code, 200, provider_status.text)
+            self.assertNotEqual(
+                provider_status.json().get("guidance"),
+                "AI provider authorization is unavailable in cloud mode.",
+            )
+            self.assertFalse((self.root / "workspaces" / "workspaces.sqlite3").exists())
+            self.assertEqual(self.client.get("/api/projects/recent").status_code, 200)
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_LOCAL": "true",
+                "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://remote.example:5173",
+            },
+        ):
+            self.assertIsNotNone(cloud_auth.config().error)
 
     def test_session_expiration_is_enforced(self):
         signed_in = self.finish()

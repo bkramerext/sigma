@@ -91,16 +91,9 @@
 .home-page .home-samples .sample-open { display: block; width: 100%; min-width: 0; padding: 12px 0; text-align: left; background: transparent; border: 0; border-radius: 0; box-shadow: none; color: #e0aa8b; }
 .home-page .home-samples .sample-open:hover:not(:disabled) { background: #a9654824; }
 
-.cloud-home-controls { position: relative; z-index: 3; display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-left: auto; color: #d1c2b1; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
-.cloud-home-controls button, .cloud-home-controls .cloud-signin-control { min-height: 30px; padding: 5px 11px; border: 1px solid #a87950; border-radius: 4px; background: linear-gradient(120deg, #251a14e8, #111822ee); color: #e6b17d; font: inherit; text-decoration: none; cursor: pointer; }
-.cloud-home-controls button:hover, .cloud-home-controls .cloud-signin-control:hover { border-color: #e6b17d; background: #302117; color: #ffe1b7; }
-.cloud-home-controls .cloud-user-email { color: #d8c2aa; }
-.cloud-home-controls.compact { gap: 7px; font-size: 10px; }
-.cloud-home-controls.compact .cloud-user-email { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cloud-home-controls.compact button { min-height: 27px; padding: 4px 8px; }
 .home-cloud-prompt, .home-cloud-denied { position: relative; z-index: 1; width: min(520px, calc(100% - 56px)); margin: 18px 0 0 clamp(26px, 5.4vw, 90px); padding: 20px 22px; border: 1px solid #9a684c; border-radius: 7px; background: linear-gradient(118deg, #090e16ec, #15120ff0); box-shadow: 0 18px 48px #0008; color: #d7d0c7; }
 .home-cloud-prompt > p, .home-cloud-denied > .cloud-auth-kicker { margin: 0 0 8px; color: #d9a77b; font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .15em; text-transform: uppercase; }
-.home-cloud-prompt h1, .home-cloud-denied h1 { margin: 0 0 10px; color: #edc39c; font: 400 clamp(24px, 3vw, 34px)/1.2 Georgia, serif; letter-spacing: 0; text-shadow: none; }
+.home-page .home-cloud-prompt h1, .home-page .home-cloud-denied h1 { margin: 0; color: #edc39c; font: 400 clamp(19px, 2vw, 23px)/1.35 Georgia, serif; letter-spacing: 0; text-shadow: none; }
 .home-cloud-prompt > span, .home-cloud-denied > p { color: #c1b9ad; font: 13px/1.65 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-cloud-denied-email { overflow-wrap: anywhere; }
 .home-cloud-denied-email strong { color: #edc39c; font-weight: 500; }
@@ -120,20 +113,7 @@
 .cloud-text-button { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .cloud-secondary-button:disabled { opacity: .55; cursor: default; }
 .cloud-auth-footnote { margin-top: 23px; font-size: 12px; }
-.cloud-access-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; overflow: auto; padding: 20px; background: #000b; }
-.cloud-access-dialog { position: relative; width: min(100%, 620px); max-height: min(90vh, 850px); overflow: auto; }
-.cloud-access-close { position: absolute; top: 12px; right: 15px; border: 0; background: transparent; color: #e0aa8b; font-size: 25px; cursor: pointer; }
-.cloud-access-dialog form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 22px 0; }
-.cloud-access-dialog label { display: grid; gap: 5px; color: #e1ae94; font-size: 12px; }
-.cloud-access-dialog input, .cloud-access-dialog select { width: 100%; padding: 9px; border: 1px solid #66533d; border-radius: 4px; background: #0b141e; color: #e5ebee; }
-.cloud-access-dialog form button { align-self: end; min-height: 38px; border: 1px solid #ba7658; border-radius: 4px; background: linear-gradient(140deg, #a75e43, #74402f); color: #fff2e9; cursor: pointer; }
-.cloud-access-dialog h3 { margin-top: 22px; color: #e5ad8f; font: 400 19px Georgia, serif; }
-.cloud-access-dialog ul { padding: 0; list-style: none; }
-.cloud-access-dialog li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #a965483d; }
-.cloud-access-dialog li span, .cloud-access-dialog li small { display: block; }
-.cloud-access-dialog li small, .cloud-access-bootstrap { margin-top: 3px; color: #aeb7bf; font-size: 11px; }
-.cloud-access-dialog li button { border: 0; background: transparent; color: #e6a092; text-decoration: underline; cursor: pointer; }
-@media (max-width: 560px) { .cloud-access-dialog form { grid-template-columns: 1fr; } .cloud-home-controls { gap: 7px; flex-wrap: wrap; } .cloud-home-controls.compact .cloud-user-email { max-width: 110px; } .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } }
+@media (max-width: 560px) { .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } }
 
 .home-page .home-samples .sample-type-group { border-bottom: 1px solid #a965483d; }
 .home-page .home-samples .sample-type-group > summary { display: grid; grid-template-columns: 10px 16px 120px max-content; align-items: center; gap: 8px; min-height: 40px; margin-left: -8px; padding: 6px 8px; color: #e0aa8b; font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; list-style: none; }
@@ -169,5 +149,91 @@
 @media (max-width: 400px) {
   .home-page .catalog-tabs { width: 100%; }
   .home-page .catalog-tabs button { flex: 1; padding-inline: 8px; }
+}
+
+/* Account controls and administrator editing follow the established pill and underlined-action language. */
+.home-page .administrator-settings-link { position: absolute; z-index: 2; top: 20px; left: clamp(26px, 5.4vw, 90px); min-height: 0; margin: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #d9b17e; font: 11px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.home-page .administrator-settings-link:hover { background: transparent; box-shadow: none; color: #f0c995; }
+.project-google-signin { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 27px; padding: 4px 9px; border: 1px solid #5b5148; border-radius: 999px; background: #091824ed; color: #c9b18f; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
+button.project-google-signin { cursor: pointer; }
+button.project-google-signin:hover:not(:disabled), button.project-google-signin:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
+button.project-google-signin:disabled { border-color: #5b5148; background: #091824ed; color: #b4bdc5; cursor: not-allowed; opacity: 1; }
+.project-google-signin small { color: #aeb9c4; font: inherit; font-size: 9px; }
+.home-page .project-google-signin { position: relative; z-index: 2; }
+.home-page .home-topline .project-google-signin { min-height: 34px; padding: 7px 12px; border-color: #a9654875; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
+.home-page .home-topline .project-google-signin:hover:not(:disabled), .home-page .home-topline .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
+.home-page .home-topline .project-google-signin .connection-dot { margin-top: 0; }
+.google-account-dialog, .cloud-access-dialog { color-scheme: dark; color: #dce7f0; border: 1px solid #a96548; border-radius: 8px; background: linear-gradient(145deg, #16212c, #0b141e); box-shadow: 0 24px 65px #000b; }
+.google-account-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; }
+.google-account-dialog::backdrop, .cloud-access-dialog::backdrop { background: #000b; }
+.google-account-dialog h2 { margin: 5px 0 14px; color: #e5ad8f; font: 400 26px/1.2 Georgia, serif; }
+.google-account-dialog p { color: #bcc5cc; line-height: 1.55; overflow-wrap: anywhere; }
+.google-account-dialog .google-account-target { font-size: 12px; }
+.google-account-dialog .google-account-target strong, .google-account-dialog .google-account-email { color: #f0cca0; }
+.google-account-dialog .google-account-email { font-size: 15px; }
+.google-account-dialog .cloud-text-button { display: inline-flex; width: fit-content; margin: 5px 16px 5px 0; padding: 3px 0; min-height: 0; border: 0; color: #e0b387; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
+.google-account-dialog .cloud-text-button:hover { color: #f5d2a4; }
+.google-account-dialog .google-account-close { display: block; margin-top: 14px; }
+.home-page .home-topline .api-connection { margin-left: 0; }
+.home-page .home-topline .api-connection > summary { max-width: min(290px, 40vw); }
+.cloud-chatgpt-allowance { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-top: 1px solid #a9654844; border-bottom: 1px solid #a9654844; }
+.cloud-chatgpt-allowance strong { color: #e5b388; }
+.cloud-chatgpt-usage { color: #aeb9c4; font-size: 11px; }
+.cloud-access-dialog { width: min(940px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px 24px 22px; }
+.admin-dialog-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; }
+.admin-dialog-heading h2 { margin: 0; color: #e5ad8f; font: 400 28px/1.2 Georgia, serif; }
+.admin-text-action { min-height: 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #e3b485; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.admin-text-action:hover:not(:disabled) { background: transparent; box-shadow: none; color: #f4d0a2; }
+.admin-text-action:disabled { background: transparent; color: #929da5; opacity: .75; cursor: not-allowed; }
+.admin-target { margin: 8px 0 16px; color: #aeb9c4; font-size: 11px; }
+.admin-tabs { display: flex; gap: 18px; border-bottom: 1px solid #35404a; margin-bottom: 15px; }
+.admin-tabs [role="tab"] { min-height: 0; padding: 7px 1px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #aab9c7; box-shadow: none; font: 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.admin-tabs [role="tab"][aria-selected="true"] { border-bottom-color: #d9a66c; color: #f0cca0; }
+.admin-tabs [role="tab"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
+.admin-access-note { margin: 0 0 7px; color: #c0cad2; font-size: 12px; }
+.cloud-access-bootstrap { margin: 4px 0 10px; color: #aeb9c4; font-size: 11px; }
+.admin-table-heading { display: flex; align-items: center; gap: 12px; margin: 15px 0 7px; }
+.admin-table-heading h3 { color: #e5ad8f; font: 400 20px/1.25 Georgia, serif; }
+.admin-new-entry-row, .admin-add-row { border-top: 1px solid #a9654844; }
+.admin-add-row th { text-align: left; }
+.admin-add-row .admin-text-action { font-size: 12px; }
+.admin-usage-panel > h3 { margin: 2px 0 12px; color: #e5ad8f; font: 400 20px/1.25 Georgia, serif; }
+.admin-table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
+.admin-grants-table, .admin-usage-table { width: 100%; border-collapse: collapse; color: #dce7f0; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; }
+.admin-grants-table { min-width: 650px; }
+.admin-usage-table { min-width: 840px; margin-top: 8px; }
+.admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 8px 9px; border-bottom: 1px solid #a9654844; vertical-align: middle; }
+.admin-grants-table thead th, .admin-usage-table thead th { color: #e0b387; font-size: 10px; font-weight: 600; letter-spacing: .04em; }
+.admin-grants-table tbody th, .admin-usage-table tbody th { color: #f0eee8; font-weight: 500; }
+.admin-grants-table tbody th small, .admin-grants-table td small { display: block; margin-top: 4px; color: #aeb9c4; font-size: 10px; }
+.admin-grants-table .admin-entry-value { overflow-wrap: anywhere; }
+.admin-grants-table select, .admin-grants-table input { min-height: 30px; padding: 5px 7px; border: 1px solid #66533d; border-radius: 4px; background: #08131e; color: #f0eee8; font: 12px/1.3 Inter, sans-serif; }
+.admin-grants-table select { min-width: 84px; }
+.admin-allowance-input { display: inline-flex; align-items: center; gap: 4px; color: #e3b485; }
+.admin-allowance-input input { width: 88px; }
+.admin-grants-table tr.is-revoked { opacity: .72; }
+.admin-grants-table .admin-revoke { color: #e6a092; }
+.admin-protected-entry { color: #aeb9c4; font-size: 10px; }
+.admin-empty-row { padding: 18px !important; color: #aeb9c4; text-align: center; }
+.admin-new-entry-row th > input { width: 100%; min-width: 190px; margin-top: 6px; }
+.admin-new-entry-row th > label { display: block; margin: 0; }
+.admin-new-entry-row th > label select { width: 100%; }
+.admin-save-row { display: flex; align-items: center; justify-content: flex-end; gap: 18px; min-height: 42px; margin-top: 9px; }
+.admin-save-row p { margin: 0 auto 0 0; color: #c0cad2; font-size: 11px; }
+.admin-feedback { margin: 8px 0 0; color: #d6be9c; font-size: 12px; }
+.admin-feedback[role="alert"] { color: #f0a89b; }
+.home-page .home-art-credit { color: #d6a16e; font: small-caps 500 12px/1.3 Georgia, 'Times New Roman', serif; letter-spacing: .075em; text-shadow: 0 1px 8px #05101dcc, 0 0 14px #b8643c55; }
+.home-page .home-art-credit time { color: #bd8053; font: small-caps 500 9px/1.3 Georgia, 'Times New Roman', serif; letter-spacing: .15em; }
+@media (max-width: 700px) {
+  .home-page .administrator-settings-link { top: 46px; left: 22px; font-size: 10px; }
+  .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 78px; height: 78px; }
+  .home-page .project-google-signin { gap: 4px; padding-inline: 6px; font-size: 8px; }
+  .home-page .project-google-signin small { font-size: 7px; }
+  .home-page .home-topline .project-google-signin { min-height: 28px; padding: 4px 9px; gap: 7px; font-size: 10px; line-height: 1.2; align-items: flex-start; }
+  .home-page .home-topline .project-google-signin .connection-dot { margin-top: 3px; }
+  .home-page .home-topline .api-connection > summary { max-width: 55vw; padding-inline: 7px; font-size: 8px; }
+  .cloud-access-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 16px 13px; }
+  .admin-dialog-heading h2 { font-size: 23px; }
+  .admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 7px; }
 }
 

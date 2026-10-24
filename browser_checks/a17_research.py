@@ -21,7 +21,7 @@ with sync_playwright() as playwright:
         headless=True,
         args=["--disable-web-security"],
     )
-    context = browser.new_context(viewport={"width": 1440, "height": 900})
+    context = browser.new_context(viewport={"width": 1440, "height": 900}, accept_downloads=True)
     page = context.new_page()
 
     def select_samples():
@@ -1494,6 +1494,16 @@ with sync_playwright() as playwright:
         and "Contributed to solution" in report
         and "unverified" in report.lower()
     )
+    tex_report = page.evaluate(
+        "async path => await (await fetch('/api/projects/export/report?' + new URLSearchParams({path,format:'tex'}))).text()",
+        max_regions_path,
+    )
+    assert (
+        r"\documentclass[11pt]{article}" in tex_report
+        and r"\section{Research sessions}" in tex_report
+        and "Positive" in tex_report
+        and "unverified" in tex_report.lower()
+    )
     page.get_by_role("button", name="Export project", exact=True).click()
     max_export = page.get_by_role("dialog", name="Export Project")
     max_export.get_by_role("radio", name="HTML report").check()
@@ -1526,6 +1536,40 @@ with sync_playwright() as playwright:
     assert html_popup.locator("body").evaluate("e => getComputedStyle(e).maxWidth") == "none"
     html_popup.emulate_media(media="screen")
     html_popup.close()
+
+    # Download each deterministic export from the real dialog and validate the saved payload.
+    page.get_by_role("button", name="Export project", exact=True).click()
+    max_export = page.get_by_role("dialog", name="Export Project")
+    max_export.get_by_role("radio", name="Project Audit").check()
+    with page.expect_download() as audit_download:
+        max_export.get_by_role("button", name="Download", exact=True).click()
+    audit_file = audit_download.value
+    downloaded_audit = json.loads(Path(audit_file.path()).read_text(encoding="utf-8"))
+    assert audit_file.suggested_filename.endswith(".json")
+    downloaded_session = downloaded_audit["research_sessions"][0]
+    assert downloaded_session["outcome"]["assessment"] == "positive"
+    assert downloaded_session["strategy_assessments"][0]["basis_artifact_ids"] == [
+        max_record["artifacts"][0]["id"]
+    ]
+
+    for report_type, extension, checks in (
+        ("Text file", ".txt", ("Research sessions", "Positive", "unverified")),
+        (
+            "LaTeX report",
+            ".tex",
+            (r"\documentclass[11pt]{article}", r"\section{Research sessions}", "unverified"),
+        ),
+    ):
+        page.get_by_role("button", name="Export project", exact=True).click()
+        max_export = page.get_by_role("dialog", name="Export Project")
+        max_export.get_by_role("radio", name=report_type).check()
+        with page.expect_download() as report_download:
+            max_export.get_by_role("button", name="Download", exact=True).click()
+        report_file = report_download.value
+        report_text = Path(report_file.path()).read_text(encoding="utf-8")
+        assert report_file.suggested_filename.endswith(extension)
+        for expected in checks:
+            assert expected in report_text, (report_type, expected)
 
     page.get_by_role("button", name="Export project", exact=True).click()
     max_export = page.get_by_role("dialog", name="Export Project")

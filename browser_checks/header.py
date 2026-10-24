@@ -114,9 +114,9 @@ with sync_playwright() as playwright:
     expect(difficulty_control).to_have_text("Difficulty · Medium")
     expect(google_signin).to_contain_text("Google Sign-in")
     expect(google_signin).to_contain_text("Coming soon")
-    expect(google_signin).to_have_attribute("role", "status")
+    expect(google_signin).to_be_disabled()
     expect(google_signin).to_have_attribute(
-        "aria-label", "Google sign-in is unavailable in the local workspace and is coming soon."
+        "aria-label", "Google sign-in is unavailable in this local workspace."
     )
     assert google_signin.locator(".connection-dot").count() == 1
     assert (
@@ -125,8 +125,11 @@ with sync_playwright() as playwright:
         )
         == "rgb(127, 140, 150)"
     )
-    assert not google_signin.evaluate("e => e.matches('button, a, input')")
-    assert google_signin.locator("a, button, input").count() == 0
+    assert google_signin.evaluate("e => e.matches('button')")
+    auth_requests: list[str] = []
+    page.on("request", lambda request: auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None)
+    google_signin.click(force=True)
+    assert not auth_requests
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
     model_box = model_control.bounding_box()

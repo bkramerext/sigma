@@ -653,7 +653,7 @@
             },
             {
               "label": "Outcome classification",
-              "value": "Negative · counterexample reported"
+              "value": "Mixed · partial progress, unresolved"
             },
             {
               "label": "Verification status",

@@ -121,9 +121,13 @@ def main() -> None:
         "start", help="Start or safely restart this checkout's browser UI"
     )
     ui_command.add_argument(
-        "--navigate", action="store_true", help="Open SIGMA in a browser tab after startup"
+        "--navigate",
+        "--nav",
+        dest="navigate",
+        action="store_true",
+        help="Open SIGMA in a browser tab after startup",
     )
-    commands.add_parser("shutdown", help="Stop this checkout's running UI servers safely")
+    commands.add_parser("shutdown", help="Stop identifiable local SIGMA UI servers safely")
     args = parser.parse_args()
     if args.command == "make_sample":
         from sigma.samples import make_sample

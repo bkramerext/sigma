@@ -227,7 +227,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false }: { disabled?: boolean; projectHeader?: boolean } = {}) {
+export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean } } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -266,25 +266,40 @@ export function ConnectionStatus({ disabled = false, projectHeader = false }: { 
   }, [open]);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
-  const projectHeaderLabel = status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
+  const serviceFunded = cloudFunding?.target === 'hosted';
+  const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && !cloudFunding.authorized;
+  const projectHeaderLabel = serviceFunded
+    ? 'ChatGPT · SIGMA service'
+    : localGoogleRequired
+      ? 'ChatGPT sign-in · Google sign-in required'
+    : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
     ? 'ChatGPT connected'
     : status === 'connected' && ai.info?.mode === 'api_key'
       ? 'OpenAI API connected'
       : `ChatGPT sign-in · ${label}`;
+  const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} title={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} aria-haspopup="dialog" aria-expanded={open} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
+  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} title={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
-      {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
-      <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : ai.info?.active_account ? 'Using ChatGPT plan' : 'Connect your ChatGPT account'}</p>
-      <p>{ai.healthError && ai.info?.status !== 'unavailable' ? 'Connection status could not be refreshed. Retry when convenient.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
-      {ai.info?.mode !== 'api_key' && <>{['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected') && <ConnectAction/>}{ai.info?.active_account && <div className="connection-usage-actions"><ManageUsage/><button type="button" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.disconnect()}>Disconnect</button></div>}</>}
-      {!!ai.info?.accounts?.length && <label>Switch account<select disabled={ai.transitioning} aria-label="Switch ChatGPT account" value={ai.info.active_account ?? ''} onChange={event => void ai.selectMode('chatgpt', event.target.value)}>{ai.info.accounts.map(account => <option key={account.id} value={account.id}>{account.label}</option>)}</select></label>}
-      {ai.info?.active_account && <button type="button" disabled={ai.connecting} onClick={() => void ai.signIn({ newAccount: true })}>Connect another account</button>}
-      <button type="button" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
-      {ai.info?.mode === 'api_key' ? <button type="button" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>Use API key (advanced)</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" onClick={() => void ai.selectMode('api_key')}>Use API key · billed separately</button></details>}
+      {serviceFunded ? <>
+        <p>SIGMA service-funded inference · separate from a personal ChatGPT plan.</p>
+        {cloudFunding?.authorized && <p className="cloud-chatgpt-allowance"><strong>ChatGPT allowance</strong>{cloudFunding.budget ? <span>{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.remaining_usd)} remaining</span> : cloudFunding.loading ? <span>Loading…</span> : <span>{cloudFunding.error ?? 'Unavailable'}</span>}</p>}
+        {cloudFunding?.authorized && cloudFunding.budget && <p className="cloud-chatgpt-usage">Estimated {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.estimated_usage_usd)} · held {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(cloudFunding.budget.held_usd)}{cloudFunding.budget.unknown_provider_attempts ? ` · ${cloudFunding.budget.unknown_provider_attempts} unknown-charge attempts` : ''}</p>}
+        {cloudFunding?.error && <p role="status">{cloudFunding.error} Saved research remains available.</p>}
+        {cloudFunding?.budget && cloudFunding.budget.remaining_usd <= 0 && <p role="status">This service-funded allowance is exhausted. Saved research remains available.</p>}
+      </> : <>
+        {ai.info?.account_label && <p className="account-label">{ai.info.account_label}</p>}
+        <p>{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately' : ai.info?.active_account ? 'Using ChatGPT plan' : 'Connect your ChatGPT account'}</p>
+        <p>{ai.healthError && ai.info?.status !== 'unavailable' ? 'Connection status could not be refreshed. Retry when convenient.' : ai.info?.guidance ?? 'Manual research is always available.'}</p>
+        {ai.info?.mode !== 'api_key' && <>{['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected') && <ConnectAction/>}{ai.info?.active_account && <div className="connection-usage-actions"><ManageUsage/><button type="button" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.disconnect()}>Disconnect</button></div>}</>}
+        {!!ai.info?.accounts?.length && <label>Switch account<select disabled={ai.transitioning} aria-label="Switch ChatGPT account" value={ai.info.active_account ?? ''} onChange={event => void ai.selectMode('chatgpt', event.target.value)}>{ai.info.accounts.map(account => <option key={account.id} value={account.id}>{account.label}</option>)}</select></label>}
+        {ai.info?.active_account && <button type="button" disabled={ai.connecting} onClick={() => void ai.signIn({ newAccount: true })}>Connect another account</button>}
+        <button type="button" className="connection-text-action" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
+        {ai.info?.mode === 'api_key' ? <button type="button" className="connection-text-action" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>API key option</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" className="connection-text-action" onClick={() => void ai.selectMode('api_key')}>Separately billed API Key</button></details>}
+      </>}
       {ai.error && <p role="alert">{ai.error}</p>}
     </div></>, document.body)}
   </details>;

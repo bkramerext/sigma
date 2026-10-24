@@ -17,13 +17,16 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
+from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 import httpx
 import jwt
-from fastapi import APIRouter, Cookie, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
+
+from sigma.config_secrets import SecretConfigurationError, secret_value
 
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
@@ -50,6 +53,31 @@ class Config:
     admin_contact_email: str | None
     database: Path | None
     error: str | None
+    local: bool = False
+
+
+def _local_mode() -> bool:
+    return os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().casefold() in {"1", "true", "yes"}
+
+
+def _cookie_name(name: str, cfg: Config) -> str:
+    return name.removeprefix("__Host-") if cfg.local else name
+
+
+def _cookie_options(cfg: Config, name: str, *, max_age: int | None = None) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "path": "/",
+        "secure": not cfg.local,
+        "httponly": True,
+        "samesite": "lax",
+    }
+    if max_age is not None:
+        options["max_age"] = max_age
+    return options
+
+
+def _clear_cookie(response: Response, cfg: Config, name: str) -> None:
+    response.delete_cookie(_cookie_name(name, cfg), **_cookie_options(cfg, name))
 
 
 @dataclass(frozen=True)
@@ -78,15 +106,21 @@ def _normalize_domain(value: str) -> str:
 
 def config() -> Config:
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+    local = enabled and _local_mode()
     if not enabled:
-        return Config(False, None, None, None, None, None, None, None)
+        return Config(False, None, None, None, None, None, None, None, False)
     client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip() or None
-    client_secret = os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip() or None
+    secret_error = False
+    try:
+        client_secret = secret_value("GOOGLE_OIDC_CLIENT_SECRET")
+    except SecretConfigurationError:
+        client_secret = None
+        secret_error = True
     origin = os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").strip().rstrip("/") or None
     bootstrap = os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip()
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
-    error = None
+    error = "Cloud authentication secret configuration is invalid." if secret_error else None
     if (
         not client_id
         or not client_secret
@@ -97,8 +131,22 @@ def config() -> Config:
     ):
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
+    try:
+        local_origin = (
+            local
+            and parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost"}
+            and parsed.port == 5173
+            and parsed.path == ""
+            and not parsed.query
+            and not parsed.fragment
+            and not parsed.username
+        )
+    except ValueError:
+        local_origin = False
     if not error and (
-        parsed.scheme != "https"
+        (local and not local_origin)
+        or (not local and parsed.scheme != "https")
         or not parsed.hostname
         or parsed.path
         or parsed.query
@@ -148,6 +196,7 @@ def config() -> Config:
         admin_contact or None,
         database,
         error,
+        local,
     )
 
 
@@ -179,6 +228,7 @@ def _initialize(path: Path) -> None:
                 role TEXT NOT NULL CHECK(role IN ('member','admin')),
                 active INTEGER NOT NULL CHECK(active IN (0,1)),
                 updated_at INTEGER NOT NULL,
+                allowance_usd REAL,
                 PRIMARY KEY(kind,value)
             );
             CREATE TABLE IF NOT EXISTS bootstrap_subject (
@@ -190,6 +240,11 @@ def _initialize(path: Path) -> None:
                 subject TEXT NOT NULL,
                 email TEXT NOT NULL,
                 expires_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS identities (
+                subject TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS flows (
                 state_hash TEXT PRIMARY KEY,
@@ -211,6 +266,9 @@ def _initialize(path: Path) -> None:
                 at INTEGER NOT NULL
             );
         """)
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(grants)")}
+        if "allowance_usd" not in columns:
+            db.execute("ALTER TABLE grants ADD COLUMN allowance_usd REAL")
     if not existed:
         path.chmod(0o600)
 
@@ -302,18 +360,21 @@ async def middleware(request: Request, call_next):
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(request.cookies.get(SESSION_COOKIE))
+        principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
         )
     if principal is None:
         response = JSONResponse({"error": "Authentication required."}, status_code=401)
-        response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        _clear_cookie(response, cfg, SESSION_COOKIE)
         return response
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
-    if path.startswith("/api/ai/"):
+    # Local Google identity gates project access but does not replace the
+    # separate local ChatGPT account flow. Hosted SIGMA must never proxy a
+    # user's personal ChatGPT authorization through the service.
+    if path.startswith("/api/ai/") and not cfg.local:
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )
@@ -331,7 +392,7 @@ def status(request: Request):
     cfg = config()
     try:
         principal = (
-            resolve_session(request.cookies.get(SESSION_COOKIE))
+            resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
             if cfg.enabled and not cfg.error
             else None
         )
@@ -343,13 +404,13 @@ def status(request: Request):
         "authenticated": principal is not None,
         "user": principal.public() if principal else None,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
+        "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
     }
 
 
 @router.get("/login")
 def login(
-    denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
-    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    request: Request,
 ):
     cfg = config()
     if not cfg.enabled:
@@ -364,6 +425,8 @@ def login(
     challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
@@ -390,16 +453,12 @@ def login(
         "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), status_code=302
     )
     response.set_cookie(
-        FLOW_COOKIE,
+        _cookie_name(FLOW_COOKIE, cfg),
         state,
-        max_age=FLOW_SECONDS,
-        secure=True,
-        httponly=True,
-        samesite="lax",
-        path="/",
+        **_cookie_options(cfg, FLOW_COOKIE, max_age=FLOW_SECONDS),
     )
-    response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-    response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    _clear_cookie(response, cfg, DENIED_COOKIE)
+    _clear_cookie(response, cfg, SESSION_COOKIE)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -411,13 +470,13 @@ async def callback(
     state: str = "",
     code: str = "",
     error: str = "",
-    flow_cookie: str | None = Cookie(default=None, alias=FLOW_COOKIE),
-    denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
-    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
 ):
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
         raise HTTPException(503, "Cloud authentication is not ready.")
+    flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     if (
         error
         or not state
@@ -515,16 +574,12 @@ async def callback(
                 (_hash(denied_token), email, _now() + DENIED_SECONDS),
             )
         response = RedirectResponse("/?access=denied", status_code=303)
-        response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-        response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        _clear_cookie(response, cfg, FLOW_COOKIE)
+        _clear_cookie(response, cfg, SESSION_COOKIE)
         response.set_cookie(
-            DENIED_COOKIE,
+            _cookie_name(DENIED_COOKIE, cfg),
             denied_token,
-            max_age=DENIED_SECONDS,
-            secure=True,
-            httponly=True,
-            samesite="lax",
-            path="/",
+            **_cookie_options(cfg, DENIED_COOKIE, max_age=DENIED_SECONDS),
         )
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -532,38 +587,40 @@ async def callback(
     # Provision only after the Google subject has passed authorization, before
     # an authenticated session is issued. This creates an empty root and keeps
     # identity/provider concerns out of project path handling.
-    from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
+    if not cfg.local:
+        from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
-    try:
-        workspace_for_subject(subject)
-    except WorkspaceUnavailable as exc:
-        raise HTTPException(503, "Private workspace is unavailable.") from exc
+        try:
+            workspace_for_subject(subject)
+        except WorkspaceUnavailable as exc:
+            raise HTTPException(503, "Private workspace is unavailable.") from exc
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
+        db.execute(
+            "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+            (subject, email, _now()),
+        )
         db.execute(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
-        SESSION_COOKIE,
+        _cookie_name(SESSION_COOKIE, cfg),
         raw,
-        max_age=SESSION_SECONDS,
-        secure=True,
-        httponly=True,
-        samesite="lax",
-        path="/",
+        **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
-    response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-    response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    _clear_cookie(response, cfg, FLOW_COOKIE)
+    _clear_cookie(response, cfg, DENIED_COOKIE)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
 @router.get("/denied")
-def denied_identity(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE)):
+def denied_identity(request: Request):
     cfg = config()
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     if not cfg.enabled or cfg.error or not denied_cookie or len(denied_cookie) > 128:
         raise HTTPException(404, "No denied sign-in is available.")
     with _db(cfg) as db:
@@ -584,12 +641,12 @@ def denied_identity(denied_cookie: str | None = Cookie(default=None, alias=DENIE
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
-    raw = request.cookies.get(SESSION_COOKIE)
+    raw = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
     response = Response(status_code=204)
-    response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    _clear_cookie(response, cfg, SESSION_COOKIE)
     return response
 
 
@@ -597,6 +654,88 @@ class GrantRequest(BaseModel):
     kind: str = Field(pattern="^(email|domain)$")
     value: str = Field(min_length=3, max_length=254)
     role: str = Field(default="member", pattern="^(member|admin)$")
+    allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+class AllowanceRequest(BaseModel):
+    allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+class GrantUpdate(BaseModel):
+    kind: str = Field(pattern="^(email|domain)$")
+    value: str = Field(min_length=3, max_length=254)
+    role: str = Field(pattern="^(member|admin)$")
+    allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+class GrantUpdatesRequest(BaseModel):
+    updates: list[GrantUpdate] = Field(min_length=1, max_length=250)
+
+
+def effective_spending_allowance(email: str, default_usd: float) -> float:
+    """Resolve the verified identity's current allowance, never a browser claim."""
+    cfg = config()
+    normalized = _normalize_email(email)
+    if not cfg.enabled or cfg.error:
+        raise RuntimeError("Cloud access policy is unavailable.")
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT allowance_usd FROM grants WHERE kind='email' AND value=? AND active=1",
+            (normalized,),
+        ).fetchone()
+        if row is not None:
+            return float(row["allowance_usd"] if row["allowance_usd"] is not None else default_usd)
+        row = db.execute(
+            "SELECT allowance_usd FROM grants WHERE kind='domain' AND value=? AND active=1",
+            (normalized.rsplit("@", 1)[1],),
+        ).fetchone()
+        return float(
+            row["allowance_usd"] if row and row["allowance_usd"] is not None else default_usd
+        )
+
+
+def _configured_default_allowance() -> float | None:
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        value = Decimal(os.environ["SIGMA_CLOUD_USER_SPEND_CEILING_USD"])
+    except (KeyError, InvalidOperation):
+        return None
+    if not value.is_finite() or value < Decimal("0.01") or value > Decimal("15.00"):
+        return None
+    return float(value)
+
+
+def _admin_spending_snapshot(
+    subject: str, allowance: float | None
+) -> dict[str, float | int | None]:
+    from sigma import cloud_research, cloud_workspaces
+
+    workspace = cloud_workspaces.workspace_for_subject(subject)
+    return cloud_research.admin_workspace_spending(workspace.workspace_id, allowance)
+
+
+def _allowance_in_db(db: sqlite3.Connection, email: str, default: float | None) -> float | None:
+    explicit = db.execute(
+        "SELECT active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+        (email,),
+    ).fetchone()
+    if explicit is not None:
+        if not explicit["active"]:
+            return None
+        if explicit["allowance_usd"] is not None:
+            return float(explicit["allowance_usd"])
+        return default
+    domain = db.execute(
+        "SELECT active,allowance_usd FROM grants WHERE kind='domain' AND value=?",
+        (email.rsplit("@", 1)[1],),
+    ).fetchone()
+    if domain is not None:
+        if not domain["active"]:
+            return None
+        if domain["allowance_usd"] is not None:
+            return float(domain["allowance_usd"])
+    return default
 
 
 @router.get("/admin/grants")
@@ -606,7 +745,7 @@ def list_grants():
         grants = [
             dict(row)
             for row in db.execute(
-                "SELECT kind,value,role,active,updated_at FROM grants ORDER BY kind,value"
+                "SELECT kind,value,role,active,updated_at,allowance_usd FROM grants ORDER BY kind,value"
             )
         ]
         sessions = db.execute(
@@ -618,14 +757,56 @@ def list_grants():
             if session["expires_at"] <= _now() or not role:
                 db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
                 continue
-            current = active.get(session["email"])
+            current = active.get(session["subject"])
             if current is None:
-                active[session["email"]] = {
+                active[session["subject"]] = {
                     "email": session["email"],
                     "role": role,
                     "expires_at": session["expires_at"],
                 }
-    users = list(active.values())
+        identities = {
+            row["subject"]: row["email"]
+            for row in db.execute("SELECT subject,email FROM identities")
+        }
+        # Include authenticated accounts from before the durable identity index
+        # migration when their session is still present.
+        for session in sessions:
+            identities.setdefault(session["subject"], session["email"])
+        default = _configured_default_allowance()
+        users: list[dict[str, object]] = []
+        for subject, email in identities.items():
+            role = _authorization_in_db(db, cfg, subject, email)
+            current = active.get(subject)
+            allowance = _allowance_in_db(db, email, default) if role else None
+            users.append(
+                {
+                    "email": email,
+                    "role": role or "member",
+                    "authorized": role is not None,
+                    "status": "active" if current else "authorized" if role else "revoked",
+                    "expires_at": current["expires_at"] if current else None,
+                    "allowance_usd": allowance,
+                    "subject": subject,
+                }
+            )
+    # Identity is server-derived and admin-only; balances come from the same
+    # subject-keyed ledger even when the user's session has been revoked.
+    for account in users:
+        raw_allowance = account["allowance_usd"]
+        allowance = (
+            float(raw_allowance)
+            if isinstance(raw_allowance, int | float) and not isinstance(raw_allowance, bool)
+            else None
+        )
+        account["spending"] = _admin_spending_snapshot(str(account["subject"]), allowance)
+        account.pop("subject", None)
+    users.sort(key=lambda account: str(account["email"]))
+    for grant in grants:
+        grant["effective_allowance_usd"] = (
+            grant["allowance_usd"]
+            if grant["allowance_usd"] is not None
+            else _configured_default_allowance()
+        )
     return {"grants": grants, "sessions": users, "bootstrap_admin": cfg.bootstrap_email}
 
 
@@ -638,19 +819,98 @@ def add_grant(body: GrantRequest, request: Request):
         )
         if body.kind == "domain" and body.role == "admin":
             raise ValueError("Domains cannot grant administrator access.")
+        if body.allowance_usd is not None and not (0.01 <= body.allowance_usd <= 15.0):
+            raise ValueError("Allowance must be between $0.01 and the $15 global ceiling.")
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     actor: Principal = request.state.cloud_principal
     with _db(cfg) as db:
         db.execute(
-            "INSERT INTO grants(kind,value,role,active,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1,updated_at=excluded.updated_at",
-            (body.kind, value, body.role, 1, _now()),
+            "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) VALUES(?,?,?,?,?,?) ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1,updated_at=excluded.updated_at,allowance_usd=COALESCE(excluded.allowance_usd,grants.allowance_usd)",
+            (body.kind, value, body.role, 1, _now(), body.allowance_usd),
         )
         db.execute(
             "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
             (actor.email, "grant", body.kind, value, _now()),
         )
-    return {"kind": body.kind, "value": value, "role": body.role, "active": True}
+    return {
+        "kind": body.kind,
+        "value": value,
+        "role": body.role,
+        "active": True,
+        "allowance_usd": body.allowance_usd,
+    }
+
+
+@router.put("/admin/grants/{kind}/{value:path}/allowance")
+def update_grant_allowance(kind: str, value: str, body: AllowanceRequest, request: Request):
+    cfg = config()
+    if kind not in {"email", "domain"}:
+        raise HTTPException(422, "Invalid access rule.")
+    try:
+        normalized = _normalize_email(value) if kind == "email" else _normalize_domain(value)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT active FROM grants WHERE kind=? AND value=?", (kind, normalized)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Authorization entry not found.")
+        db.execute(
+            "UPDATE grants SET allowance_usd=?,updated_at=? WHERE kind=? AND value=?",
+            (body.allowance_usd, _now(), kind, normalized),
+        )
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "allowance", kind, normalized, _now()),
+        )
+    return {"kind": kind, "value": normalized, "allowance_usd": body.allowance_usd}
+
+
+@router.put("/admin/grants/updates")
+def update_grants(body: GrantUpdatesRequest, request: Request):
+    """Validate then atomically persist the administrator's changed grant rows."""
+    cfg = config()
+    normalized_updates: list[tuple[str, str, str, float | None]] = []
+    keys: set[tuple[str, str]] = set()
+    for update in body.updates:
+        try:
+            value = (
+                _normalize_email(update.value)
+                if update.kind == "email"
+                else _normalize_domain(update.value)
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        if update.kind == "domain" and update.role == "admin":
+            raise HTTPException(422, "Domains cannot grant administrator access.")
+        if update.kind == "email" and value == cfg.bootstrap_email and update.role != "admin":
+            raise HTTPException(409, "The bootstrap administrator role cannot be changed here.")
+        key = (update.kind, value)
+        if key in keys:
+            raise HTTPException(422, "An authorization entry may be updated only once per save.")
+        keys.add(key)
+        normalized_updates.append((update.kind, value, update.role, update.allowance_usd))
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        for kind, value, _role, _allowance in normalized_updates:
+            row = db.execute(
+                "SELECT active FROM grants WHERE kind=? AND value=?", (kind, value)
+            ).fetchone()
+            if row is None or not row["active"]:
+                raise HTTPException(409, "A changed authorization entry is no longer active.")
+        for kind, value, role, allowance in normalized_updates:
+            db.execute(
+                "UPDATE grants SET role=?,allowance_usd=?,updated_at=? WHERE kind=? AND value=?",
+                (role, allowance, _now(), kind, value),
+            )
+            db.execute(
+                "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+                (actor.email, "update", kind, value, _now()),
+            )
+    return {"updated": [{"kind": kind, "value": value} for kind, value, _, _ in normalized_updates]}
 
 
 @router.delete("/admin/grants/{kind}/{value:path}")

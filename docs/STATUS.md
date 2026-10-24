@@ -1,5 +1,167 @@
 # SIGMA status
 
+## T43 manual acceptance fixes (2026-10-23)
+
+Implemented on `gray/t43-manual-acceptance-fixes`, based on current `main`
+`bd0429e`. The signed-out Home now uses the concise approved-Gmail copy and
+the existing restrained copper/serif prompt styling; a class-name mismatch had
+previously left the heading inheriting Home's 74px hero scale. The Home Google
+pill now matches the neighboring ChatGPT pill's height, typography, border and
+surface, with no repeated “Sign in” label. Its popover reuses ChatGPT's anchored
+panel/backdrop, focus, keyboard dismissal and responsive placement.
+
+The initial toast was traced to the expected signed-out `GET /api/ai/connection`
+401 issued by `AIProvider` in hosted/local-Google-gated Home. Toast handling now
+suppresses only that endpoint's exact `Authentication required.` 401. Other
+401s and genuine request failures still surface.
+
+The blocking ChatGPT 403 came from cloud-auth middleware denying every
+`/api/ai/*` request whenever cloud authentication was enabled, including the
+launcher-established, loopback-only local Google mode. When
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is configured, `./sigma start` sets
+`SIGMA_CLOUD_AUTH_ENABLED=true`, `SIGMA_CLOUD_AUTH_LOCAL=true`, and the
+loopback origin. The checkout `.env` alone therefore does not show the full
+effective mode; shell configuration may supply the bootstrap email. Middleware
+now retains the personal-provider prohibition for hosted mode and lets an
+authenticated local Google session use the separate local ChatGPT account
+store. Project authorization, the local Google session check, provider
+account-flow checks, and hosted 403 behavior remain intact.
+
+Administrator Settings now says “Built-in administrator” and “Authorized
+users”, has separate keyboard-operable Access Management and Account usage
+tabs, and always places a labeled New action in a dedicated table row. ChatGPT
+connection controls use SIGMA's copper primary treatment and underlined Retry
+and Separately billed API Key actions.
+
+Verification:
+
+- `./sigma test` passed all lifecycle/project/research/cloud scenarios,
+  `tests/cloud_auth.py` (14 scenarios), Ruff, formatting, Pyright (zero
+  diagnostics), frontend typecheck, and production build. Existing
+  Starlette/httpx deprecation warnings remain.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed deterministic
+  signed-out/admin/member states, prompt and anchored Google popover at
+  1440px/390px, expected-vs-genuine 401 toast behavior, pill alignment,
+  admin tabs/keyboard navigation, populated and empty authorization lists,
+  Add/edit/save/Revoke, and responsive administrator layouts.
+- Real Chrome `browser_checks/t43_manual_acceptance.py` passed copper and
+  underlined action styles, API-key expansion, anchored dismissal/focus
+  restoration, and 1280px/390px/320px widths. Screenshots:
+  `/tmp/sigma-t43-signin-1440.png`, `/tmp/sigma-t43-signin-390.png`,
+  `/tmp/sigma-t40-admin-home-1440.png`, `/tmp/sigma-t40-admin-dialog-390.png`,
+  and `/tmp/sigma-t43-chatgpt-320.png`.
+- Chrome ran against an isolated Vite/API pair on 5189/8011; existing checkout
+  listeners on 5173/8000 were left untouched. Authentication states were
+  deterministic fixtures. No live Google OAuth, ChatGPT OAuth, paid provider
+  call, or cloud provisioning was used.
+
+Acceptance: **MET** — nine ticket fixes, local-versus-hosted ChatGPT
+authorization boundary, browser layout/interactions, and automated suite.
+**UNVERIFIED** — the operator's real localhost Google OAuth round trip and a
+real ChatGPT OAuth handoff; deterministic Google-session and hosted-denial
+tests cover the relevant backend paths without using live credentials.
+
+## Local launcher and shutdown reliability (2026-10-23)
+
+Launcher recovery now discovers owner records in the private per-user SIGMA
+registry, so `./sigma shutdown` and `./sigma start --nav` can request a clean
+shutdown across checkout directories. Older records without an explicit root
+are resolved from their recorded launcher command and checked against the
+canonical checkout identity. Dead owner metadata, refused control sockets, and
+partial temporary records are removed while holding the checkout lock. The
+kernel releases `flock` ownership when a process exits; the lock file remains as
+a stable synchronization inode to avoid an unlink/recreate race.
+
+Orphan recovery searches fixed-port listeners across checkout roots. It signals
+only processes whose user, checkout structure, exact server command, process
+birth identity, environment launch marker, and HTTP-served instance marker
+agree. Unknown listeners are left running and reported with port, PID,
+executable, and working directory when available. Startup stops registered
+instances and identified orphan servers before binding the ports.
+
+Verification on current `main` `2f1dbc3`: `./sigma test` passed, including the new `tests/ui_registry.py`
+cross-checkout/stale-state coverage, updated `tests/ui_orphans.py` ownership and
+occupied-port checks, Ruff, formatting, Pyright, frontend typecheck, and build.
+The opt-in `tests/ui_lifecycle.py` real-process scenario remains **UNVERIFIED**:
+ports 8000 and 5173 were occupied by an active SIGMA instance in the Red
+checkout, and its preflight correctly refuses to disturb those ports. No other
+checkout was stopped. Deterministic ownership/control tests are **MET**. No
+paid provider calls or cloud provisioning were performed.
+
+## A18 follow-up — Concurrent preflight failure audit attribution (2026-10-23)
+
+Local research portfolio preflight failures now append a `call.preflight_failed`
+event before dispatch with the strategy ID/title, role, preflight stage, safe
+failure kind, and `dispatched: false`. Event messages are generic; raw exception
+text, provider inputs, and credential data are not added to this audit event.
+Coverage includes context assembly, project snapshot/binding, account
+verification/binding, and model configuration. Existing failure, scheduling,
+call-budget, pause, resume, and retry behavior is unchanged.
+
+Added a mixed-wave regression: one strategy's project snapshot preflight fails
+while its sibling completes an Investigator call. The persisted audit identifies
+the failed strategy and role; the sibling retains its completed step; only the
+sibling's one dispatched call is counted. Existing configuration-failure and
+preflight-timeout tests now assert event metadata. The timeout case still pauses
+with zero calls and resumes successfully.
+
+Verification: `uv run --locked --no-sync python tests/research_sessions.py`
+passed. `./sigma test` passed all backend scenarios, Ruff check/format, Pyright
+(zero diagnostics), frontend typecheck, and production build. The suite emitted
+the existing Starlette/httpx deprecation warnings. No real-browser check was
+run because no UI changed; the additive event fields were exercised through the
+research-session service/API scenarios. No provider inference or credential
+access was used. Review and handoff: `messages/a18_concurrent_preflight_audit_r4r.txt`.
+
+## T40 local Google administrator bootstrap and account UI (2026-10-23)
+
+Implemented the clarified T40 behavior on `gray/t40-cloud-ui-admin`, based on
+`main` commit `1aff185` (including the T40 scope decision `42bfb3a`). The
+simulated administrator command and Vite middleware
+were removed, as was the separate real-auth CLI switch. `./sigma start --nav`
+now opens the existing Home and, when the actual bootstrap email is configured
+alongside Google OAuth client credentials, automatically starts real
+loopback-only Google OIDC. With no bootstrap email, normal local startup keeps
+its existing unauthenticated project behavior. `GOOGLE_OIDC_CLIENT_SECRET` is
+passed only to the backend process.
+
+`docs/CLOUD-AUTH.md` records Google Cloud OAuth consent/client setup, exact
+loopback origin and callback, the `~/.bashrc` bootstrap-email setting, ignored
+checkout `.env` OAuth values, and the expected local-versus-hosted boundary. The
+verified bootstrap address remains bound to Google's immutable subject; backend
+authorization, session, nonce, state, ID-token and CSRF checks remain active.
+The existing Home, identity pills, access-management table, staged updates and
+copper artwork credit remain in place.
+
+Validation rerun on the T40 branch rebased onto current `main` `1aff185`:
+
+- `./sigma test` passed, including the 13 focused cloud-auth scenarios, CLI
+  option rejection/`--nav` help, automatic local auth environment propagation,
+  backend authorization/workspace isolation, Ruff, Pyright, frontend typecheck
+  and production build. Existing Starlette/httpx deprecation warnings remain.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed deterministic signed-out,
+  administrator and member states; account dialog; Add/edit/save/Revoke; credit
+  styling; and 1440 px/390 px layouts. Screenshots are in `/tmp` as recorded in
+  `browser_checks/README.md`.
+- Real Chrome `browser_checks/t23_1_google_signin.py` and `browser_checks/header.py`
+  passed cloud pill/account behavior, project-header controls, disabled local
+  Google placeholder, keyboard interactions, persistence and responsive layout.
+- No paid provider calls, cloud provisioning, or live Google OAuth were used.
+- Shared standard ports were occupied by other checkouts, so the browser
+  walkthrough used an isolated Vite/API pair on ports 5176/8001. The real
+  `./sigma start --nav` process launch was verified through CLI and launcher
+  tests, not started over another checkout's servers.
+
+Acceptance status: MET — fake administrator mode removal, normal `--nav`
+startup, deterministic bootstrap email/subject binding and denial, backend-only
+authorization enforcement, local OAuth configuration flow, account UI, and
+responsive access-management behavior. DEFERRED — administering hosted access
+from a locally running SIGMA instance is explicitly outside T40; hosted
+administrators use the hosted SIGMA website, while local administration changes
+only local authorization records. UNVERIFIED — the operator's real localhost
+Google OAuth round trip, to be completed after merge. No real OAuth credentials
+were supplied for this acceptance run.
+
 ## Lean toolbar color feedback (2026-10-23)
 
 Changed the disabled Lean logo in mathematical projects from its darker copper
@@ -12,6 +174,123 @@ scenario did not complete because it expects an obsolete Google-sign-in
 placeholder selector; it fails before reaching paper export. Its existing
 Ruff check also reports two RUF007 findings in unrelated adjacent-gap loops.
 No paid provider calls were made.
+
+## T21 final local integration and product acceptance (2026-10-23)
+
+Validated on the locally integrated `main` head `703442cfef6be004e8ed28e46f211ecf151e3f6e` (PR #49 included). This is a local-alpha acceptance pass; no live or paid model/provider calls were made.
+
+`./sigma test` passed after the final sample-history correction. This includes
+the local API and CLI scenarios, research sessions and interruption recovery,
+Python/SageMath evidence, report and Project Audit export tests, formatting,
+Pyright, frontend typecheck, and production build. The suite emits the existing
+Starlette/httpx deprecation warning; all checks complete successfully.
+
+Real Chrome fixture coverage on the same integrated head:
+
+- `browser_checks/a17_research.py`: project title editing, strategy generation
+  and unsaved-draft acceptance, multi-strategy sessions, concurrent activity,
+  stop/pause/resume and failure recovery, history, evidence attribution, and
+  export. It validates a downloaded Project Audit JSON, Text report, HTML
+  report opened in a browser tab with rendered math, and LaTeX report, including
+  session outcomes and evidence references. It also exercises the AI-paper
+  workflow and compiled PDF against a deterministic provider fixture. No live
+  provider calls were made.
+- `browser_checks/settings.py`: create/edit settings, persistence, save failure
+  and retry, focus behavior, offline model state, and responsive layouts.
+- `browser_checks/header.py`: the local 2×2 project header, model/effort
+  reconciliation, Google unavailable placeholder, connection disclosure,
+  keyboard access, persistence, and responsive widths through 320 px.
+- `browser_checks/recents.py`: sample/recent navigation, project copies,
+  strategy expansion, source immutability, and 1280×720, 390 px, and 320 px
+  layouts. The check was run on a fresh isolated fixture.
+- `browser_checks/nonconsecutive_sample.py`: all five saved outcomes display
+  “Mixed · partial progress, unresolved”; Session #1 keeps its exact
+  counterexample and disproved recurrence visible without presenting a negative
+  project outcome in either the Outcome or Metrics subsection. The report
+  retains the three strategies and open obligations. At 390 px and 320 px there
+  is no horizontal overflow; the report is 35,081 characters and no page errors
+  were observed.
+- `browser_checks/t29_intervention.py`: fixture-backed user guidance,
+  acknowledgment/audit provenance, and narrow mobile layout.
+- `browser_checks/a20_paper.py`: project header actions, tooltip/keyboard
+  behavior, export format options, paper snapshot and compiled PDF, and narrow
+  dialog layout.
+
+The sample-export regression `tests/make_sample.py` passed after correcting the
+imported Session #1 metric snapshot; `uv run ruff check
+browser_checks/a17_research.py browser_checks/nonconsecutive_sample.py` passed.
+The historical fixture had retained an obsolete “Negative · counterexample
+reported” metrics label despite the corrected Mixed outcome. The metric label
+now matches the unresolved objective; the counterexample, skeptical findings,
+and strategy hypothesis remain intact. No research-session coordinator logic
+was changed.
+
+Remaining limits: provider behavior was exercised only through deterministic
+fixtures, so live-provider reliability and model research quality remain
+unverified. Cloud authentication was not exercised in the local browser pass;
+it remains with the Cloud team. Mobile checks use Chrome viewport emulation,
+not a physical device.
+
+### T22.5 — Per-user cloud research spending limits (2026-10-23)
+
+Implemented on `feature/t22-5-per-user-spending`, originally based on `main`
+`703442c` and reconciled with current `main` `dc2f914` (including T21 local
+acceptance). Cloud inference now requires valid default per-user and global
+ceilings configured through `SIGMA_CLOUD_USER_SPEND_CEILING_USD` and
+`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD` (both fail closed; each is bounded by
+`$15.00`). `$2.00` is the initial per-user default. SQLite `BEGIN IMMEDIATE`
+reservations atomically include all usage for the verified workspace across
+projects and reserve against both ceilings. Unknown charges remain held across
+a fresh process; no monthly reset or administrator exception was added.
+Cloud session limits are enforced at six calls, 15 minutes, and `$0.25`; the
+shared queue enforces one running session per workspace and two globally.
+Local project settings are covered by a regression proving these caps do not
+change local-mode limits.
+
+Added an authenticated owner-only, no-store budget endpoint and compact Home
+summary for allowance, estimated use, held use, unknown charges, and remaining
+allowance. Access Management now lets admins set/reset USD allowances per email
+or exact domain. Email rules override domain allowances; a domain amount is
+applied independently to each verified identity. Per-rule allowances may
+exceed `$2.00` up to the `$15.00` global ceiling. A durable subject-to-current-
+email index lets Access Management display effective allowances plus estimated,
+held, and remaining balances for identities that have signed in, including
+after logout or revocation. A revoked identity has no effective allowance or
+remaining amount, but its recorded estimated spend and unknown holds remain
+visible. Reductions below prior spend preserve ledger evidence and holds and
+deny new reservations. Exhaustion and invalid configuration do not block
+project or saved research reads. Research Limits explains the cloud caps. Updated
+`docs/CLOUD-AUTH.md` with configuration, durable accounting, and initial pilot
+allocation (five accounts including admin: `$10` combined per-user allowances
+and `$5` global reserve under the `$15` ceiling).
+
+Verification on the implementation tree: deterministic same-user concurrent
+spending race across two projects admitted exactly one of two `$0.10`
+reservations after `$0.15` persisted use; a separate Python process observed
+the same `$0.15` estimate, `$0.10` unknown held charge, and zero remaining.
+Added policy regressions verify a `$5` domain allowance, an `$8` email override,
+another user's independent effective domain policy, lowering an allowance
+below held spending without releasing the unknown reservation, and owner-only
+admin summary fields. Tests also cover missing/malformed/over-policy configs, cross-workspace forged
+reservations and query parameters, cloud session-cap clamping, exhausted-budget
+read access, and local-mode compatibility. The first combined test run exposed
+a test-only identity shim missing OIDC policy configuration; its fixture now
+supplies valid deterministic cloud-auth configuration. The browser scenario's
+Recent selector now targets its uniquely generated project, so existing Recent
+entries cannot make it ambiguous. `tests/cloud_auth.py` (11 tests),
+`tests/cloud_research.py`, and `tests/cloud_research_api.py` passed.
+`./sigma test` passed all backend regressions, Ruff/format, Pyright (zero
+diagnostics), frontend typecheck, and production build. Real Chrome
+`browser_checks/t23_1_google_signin.py` passed against an isolated local SIGMA
+backend and Vite server; cloud identity, budget, and access-rule responses were
+deterministic browser fixtures. It verified the Access Management allowance
+editor and per-user balance display, exhausted owner budget, and opening a
+saved project. After rebasing onto `dc2f914`, `./sigma test` and the same real
+Chrome scenario passed again. No live or paid provider calls were made.
+Remaining operational verification: deploy with five authorized pilot accounts
+and explicitly configure the approved `$2`/`$15` values before
+enabling cloud inference; hosted deployment and real provider billing were
+intentionally not exercised.
 
 ## T20.1: Minor UI acceptance fixes (2026-10-23)
 
@@ -4705,3 +4984,152 @@ Investigator steps with different inputs and proves one cannot validate against
 the other's audit. Offline worker/cloud test doubles assert the ID is
 propagated. `./sigma test` passed after this correction; no provider calls were
 made.
+## T42 Google Cloud Compute Engine readiness (2026-10-23)
+
+Prepared a reproducible local Docker deployment package for the Python/FastAPI
+backend, built SPA, Caddy HTTPS edge, and the existing Python/SageMath research
+runners. The selected hosted target is one `us-west1` Compute Engine VM; no
+other hosting provider is proposed. The backend uses the existing T40/T41 cloud
+authorization/workspace and sponsored inference services with mounted
+server-side secrets and the existing durable spend ledger. Spending ceilings,
+reservations, unknown-charge behavior, and workspace isolation remain enabled.
+No personal ChatGPT/API connection is needed in cloud mode; invalid or ambiguous
+secret configuration fails closed.
+
+**MET:** pinned amd64 backend/frontend/research images; local Compose startup,
+SPA/API health, backend restart and container recreation with persistent auth
+SQLite; sandbox execution of deterministic `print(6 * 7)` in both Python and
+SageMath; rootless separate sandbox-socket contract in the GCE Compose setup;
+least-privilege IAM, OAuth, HTTPS, firewall, secrets, backup/restore,
+update/rollback procedures, operator approval gates, and an itemized trial cost
+estimate documented in `docs/GCP-DEPLOYMENT.md`. Local Docker image sizes were
+backend 120 MB, frontend 29 MB, Python runner 190 MB, and SageMath runner 1.47
+GB. The local Apple Silicon host ran linux/amd64 images under emulation.
+
+**UNMET:** deployment has not been performed on Compute Engine and is not
+operator-ready for immediate public use until the approval checklist, target VM
+security review, IAM/OAuth/DNS/HTTPS setup, backup restore rehearsal, and
+runtime measurements are completed. The plan assumes a reviewed rootless Docker
+daemon boundary whose isolation still requires target-Linux security testing.
+
+**UNVERIFIED:** actual regional invoice and trial eligibility/terms; GCE Sage
+build startup time, peak memory and multi-user capacity; rootless sandbox
+adversarial isolation on the target kernel; production Google OAuth, Secret
+Manager permissions, HTTPS certificate issuance, VM boot recovery, and backup
+restore. The listed estimate is planning only: $132.97 per normalized month and
+$393.54 over 90 days, approximately $93.54 beyond a $300 credit. OpenAI API
+charges are separately budgeted and excluded. Confirm current prices and trial
+terms before any operator-approved activation.
+
+**Checks:** `uv run --locked --no-sync python tests/deployment_package.py`,
+`tests/python_sandbox.py`, `tests/cloud_auth.py` (13 cases), focused Ruff and
+format checks all passed. `./deploy/validate-local.sh` passed using dummy local
+secret files; it contacted only local HTTP endpoints. Existing Python and
+SageMath runner images built locally and each returned `42` through the actual
+sandbox adapter with `--network=none`, 512/1024 MiB memory caps, one CPU, 64
+process limit, read-only root and UID 65532. No Google Cloud action, paid
+provider request, credential access, or remote deployment was performed.
+
+The first `./sigma test` invocation failed only in the known T40 launcher test
+because the invoking shell exports `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`. The
+rerun as `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+backend scenarios (including cloud authorization/workspace isolation, cloud
+spend admission and deterministic fake-provider API cases), Ruff check/format,
+Pyright (0 diagnostics), frontend typecheck, and production build. Existing
+Starlette/httpx deprecation warnings remain. No Gray launcher/UI files were
+changed.
+
+### T42 refresh after T43 PR #62 merged (2026-10-23)
+
+Merged current `main` through `15a5b9d3d639cee7d87e912f2698633e959a6f76` into
+the T42 branch. PR #61 remains open against `main`. Its diff against the base
+contains the T42 deployment files and no Gray launcher or UI changes.
+
+Confirmed T43 local-versus-hosted Google auth behavior:
+
+- `tests/cloud_auth.py` passes 14 cases, including T43's explicit loopback-only
+  local Google mode retaining the local ChatGPT account flow, and hosted Google
+  auth returning 403 for personal `/api/ai/*` access.
+- `tests/deployment_package.py` asserts the hosted Compose configuration does
+  not set `SIGMA_CLOUD_AUTH_LOCAL`.
+- `deploy/validate-local.sh` checks that the running packaged service reports
+  `target: hosted`, then verifies auth SQLite persists across backend restart
+  and container recreation.
+
+The local Compose smoke passed with dummy secret files and only local HTTP
+requests. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed on the
+merged branch, including cloud auth/workspace/spending/fake-provider scenarios,
+Ruff/format, Pyright (0 diagnostics), frontend typecheck, and production build.
+No cloud resources, live Google OAuth, or paid provider calls were used.
+
+## T44 Google Cloud provisioning runbook (2026-10-23)
+
+Added `docs/GCP-PROVISIONING-RUNBOOK.md` as an operator-executable companion
+to the existing deployment guide. It separates preflight/budget/API preparation,
+IAM/network/disk/IP/VM resource creation, and post-VM deployment. It makes the
+VM and attached static IP independent of domain selection, keeps public web
+ingress and Compose startup gated on DNS/OAuth/secret approvals, and includes
+exact commands, human authorization points, trial cost assumptions, and
+post-provision checks. No deployment architecture, launcher, or UI code changed.
+
+**MET:** reviewed the existing GCE package and documented a custom VPC, IAP-only
+SSH, named operator roles, a keyless runtime service account with secret-level
+access, a separately retained state disk, static IPv4, required APIs, public
+firewall deferred to launch, budget notifications, and domain-later sequencing.
+Documented the existing estimated $132.97 normalized month / $393.54 over 90
+days and the $300/90-day trial closure behavior. The runbook discloses that
+budgets notify but do not cap spend, and that stopped VMs retain disk and
+attached-IP costs.
+
+**UNMET:** none for the requested documentation deliverables. Provisioning,
+production deployment, and real OAuth remain intentionally unperformed under
+the assignment's restrictions.
+
+**UNVERIFIED:** project ownership/billing link, trial eligibility and start/end
+dates, organization policy, actual `us-west1-b` quota/capacity, final price
+quote, alert delivery, API availability, target-VM security, production OAuth,
+and certificate issuance must be checked/approved by the operator. Documented
+`gcloud` commands were syntax-checked locally only and were not sent to Google.
+
+**Checks:** all shell code fences in the runbook passed `bash -n`; local
+assertions verified the staged phase headings, API/IAM/VM/disk/address/firewall
+commands, no-domain path, budget alert, trial caveat, and required validation
+checklist. `./sigma test` passed. No `gcloud` command, cloud resource,
+credential, or provider endpoint was used.
+
+### T44 selected-hostname and launch-gate follow-up
+
+Updated the existing T44 branch after the operator selected and registered
+`sigma-research.duckdns.org`. The runbook and deployment guide now require the
+DuckDNS A record to match the reserved static IPv4, specify the production
+OAuth origin/callback for that host, and defer public 80/443 ingress and
+Compose startup until DNS, OAuth, secrets, and operator approvals are ready.
+The Compose launch commands include `deploy/compose.gce.yaml`, which bind-mounts
+the attached state disk at `SIGMA_STATE_DISK_MOUNT`; the documented secret
+fetch path and runtime socket/env settings match the checked-in scripts and
+configuration. Costs now separate the pre-public baseline ($125.49/month;
+$371.31/90 days) from post-launch estimates ($132.57/month; $392.34/90 days),
+with no Cloud DNS charges. Image/package download egress before launch remains
+unmeasured and excluded. No application, launcher, or UI code changed.
+
+**MET:** selected hostname and DuckDNS-to-static-IP steps; no Cloud DNS zone;
+launch gates before public ingress/Compose; project/API/IAM/network/address/VM
+command review against official `gcloud` reference pages and the actual
+`deploy/compose.yaml`, `deploy/compose.gce.yaml`, `deploy/env.example`, and
+`deploy/fetch-secrets.sh`; updated staged estimates and approvals; local
+deployment/package validation and full project suite.
+
+**UNMET:** none for this documentation-only follow-up.
+
+**UNVERIFIED:** Google account/project/billing/trial state, actual reserved IP
+and DuckDNS record propagation, API quota/capacity, IAM changes, production
+OAuth, secrets, HTTPS certificate issuance, and actual GCP prices/charges remain
+operator checks. `gcloud` commands were reviewed as text and deliberately not
+executed. No cloud provisioning, billing/trial activation, purchases, or paid
+provider calls occurred.
+
+**Checks performed:** current `main` was fetched and matched this branch's
+base `042485464e2396b8b8497aed8883dbb71f03bbd8`; no rebase conflict. All shell
+fences in the edited runbook passed `bash -n`; deployment package and local
+Compose smoke checks passed; `./sigma test` passed. Coordinator handoff:
+`messages/t44_red_duckdns_update.txt`.

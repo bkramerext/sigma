@@ -1,0 +1,7 @@
+volumes:
+  sigma-state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth

@@ -44,16 +44,63 @@ and expire after eight hours. State/nonce/verifier records are one-use and
 expire after five minutes. Unsafe requests require the configured exact Origin.
 The auth database contains no provider tokens or project data.
 
-Cloud sign-in controls appear in the existing Home header above Projects, and
-the authenticated identity controls stay in the existing Home/project headers.
-The legacy Google placeholder is not shown. When a valid Google identity is not
+## Real Google sign-in for local SIGMA
+
+Local Google authentication starts only when the bootstrap administrator email
+is configured. Without that setting, `./sigma start` keeps the existing local
+single-user behavior. Add the operator's actual Gmail address to `~/.bashrc`:
+
+```dotenv
+export SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL="you@gmail.com"
+```
+
+Create a Google Cloud project and configure the OAuth consent screen for the
+intended test users. Create an OAuth client ID of type **Web application**, add
+`http://127.0.0.1:5173` under Authorized JavaScript origins, and register this
+exact Authorized redirect URI:
+`http://127.0.0.1:5173/api/cloud-auth/callback`. Put the resulting client ID and
+secret in the checkout's ignored `.env` (never commit or expose the secret):
+
+```dotenv
+GOOGLE_OIDC_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_OIDC_CLIENT_SECRET=your-client-secret
+```
+
+Reload the shell configuration, then run the requested command:
+
+```sh
+source ~/.bashrc
+./sigma start --nav
+```
+
+The presence of the configured bootstrap email opts this local launch into real
+Google sign-in; the launcher supplies the loopback-only auth settings and stores
+the private access database below `~/.sigma/local-cloud-auth`. The first
+verified login binds both the configured email and Google's immutable subject
+as this local installation's administrator. Every later login must match both
+values. Other identities need an explicit authorization entry. The bootstrap
+administrator cannot be revoked through Access Management.
+
+Local OAuth is strictly loopback HTTP: its session cookies are `HttpOnly` and
+`SameSite=Lax` but cannot be `Secure` on localhost. The callback origin is
+hard-coded by the launcher; the auth service accepts only the exact loopback
+origin and still verifies state, nonce, PKCE, ID-token signature, issuer,
+audience, subject, verified email, and server-side role. It never applies to
+hosted HTTPS deployments. Local login uses the normal local project store and
+local access database; it does not administer or share state with hosted SIGMA.
+For actual hosted administration, sign in to the hosted service itself. There
+is no simulated administrator mode.
+
+Google and ChatGPT controls reuse the existing Home and project-header pills.
+Google identity and sign-out are shown only in the Google pill dialog; account
+emails are not shown in the header. When a valid Google identity is not
 authorized, the app displays “Access not yet granted” in the SIGMA Home design.
 Only that denied flow can read its verified email: the server keeps it in a
 short-lived private-database record behind an opaque `Secure`, `HttpOnly` cookie
 for up to ten minutes. It is not returned by status, does not create a session
 or workspace, and is deleted when Use Another Account starts a fresh
-`prompt=select_account` login. The screen offers the `/demo` guest-route
-handoff and a prefilled `mailto:` invitation request to the configured contact.
+`prompt=select_account` login. The screen offers a prefilled `mailto:` invitation
+request to the configured contact.
 The contact address is intentionally public; access rules and other accounts
 remain private. `/demo` serves the same read-only curated project to anonymous
 visitors, denied identities and signed-in users. Its dedicated API accepts no
@@ -106,34 +153,59 @@ authentication and filesystem-backed workspace implementation.
 ## Gate B research execution configuration
 
 Cloud research inference is enabled only when an operator explicitly supplies
-`SIGMA_CLOUD_OPENAI_API_KEY` and `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Cloud
+`SIGMA_CLOUD_OPENAI_API_KEY`, `SIGMA_CLOUD_USER_SPEND_CEILING_USD`, and
+`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Initial pilot values are `$2.00` per
+verified Google subject and `$15.00` globally. The five initial invited
+accounts (including the administrator) start with `$2.00` each, leaving `$5.00`
+under the global ceiling for operator-directed testing and unresolved charges.
+The default allowance is configurable from `$0.01` through `$15.00`; an
+administrator can set a per-entry USD allowance in Access Management up to the
+global ceiling. An exact email rule overrides its matching domain rule. Domain
+allowances apply independently to each verified user's subject-backed
+workspace, never as a shared pool. The user's allowance is cumulative, does not
+reset automatically, and follows the stable verified subject across changed
+email addresses, sign-out, revocation, and new projects. The administrator has
+no spending exception. Lowering an allowance below recorded spend preserves
+all estimated and unknown charges and blocks further inference until the
+effective allowance again exceeds recorded spend. Cloud
 mode never falls back to a checkout's `OPENAI_API_KEY` or a locally connected
 ChatGPT plan. The service credential stays in the backend environment; the
 cloud UI cannot read, replace, or select it. Keep the deployment's secret
 store and backups access-controlled, and rotate the key through the operator's
 secret-management process.
 
-The global ceiling is in estimated USD and applies atomically across all
-workspaces. A call must reserve a conservative maximum cost before dispatch.
+Each call atomically reserves a conservative maximum cost against the
+authenticated user's remaining allowance and the global ceiling before
+dispatch.
 Confirmed provider token counts are priced using SIGMA's reviewed model price
 table; the reported cost remains an estimate. If a call times out, is canceled,
 or its response is lost before its usage is saved, the full reservation remains
 held and the attempt is recorded as unknown. Such a call is never automatically
-retried. Cloud research also requires a per-session cost limit in Research
-Limits, a priced model, and explicit token usage bounds.
+retried. Cloud sessions are capped at `$0.25` estimated cost, six model calls,
+and 15 minutes regardless of larger saved project limits. A priced model and
+explicit token usage bounds are required. The ChatGPT connection dialog reports
+the authenticated owner's read-only allowance, estimated usage, held
+reservations (including unknown charges), and remaining allowance. Exhaustion
+blocks new inference while saved projects and research remain readable.
 
 The service ledger also enforces these environment-configurable limits:
 
 | Variable | Default | Meaning |
 |---|---:|---|
 | `SIGMA_CLOUD_USER_MAX_CONCURRENT` | `1` | Running sessions per workspace |
-| `SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT` | `4` | Running sessions across the service |
+| `SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT` | `2` | Running sessions across the service |
 | `SIGMA_CLOUD_USER_MAX_QUEUED` | `2` | Queued sessions per workspace |
 | `SIGMA_CLOUD_GLOBAL_MAX_QUEUED` | `16` | Queued sessions across the service |
 | `SIGMA_CLOUD_USER_TOKEN_BUDGET` | `2000000` | Reserved or observed model tokens per workspace |
 
-Malformed or missing global spend configuration disables cloud research. Queue
-slots, active slots, provider attempts, token reservations and spend reservations
+Malformed or missing user or global spend configuration disables cloud
+research; configured default user allowance and individual entries are limited
+to `$15.00`, as is the global ceiling. Spend totals include completed estimates, live reservations, and
+unknown provider outcomes. A reservation is released only when the provider
+call is proven not to have been dispatched; age, restart, timeout, cancellation,
+and account revocation do not release uncertain charges. Accounting is shared
+across the user's projects and persists in the SQLite ledger. Queue slots,
+active slots, provider attempts, token reservations and spend reservations
 are stored in `cloud-research.sqlite3` beside the workspace mapping database,
 under the configured private workspaces root. Back up that file together with
 the auth database and workspace tree. The existing project session records

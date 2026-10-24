@@ -9,14 +9,15 @@ import subprocess
 import sys
 import time
 import webbrowser
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 from uuid import uuid4
 
 from sigma.local_config import load_local_config
 from sigma.projects import ROOT
-from sigma.ui_instance import Instance
-from sigma.ui_orphans import recover_orphans
+from sigma.ui_instance import Instance, stop_registered_instances
+from sigma.ui_orphans import listener_details, recover_orphans
 
 API_URL = "http://127.0.0.1:8000"
 URL = "http://127.0.0.1:5173"
@@ -29,10 +30,13 @@ def check_ports() -> None:
             try:
                 listener.bind(("127.0.0.1", port))
             except OSError as exc:
+                occupants = listener_details(port) or [
+                    "PID unavailable (listener process details could not be read)"
+                ]
                 raise RuntimeError(
-                    f"Port {port} is occupied by an unrelated or unverifiable service. "
-                    "SIGMA cannot safely replace it. Close that service using its own controls, "
-                    "then retry ./sigma start. No process was signalled."
+                    f"Port {port} is occupied by {', '.join(occupants)}. "
+                    "SIGMA could not verify ownership and left it untouched. Stop it using its own controls, "
+                    "then retry ./sigma start."
                 ) from exc
 
 
@@ -90,10 +94,28 @@ def run_ui(*, navigate: bool = False) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         load_local_config()
+        local_google_auth = bool(os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip())
+        if local_google_auth:
+            if not os.environ.get("GOOGLE_OIDC_CLIENT_ID") or not os.environ.get(
+                "GOOGLE_OIDC_CLIENT_SECRET"
+            ):
+                raise RuntimeError(
+                    "Local Google sign-in needs GOOGLE_OIDC_CLIENT_ID and "
+                    "GOOGLE_OIDC_CLIENT_SECRET configured."
+                )
+            if not os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"):
+                raise RuntimeError(
+                    "Local Google sign-in needs SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "
+                    "set to the operator's actual Google account."
+                )
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:
-                recover_orphans(ROOT)
+                failures = stop_registered_instances(exclude_identity=instance.identity)
+                if failures:
+                    raise RuntimeError(" ".join(failures))
+                if orphan_failures := recover_orphans():
+                    raise RuntimeError(" ".join(orphan_failures))
                 wait_for_ports()
                 print("Starting SIGMA backend and frontend…", flush=True)
                 commands = [
@@ -112,6 +134,20 @@ def run_ui(*, navigate: bool = False) -> int:
                 ]
                 instance_id = uuid4().hex
                 child_env = {**os.environ, "SIGMA_UI_INSTANCE_ID": instance_id}
+                if local_google_auth:
+                    child_env["SIGMA_CLOUD_AUTH_ENABLED"] = "true"
+                    child_env["SIGMA_CLOUD_AUTH_LOCAL"] = "true"
+                    child_env["SIGMA_CLOUD_PUBLIC_ORIGIN"] = URL
+                    child_env.setdefault(
+                        "SIGMA_CLOUD_AUTH_HOME", str(Path.home() / ".sigma" / "local-cloud-auth")
+                    )
+                    child_env.setdefault(
+                        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+                        child_env["SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"],
+                    )
+                else:
+                    child_env.pop("SIGMA_CLOUD_AUTH_LOCAL", None)
+                    child_env.pop("SIGMA_CLOUD_AUTH_ENABLED", None)
                 for command in commands:
                     children.append(
                         subprocess.Popen(
@@ -120,14 +156,20 @@ def run_ui(*, navigate: bool = False) -> int:
                             env={
                                 key: value
                                 for key, value in child_env.items()
-                                if command[0] != "npm"
-                                or key
-                                not in {
-                                    "OPENAI_API_KEY",
-                                    "ACCESS_TOKEN",
-                                    "REFRESH_TOKEN",
-                                    "ID_TOKEN",
-                                }
+                                if (
+                                    command[0] != "npm"
+                                    or key
+                                    not in {
+                                        "OPENAI_API_KEY",
+                                        "ACCESS_TOKEN",
+                                        "REFRESH_TOKEN",
+                                        "ID_TOKEN",
+                                        "GOOGLE_OIDC_CLIENT_SECRET",
+                                        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
+                                        "SIGMA_CLOUD_AUTH_HOME",
+                                        "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL",
+                                    }
+                                )
                             },
                             start_new_session=True,
                             stdin=subprocess.PIPE,
@@ -208,10 +250,13 @@ def run_ui(*, navigate: bool = False) -> int:
 
 
 def run_shutdown() -> int:
-    """Stop the verified same-checkout SIGMA UI; never start servers."""
+    """Stop all verifiable local SIGMA UI instances; never start servers."""
     try:
-        with Instance(shutdown_only=True):
-            recover_orphans(ROOT)
+        failures = stop_registered_instances()
+        if orphan_failures := recover_orphans():
+            failures.extend(orphan_failures)
+        if failures:
+            raise RuntimeError(" ".join(failures))
         print("SIGMA UI shutdown complete.", flush=True)
         return 0
     except (OSError, RuntimeError) as exc:

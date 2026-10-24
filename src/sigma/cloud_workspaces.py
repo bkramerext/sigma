@@ -36,6 +36,7 @@ class Workspace:
     workspace_id: str
     subject_hash: str
     path: Path
+    email: str | None = None
 
 
 _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", default=None)
@@ -43,11 +44,17 @@ _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", def
 
 def enabled() -> bool:
     """Cloud auth is an explicit opt-in; local SIGMA does not need cloud config."""
-    return os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
+    enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
         "1",
         "true",
         "yes",
     }
+    local_auth = os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+    }
+    return enabled and not local_auth
 
 
 def current() -> Workspace | None:
@@ -60,6 +67,9 @@ def bind(principal: Principal) -> Token[Workspace | None]:
     if not isinstance(subject, str) or not subject or len(subject) > 255:
         raise WorkspaceUnavailable("Workspace identity is unavailable.")
     workspace = workspace_for_subject(subject)
+    from dataclasses import replace
+
+    workspace = replace(workspace, email=getattr(principal, "email", None))
     return _CURRENT.set(workspace)
 
 
