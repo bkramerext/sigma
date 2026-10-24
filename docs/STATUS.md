@@ -4603,6 +4603,56 @@ passed Ruff checks and formatting. Other checkouts' listeners were not stopped
 or changed; this check used separate ports and its own server processes. No
 No Google Auth code was modified; the browser preflight itself made no inference calls.
 
+## T17.8 acceptance corrections (2026-10-23)
+
+Applied Green's acceptance corrections without starting another provider
+session. Each dispatched investigator/skeptic step now records its exact
+role-specific JSON request body (model, instructions, schema and complete
+input/context) in a compressed, hash-checked audit field. Authorization headers
+and credentials are excluded; pattern-like secrets or the active credential
+inside a prompt fail closed before dispatch. The request is checked against the
+saved audit immediately before provider submission. Public session/export data
+expands the exact body and identifies it as submitted input, rather than a
+reconstruction. Unknown execution-record fields are excluded from provider
+context while known execution provenance is retained.
+
+Investigator method and Skeptic response schema limits are now 6,000 characters.
+The system marks a string field that reaches its schema maximum as potentially
+truncated, persists the affected field names on the step, and displays a
+warning. This is a conservative boundary signal: it cannot prove that a
+provider actually truncated a response that happens to fill the limit.
+
+Both session worker paths now aggregate completed step input/output usage. The
+aggregate is explicitly `partial`, `unavailable`, or `pending` when a complete
+sum cannot be established; the API no longer represents missing usage as zero.
+Legacy session views derive the aggregate from saved step records. For the
+archived trial this reports 38,591 total tokens (32,042 input + 6,549 output).
+Obligation reconciliation now distinguishes the model's reported remaining
+items from canonical unresolved obligations, records coordinator closure and
+reconciliation decisions, and aligns artifact `open_obligations` with the
+review. Portfolio attribution now separates completed productive strategies
+from stopped or failed strategies.
+
+Added `browser_checks/t17_8_saved_session.py`, a real-Chrome projection check
+using the archived trial export and isolated local services. It verified the
+ended session, provisional positive outcome, mathematical review and both
+artifacts, and asserted that no session-start request occurred. Result:
+`T17.8 archived-session real Chrome projection passed; no provider calls made.`
+
+Verification completed: `./sigma test` passed all steps, including research
+session regressions, Ruff, formatting, Pyright (0 diagnostics), frontend
+typecheck and production build. The focused archived-session Chrome check
+passed. The full suite emitted existing Starlette `TestClient` deprecation
+warnings; they did not fail checks. No provider call or paid usage was made.
+
+The original live run predates exact-input auditing, so its archived transcript
+cannot establish from byte-for-byte submitted prompts whether answer-bearing
+material entered. Its pretrial fixture hash and context manifest are useful
+supporting evidence but not a substitute for exact prompt evidence. A new
+bounded live trial with the input audit in place is necessary to establish
+answer independence to Green's criterion. It was not started and requires
+separate authorization. PR #53 remains open and unmerged.
+
 ## T17.8 answer-free live trial (2026-10-23 Pacific)
 
 The human authorized one bounded Maximum Regions run. Preflight verified the

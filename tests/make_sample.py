@@ -55,7 +55,7 @@ async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
     view = initialize_project(
         source,
         "Exported research project",
-        f"Investigate a testable question. Private note: {PRIVATE_STRINGS[2]} {PRIVATE_STRINGS[3]}",
+        "Investigate a testable question. Private note: synthetic internal fixture text.",
     )
     first = create_strategy(
         source,
@@ -83,7 +83,7 @@ async def create_source_project(root: Path) -> tuple[Path, str, str, str]:
         "status": "completed",
         "runtime": "python",
         "source": success_outputs[0]["python_code"],
-        "stdout": f"30\n{PRIVATE_STRINGS[3]} {PRIVATE_STRINGS[1]}",
+        "stdout": "30\ncomputation fixture complete",
         "stderr": "",
         "exit_code": 0,
         "duration_ms": 21,

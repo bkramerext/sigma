@@ -138,6 +138,140 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
+def test_request_audit_truncation_tokens_and_reconciliation():
+    context = {"problem": "Answer-free objective", "strategy": "Incremental reasoning"}
+    record = {
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    body = research_sessions._role_request_payload(record, "investigator", context)
+    audit = research_sessions._role_input_audit(record, "investigator", context, "fixture-token")
+    assert audit["kind"] == "exact_provider_request_body"
+    research_sessions._expand_role_input_audit(audit)
+    assert audit["request_body"] == body and audit["headers_included"] is False
+    submitted = body["input"][0]["content"]
+    assert submitted == json.dumps(context, ensure_ascii=False)
+    assert "fixture-token" not in json.dumps(audit)
+    try:
+        research_sessions._role_input_audit(
+            record,
+            "investigator",
+            {"problem": "refresh_token=synthetic-secret-value"},
+            "fixture-token",
+        )
+    except ProjectError as exc:
+        assert "credential-like" in str(exc)
+        assert "synthetic-secret-value" not in str(exc)
+    else:
+        raise AssertionError(
+            "Credential-like prompt data must be rejected before audit persistence"
+        )
+
+    investigator_output = {"method": "m" * 6000}
+    skeptic_output = {"response": "r" * 6000}
+    assert research_sessions._potential_truncation_fields("investigator", investigator_output) == [
+        "method"
+    ]
+    assert research_sessions._potential_truncation_fields("skeptic", skeptic_output) == ["response"]
+    assert (
+        research_sessions._research_schema(research_sessions.Investigator)["properties"]["method"][
+            "maxLength"
+        ]
+        == 6000
+    )
+    assert (
+        research_sessions._research_schema(research_sessions.Skeptic)["properties"]["response"][
+            "maxLength"
+        ]
+        == 6000
+    )
+    safe_execution = research_sessions._execution_with_inspections(
+        {
+            "id": "execution-fixture",
+            "status": "completed",
+            "stdout": "30",
+            "artifacts": [],
+            "private_config": {"token": "synthetic-confidential-value"},
+        },
+        "unused-fixture-path",
+    )
+    assert "private_config" not in safe_execution
+    assert "synthetic-confidential-value" not in json.dumps(safe_execution)
+
+    accounting = {
+        "steps": [{"status": "completed", "token_usage": {"input_tokens": 3, "output_tokens": 2}}],
+        "status": "ended",
+    }
+    research_sessions._refresh_token_accounting(accounting)
+    assert accounting["tokens_used"] == 5 and accounting["token_usage_status"] == "complete"
+    accounting["steps"].append({"status": "completed", "token_usage_status": "unavailable"})
+    research_sessions._refresh_token_accounting(accounting)
+    assert accounting["tokens_used"] == 5 and accounting["token_usage_status"] == "partial"
+    unavailable = {"steps": [{"status": "completed"}], "status": "ended"}
+    research_sessions._refresh_token_accounting(unavailable)
+    assert unavailable["tokens_used"] is None and unavailable["token_usage_status"] == "unavailable"
+
+    archived = json.loads(
+        Path(
+            "docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
+        ).read_text()
+    )["research_sessions"][0]
+    archived_public = research_sessions._public(archived)
+    assert archived_public["tokens_used"] == 38591
+    assert archived_public["token_usage_status"] == "complete"
+    source_artifacts = json.loads(json.dumps(archived["artifacts"]))
+    archived["artifacts"] = []
+    for artifact in source_artifacts:
+        archived["artifacts"].append(artifact)
+        if isinstance(artifact.get("skeptic_output"), dict):
+            research_sessions._reconcile_skeptic_obligations(
+                archived,
+                artifact["investigator_output"],
+                artifact["skeptic_output"],
+                artifact["strategy_id"],
+                artifact["sequence"],
+            )
+        research_sessions._reconcile_artifact_open_obligations(archived, artifact)
+    assert archived["artifacts"][0]["open_obligations"]
+    assert (
+        archived["artifacts"][1]["open_obligations"]
+        == archived["artifacts"][1]["skeptic_output"]["remaining_obligations"]
+    )
+    assert archived["artifacts"][1]["skeptic_output"]["model_remaining_obligations"] == []
+    assert archived["artifacts"][1]["skeptic_output"]["coordinator_global_closure"]["accepted"]
+    assert archived["artifacts"][1]["skeptic_output"]["coordinator_closed_obligations"]
+
+    strategy_id = "strategy-fixture"
+    artifact_id = "artifact-fixture"
+    decision = research_sessions._portfolio_decision(
+        {
+            "artifacts": [
+                {
+                    "id": artifact_id,
+                    "strategy_id": strategy_id,
+                    "strategy_review": {
+                        "assessment": "solution",
+                        "basis_artifact_ids": [artifact_id],
+                    },
+                }
+            ],
+            "strategy_runs": [
+                {
+                    "strategy_id": strategy_id,
+                    "strategy_title": "Completed",
+                    "status": "ended",
+                    "last_decision": "stop_productive_conclusion",
+                    "artifacts": [artifact_id],
+                }
+            ],
+        }
+    )
+    assert [item["strategy_title"] for item in decision["completed_strategies"]] == ["Completed"]
+    assert decision["stopped_strategies"] == []
+
+
 async def test_disabled_strategy_never_starts_a_run(path: Path):
     view, strategy, _, _ = await setup(path)
     set_strategy_enabled(path, strategy.id, False)
@@ -164,6 +298,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         skeptic(3),
     ]
     contexts = []
+    submitted_payloads = []
 
     async def handler(request):
         payload = json.loads(request.content)
@@ -179,6 +314,7 @@ async def test_three_cycles_and_idempotency(path: Path):
             )
         context = json.loads(payload["input"])
         contexts.append((payload["text"]["format"]["name"], context))
+        submitted_payloads.append(payload)
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -213,6 +349,11 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert duplicate["id"] == started["id"]
 
     assert finished["status"] == "ended" and finished["calls_used"] == 6
+    assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
+    assert [
+        step["provider_input_audit"]["request_body"] for step in finished["steps"]
+    ] == submitted_payloads
+    assert all(not step["provider_input_audit"]["headers_included"] for step in finished["steps"])
     assert len(finished["artifacts"]) == 3 and [a["sequence"] for a in finished["artifacts"]] == [
         1,
         2,
@@ -270,6 +411,53 @@ async def test_three_cycles_and_idempotency(path: Path):
         range(1, len(finished["events"]) + 1)
     )
     assert any(event["kind"] == "coordinator.started" for event in finished["events"])
+
+
+async def test_legacy_worker_aggregates_usage_and_audits_inputs(path: Path):
+    view, strategy, credential, config = await setup(path)
+    calls = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    calls[0]["method"] = "m" * 6000
+    calls[1]["response"] = "r" * 6000
+    calls[0]["open_obligations"] = []
+
+    async def defer_worker(*_args):
+        return None
+
+    async def fake_call(_record, _role, _context, _timeout=None):
+        return calls.pop(0), {
+            "input_tokens": 7,
+            "output_tokens": 5,
+            "cached_input_tokens": None,
+        }
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=defer_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+    record = research_sessions._read(str(path), started["id"])
+    record.pop("strategy_runs")
+    record["status"] = "queued"
+    research_sessions._save(str(path), record)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=fake_call),
+    ):
+        await research_sessions._worker(started["id"], str(path))
+    finished = research_sessions.get_session(str(path), started["id"])
+    assert finished["status"] == "ended" and finished["calls_used"] == 2
+    assert finished["tokens_used"] == 24 and finished["token_usage_status"] == "complete"
+    assert len(finished["steps"]) == 2
+    assert all(
+        step["provider_input_audit"]["kind"] == "exact_provider_request_body"
+        for step in finished["steps"]
+    )
+    assert finished["steps"][0]["potential_truncation_fields"] == ["method"]
+    assert finished["steps"][1]["potential_truncation_fields"] == ["response"]
 
 
 async def test_investigator_python_is_run_and_reviewed(path: Path):
@@ -3277,6 +3465,8 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
         if role == "research_investigator":
             output = investigation(cycle)
             output["claim"] = f"Candidate claim for {context['strategy']['title']}."
+            if strategy_id == first.id:
+                output["open_obligations"] = []
         elif strategy_id == first.id:
             output = skeptic(cycle, "stop", "no_progress")
             output["next_question"] = ""
@@ -3344,6 +3534,7 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
     limits["model_calls"] = 20
     limits = research_sessions.save_limits(str(path), limits)
     state = {"active": 0, "maximum": 0}
+    first_response_gate = asyncio.Event()
     delays = {
         strategy.id: (len(strategies) - index) * 0.005 for index, strategy in enumerate(strategies)
     }
@@ -3367,7 +3558,11 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
                 if role == "research_investigator"
                 else skeptic(context["cycle"])
             )
+            if context["strategy"]["id"] == first.id and role == "research_investigator":
+                await first_response_gate.wait()
             completion_order.append((context["strategy"]["id"], role))
+            if context["strategy"]["id"] != first.id:
+                first_response_gate.set()
             return httpx.Response(200, json=provider_response(output))
         finally:
             state["active"] -= 1
@@ -5298,10 +5493,14 @@ def test_intervention_recovery_supersession_and_rejection(path: Path):
 
 
 def main():
+    test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
+        asyncio.run(
+            test_legacy_worker_aggregates_usage_and_audits_inputs(root / "legacy-worker.sigma")
+        )
         asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
         asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
         asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))
