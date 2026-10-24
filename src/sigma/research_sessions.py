@@ -1727,18 +1727,18 @@ def _expand_role_input_audit(audit: dict[str, Any]) -> None:
 
 
 def _assert_saved_role_input_matches(
-    record: dict[str, Any], role: str, payload: dict[str, Any]
+    record: dict[str, Any], role: str, payload: dict[str, Any], step_id: str | None
 ) -> None:
     if not record.get("steps"):
         return
     step = next(
-        (
-            item
-            for item in reversed(record.get("steps", []))
-            if item.get("status") == "running" and item.get("role") == role
-        ),
+        (item for item in record["steps"] if isinstance(item, dict) and item.get("id") == step_id),
         None,
     )
+    if not isinstance(step_id, str) or not isinstance(step, dict):
+        raise ProjectError("Exact provider input audit is missing; no provider request was sent.")
+    if step.get("status") != "running" or step.get("role") != role:
+        raise ProjectError("Exact provider input audit is missing; no provider request was sent.")
     audit = step.get("provider_input_audit") if isinstance(step, dict) else None
     if not isinstance(audit, dict):
         raise ProjectError("Exact provider input audit is missing; no provider request was sent.")
@@ -2817,6 +2817,7 @@ async def _call(
     role: str,
     context: dict[str, Any],
     timeout_seconds: float | None = None,
+    step_id: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, int | None] | None]:
     credential = await auth_context()
     if (
@@ -2829,7 +2830,7 @@ async def _call(
     schema_model = Investigator if role == "investigator" else Skeptic
     payload = _role_request_payload(record, role, context)
     _assert_safe_role_request(payload, credential.get("token"))
-    _assert_saved_role_input_matches(record, role, payload)
+    _assert_saved_role_input_matches(record, role, payload, step_id)
     headers = {"Authorization": "Bearer " + credential["token"]}
     if credential["mode"] == "chatgpt":
         headers["Accept"] = "text/event-stream"
@@ -5377,7 +5378,9 @@ async def _portfolio_role_call(
                 _save(path, record)
             call_record = record
         try:
-            output, usage = await _call(call_record, role, context, timeout_seconds)
+            output, usage = await _call(
+                call_record, role, context, timeout_seconds, step_id=step_id
+            )
             _validate_guidance_acknowledgments(human_guidance, output)
         except asyncio.CancelledError:
             if cloud_workspaces.enabled():
@@ -6517,7 +6520,7 @@ async def _worker(session_id: str, path: str) -> None:
                     guidance=guidance,
                 )
                 _save(path, record)
-                output, usage = await _call(record, role, context)
+                output, usage = await _call(record, role, context, step_id=step["id"])
             finally:
                 for gate in reversed(gates):
                     gate.release()

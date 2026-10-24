@@ -193,8 +193,9 @@ def test_orphaned_job_reconciliation(
             outputs = research_outputs()
             dispatched_roles: list[str] = []
 
-            async def retry_call(record, role, context, timeout_seconds=None):
+            async def retry_call(record, role, context, timeout_seconds=None, step_id=None):
                 del record, context, timeout_seconds
+                assert isinstance(step_id, str)
                 dispatched_roles.append(role)
                 output = outputs[0] if role == "investigator" else outputs[1]
                 return output, {
@@ -505,8 +506,9 @@ def main() -> None:
                 }
                 outputs = research_outputs()
 
-                async def fake_call(record, role, context, timeout_seconds=None):
+                async def fake_call(record, role, context, timeout_seconds=None, step_id=None):
                     del record, context, timeout_seconds
+                    assert isinstance(step_id, str)
                     output = outputs[0] if role == "investigator" else outputs[1]
                     return output, {
                         "input_tokens": 90,
@@ -655,8 +657,9 @@ def main() -> None:
                     key = str(uuid4())
                     dispatched = asyncio.Event()
 
-                    async def hang(record, role, context, timeout_seconds=None):
+                    async def hang(record, role, context, timeout_seconds=None, step_id=None):
                         del record, role, context, timeout_seconds
+                        assert isinstance(step_id, str)
                         dispatched.set()
                         await asyncio.Future()
 

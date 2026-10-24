@@ -4694,3 +4694,14 @@ No application code was changed after the live run. T17.8's bounded quality
 gate is met on this trial's rubric evidence; final A17/T17.8 acceptance remains
 for human sign-off. This run does not establish formal verification, billing
 cost, or reliability on other problems.
+
+## T17.8 final pre-review step binding (2026-10-24)
+
+Exact-input verification is bound to the caller's step ID and requires that
+exact saved step to be running under the expected role. Both worker paths pass
+their step ID; missing, wrong-role, non-running, or mismatched audits fail
+closed before dispatch. Regression coverage creates two simultaneous running
+Investigator steps with different inputs and proves one cannot validate against
+the other's audit. Offline worker/cloud test doubles assert the ID is
+propagated. `./sigma test` passed after this correction; no provider calls were
+made.

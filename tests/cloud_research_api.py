@@ -89,8 +89,9 @@ def main() -> None:
                 "output_tokens": 30,
             }
 
-            async def fake_call(record, role, context, timeout_seconds=None):
+            async def fake_call(record, role, context, timeout_seconds=None, step_id=None):
                 del record, context, timeout_seconds
+                assert isinstance(step_id, str)
                 return (investigator if role == "investigator" else skeptic), usage
 
             settings = {

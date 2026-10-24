@@ -154,6 +154,45 @@ def test_request_audit_truncation_tokens_and_reconciliation():
     submitted = body["input"][0]["content"]
     assert submitted == json.dumps(context, ensure_ascii=False)
     assert "fixture-token" not in json.dumps(audit)
+    concurrent_contexts = [
+        {"problem": "Shared objective", "strategy": "Concurrent route A"},
+        {"problem": "Shared objective", "strategy": "Concurrent route B"},
+    ]
+    concurrent_payloads = [
+        research_sessions._role_request_payload(record, "investigator", item)
+        for item in concurrent_contexts
+    ]
+    concurrent_steps = [
+        {
+            "id": f"same-role-step-{index}",
+            "role": "investigator",
+            "status": "running",
+            "provider_input_audit": research_sessions._role_input_audit(
+                record, "investigator", item, "fixture-token"
+            ),
+        }
+        for index, item in enumerate(concurrent_contexts)
+    ]
+    concurrent_record = {"steps": concurrent_steps}
+    research_sessions._assert_saved_role_input_matches(
+        concurrent_record, "investigator", concurrent_payloads[0], "same-role-step-0"
+    )
+    try:
+        research_sessions._assert_saved_role_input_matches(
+            concurrent_record, "investigator", concurrent_payloads[1], "same-role-step-0"
+        )
+    except ProjectError as exc:
+        assert "did not match" in str(exc)
+    else:
+        raise AssertionError("A same-role request must not validate against another step's audit")
+    try:
+        research_sessions._assert_saved_role_input_matches(
+            concurrent_record, "investigator", concurrent_payloads[0], None
+        )
+    except ProjectError as exc:
+        assert "audit is missing" in str(exc)
+    else:
+        raise AssertionError("Calls with recorded steps must provide their exact step ID")
     try:
         research_sessions._role_input_audit(
             record,
@@ -423,7 +462,8 @@ async def test_legacy_worker_aggregates_usage_and_audits_inputs(path: Path):
     async def defer_worker(*_args):
         return None
 
-    async def fake_call(_record, _role, _context, _timeout=None):
+    async def fake_call(_record, _role, _context, _timeout=None, step_id=None):
+        assert isinstance(step_id, str)
         return calls.pop(0), {
             "input_tokens": 7,
             "output_tokens": 5,
@@ -5149,7 +5189,8 @@ async def test_concurrent_human_guidance_is_delivered_and_attributed(path: Path)
     initial_investigators = 0
     calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    async def fake_call(record, role, context, timeout):
+    async def fake_call(record, role, context, timeout=None, step_id=None):
+        assert isinstance(step_id, str)
         nonlocal initial_investigators
         strategy_id = context["strategy"]["id"]
         calls.append((role, strategy_id, json.loads(json.dumps(context))))
@@ -5262,7 +5303,8 @@ async def test_intervention_delivery_pause_resume_keeps_attempt_provenance(path:
     guided_skeptic_calls = 0
     contexts = []
 
-    async def fake_call(record, role, context, timeout):
+    async def fake_call(record, role, context, timeout=None, step_id=None):
+        assert isinstance(step_id, str)
         nonlocal guided_skeptic_calls
         contexts.append((role, json.loads(json.dumps(context))))
         guidance = context.get("human_guidance", [])
