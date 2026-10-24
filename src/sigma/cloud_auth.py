@@ -17,11 +17,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
+from typing import Any
 from urllib.parse import urlencode, urlsplit
 
 import httpx
 import jwt
-from fastapi import APIRouter, Cookie, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
@@ -50,6 +51,31 @@ class Config:
     admin_contact_email: str | None
     database: Path | None
     error: str | None
+    local: bool = False
+
+
+def _local_mode() -> bool:
+    return os.environ.get("SIGMA_CLOUD_AUTH_LOCAL", "").strip().casefold() in {"1", "true", "yes"}
+
+
+def _cookie_name(name: str, cfg: Config) -> str:
+    return name.removeprefix("__Host-") if cfg.local else name
+
+
+def _cookie_options(cfg: Config, name: str, *, max_age: int | None = None) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "path": "/",
+        "secure": not cfg.local,
+        "httponly": True,
+        "samesite": "lax",
+    }
+    if max_age is not None:
+        options["max_age"] = max_age
+    return options
+
+
+def _clear_cookie(response: Response, cfg: Config, name: str) -> None:
+    response.delete_cookie(_cookie_name(name, cfg), **_cookie_options(cfg, name))
 
 
 @dataclass(frozen=True)
@@ -78,8 +104,9 @@ def _normalize_domain(value: str) -> str:
 
 def config() -> Config:
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+    local = enabled and _local_mode()
     if not enabled:
-        return Config(False, None, None, None, None, None, None, None)
+        return Config(False, None, None, None, None, None, None, None, False)
     client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip() or None
     client_secret = os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip() or None
     origin = os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").strip().rstrip("/") or None
@@ -97,8 +124,22 @@ def config() -> Config:
     ):
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
+    try:
+        local_origin = (
+            local
+            and parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost"}
+            and parsed.port == 5173
+            and parsed.path == ""
+            and not parsed.query
+            and not parsed.fragment
+            and not parsed.username
+        )
+    except ValueError:
+        local_origin = False
     if not error and (
-        parsed.scheme != "https"
+        (local and not local_origin)
+        or (not local and parsed.scheme != "https")
         or not parsed.hostname
         or parsed.path
         or parsed.query
@@ -148,6 +189,7 @@ def config() -> Config:
         admin_contact or None,
         database,
         error,
+        local,
     )
 
 
@@ -311,14 +353,14 @@ async def middleware(request: Request, call_next):
     if public or demo_public:
         return await call_next(request)
     try:
-        principal = resolve_session(request.cookies.get(SESSION_COOKIE))
+        principal = resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
     except (sqlite3.Error, OSError, RuntimeError):
         return JSONResponse(
             {"error": "Cloud authentication is temporarily unavailable."}, status_code=503
         )
     if principal is None:
         response = JSONResponse({"error": "Authentication required."}, status_code=401)
-        response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        _clear_cookie(response, cfg, SESSION_COOKIE)
         return response
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
@@ -340,7 +382,7 @@ def status(request: Request):
     cfg = config()
     try:
         principal = (
-            resolve_session(request.cookies.get(SESSION_COOKIE))
+            resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
             if cfg.enabled and not cfg.error
             else None
         )
@@ -352,13 +394,13 @@ def status(request: Request):
         "authenticated": principal is not None,
         "user": principal.public() if principal else None,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,
+        "target": "local" if cfg.local else "hosted" if cfg.enabled else "local",
     }
 
 
 @router.get("/login")
 def login(
-    denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
-    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    request: Request,
 ):
     cfg = config()
     if not cfg.enabled:
@@ -373,6 +415,8 @@ def login(
     challenge = (
         base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     )
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     with _db(cfg) as db:
         if denied_cookie:
             db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(denied_cookie),))
@@ -399,16 +443,12 @@ def login(
         "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params), status_code=302
     )
     response.set_cookie(
-        FLOW_COOKIE,
+        _cookie_name(FLOW_COOKIE, cfg),
         state,
-        max_age=FLOW_SECONDS,
-        secure=True,
-        httponly=True,
-        samesite="lax",
-        path="/",
+        **_cookie_options(cfg, FLOW_COOKIE, max_age=FLOW_SECONDS),
     )
-    response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-    response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    _clear_cookie(response, cfg, DENIED_COOKIE)
+    _clear_cookie(response, cfg, SESSION_COOKIE)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
@@ -420,13 +460,13 @@ async def callback(
     state: str = "",
     code: str = "",
     error: str = "",
-    flow_cookie: str | None = Cookie(default=None, alias=FLOW_COOKIE),
-    denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE),
-    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
 ):
     cfg = config()
     if not cfg.enabled or cfg.error or not cfg.origin or not cfg.client_id or not cfg.client_secret:
         raise HTTPException(503, "Cloud authentication is not ready.")
+    flow_cookie = request.cookies.get(_cookie_name(FLOW_COOKIE, cfg))
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
+    session_cookie = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     if (
         error
         or not state
@@ -524,16 +564,12 @@ async def callback(
                 (_hash(denied_token), email, _now() + DENIED_SECONDS),
             )
         response = RedirectResponse("/?access=denied", status_code=303)
-        response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-        response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        _clear_cookie(response, cfg, FLOW_COOKIE)
+        _clear_cookie(response, cfg, SESSION_COOKIE)
         response.set_cookie(
-            DENIED_COOKIE,
+            _cookie_name(DENIED_COOKIE, cfg),
             denied_token,
-            max_age=DENIED_SECONDS,
-            secure=True,
-            httponly=True,
-            samesite="lax",
-            path="/",
+            **_cookie_options(cfg, DENIED_COOKIE, max_age=DENIED_SECONDS),
         )
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -541,12 +577,13 @@ async def callback(
     # Provision only after the Google subject has passed authorization, before
     # an authenticated session is issued. This creates an empty root and keeps
     # identity/provider concerns out of project path handling.
-    from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
+    if not cfg.local:
+        from sigma.cloud_workspaces import WorkspaceUnavailable, workspace_for_subject
 
-    try:
-        workspace_for_subject(subject)
-    except WorkspaceUnavailable as exc:
-        raise HTTPException(503, "Private workspace is unavailable.") from exc
+        try:
+            workspace_for_subject(subject)
+        except WorkspaceUnavailable as exc:
+            raise HTTPException(503, "Private workspace is unavailable.") from exc
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
         db.execute(
@@ -559,24 +596,21 @@ async def callback(
         )
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
-        SESSION_COOKIE,
+        _cookie_name(SESSION_COOKIE, cfg),
         raw,
-        max_age=SESSION_SECONDS,
-        secure=True,
-        httponly=True,
-        samesite="lax",
-        path="/",
+        **_cookie_options(cfg, SESSION_COOKIE, max_age=SESSION_SECONDS),
     )
-    response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
-    response.delete_cookie(DENIED_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    _clear_cookie(response, cfg, FLOW_COOKIE)
+    _clear_cookie(response, cfg, DENIED_COOKIE)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
 @router.get("/denied")
-def denied_identity(denied_cookie: str | None = Cookie(default=None, alias=DENIED_COOKIE)):
+def denied_identity(request: Request):
     cfg = config()
+    denied_cookie = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     if not cfg.enabled or cfg.error or not denied_cookie or len(denied_cookie) > 128:
         raise HTTPException(404, "No denied sign-in is available.")
     with _db(cfg) as db:
@@ -597,12 +631,12 @@ def denied_identity(denied_cookie: str | None = Cookie(default=None, alias=DENIE
 @router.post("/logout")
 def logout(request: Request):
     cfg = config()
-    raw = request.cookies.get(SESSION_COOKIE)
+    raw = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     if raw and cfg.database:
         with _db(cfg) as db:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(raw),))
     response = Response(status_code=204)
-    response.delete_cookie(SESSION_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+    _clear_cookie(response, cfg, SESSION_COOKIE)
     return response
 
 
@@ -615,6 +649,17 @@ class GrantRequest(BaseModel):
 
 class AllowanceRequest(BaseModel):
     allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+class GrantUpdate(BaseModel):
+    kind: str = Field(pattern="^(email|domain)$")
+    value: str = Field(min_length=3, max_length=254)
+    role: str = Field(pattern="^(member|admin)$")
+    allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+class GrantUpdatesRequest(BaseModel):
+    updates: list[GrantUpdate] = Field(min_length=1, max_length=250)
 
 
 def effective_spending_allowance(email: str, default_usd: float) -> float:
@@ -812,6 +857,50 @@ def update_grant_allowance(kind: str, value: str, body: AllowanceRequest, reques
             (actor.email, "allowance", kind, normalized, _now()),
         )
     return {"kind": kind, "value": normalized, "allowance_usd": body.allowance_usd}
+
+
+@router.put("/admin/grants/updates")
+def update_grants(body: GrantUpdatesRequest, request: Request):
+    """Validate then atomically persist the administrator's changed grant rows."""
+    cfg = config()
+    normalized_updates: list[tuple[str, str, str, float | None]] = []
+    keys: set[tuple[str, str]] = set()
+    for update in body.updates:
+        try:
+            value = (
+                _normalize_email(update.value)
+                if update.kind == "email"
+                else _normalize_domain(update.value)
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        if update.kind == "domain" and update.role == "admin":
+            raise HTTPException(422, "Domains cannot grant administrator access.")
+        if update.kind == "email" and value == cfg.bootstrap_email and update.role != "admin":
+            raise HTTPException(409, "The bootstrap administrator role cannot be changed here.")
+        key = (update.kind, value)
+        if key in keys:
+            raise HTTPException(422, "An authorization entry may be updated only once per save.")
+        keys.add(key)
+        normalized_updates.append((update.kind, value, update.role, update.allowance_usd))
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        for kind, value, _role, _allowance in normalized_updates:
+            row = db.execute(
+                "SELECT active FROM grants WHERE kind=? AND value=?", (kind, value)
+            ).fetchone()
+            if row is None or not row["active"]:
+                raise HTTPException(409, "A changed authorization entry is no longer active.")
+        for kind, value, role, allowance in normalized_updates:
+            db.execute(
+                "UPDATE grants SET role=?,allowance_usd=?,updated_at=? WHERE kind=? AND value=?",
+                (role, allowance, _now(), kind, value),
+            )
+            db.execute(
+                "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+                (actor.email, "update", kind, value, _now()),
+            )
+    return {"updated": [{"kind": kind, "value": value} for kind, value, _, _ in normalized_updates]}
 
 
 @router.delete("/admin/grants/{kind}/{value:path}")

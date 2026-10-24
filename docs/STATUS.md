@@ -1,5 +1,53 @@
 # SIGMA status
 
+## T40 local Google administrator bootstrap and account UI (2026-10-23)
+
+Implemented the clarified T40 behavior on `gray/t40-cloud-ui-admin`, based on
+`main` commit `c44a4fe`. The simulated administrator command and Vite middleware
+were removed, as was the separate real-auth CLI switch. `./sigma start --nav`
+now opens the existing Home and, when the actual bootstrap email is configured
+alongside Google OAuth client credentials, automatically starts real
+loopback-only Google OIDC. With no bootstrap email, normal local startup keeps
+its existing unauthenticated project behavior. `GOOGLE_OIDC_CLIENT_SECRET` is
+passed only to the backend process.
+
+`docs/CLOUD-AUTH.md` records Google Cloud OAuth consent/client setup, exact
+loopback origin and callback, the `~/.bashrc` bootstrap-email setting, ignored
+checkout `.env` OAuth values, and the expected local-versus-hosted boundary. The
+verified bootstrap address remains bound to Google's immutable subject; backend
+authorization, session, nonce, state, ID-token and CSRF checks remain active.
+The existing Home, identity pills, access-management table, staged updates and
+copper artwork credit remain in place.
+
+Validation on the rebased T40 branch:
+
+- `./sigma test` passed, including the 13 focused cloud-auth scenarios, CLI
+  option rejection/`--nav` help, automatic local auth environment propagation,
+  backend authorization/workspace isolation, Ruff, Pyright, frontend typecheck
+  and production build. Existing Starlette/httpx deprecation warnings remain.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed deterministic signed-out,
+  administrator and member states; account dialog; Add/edit/save/Revoke; credit
+  styling; and 1440 px/390 px layouts. Screenshots are in `/tmp` as recorded in
+  `browser_checks/README.md`.
+- Real Chrome `browser_checks/t23_1_google_signin.py` and `browser_checks/header.py`
+  passed cloud pill/account behavior, project-header controls, disabled local
+  Google placeholder, keyboard interactions, persistence and responsive layout.
+- No paid provider calls, cloud provisioning, or live Google OAuth were used.
+- Shared standard ports were occupied by other checkouts, so the browser
+  walkthrough used an isolated Vite/API pair on ports 5176/8001. The real
+  `./sigma start --nav` process launch was verified through CLI and launcher
+  tests, not started over another checkout's servers.
+
+Acceptance status: MET — fake administrator mode removal, normal `--nav`
+startup, deterministic bootstrap email/subject binding and denial, backend-only
+authorization enforcement, local OAuth configuration flow, account UI, and
+responsive access-management behavior. UNVERIFIED — completing an external
+Google login with operator-owned OAuth credentials; no real OAuth credentials
+were supplied for this acceptance run. UNMET — administering the hosted service
+from the local application: local rules are explicitly local SQLite state, and
+there is no separately authenticated hosted administration API. Hosted
+administrators must sign in to the hosted SIGMA service itself.
+
 ## Lean toolbar color feedback (2026-10-23)
 
 Changed the disabled Lean logo in mathematical projects from its darker copper

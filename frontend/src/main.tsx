@@ -1219,9 +1219,8 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      {cloud ? <CloudIdentityControls compact/> : null}
-      {!cloud && <GoogleSignInPlaceholder/>}
-      <ConnectionStatus disabled={connectionDisabled} projectHeader/>
+      <GoogleIdentityPill compact/>
+      <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     </div>
   </header>;
@@ -1792,27 +1791,10 @@ type CloudResearchBudget = {
   unknown_provider_attempts: number;
 };
 
-function CloudResearchBudgetCard({ budget, error }: {
-  budget: CloudResearchBudget | null; error: string | null;
-}) {
-  const usd = (value: number) => new Intl.NumberFormat(undefined, {
-    style: 'currency', currency: 'USD', maximumFractionDigits: 9,
-  }).format(value);
-  return <section className="cloud-research-budget" aria-label="Cloud research budget" aria-live="polite">
-    <div><strong>Cloud research allowance</strong><span>{budget ? `${usd(budget.remaining_usd)} remaining of ${usd(budget.allowance_usd)}` : 'Loading allowance…'}</span></div>
-    {budget && <p>Estimated usage {usd(budget.estimated_usage_usd)} · held {usd(budget.held_usd)}{budget.unknown_provider_attempts ? ` · ${budget.unknown_provider_attempts} provider attempt${budget.unknown_provider_attempts === 1 ? '' : 's'} with unknown charges` : ''}</p>}
-    {error && <p role="status">{error} Saved projects and research remain available.</p>}
-    {budget && budget.remaining_usd <= 0 && <p role="status">The cloud inference allowance is exhausted. Saved projects and research remain available.</p>}
-    <small>Cloud sessions: up to 6 model calls, 15 minutes, and $0.25 estimated cost each.</small>
-  </section>;
-}
-
 function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
-  const [cloudBudget, setCloudBudget] = useState<CloudResearchBudget | null>(null);
-  const [cloudBudgetError, setCloudBudgetError] = useState<string | null>(null);
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -1825,24 +1807,6 @@ function Home({ initialPath, onOpen }: {
   const [creditStreaks, setCreditStreaks] = useState<number[]>([]);
   const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
-  useEffect(() => {
-    if (!cloud?.enabled || !cloud.authenticated) return;
-    let active = true;
-    const refresh = () => {
-      fetch('/api/cloud-research/budget', { credentials: 'same-origin', cache: 'no-store' })
-        .then(async response => {
-          const body = await response.json();
-          if (!response.ok) throw new Error(body.detail || 'Cloud research budget is unavailable.');
-          return body as CloudResearchBudget;
-        })
-        .then(value => { if (active) { setCloudBudget(value); setCloudBudgetError(null); } })
-        .catch(error => { if (active) setCloudBudgetError(error instanceof Error ? error.message : 'Cloud research budget is unavailable.'); });
-    };
-    refresh();
-    const interval = window.setInterval(refresh, 30_000);
-    window.addEventListener('focus', refresh);
-    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
-  }, [cloud?.enabled, cloud?.authenticated]);
   useEffect(() => {
     // CSS background-size: cover scales the source image by the larger of
     // viewport-width/image-width and viewport-height/image-height. Apply
@@ -1891,11 +1855,11 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline">{cloud ? <CloudIdentityControls/> : <ConnectionStatus/>}</div>
+      {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Administrator Settings</a>}
+      <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="cloud-home-prompt"><p>Private research workspace</p><h1>Sign in to access projects</h1><span>Your projects and research are available after an administrator authorizes your Google account.</span></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
-        {cloud?.enabled && cloud.authenticated && <CloudResearchBudgetCard budget={cloudBudget} error={cloudBudgetError}/>}
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
@@ -2583,12 +2547,16 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { preview?: boolean; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
+type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
-type CloudIdentityState = CloudStatus & { deniedEmail: string | null; openAccessManagement: () => void };
+type CloudFunding = { target: 'local' | 'hosted'; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean };
+type CloudIdentityState = CloudStatus & { deniedEmail: string | null; funding: CloudFunding; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
+function cloudFundingFor(cloud: CloudIdentityState | null): CloudFunding | undefined {
+  return cloud?.funding;
+}
 
 type CloudDemoAudit = { export_version: 2; project: ProjectView['project']; agentic_runs: Record<string, any>[]; research_sessions: Record<string, any>[] };
 function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail: string | null; authenticated: boolean; user: CloudStatus['user'] }) {
@@ -2623,18 +2591,136 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 }
 
 
-function GoogleSignInPlaceholder() {
-  const description = 'Google sign-in is unavailable in the local workspace and is coming soon.';
-  return <div className="project-google-signin" role="status" aria-label={description} title={description} data-tooltip={description}>
-    <span className="connection-dot" aria-hidden="true"/><span>Google Sign-in</span><small>Coming soon</small>
-  </div>;
-}
-function CloudIdentityControls({ compact = false }: { compact?: boolean }) {
+function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
-  if (!cloud?.enabled) return null;
-  if (!cloud.authenticated) return cloud.deniedEmail ? null : <div className={`cloud-home-controls${compact ? ' compact' : ''}`}><a className="cloud-secondary-button" href="/demo">Explore Demo</a><a className="cloud-signin-control" href="/api/cloud-auth/login">Continue with Google</a></div>;
-  return <div className={`cloud-home-controls cloud-home-user${compact ? ' compact' : ''}`}><a className="cloud-secondary-button" href="/demo">Explore Demo</a><span className="cloud-user-email">{cloud.user?.email}</span>{cloud.user?.role === 'admin' && <button type="button" onClick={cloud.openAccessManagement}>Access Management</button>}<button type="button" onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/'); }}>Sign out</button></div>;
+  const [open, setOpen] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { if (open && !dialog.current?.open) dialog.current?.showModal(); }, [open]);
+  const target = cloud?.target === 'hosted' ? 'Hosted SIGMA service' : 'Local SIGMA';
+  async function signOut() {
+    setError('');
+    try {
+      const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' });
+      if (!response.ok) throw new Error('Google sign-out could not be completed.');
+      window.location.assign('/');
+    } catch (cause) { setError(errorMessage(cause)); }
+  }
+  const description = cloud?.authenticated ? 'Open Google account settings' : cloud?.enabled ? 'Open Google sign-in' : 'Google sign-in is unavailable in this local workspace.';
+  return <>
+    <button type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} disabled={!cloud?.enabled} onClick={() => setOpen(true)}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google Sign-in</span><small>{cloud?.authenticated ? 'Signed in' : cloud?.enabled ? 'Sign in' : 'Coming soon'}</small>
+    </button>
+    {open && createPortal(<dialog ref={dialog} className="google-account-dialog" aria-labelledby="google-account-title" onCancel={event => { event.preventDefault(); dialog.current?.close(); setOpen(false); }} onClose={() => setOpen(false)}>
+      <p className="cloud-auth-kicker">Verified Google account</p>
+      <h2 id="google-account-title">Google Sign-in</h2>
+      <p className="google-account-target">Authorization target: <strong>{target}</strong></p>
+      {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
+      {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
+      {!cloud?.authenticated && <a className="cloud-text-button" href="/api/cloud-auth/login">Continue with Google</a>}
+      {cloud?.authenticated && <><button type="button" className="cloud-text-button" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="cloud-text-button" onClick={() => void signOut()}>Sign out</button></>}
+      {error && <p role="alert">{error}</p>}
+      <button type="button" className="cloud-text-button google-account-close" onClick={() => { dialog.current?.close(); setOpen(false); }}>Close</button>
+    </dialog>, document.body)}
+  </>;
 }
+function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
+function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, error, busy, onClose, onAdd, onSave, onRevoke }: {
+  target: 'local' | 'hosted'; bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
+  error: string; busy: boolean; onClose: () => void;
+  onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
+  onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
+  onRevoke: (grant: CloudGrant) => Promise<void>;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [drafts, setDrafts] = useState<Record<string, { role: string; allowance: string }>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [newKind, setNewKind] = useState<'email' | 'domain'>('email');
+  const [newValue, setNewValue] = useState('');
+  const [newRole, setNewRole] = useState<'member' | 'admin'>('member');
+  const [newAllowance, setNewAllowance] = useState('');
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    setDrafts(Object.fromEntries(grants.map(grant => [`${grant.kind}:${grant.value}`, { role: grant.role, allowance: allowanceInput(grant.allowance_usd) }])));
+  }, [grants]);
+  useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
+  const ordered = [...grants].sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
+  const changed = ordered.filter(grant => {
+    const key = `${grant.kind}:${grant.value}`; const draft = drafts[key];
+    return grant.active === 1 && draft && (draft.role !== grant.role || draft.allowance.trim() !== allowanceInput(grant.allowance_usd));
+  });
+  const validation = (value: string) => value.trim() === '' || /^\d+(?:\.\d{1,2})?$/.test(value.trim()) && Number(value) >= 0.01 && Number(value) <= 15;
+  const draftsValid = changed.every(grant => validation(drafts[`${grant.kind}:${grant.value}`]?.allowance ?? ''));
+  const hasDrafts = changed.length > 0;
+  function requestClose() {
+    if (hasDrafts && !window.confirm('Discard only the unsaved role or allowance edits? Completed Add, Revoke, and Save actions remain in effect.')) return;
+    dialog.current?.close(); onClose();
+  }
+  async function addEntry() {
+    const value = newValue.trim();
+    if (!value || !validation(newAllowance) || value.includes('@') !== (newKind === 'email')) return;
+    try {
+      await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newAllowance.trim() ? Number(newAllowance) : null });
+      setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('Authorization added.');
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
+  }
+  async function saveUpdates() {
+    if (!hasDrafts || !draftsValid) return;
+    const updates = changed.map(grant => {
+      const draft = drafts[`${grant.kind}:${grant.value}`];
+      return { kind: grant.kind as 'email' | 'domain', value: grant.value, role: draft.role as 'member' | 'admin', allowance_usd: draft.allowance.trim() ? Number(draft.allowance) : null };
+    });
+    try { await onSave(updates); setMessage(`Saved ${updates.length} authorization ${updates.length === 1 ? 'update' : 'updates'}.`); }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Updates could not be saved.'); }
+  }
+  async function revoke(grant: CloudGrant) {
+    if (!window.confirm(`Revoke ${grant.value}? Recorded usage will be retained.`)) return;
+    try { await onRevoke(grant); setMessage(`Revoked ${grant.value}.`); }
+    catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be revoked.'); }
+  }
+  const currency = (value: number | null | undefined) => value === null || value === undefined ? '—' : `$${value.toFixed(2)}`;
+  return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
+    <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2><button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
+    <p className="admin-target">{target === 'local' ? 'Local SIGMA access rules' : 'Hosted SIGMA access rules'}</p>
+    <div className="admin-tabs" role="tablist" aria-label="Administrator settings"><button type="button" role="tab" aria-selected="true" aria-controls="access-management-panel" id="access-management-tab">Access Management</button></div>
+    <section id="access-management-panel" role="tabpanel" aria-labelledby="access-management-tab" className="admin-access-panel">
+      <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
+      <p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>
+      <details className="admin-spending-disclosure"><summary>Recorded account usage</summary>
+        {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th>Email</th><th>Access</th><th>Allowance</th><th>Estimated</th><th>Held</th><th>Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
+      </details>
+      <div className="admin-table-heading"><h3>Authorizations</h3><button type="button" className="admin-add-toggle" aria-label={addOpen ? 'Hide new authorization row' : 'Add authorization'} aria-expanded={addOpen} onClick={() => setAddOpen(value => !value)}>+</button></div>
+      <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
+        {ordered.map(grant => {
+          const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
+          const isBootstrap = grant.kind === 'email' && grant.value.toLowerCase() === bootstrapAdmin.toLowerCase();
+          return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
+            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Revoked'}</small></th>
+            <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
+            <td><label className="admin-allowance-input"><span className="sr-only">ChatGPT allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></td>
+            <td>{grant.active === 1 && !isBootstrap && <button type="button" className="admin-text-action admin-revoke" disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
+          </tr>;
+        })}
+        {addOpen && <tr className="admin-new-entry-row">
+          <th scope="row"><label><span className="sr-only">Entry type</span><select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label><input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></th>
+          <td>{newKind === 'domain' ? <span>Member</span> : <select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
+          <td><label className="admin-allowance-input"><span className="sr-only">New ChatGPT allowance</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></label><small>Blank uses the configured default</small></td>
+          <td><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button></td>
+        </tr>}
+        {!ordered.length && !addOpen && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
+      </tbody></table></div>
+      {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p><button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save Updates</button></div>}
+      {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
+    </section>
+  </dialog>;
+}
+
+async function cloudFailure(response: Response, fallback: string) {
+  let body: { error?: string; detail?: string } = {};
+  try { body = await response.json() as typeof body; } catch { /* use a stable generic error */ }
+  return new Error(body.error || (typeof body.detail === 'string' ? body.detail : fallback));
+}
+
 function CloudAuthGate() {
   const [status, setStatus] = useState<CloudStatus | null>(null);
   const [failure, setFailure] = useState('');
@@ -2642,65 +2728,84 @@ function CloudAuthGate() {
   const [grants, setGrants] = useState<CloudGrant[]>([]);
   const [accountSessions, setAccountSessions] = useState<CloudAccountSession[]>([]);
   const [bootstrapAdmin, setBootstrapAdmin] = useState('');
-  const [kind, setKind] = useState<'email' | 'domain'>('email');
-  const [value, setValue] = useState('');
-  const [role, setRole] = useState<'member' | 'admin'>('member');
-  const [allowance, setAllowance] = useState('');
   const [busy, setBusy] = useState(false);
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
+  const [budget, setBudget] = useState<CloudResearchBudget | null>(null);
+  const [budgetLoading, setBudgetLoading] = useState(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
   const refresh = useCallback(async () => {
     try {
       const response = await fetch('/api/cloud-auth/status', { credentials: 'same-origin', cache: 'no-store' });
-      if (!response.ok) throw new Error('Cloud authentication could not be checked.');
+      if (!response.ok) throw new Error('Google sign-in could not be checked.');
       const current = await response.json() as CloudStatus;
       if (current.enabled && !current.authenticated && new URLSearchParams(window.location.search).get('access') === 'denied') {
         const denied = await fetch('/api/cloud-auth/denied', { credentials: 'same-origin', cache: 'no-store' });
         if (denied.ok) setDeniedEmail((await denied.json() as { email: string }).email);
         else { setDeniedEmail(null); window.history.replaceState(null, '', '/'); }
       } else setDeniedEmail(null);
-      setStatus(current); setFailure(current.ready ? '' : 'Cloud sign-in is not configured correctly.');
-    } catch { setFailure('SIGMA could not check sign-in. Refresh this page or contact the administrator.'); }
+      setStatus(current); setFailure(current.ready ? '' : 'Google sign-in is not configured correctly.');
+    } catch { setFailure('SIGMA could not check Google sign-in. Refresh this page or contact the administrator.'); }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   const loadGrants = useCallback(async () => {
     const response = await fetch('/api/cloud-auth/admin/grants', { credentials: 'same-origin', cache: 'no-store' });
-    if (!response.ok) throw new Error('Access rules could not be loaded.');
+    if (!response.ok) throw await cloudFailure(response, 'Access rules could not be loaded.');
     const result = await response.json() as { grants: CloudGrant[]; sessions: CloudAccountSession[]; bootstrap_admin: string };
     setGrants(result.grants); setAccountSessions(result.sessions); setBootstrapAdmin(result.bootstrap_admin);
   }, []);
-  async function addGrant(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setFailure('');
+  useEffect(() => {
+    const target = status?.target ?? 'hosted';
+    if (!status?.enabled || !status.authenticated || target !== 'hosted') {
+      setBudget(null); setBudgetLoading(false); setBudgetError(null); return;
+    }
+    let active = true;
+    const fetchBudget = async () => {
+      setBudgetLoading(true);
+      try {
+        const response = await fetch('/api/cloud-research/budget', { credentials: 'same-origin', cache: 'no-store' });
+        if (!response.ok) throw await cloudFailure(response, 'ChatGPT allowance is unavailable.');
+        const result = await response.json() as CloudResearchBudget;
+        if (active) { setBudget(result); setBudgetError(null); }
+      } catch (cause) { if (active) setBudgetError(cause instanceof Error ? cause.message : 'ChatGPT allowance is unavailable.'); }
+      finally { if (active) setBudgetLoading(false); }
+    };
+    void fetchBudget();
+    const interval = window.setInterval(fetchBudget, 30_000);
+    window.addEventListener('focus', fetchBudget);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', fetchBudget); };
+  }, [status?.enabled, status?.authenticated, status?.target]);
+  async function addGrant(entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) {
+    setBusy(true);
     try {
-      const response = await fetch('/api/cloud-auth/admin/grants', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, value, role: kind === 'domain' ? 'member' : role, allowance_usd: allowance.trim() ? Number(allowance) : null }) });
-      if (!response.ok) throw new Error((await response.json() as { error?: string }).error || 'Access rule could not be saved.');
-      setValue(''); setAllowance(''); await loadGrants();
-    } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be saved.'); }
-    finally { setBusy(false); }
-  }
-  async function saveAllowance(grant: CloudGrant, input: HTMLInputElement) {
-    setBusy(true); setFailure('');
-    try {
-      const response = await fetch(`/api/cloud-auth/admin/grants/${grant.kind}/${encodeURIComponent(grant.value)}/allowance`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowance_usd: input.value.trim() ? Number(input.value) : null }) });
-      if (!response.ok) throw new Error('Spending allowance could not be saved.');
+      const response = await fetch('/api/cloud-auth/admin/grants', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) });
+      if (!response.ok) throw await cloudFailure(response, 'Authorization could not be added.');
       await loadGrants();
-    } catch (error) { setFailure(error instanceof Error ? error.message : 'Spending allowance could not be saved.'); }
-    finally { setBusy(false); }
+    } finally { setBusy(false); }
   }
-  async function revoke(grant: CloudGrant) {
-    setBusy(true); setFailure('');
+  async function saveGrants(updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/cloud-auth/admin/grants/updates', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates }) });
+      if (!response.ok) throw await cloudFailure(response, 'Updates could not be saved.');
+      await loadGrants();
+    } finally { setBusy(false); }
+  }
+  async function revokeGrant(grant: CloudGrant) {
+    setBusy(true);
     try {
       const response = await fetch(`/api/cloud-auth/admin/grants/${grant.kind}/${encodeURIComponent(grant.value)}`, { method: 'DELETE', credentials: 'same-origin' });
-      if (!response.ok) throw new Error('Access rule could not be revoked.');
+      if (!response.ok) throw await cloudFailure(response, 'Authorization could not be revoked.');
       await loadGrants();
-    } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be revoked.'); }
-    finally { setBusy(false); }
+    } finally { setBusy(false); }
   }
-  const context: CloudIdentityState | null = status?.enabled ? { ...status, deniedEmail, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(String(error))); } } : null;
+  const funding: CloudFunding = { target: status?.target ?? 'local', budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated };
+  const context: CloudIdentityState | null = status?.enabled ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
   if (!status.enabled) return <AIProvider><App/></AIProvider>;
   if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
-  return <CloudIdentityContext.Provider value={context}><>{status.authenticated ? <AIProvider><App/></AIProvider> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}{accessOpen && <div className="cloud-access-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAccessOpen(false); }}><section className="cloud-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-access-title"><button className="cloud-access-close" onClick={() => setAccessOpen(false)} aria-label="Close access management">×</button><p className="cloud-auth-kicker">Administrator</p><h2 id="cloud-access-title">Access Management</h2><p>Invitations are authorization entries. SIGMA does not send email.</p>{status.preview && <p role="status">Local admin preview. Changes are temporary and do not authorize real Google accounts.</p>}<form onSubmit={addGrant}><label>Entry type<select value={kind} onChange={event => setKind(event.target.value as 'email' | 'domain')}><option value="email">Email address</option><option value="domain">Exact verified email domain</option></select></label><label>{kind === 'email' ? 'Email address' : 'Domain'}<input required value={value} onChange={event => setValue(event.target.value)} placeholder={kind === 'email' ? 'person@example.org' : 'example.org'}/></label>{kind === 'email' && <label>Access<select value={role} onChange={event => setRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Administrator</option></select></label>}<label>USD inference allowance <small>Leave blank to use the configured default. Domain allowances apply separately to each person.</small><input type="number" min="0.01" max="15" step="0.01" value={allowance} onChange={event => setAllowance(event.target.value)} placeholder="Configured default"/></label><button disabled={busy}>Add authorization</button></form><h3>Accounts and spending</h3><p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>{accountSessions.length ? <ul aria-label="Authorized account sessions">{accountSessions.map(session => <li key={session.email}><span><strong>{session.email}</strong><small>{session.status} · {session.role} · allowance {session.allowance_usd === null ? '—' : `$${session.allowance_usd.toFixed(2)}`} · estimated ${session.spending?.estimated_usage_usd.toFixed(2) ?? '—'} · held ${session.spending?.held_usd.toFixed(2) ?? '—'} · remaining {session.spending?.remaining_usd === null || session.spending?.remaining_usd === undefined ? '—' : `$${session.spending.remaining_usd.toFixed(2)}`}</small><small>{session.expires_at ? `Session expires ${new Date(session.expires_at * 1000).toLocaleString()}` : 'No active session'}</small></span></li>)}</ul> : <p className="cloud-access-bootstrap">No active authorized sessions.</p>}<h3>Authorized entries</h3><p>Effective allowances are per person; a specific email rule overrides its domain rule. Existing spend and unknown charges remain recorded after edits or revocation.</p><ul>{grants.map(grant => <li key={`${grant.kind}:${grant.value}:${grant.allowance_usd ?? 'default'}`}><span><strong>{grant.value}</strong><small>{grant.kind} · {grant.role}{grant.active ? '' : ' · revoked'} · effective allowance {grant.effective_allowance_usd === null ? '—' : `$${grant.effective_allowance_usd.toFixed(2)}`}</small><input aria-label={`Allowance for ${grant.value}`} type="number" min="0.01" max="15" step="0.01" defaultValue={grant.allowance_usd ?? ''} placeholder="Configured default"/><button disabled={busy} onClick={event => { const input = event.currentTarget.parentElement?.querySelector('input'); if (input) void saveAllowance(grant, input); }}>Save allowance</button></span>{grant.active === 1 && <button disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}</li>)}</ul>{failure && <p role="alert">{failure}</p>}</section></div>}</></CloudIdentityContext.Provider>;
+  const target = status.target ?? 'hosted';
+  return <CloudIdentityContext.Provider value={context}><AIProvider>{status.authenticated ? <App/> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}</AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog target={target} bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
 }
 
 function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {
@@ -2709,7 +2814,7 @@ function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail
   const requestHref = contactEmail
     ? `mailto:${contactEmail}?${new URLSearchParams({ subject, body })}`
     : undefined;
-  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions"><a className="cloud-auth-button" href="/demo?access=denied">Explore Demo</a>{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div></section>;
+  return <section className="home-cloud-denied"><p className="cloud-auth-kicker">Google sign-in verified</p><h1>Access not yet granted</h1><p>Your Google account is valid, but it has not been invited to SIGMA.</p><p className="home-cloud-denied-email">Verified account: <strong>{email}</strong></p><div className="cloud-denied-actions">{requestHref ? <a className="cloud-secondary-button" href={requestHref}>Request Invitation</a> : <button className="cloud-secondary-button" disabled title="Administrator contact is not configured">Request Invitation</button>}<a className="cloud-text-button" href="/api/cloud-auth/login">Use Another Account</a></div></section>;
 }
 
 installRequestErrorToasts();
