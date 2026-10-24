@@ -2,7 +2,8 @@ T43.1 — Third-pass operator acceptance fixes
 Owner: Gray
 Base: current main at 0424854 (including T42 deployment-readiness integration)
 Branch: gray/t43-1-operator-followups
-Status: R4R handoff pending PR creation
+Status: R4R — [PR #63](https://github.com/bkramerext/sigma/pull/63)
+Validated implementation commit at PR creation: `84561225983be6f6c1584abfbb1f536103a6fe84`
 
 Root cause and security disposition
 The active local API reported Google auth `enabled: false`. This checkout's `.env` had Google OAuth client credentials, and `~/.bashrc` contained the bootstrap-email export, but the actual launcher environment lacked `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`. The launcher intentionally reads checkout `.env` without executing shell files; when the launching shell has not sourced `.bashrc`, the bootstrap value is unavailable. A second UI defect compounded this: CloudAuthGate omitted local identity context when auth was disabled, so the Home pill showed “Coming Soon” and could not explain the missing setting.
