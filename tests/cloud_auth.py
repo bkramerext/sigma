@@ -18,7 +18,6 @@ from jwt.algorithms import RSAAlgorithm
 
 from sigma import cloud_auth
 from sigma.api import app
-from sigma.projects import initialize_project
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 CLIENT_ID = "sigma-test.apps.googleusercontent.com"
@@ -97,6 +96,8 @@ class CloudAuthTests(TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "auth"
         self.root.mkdir(mode=0o700)
+        self.project_path = Path(self.temp.name) / "project"
+        self.project_path.mkdir(mode=0o700)
         self.env = patch.dict(
             os.environ,
             {
@@ -151,7 +152,7 @@ class CloudAuthTests(TestCase):
     def test_successful_signin_admin_invite_and_revocation(self):
         self.assertEqual(
             self.client.get(
-                "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                "/api/projects/research-sessions", params={"path": str(self.project_path)}
             ).status_code,
             401,
         )
@@ -235,7 +236,7 @@ class CloudAuthTests(TestCase):
         self.assertEqual(public_demo.json()["project"]["title"], "Counting Pairwise Handshakes")
         self.assertEqual(
             self.client.get(
-                "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                "/api/projects/research-sessions", params={"path": str(self.project_path)}
             ).status_code,
             401,
         )
@@ -635,15 +636,15 @@ class CloudAuthTests(TestCase):
 
     def test_every_api_group_is_protected_and_origin_is_checked(self):
         for path in [
-            "/api/projects/inspect?path=projects/rh.sigma",
-            "/api/projects/research-sessions?path=projects/rh.sigma",
-            "/api/projects/research-executions?path=projects/rh.sigma",
+            f"/api/projects/inspect?path={self.project_path}",
+            f"/api/projects/research-sessions?path={self.project_path}",
+            f"/api/projects/research-executions?path={self.project_path}",
             "/api/projects/recent",
         ]:
             self.assertEqual(self.client.get(path).status_code, 401, path)
         rejected = self.client.post(
             "/api/projects/close",
-            json={"path": "projects/rh.sigma"},
+            json={"path": str(self.project_path)},
             headers={"Origin": "https://attacker.test"},
         )
         self.assertEqual(rejected.status_code, 403)
