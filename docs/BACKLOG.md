@@ -1,6 +1,6 @@
 # SIGMA backlog
 
-Open ideas and possible follow-up work, not implementation commitments. Completed work and historical decisions belong in [DECISIONS](DECISIONS.md), [STATUS](STATUS.md), and the ticket tracker.
+Open ideas and possible follow-up work, not implementation commitments. Implemented behavior is tracked in code, tests, [STATUS](STATUS.md), and the ticket tracker; historical decisions are not maintained here.
 
 **Times:** Approximate local times reconstructed from discussions. Preserve timestamps for retained ideas.
 
@@ -62,3 +62,8 @@ Some base settings and limits now exist. The entries below concern additional st
 
 - **2026-10-22** — Build a deterministic Context Manager to seed each Investigator/Skeptic call, including resumed sessions, from durable strategy, session, artifact, objection, and Coordinator-decision records. Assemble role-specific, token-budgeted context with provenance; never silently omit unresolved critical objections. Resume must not depend on an earlier model conversation or process.
 - **2026-10-22** — **Potential future vector retrieval:** Embedding-based semantic search across past strategies, sessions, arguments, experiments, and objections could discover related research despite differing terminology and reduce repeated dead ends. Treat similarity as a discovery signal, never mathematical equivalence or proof; preserve structured retrieval of critical obligations as mandatory. Start with explicit relationships and possibly full-text search, not a vector database. Design the retrieval interface to accommodate an optional local SQLite vector index later, when research volume warrants its cost and complexity. Preserve export/deletion consistency and retrieval provenance.
+
+## Possible infrastructure follow-ups
+
+- **2026-10-24** — Consider migrating project persistence from versioned JSON to SQLite only if project size, write amplification, or concurrent access makes the current storage model inadequate. This is an option, not a planned migration.
+- **2026-10-24** — Consider optional OS Keychain integration for local ChatGPT authorization secrets; current private application storage remains the implemented path.
