@@ -130,10 +130,10 @@ def run_ui(*, navigate: bool = False, admin_preview: bool = False) -> int:
                                     command[0] != "npm"
                                     or key
                                     not in {
-                                    "OPENAI_API_KEY",
-                                    "ACCESS_TOKEN",
-                                    "REFRESH_TOKEN",
-                                    "ID_TOKEN",
+                                        "OPENAI_API_KEY",
+                                        "ACCESS_TOKEN",
+                                        "REFRESH_TOKEN",
+                                        "ID_TOKEN",
                                     }
                                 )
                             },
