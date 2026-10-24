@@ -161,3 +161,41 @@ On that tree, `./sigma test` and real-Chrome T29 guidance and T43.1
 strategy-selection checks passed. PR #63 is open, mergeable, and ready for
 coordinator review; no merge was performed. The next handoff-only commit
 records this update.
+
+Coordinator review corrections (2026-10-23)
+------------------------------------------
+Implemented on the existing `gray/t43-1-operator-followups` branch and PR #63.
+
+1. Administrator Settings New form: Cancel now stacks directly below Add,
+   left-aligned with it. The Chrome regression asserts both same-column
+   placement and vertical ordering. The child form remains centered as an
+   overlay in the fixed dialog frame; table geometry and overlay behavior are
+   unchanged.
+2. A17 browser check: the first failure was test setup, not an application
+   regression. Its catch-all API route sent `/api/cloud-auth/status` to the
+   provider fixture, which returns 404 for cloud-auth endpoints; the app then
+   displayed its request-failure state before the test could open a sample.
+   The check now supplies a deterministic authenticated **member** status
+   response for that endpoint. No OAuth is contacted and no admin privileges
+   are granted. The next failure exposed stale activity-pulse expectations:
+   the test expected `connection-active` and a pulse animation on the compact
+   project-header pill, which is intentionally static. Assertions now verify
+   its connected state and lack of pulse while retaining the research/session
+   flow. The full A17 real-Chrome check passes.
+
+Verification on the integrated tree:
+- `./sigma test` — all lifecycle, service/API/CLI, security/cloud, lint/format,
+  Pyright (0 diagnostics), frontend typecheck, and production build steps
+  passed. Existing Starlette/httpx deprecation warnings remain.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5190 SIGMA_BROWSER_API_URL=http://127.0.0.1:8014 uv run --with playwright python browser_checks/t40_cloud_ui.py`
+  — real Chrome passed administrator Add/Cancel, including the new vertical
+  placement regression, fixed table geometry, centered overlay, and desktop /
+  390px layouts.
+- `SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8022 uv run --with playwright python browser_checks/a17_research.py`
+  — full real-Chrome A17 acceptance passed against a fresh isolated fixture,
+  including project/session/export workflows and desktop/mobile checks.
+- No live OAuth, paid provider calls, or cloud provisioning were used.
+
+Tested implementation head: `e8e734ab2e0ac9d9ce8fc5ed5b463a631866850a`.
+This handoff update follows as a documentation-only commit. PR #63 remains open
+for coordinator review; do not merge.
