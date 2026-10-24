@@ -27,6 +27,8 @@ Status evidence: `docs/STATUS.md`, section “A18 follow-up — Concurrent prefl
   `Persistent research session scenarios passed.`
 - `./sigma test` — passed all backend scenarios, Ruff check and format check,
   Pyright (0 diagnostics), frontend typecheck, and Vite production build.
+- Repeated `./sigma test` after merging current `main` at `087196e`; all steps
+  passed again, including the updated local cloud-auth regression suite.
 - Existing Starlette/httpx deprecation warnings were emitted.
 - No provider inference calls or credential reads were made.
 
@@ -45,6 +47,8 @@ branch and one successful sibling; the rerun and full suite passed.
 - The suite uses controlled local provider fixtures only; no live provider
   behavior or billing was tested.
 - No dependencies, conflicts, or requests for other workers were identified.
-  No Codex worker was contacted.
+  No Codex worker was contacted. The branch is based on current `main` after a
+  clean merge; the `docs/STATUS.md` insertion conflict was resolved by retaining
+  both independent status entries.
 
-PR: pending branch push and PR creation.
+PR: [#59 — Audit concurrent research preflight failures](https://github.com/bkramerext/sigma/pull/59).

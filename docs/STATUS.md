@@ -23,7 +23,7 @@ passed. `./sigma test` passed all backend scenarios, Ruff check/format, Pyright
 the existing Starlette/httpx deprecation warnings. No real-browser check was
 run because no UI changed; the additive event fields were exercised through the
 research-session service/API scenarios. No provider inference or credential
-access was used. Review and handoff: `messages/t41_concurrent_preflight_audit_r4r.txt`.
+access was used. Review and handoff: `messages/a18_concurrent_preflight_audit_r4r.txt`.
 
 ## T40 local Google administrator bootstrap and account UI (2026-10-23)
 
