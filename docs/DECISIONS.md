@@ -225,11 +225,15 @@ actual process group and bound cleanup with KILL while retaining group ownership
 The supervisor never signals stored PIDs. This adds two small foreground lifecycle
 helpers, not daemons or research agents. Existing instance replacement exits the
 old terminal cleanly. Fixed ports and current strict localhost host/origin checks
-remain; unrelated/different-checkout/unverified listeners produce a named safe
-conflict rather than automatic alternate ports. This avoids extra dynamic proxy
-and origin configuration. A per-launch public non-secret readiness ID must match
-through both backend and frontend proxy before the URL is announced. Project
-storage, Close semantics, frontend design and artwork are unchanged.
+remain; unrelated and unverified listeners produce a named safe conflict rather
+than automatic alternate ports. This avoids extra dynamic proxy and origin
+configuration. The private per-user registry enables clean control-channel
+shutdown across checkout roots. If a supervisor has crashed, orphan recovery
+requires the same OS user, a valid SIGMA checkout, exact server command, matching
+per-launch environment and served readiness IDs, and unchanged process birth
+identity before signalling. A per-launch public non-secret readiness ID must
+match through both backend and frontend proxy before the URL is announced.
+Project storage, Close semantics, frontend design and artwork are unchanged.
 
 ## A8.2: explicit billing modes and remembered ChatGPT authorization
 
