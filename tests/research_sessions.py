@@ -3632,6 +3632,79 @@ async def test_portfolio_preflight_failure_terminates_instead_of_spinning(path: 
     assert finished["calls_used"] == 0
     assert all(branch["status"] == "paused" for branch in finished["strategy_runs"])
     assert "configuration service failure" in finished["message"].lower()
+    failures = [event for event in finished["events"] if event["kind"] == "call.preflight_failed"]
+    assert len(failures) == 1
+    assert failures[0]["strategy_id"] == strategy.id
+    assert failures[0]["strategy_title"] == strategy.title
+    assert failures[0]["role"] == "investigator"
+    assert failures[0]["failure_stage"] == "model_configuration"
+    assert failures[0]["failure_kind"] == "preflight_error"
+    assert failures[0]["dispatched"] is False
+
+
+async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent check", "Try an independent derivation and boundary check."
+    ).project.strategies[-1]
+    snapshot_calls = 0
+    real_snapshot = research_sessions._snapshot
+
+    def fail_first_worker_snapshot(target):
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        # start_session takes the first snapshot. The first branch then fails
+        # preflight; its sibling proceeds to the provider fixture.
+        if snapshot_calls == 2:
+            raise ProjectError("temporary project snapshot service failure")
+        return real_snapshot(target)
+
+    async def handler(_request):
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_snapshot", side_effect=fail_first_worker_snapshot),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "failed"
+    assert finished["calls_used"] == 1
+    failed_events = [
+        event for event in finished["events"] if event["kind"] == "call.preflight_failed"
+    ]
+    assert len(failed_events) == 1
+    failure = failed_events[0]
+    expected_titles = {first.id: first.title, second.id: second.title}
+    assert failure["strategy_id"] in expected_titles
+    assert failure["strategy_title"] == expected_titles[failure["strategy_id"]]
+    assert failure["role"] == "investigator"
+    assert failure["failure_stage"] == "project_snapshot"
+    assert failure["failure_kind"] == "preflight_error"
+    assert failure["dispatched"] is False
+    assert "temporary project snapshot service failure" not in failure["message"]
+    completed_steps = [step for step in finished["steps"] if step["status"] == "completed"]
+    assert len(completed_steps) == 1
+    assert completed_steps[0]["strategy_id"] in expected_titles
+    assert completed_steps[0]["strategy_id"] != failure["strategy_id"]
+    assert completed_steps[0]["role"] == "investigator"
+    assert completed_steps[0]["output"]["claim"].startswith("Claim 1:")
+    assert all(step.get("strategy_id") != failure["strategy_id"] for step in finished["steps"])
 
 
 async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
@@ -3677,6 +3750,15 @@ async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_rec
         assert paused["calls_used"] == 0
         assert "timed out" in paused["message"].lower()
         assert all(branch["status"] == "paused" for branch in paused["strategy_runs"])
+        failure_events = [
+            event for event in paused["events"] if event["kind"] == "call.preflight_failed"
+        ]
+        assert len(failure_events) == 1
+        assert failure_events[0]["strategy_id"] == strategy.id
+        assert failure_events[0]["role"] == "investigator"
+        assert failure_events[0]["failure_stage"] == "model_configuration"
+        assert failure_events[0]["failure_kind"] == "timeout"
+        assert failure_events[0]["dispatched"] is False
 
         resumed = await research_sessions.control_session(str(path), started["id"], "resume")
         finished = await wait_for(path, resumed["id"])
@@ -5331,6 +5413,11 @@ def main():
         asyncio.run(
             test_portfolio_preflight_failure_terminates_instead_of_spinning(
                 root / "portfolio-preflight-failure.sigma"
+            )
+        )
+        asyncio.run(
+            test_portfolio_audits_mixed_preflight_failure_and_sibling_success(
+                root / "portfolio-preflight-mixed-wave.sigma"
             )
         )
         asyncio.run(

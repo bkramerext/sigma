@@ -390,6 +390,37 @@ def _event(record: dict[str, Any], kind: str, message: str, role: str | None = N
     )
 
 
+def _record_preflight_failure(
+    record: dict[str, Any],
+    branch: dict[str, Any],
+    role: str,
+    stage: str,
+    error: Exception,
+) -> None:
+    """Audit a branch-local failure before provider dispatch without storing raw errors."""
+    if isinstance(error, ResearchContextLimitError):
+        failure_kind = "context_limit"
+    elif isinstance(error, (TimeoutError, asyncio.TimeoutError, httpx.TimeoutException)):
+        failure_kind = "timeout"
+    else:
+        failure_kind = "preflight_error"
+    _event(
+        record,
+        "call.preflight_failed",
+        f"{role.title()} preflight failed for {branch['strategy_title']} during {stage}; no provider request was dispatched.",
+        role,
+    )
+    record["events"][-1].update(
+        {
+            "strategy_id": branch["strategy_id"],
+            "strategy_title": branch["strategy_title"],
+            "failure_stage": stage,
+            "failure_kind": failure_kind,
+            "dispatched": False,
+        }
+    )
+
+
 def _directory(path: str | Path) -> Path:
     target = project_path(path)
     samples = (Path(__file__).resolve().parents[2] / "samples").resolve()
@@ -4776,6 +4807,7 @@ async def _portfolio_role_call(
                     )
             except Exception as exc:  # noqa: BLE001 — fail this strategy branch without losing peers
                 context_blocked = isinstance(exc, ResearchContextLimitError)
+                _record_preflight_failure(record, branch, role, "context_assembly", exc)
                 branch["status"] = "paused" if context_blocked else "failed"
                 branch["current_action"] = (
                     "Paused · context limit" if context_blocked else "Failed · preparing work"
@@ -4792,12 +4824,22 @@ async def _portfolio_role_call(
                 )
                 _save(path, record)
                 return False
-            view, guard = _snapshot(path)
+            try:
+                view, guard = _snapshot(path)
+            except Exception as exc:
+                _record_preflight_failure(record, branch, role, "project_snapshot", exc)
+                _save(path, record)
+                raise
             if guard != record["guard_hash"] or view.project.id != record["project_id"]:
-                raise ProjectError("Project or strategy changed; session paused before a new call.")
+                exc = ProjectError("Project or strategy changed; session paused before a new call.")
+                _record_preflight_failure(record, branch, role, "project_binding", exc)
+                _save(path, record)
+                raise exc
             try:
                 credential = await asyncio.wait_for(auth_context(), timeout=PREFLIGHT_TIMEOUT)
             except Exception as exc:
+                _record_preflight_failure(record, branch, role, "account_verification", exc)
+                _save(path, record)
                 raise ProjectError(
                     "AI account or billing connection could not be verified; "
                     "session paused before a new call: "
@@ -4807,14 +4849,19 @@ async def _portfolio_role_call(
                 credential["mode"] != record["mode"]
                 or _digest(credential["identity"]) != record["identity_hash"]
             ):
-                raise ProjectError(
+                exc = ProjectError(
                     "AI account or billing identity changed; session paused before another call."
                 )
+                _record_preflight_failure(record, branch, role, "account_binding", exc)
+                _save(path, record)
+                raise exc
             try:
                 config = await asyncio.wait_for(
                     configuration(view=view, context=credential), timeout=PREFLIGHT_TIMEOUT
                 )
             except Exception as exc:
+                _record_preflight_failure(record, branch, role, "model_configuration", exc)
+                _save(path, record)
                 raise ProjectError(
                     "Selected model is no longer available; session paused before a new call: "
                     f"{str(exc).strip() or 'preflight timed out'}"[:500]
@@ -4824,10 +4871,13 @@ async def _portfolio_role_call(
                 or config["model"] != record["model"]
                 or config["reasoning_effort"] != record["reasoning_effort"]
             ):
-                raise ProjectError(
+                exc = ProjectError(
                     "Selected model is no longer available; session paused before a new call: "
                     + config.get("message", "the saved model configuration is unavailable")
                 )
+                _record_preflight_failure(record, branch, role, "model_configuration", exc)
+                _save(path, record)
+                raise exc
             if datetime.fromisoformat(record["deadline_at"]) <= datetime.now(UTC):
                 branch["status"] = "ended"
                 branch["reason"] = "Session duration limit reached before a call was dispatched."
