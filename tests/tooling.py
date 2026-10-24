@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, Mock, call, patch
 from sigma.cli import main as cli_main
 from sigma.projects import ROOT
 from sigma.tooling import run_tooling
-from sigma.ui import run_shutdown, run_ui, stop_servers
+from sigma.ui import local_google_configuration_warning, run_shutdown, run_ui, stop_servers
 from sigma.ui_instance import Instance
 
 
@@ -183,6 +183,70 @@ def check_local_google_startup() -> None:
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
 
 
+def check_local_google_setup_warning() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "GOOGLE_OIDC_CLIENT_ID": "client-id",
+            "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+        },
+        clear=True,
+    ):
+        warning = local_google_configuration_warning()
+    assert warning is not None
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in warning
+    assert "source ~/.bashrc" in warning
+    assert "server-secret" not in warning
+    with patch.dict(
+        "os.environ",
+        {
+            "GOOGLE_OIDC_CLIENT_ID": "client-id",
+            "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+        },
+        clear=True,
+    ):
+        assert local_google_configuration_warning() is None
+
+
+def check_partial_google_startup_warns_without_enabling_auth() -> None:
+    backend, frontend = Mock(), Mock()
+    backend.poll.return_value = None
+    frontend.poll.return_value = None
+    owner = MagicMock()
+    owner.__enter__.return_value.replacement_request.return_value = None
+    warning_output = StringIO()
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "GOOGLE_OIDC_CLIENT_ID": "client-id",
+                "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            },
+            clear=True,
+        ),
+        patch("sigma.ui.Instance", return_value=owner),
+        patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.wait_for_ports"),
+        patch("sigma.ui.subprocess.Popen", side_effect=[backend, frontend]) as launch,
+        patch("sigma.ui.ready", return_value=True),
+        patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
+        patch("sigma.ui.stop_servers"),
+        redirect_stderr(warning_output),
+    ):
+        assert run_ui() == 0
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in warning_output.getvalue()
+    backend_env = launch.call_args_list[0].kwargs["env"]
+    assert "SIGMA_CLOUD_AUTH_ENABLED" not in backend_env
+    assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
+
+
 def check_shutdown_and_suspended() -> None:
     # SIGKILL verified dormant launchers directly, so they cannot wake
     # simultaneously and compete to start servers. No real signals are sent.
@@ -257,6 +321,8 @@ def main() -> None:
         check_start_cli()
         check_ui()
         check_local_google_startup()
+        check_local_google_setup_warning()
+        check_partial_google_startup_warns_without_enabling_auth()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()

@@ -1,5 +1,130 @@
 # SIGMA status
 
+## T43.1 third-pass operator acceptance fixes (2026-10-24)
+
+Implemented on `gray/t43-1-operator-followups`, based on current `main`
+`0424854` (including T42 deployment-readiness integration). The P0 Google
+issue had two linked causes. First, the active local
+runtime reported Google auth disabled: checkout `.env` had OAuth client
+credentials, but `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` was not present in the
+launcher environment. That address was configured in `~/.bashrc`, which the
+launcher intentionally does not execute; a shell that has not sourced that
+file does not export the value. Second, `CloudAuthGate` discarded local auth
+status when auth was disabled, so the Home pill could only show “Coming Soon”
+and could not explain the missing setting.
+
+Local status now reports missing variable names only. The Home and project
+Google pill remains available as a setup disclosure, changes its state to
+“Setup required”, and gives exact shell/configuration and restart steps. It
+offers Continue with Google only when auth is enabled and ready. `./sigma start`
+also prints an actionable warning when OAuth client settings exist but the
+bootstrap Gmail is absent from the launch environment. The launcher does not
+source arbitrary shell code or infer an administrator identity. Existing
+verified-email, persistent Google-subject, and local/hosted authorization checks
+are unchanged. `docs/CLOUD-AUTH.md` now explains that the bootstrap value must
+be exported in the launching shell.
+
+The ChatGPT Connected popup now uses the same small underlined action treatment
+for Manage usage, Disconnect, Connect another account, Retry connection, and
+Cancel sign-in. The redundant standalone “Using ChatGPT plan” label and Switch
+account selector are removed; the active account remains unchanged, and the
+provider's allowance/permission/uncertainty guidance is retained. Artwork
+credits display in Title Case and sit 5px from the bottom-right viewport edge.
+Unmapped legacy Recent project types are grouped under Other instead of showing
+an “Unavailable” category; the projects themselves remain in Recent.
+
+The operator's consolidated pill feedback is also implemented on the same
+branch: connected Google now shows one “Google account connected” label with a
+static green dot; disconnected Google uses “Sign into Google”, while incomplete
+OAuth setup retains the actionable diagnostic and setup label. The redundant
+“Signed in” suffix and Google/ChatGPT hover tooltips are gone. The Google
+account panel no longer labels the auth target as “Local SIGMA” or “Hosted SIGMA
+service”. Both Home and project-header Google pills match their ChatGPT peers'
+height, typography, internal spacing, border and surface at desktop and narrow
+widths. ChatGPT's animated request indicator remains available outside the
+header; both account-pill dots stay static.
+
+Verification:
+
+- `./sigma test` passed, including `tests/cloud_auth.py` (15 tests), launcher
+  setup/warning checks, Ruff, formatting, Pyright (zero diagnostics), frontend
+  typecheck, and production build. Existing Starlette/httpx deprecation
+  warnings remain.
+- Real Chrome `browser_checks/t43_1_manual_acceptance.py` passed against an
+  isolated Vite/API pair using this checkout's `.env`. Its actual local auth
+  status reported disabled with the missing bootstrap variable; only project
+  list and ChatGPT connection responses were deterministic fixtures. Google
+  setup disclosure, no-login action, keyboard dismissal/focus, recent-category
+  recovery, credits position/title case, ChatGPT popup simplification/actions,
+  and 1440px/390px layouts passed. Sign-in attempt/cancel styling used a local
+  deterministic fixture; no OAuth request was made. Screenshots:
+  `/tmp/sigma-t43-1-google-setup-1440.png`,
+  `/tmp/sigma-t43-1-google-setup-390.png`,
+  `/tmp/sigma-t43-1-home-1440.png`, `/tmp/sigma-t43-1-home-390.png`,
+  `/tmp/sigma-t43-1-recent-1440.png`, `/tmp/sigma-t43-1-recent-390.png`, and
+  `/tmp/sigma-t43-1-connected-popup-390.png`.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed deterministic signed-out,
+  administrator and member flows, Google controls, account management, and
+  desktop/mobile layout. The existing live listeners on 8000/5173 were left
+  untouched; browser checks used ports 8014/5190.
+- Updated Chrome `browser_checks/t43_1_manual_acceptance.py`,
+  `browser_checks/t40_cloud_ui.py`, `browser_checks/t23_1_google_signin.py`,
+  `browser_checks/header.py`, and `browser_checks/a20_paper.py` — passed.
+  Coverage includes Google connected and setup-required states, static green/
+  gray dots, no pill tooltips, matching desktop/mobile project-header
+  dimensions, keyboard dialog dismissal, deterministic member/admin behavior,
+  and the existing paper/export workflow. `header.py` uses an authenticated
+  member fixture for account/header interactions; the actual local setup
+  diagnostic remains covered separately by `t43_1_manual_acceptance.py`.
+- Deterministic local Google OIDC tests cover state, nonce, PKCE, ID-token,
+  bootstrap email/subject binding, and authorization. No paid provider calls or
+  cloud provisioning were made.
+
+Acceptance: **MET** — configuration diagnosis and actionable setup flow,
+authorization invariants, ChatGPT popup and Recent/credits fixes, deterministic
+tests, and real Chrome desktop/narrow checks. **UNVERIFIED** — the operator's
+real local Google OAuth round trip. The launch environment used for this check
+did not include the bootstrap Gmail, so it correctly stayed disabled; the
+operator must source the configured shell value and perform the requested
+third manual acceptance pass. No real ChatGPT OAuth handoff was performed.
+
+### T43.1 Administrator Settings interaction follow-up (2026-10-23)
+
+The administrator dialog keeps a fixed responsive frame across its
+Access Management and Account usage tabs; each tab scrolls within the same
+dialog bounds. Its desktop width is now 705px, down from 940px. The New action
+is in the Actions column. Its centered “New Email or Domain” panel and the
+account-removal confirmation overlay do not change the table's dimensions or
+column alignment. The form uses the established dark input treatment, places
+Cancel beside Add, and Cancel clears the draft and restores focus to New.
+Removing an account requires the established Confirm/Cancel action; the removed
+authorization row disappears from Authorized users while its persisted record
+and usage history remain intact. Add/Remove success toasts are omitted.
+
+The Home account pills no longer snap to a compact position or reduced padding
+at the 700px breakpoint. They keep shared padding and pill geometry, scale their
+type smoothly down to 9px at 360px, and may sit over the Home artwork. Below
+560px, the Administrator Settings link moves below the pills and Home reserves
+space so it and Projects do not overlap.
+
+Real Chrome `browser_checks/t40_cloud_ui.py` passed. Home header geometry was
+checked at 1440, 800, 700, 600, 520, 390, and 360px widths; administrator
+settings were checked at 1440px and 390px. Assertions cover pill dimensions and
+padding, viewport fit, no overlap with the admin link or Projects, centered form
+placement inside the parent dialog, stable table geometry, keyboard Cancel and
+focus restoration, and removal confirmation without table reflow. Screenshots:
+`/tmp/sigma-t40-admin-add-overlay.png`,
+`/tmp/sigma-t40-admin-remove-overlay.png`,
+`/tmp/sigma-t40-admin-add-overlay-390.png`,
+`/tmp/sigma-t40-home-header-700.png`, and
+`/tmp/sigma-t40-home-header-390.png`.
+
+`./sigma test` passed all backend/API/CLI scenarios, Ruff, formatting, Pyright
+(zero diagnostics), frontend typecheck, and production build. Existing
+Starlette/httpx deprecation warnings remain. Real Google OAuth remains
+UNVERIFIED pending the operator-led acceptance pass; no live OAuth, paid
+provider call, or cloud provisioning was used.
+
 ## T43 manual acceptance fixes (2026-10-23)
 
 Implemented on `gray/t43-manual-acceptance-fixes`, based on current `main`
@@ -5062,6 +5187,46 @@ merged branch, including cloud auth/workspace/spending/fake-provider scenarios,
 Ruff/format, Pyright (0 diagnostics), frontend typecheck, and production build.
 No cloud resources, live Google OAuth, or paid provider calls were used.
 
+### T43.1 operator UI follow-up: strategy selection and Human Guidance (2026-10-23)
+
+On the existing `gray/t43-1-operator-followups` branch, the multi-strategy
+selection is now laid out as a left-aligned compact list: checkbox inputs have
+fixed dimensions, strategy titles share one aligned column, and Start/Cancel
+flow below the options. Human Guidance is a native keyboard-accessible
+disclosure styled as an outlined Outcome subsection and remains open by default
+to preserve visibility of the intervention form and history.
+The action is labeled **Send Guidance**. Its accessible description explains
+that it queues instructions for the selected agents' next eligible step and
+does not start a provider call on click; paused/stopped sessions describe the
+instruction as saved for resumption. The duplicated static copy below the form
+was removed and the helper/action row spacing tightened.
+
+- Real Chrome `browser_checks/t43_1_strategy_selection.py` passed at 1440px and
+  390px, verifying checkbox/title alignment, left alignment, stacked actions,
+  and no horizontal overflow. Screenshots are in `/tmp` as documented in
+  `browser_checks/README.md`.
+- Real Chrome `browser_checks/t29_intervention.py` passed the complete
+  deterministic guidance lifecycle, disclosure collapse/reopen, full-width
+  summary alignment, saved provenance, and mobile overflow check.
+- `./sigma test` passed backend, CLI, cloud/security, lint/format, Pyright,
+  frontend typecheck, and production build. Existing Starlette/httpx
+  deprecation warnings remain.
+- `browser_checks/a17_research.py` was attempted but stopped earlier in its
+  AI-connection-settings dialog scenario (the expected dialog did not open
+  with this checkout's current local authentication configuration), before
+  reaching the strategy-picker scenario. The focused real-Chrome picker check
+  above covers the changed behavior directly.
+
+No research provider calls were made. PR #63 remains open for coordinator
+review; no merge was performed.
+
+Integrated `origin/main` at `9305a6fa541d27dc5c2b302a48d8954b0112dd32` in
+merge commit `72b61a58ed2ffffaf6be2f7e7af30524d848a966`; resolved the shared
+status-log conflict while retaining both T43.1 and main's entries. After
+integration, `./sigma test`, the focused real-Chrome strategy-selection check
+at 1440px/390px, and the real-Chrome T29 guidance interaction check all passed.
+The wider `browser_checks/a17_research.py` attempt remains limited by its
+earlier local AI-connection-dialog scenario as described above.
 ## T44 Google Cloud provisioning runbook (2026-10-23)
 
 Added `docs/GCP-PROVISIONING-RUNBOOK.md` as an operator-executable companion

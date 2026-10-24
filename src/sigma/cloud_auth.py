@@ -390,6 +390,17 @@ async def middleware(request: Request, call_next):
 @router.get("/status")
 def status(request: Request):
     cfg = config()
+    local_setup_missing = []
+    if not cfg.enabled or cfg.local:
+        local_setup_missing = [
+            key
+            for key in (
+                "GOOGLE_OIDC_CLIENT_ID",
+                "GOOGLE_OIDC_CLIENT_SECRET",
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
+            )
+            if not os.environ.get(key, "").strip()
+        ]
     try:
         principal = (
             resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
@@ -397,10 +408,19 @@ def status(request: Request):
             else None
         )
     except (sqlite3.Error, OSError, RuntimeError):
-        return {"enabled": cfg.enabled, "ready": False, "authenticated": False, "user": None}
+        return {
+            "enabled": cfg.enabled,
+            "ready": False,
+            "local_setup_missing": local_setup_missing,
+            "authenticated": False,
+            "user": None,
+        }
     return {
         "enabled": cfg.enabled,
         "ready": not cfg.error if cfg.enabled else True,
+        # Names only: the setup panel can explain missing local prerequisites
+        # without ever returning OAuth secrets or the configured admin email.
+        "local_setup_missing": local_setup_missing,
         "authenticated": principal is not None,
         "user": principal.public() if principal else None,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,

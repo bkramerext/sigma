@@ -191,6 +191,19 @@ add concurrent strategy, safe-boundary delivery, pause/resume, restart recovery,
 supersession and terminal rejection coverage. These are local fixtures and make no
 live provider calls. Screenshot: `/tmp/sigma-t29-intervention-mobile.png`.
 
+## T43.1 strategy-selection layout
+
+With Vite running on `127.0.0.1:5173` and a fresh isolated provider fixture on
+port 8022, run
+`SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8022 uv run --with playwright
+python browser_checks/t43_1_strategy_selection.py`. Real Chrome creates a
+temporary project with three strategies, opens the multi-strategy session
+picker, and checks compact aligned checkbox rows, left alignment, vertically
+stacked actions, and viewport fit at 1440px and 390px. No research session or
+provider call is started. Screenshots:
+`/tmp/sigma-t43-1-strategy-selection-desktop.png` and
+`/tmp/sigma-t43-1-strategy-selection-mobile.png`.
+
 ## A20 AI-authored research paper
 
 Start the current Vite frontend on port 5174 and the isolated mock provider/API

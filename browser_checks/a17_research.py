@@ -66,6 +66,25 @@ with sync_playwright() as playwright:
     )
 
     def forward(route):
+        if route.request.url.endswith("/api/cloud-auth/status"):
+            # The local app now gates workspace access on Google identity. Keep
+            # this browser acceptance run deterministic with a member fixture;
+            # it neither calls OAuth nor grants administrator privileges.
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "target": "local",
+                        "enabled": True,
+                        "ready": True,
+                        "authenticated": True,
+                        "user": {"email": "a17-member@example.test", "role": "member"},
+                        "admin_contact_email": None,
+                    }
+                ),
+            )
+            return
         if fail_export["enabled"] and "/api/projects/export" in route.request.url:
             route.fulfill(status=503, json={"error": "fixture export failure"})
             return
@@ -147,8 +166,10 @@ with sync_playwright() as playwright:
 
     page.goto(browser_base_url)
     home_credit = page.locator(".home-art-credit")
-    expect(home_credit.locator("span")).to_have_text("By Brian Kramer, ChatGPT & Codex")
-    expect(home_credit.locator("time")).to_have_text("October 2026")
+    expect(
+        home_credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")
+    ).to_have_text(["Brian Kramer", "& OpenAI Models"])
+    expect(home_credit.locator("time")).to_have_count(0)
     credit_box = home_credit.bounding_box()
     assert credit_box and credit_box["x"] + credit_box["width"] <= 1440
     assert credit_box["y"] + credit_box["height"] <= 900
@@ -658,16 +679,19 @@ with sync_playwright() as playwright:
     page.locator("#proposal-seed").fill("delay-fixture")
     dot = page.locator(".api-connection .connection-dot")
     proposal.get_by_role("button", name="Generate", exact=True).click()
-    expect(dot).to_have_class(re.compile("connection-active"), timeout=10000)
+    expect(dot).to_have_class(re.compile("connection-connected"), timeout=10000)
+    # The compact project-header pill is intentionally static during work; the
+    # old A17 check expected the Home-only activity pulse on this control.
+    expect(dot).not_to_have_class(re.compile("connection-active"))
     page.get_by_role("button", name="Render research problem as Markdown", exact=True).click()
     expect(
         page.get_by_role("button", name="Show plain research problem", exact=True)
     ).to_be_visible(timeout=10000)
-    expect(dot).to_have_class(re.compile("connection-active"))
+    expect(dot).to_have_class(re.compile("connection-connected"))
     expect(proposal.get_by_label("Title", exact=True)).to_have_value(
         "Moment matrix obstruction", timeout=45000
     )
-    expect(dot).not_to_have_class(re.compile("connection-active"))
+    expect(dot).to_have_class(re.compile("connection-connected"))
     proposal.get_by_role("button", name="Accept", exact=True).click()
     expect(page.locator(".strategy-row")).to_have_count(2)
 
@@ -911,12 +935,13 @@ with sync_playwright() as playwright:
     )
     expect(pause_row.locator(".session-status")).to_contain_text("running")
     dot = page.locator(".api-connection .connection-dot")
-    expect(dot).to_have_class(re.compile("connection-active"), timeout=10000)
+    expect(dot).to_have_class(re.compile("connection-connected"), timeout=10000)
+    expect(dot).not_to_have_class(re.compile("connection-active"))
     page.emulate_media(reduced_motion="reduce")
     expect(dot).to_have_css("animation-name", "none")
     expect(dot).to_have_css("background-color", "rgb(117, 177, 140)")
     page.emulate_media(reduced_motion="no-preference")
-    expect(dot).to_have_css("animation-name", "connection-dot-pulse")
+    expect(dot).to_have_css("animation-name", "none")
     page.get_by_role("button", name="Stop research session", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
     expect(pause_row.locator(".outcome-provider-attempts")).to_be_visible()

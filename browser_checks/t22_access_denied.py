@@ -126,7 +126,7 @@ with sync_playwright() as playwright:
     expect(local_page.locator(".home-projects")).to_be_visible()
     expect(local_page.get_by_role("button", name="New")).to_be_visible()
     expect(local_page.get_by_text("Google Sign-in", exact=True)).to_have_count(0)
-    expect(local_page.get_by_role("link", name="Continue with Google")).to_have_count(0)
+    expect(local_page.get_by_role("link", name="Sign in with Google")).to_have_count(0)
 
     admin_page = browser.new_page(viewport={"width": 1280, "height": 850})
     admin_page.route(

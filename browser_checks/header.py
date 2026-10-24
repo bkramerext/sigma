@@ -36,6 +36,19 @@ with sync_playwright() as playwright:
         )
 
     page.route("**/api/**", forward)
+    page.route(
+        "**/api/cloud-auth/status",
+        lambda route: route.fulfill(
+            json={
+                "target": "local",
+                "enabled": True,
+                "ready": True,
+                "authenticated": True,
+                "user": {"email": "header-reviewer@example.org", "role": "member"},
+                "admin_contact_email": None,
+            }
+        ),
+    )
     available_models = [
         {
             "id": "gpt-6.1-sol",
@@ -112,24 +125,30 @@ with sync_playwright() as playwright:
     expect(model_control).to_have_text("Model · Sol $$")
     expect(thinking_control).to_have_text("Thinking · High")
     expect(difficulty_control).to_have_text("Difficulty · Medium")
-    expect(google_signin).to_contain_text("Google Sign-in")
-    expect(google_signin).to_contain_text("Coming soon")
-    expect(google_signin).to_be_disabled()
+    expect(google_signin).to_have_text("Google account connected")
+    expect(google_signin).to_be_enabled()
     expect(google_signin).to_have_attribute(
-        "aria-label", "Google sign-in is unavailable in this local workspace."
+        "aria-label", "Google account connected; open account settings"
     )
+    expect(google_signin).to_have_attribute("data-tooltip-disabled", "")
+    expect(google_signin).not_to_have_attribute("data-tooltip")
+    expect(google_signin).not_to_have_attribute("title")
     assert google_signin.locator(".connection-dot").count() == 1
-    assert (
-        google_signin.locator(".connection-dot").evaluate(
-            "e => getComputedStyle(e).backgroundColor"
-        )
-        == "rgb(127, 140, 150)"
+    expect(google_signin.locator(".connection-dot")).to_have_css(
+        "background-color", "rgb(117, 177, 140)"
     )
+    assert google_signin.locator(".connection-dot").evaluate(
+        "e => getComputedStyle(e).animationName"
+    ) == "none"
     assert google_signin.evaluate("e => e.matches('button')")
     auth_requests: list[str] = []
     page.on("request", lambda request: auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None)
     google_signin.click(force=True)
     assert not auth_requests
+    expect(page.get_by_role("dialog", name="Connect your Google account")).to_be_visible()
+    expect(page.get_by_text("header-reviewer@example.org", exact=True)).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.get_by_role("dialog", name="Connect your Google account")).to_have_count(0)
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
     model_box = model_control.bounding_box()
