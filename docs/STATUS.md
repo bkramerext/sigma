@@ -21,7 +21,7 @@ also prints an actionable warning when OAuth client settings exist but the
 bootstrap Gmail is absent from the launch environment. The launcher does not
 source arbitrary shell code or infer an administrator identity. Existing
 verified-email, persistent Google-subject, and local/hosted authorization checks
-are unchanged. `docs/CLOUD-AUTH.md` now explains that the bootstrap value must
+are unchanged. `docs/CLOUD_DEPLOYMENT.md` now explains that the bootstrap value must
 be exported in the launching shell.
 
 The ChatGPT Connected popup now uses the same small underlined action treatment
@@ -250,7 +250,7 @@ loopback-only Google OIDC. With no bootstrap email, normal local startup keeps
 its existing unauthenticated project behavior. `GOOGLE_OIDC_CLIENT_SECRET` is
 passed only to the backend process.
 
-`docs/CLOUD-AUTH.md` records Google Cloud OAuth consent/client setup, exact
+`docs/CLOUD_DEPLOYMENT.md` records Google Cloud OAuth consent/client setup, exact
 loopback origin and callback, the `~/.bashrc` bootstrap-email setting, ignored
 checkout `.env` OAuth values, and the expected local-versus-hosted boundary. The
 verified bootstrap address remains bound to Google's immutable subject; backend
@@ -385,7 +385,7 @@ remaining amount, but its recorded estimated spend and unknown holds remain
 visible. Reductions below prior spend preserve ledger evidence and holds and
 deny new reservations. Exhaustion and invalid configuration do not block
 project or saved research reads. Research Limits explains the cloud caps. Updated
-`docs/CLOUD-AUTH.md` with configuration, durable accounting, and initial pilot
+`docs/CLOUD_DEPLOYMENT.md` with configuration, durable accounting, and initial pilot
 allocation (five accounts including admin: `$10` combined per-user allowances
 and `$5` global reserve under the `$15` ceiling).
 
@@ -4085,7 +4085,7 @@ administrator role through the copper/dark Access Management UI. No invitation
 emails are sent. Cloud mode denies the process-wide `/api/ai/*` endpoints so a
 Google account cannot inherit local ChatGPT authorization or AI billing. The
 bootstrap email is bound to its first Google subject. Configuration and setup
-are documented in [CLOUD-AUTH](CLOUD-AUTH.md).
+are documented in [CLOUD-AUTH](CLOUD_DEPLOYMENT.md).
 
 `tests/cloud_auth.py` uses generated local RSA signing keys and mocked Google
 responses; it verifies successful bootstrap and individual invitation, exact
@@ -5147,7 +5147,7 @@ SQLite; sandbox execution of deterministic `print(6 * 7)` in both Python and
 SageMath; rootless separate sandbox-socket contract in the GCE Compose setup;
 least-privilege IAM, OAuth, HTTPS, firewall, secrets, backup/restore,
 update/rollback procedures, operator approval gates, and an itemized trial cost
-estimate documented in `docs/GCP-DEPLOYMENT.md`. Local Docker image sizes were
+estimate documented in `docs/CLOUD_DEPLOYMENT.md`. Local Docker image sizes were
 backend 120 MB, frontend 29 MB, Python runner 190 MB, and SageMath runner 1.47
 GB. The local Apple Silicon host ran linux/amd64 images under emulation.
 
@@ -5249,7 +5249,7 @@ The wider `browser_checks/a17_research.py` attempt remains limited by its
 earlier local AI-connection-dialog scenario as described above.
 ## T44 Google Cloud provisioning runbook (2026-10-23)
 
-Added `docs/GCP-PROVISIONING-RUNBOOK.md` as an operator-executable companion
+Added `docs/CLOUD_DEPLOYMENT.md` as an operator-executable companion
 to the existing deployment guide. It separates preflight/budget/API preparation,
 IAM/network/disk/IP/VM resource creation, and post-VM deployment. It makes the
 VM and attached static IP independent of domain selection, keeps public web

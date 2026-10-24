@@ -195,7 +195,7 @@ See `WOLF.md` for the narrative, `WOLF_IDEAS.md` for writing ideas, `WOLF_TODO.m
 
 A new human, ChatGPT coordinator, or replacement Codex session must be able to resume from GitHub alone. **Do not rely on memory of a previous chat or on an old worker terminal.** The first action is to reconstruct the actual state, not issue new assignments.
 
-1. Read this protocol, `docs/HUMAN-AI-INTERACTION.md`, `README.md`, `docs/STATUS.md`, and `TICKET_TRACKING.md`. Read relevant `tickets/t*.md` in full.
+1. Read this protocol, the human–AI collaboration rules in Section 16, `README.md`, `docs/STATUS.md`, and `TICKET_TRACKING.md`. Read relevant `tickets/t*.md` in full.
 2. Inspect **current GitHub state**, not just tracker prose: default branch HEAD, open PRs and their bases/heads, mergeability, latest commits, review comments, and `messages/` handoffs. Tracking files are snapshots and can lag reality.
 3. Reconstruct a worker ledger: color, coordinator domain, assigned ticket, branch/PR, status, last confirmed human dispatch, blocker, next action, and whether tests were reported or independently reproduced.
 4. Reconcile discrepancies with the human. Ask which worker windows are still active, which instructions were actually forwarded, and whether a worker has unpushed changes. Never infer live activity from an open PR.
@@ -241,7 +241,7 @@ For a ChatGPT coordinator replacement, use Section 10. A coordinator conversatio
 
 **Evidence retention:** A message file must contain enough to reproduce meaningful tests: commands, relevant environment prerequisites, base/head revisions, outcomes, and artifact locations. Temporary `/tmp` screenshots are not durable evidence. When a screenshot or log is essential to acceptance, attach it to an accessible PR artifact or commit a small appropriate test fixture, subject to repository policy. Redact tokens, email addresses, private paths, and user data.
 
-**Change control:** Human discussion does not automatically authorize repository edits. Obtain explicit authorization for changes when required by `docs/HUMAN-AI-INTERACTION.md`; standing permission to review and merge assigned PRs is not blanket permission for unrelated direct edits. For consequential architecture, security, billing, UX redesign, or release-scope changes, return to the human for a decision.
+**Change control:** Human discussion does not automatically authorize repository edits. Obtain explicit authorization for changes when required by the human–AI collaboration rules in Section 16; standing permission to review and merge assigned PRs is not blanket permission for unrelated direct edits. For consequential architecture, security, billing, UX redesign, or release-scope changes, return to the human for a decision.
 
 ## 13. Exceptions, escalation, and rollback
 
@@ -265,8 +265,24 @@ At the end of an integration cycle, the coordinator should provide a concise led
 
 ## 15. Maintenance of this protocol
 
-This file is the stable operating contract; `TICKET_TRACKING.md` and current PRs hold volatile assignment state. Avoid turning this protocol into a daily status log. When practice changes, update the affected rule here, explain the rationale in the commit, and ensure worker assignments refer to the current protocol. Periodically check for contradictions with `docs/HUMAN-AI-INTERACTION.md`, ticket instructions, and actual observed behavior.
+This file is the stable operating contract; `TICKET_TRACKING.md` and current PRs hold volatile assignment state. Avoid turning this protocol into a daily status log. When practice changes, update the affected rule here, explain the rationale in the commit, and ensure worker assignments refer to the current protocol. Periodically check for contradictions with the human–AI collaboration rules in Section 16, ticket instructions, and actual observed behavior.
 
 A future team should be able to answer without the original chat: **Who decides? Who sends? Who codes? Who reviews? Who merges? Who tests the integrated result? What is actually running? What is still unverified? What happens if a participant disappears?**
 
 This protocol should evolve when the team changes its actual practices. Amend it based on observed behavior, not an idealized account of autonomous development.
+
+## 16. Human–AI collaboration principles
+
+These principles apply to the human engineering lead, ChatGPT coordinators, and worker-facing communication alongside the operational rules above.
+
+- **Clarity:** Lead with the point. Match detail to complexity, not a word count.
+- **Audience:** Human-facing writing should be easy to scan. Preserve meaning; cut explanation that adds no value.
+- **AI-to-AI assignments:** Chat → Codex instructions need **granularity and exactness**. Brevity is not a goal; include contracts, edge cases, constraints, and verification requirements.
+- **Agency and authorization:** Independently investigate, challenge assumptions, and develop substantial drafts. Never modify the repository during discussion or treat a request to draft content as permission to publish it. Commit only with explicit user authorization, consolidating settled changes into deliberate commits rather than recording conversational iterations.
+- **Continuity of agency:** Maintain independent judgment after criticism. Do not overcorrect into deference, agreement-seeking, passive replies, or merely echoing the user. Authorization boundaries do not remove responsibility to think and contribute.
+- **Continuity:** Keep decisions and revisions traceable without retelling discussions.
+- **Trust:** Separate facts from hypotheses and uncertainty. Never imply unperformed work is complete.
+- **Approved references:** Preserve exact approved assets, externally specified contracts, and acceptance tests. Changes should follow explicit requirements and be verified against actual files and runtime behavior.
+- **Defect response:** Diagnose observable failures against source, logs, and tests; distinguish root cause from hypothesis; report corrected behavior and remaining verification gaps.
+- **Feedback:** Adapt behavior to corrections rather than defending earlier choices.
+- **Research storytelling:** Creative explanations and illustrations must remain faithful to evidence. Communicate failure as carefully as success.
