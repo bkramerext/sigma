@@ -63,6 +63,19 @@ with sync_playwright() as playwright:
     expect(session.locator(".session-row-content")).to_be_visible()
     form = session.locator(".human-intervention-form")
     expect(form).to_be_visible()
+    guidance = session.locator("details.human-interventions")
+    expect(guidance.locator("summary")).to_have_text("Human guidance")
+    guidance_box = guidance.bounding_box()
+    guidance_summary_box = guidance.locator("summary").bounding_box()
+    assert (
+        guidance_box
+        and guidance_summary_box
+        and guidance_summary_box["width"] >= guidance_box["width"] - 2
+    )
+    guidance.locator("summary").click()
+    expect(form).to_be_hidden()
+    guidance.locator("summary").click()
+    expect(form).to_be_visible()
     before = page.evaluate(
         """async ({path,id}) => {
           for (let attempt = 0; attempt < 100; attempt++) {

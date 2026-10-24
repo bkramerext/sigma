@@ -341,8 +341,12 @@
 .workspace-page .research-strategy-selection { flex: 1 1 100%; max-width: 400px; color: #c4d0da; }
 .workspace-page .research-strategy-selection summary { color: #e4c39c; cursor: pointer; }
 .workspace-page .research-strategy-selection p { margin: 6px 0; font-size: 12px; }
-.workspace-page .research-strategy-selection fieldset { display: grid; gap: 4px; margin: 6px 0; padding: 6px 9px; border: 1px solid #344754; }
-.workspace-page .research-strategy-selection label { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.workspace-page .research-strategy-selection { width: 100%; max-width: none; min-width: 0; }
+.workspace-page .research-strategy-selection fieldset { display: grid; gap: 3px; margin: 6px 0 0; padding: 6px 9px; border: 1px solid #344754; }
+.workspace-page .research-strategy-selection label { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; min-width: 0; padding: 4px 2px; color: #c4d0da; font-size: 12px; line-height: 1.35; }
+.workspace-page .research-strategy-selection label input[type="checkbox"] { width: 16px; height: 16px; min-width: 16px; max-width: 16px; margin: 1px 0 0; padding: 0; border: 0; accent-color: #d4a36d; }
+.workspace-page .research-strategy-selection label span { min-width: 0; overflow-wrap: anywhere; }
+.workspace-page .session-selection-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
 .workspace-page .research-session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 14px 0; }
 .workspace-page .research-consent, .workspace-page .research-stop-confirm { margin: 8px 0; padding: 14px 16px; border: 1px solid #66533d; border-radius: 6px; background: #101820; color: #d5dfe7; line-height: 1.6; }
 .workspace-page .research-consent p, .workspace-page .research-stop-confirm p { margin: 5px 0 10px; }
@@ -482,8 +486,13 @@
 .workspace-page .sessions-pane .research-session-facts { gap: 4px 24px; }
 .workspace-page .sessions-pane .research-session-facts p { margin: 3px 0; }
 .workspace-page .sessions-pane .research-session-message { color: #e7c08d; }
-.workspace-page .human-interventions { min-width: 0; margin: 14px 0; padding: 10px 0; border-top: 1px solid #293b47; }
-.workspace-page .human-interventions > h4 { margin: 0 0 8px; color: #e4be91; font-size: 13px; }
+.workspace-page .human-interventions { min-width: 0; margin: 7px 0; padding: 0; border: 0; }
+.workspace-page .human-interventions > summary { display: flex; align-items: center; gap: 8px; width: auto; margin: 0; color: #e4be91; font-size: 13px; font-weight: 600; list-style: none; cursor: pointer; }
+.workspace-page .human-interventions > summary::-webkit-details-marker { display: none; }
+.workspace-page .human-interventions > summary:hover { color: #f1c58d; }
+.workspace-page .human-interventions > summary:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; border-radius: 3px; }
+.workspace-page .human-interventions > summary .disclosure-chevron { width: 11px; height: 11px; flex-basis: 11px; }
+.workspace-page .human-interventions[open] > summary .disclosure-chevron { transform: rotate(90deg); }
 .workspace-page .human-intervention-form { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(160px, 1fr) minmax(190px, 1.2fr); align-items: end; gap: 8px 14px; }
 .workspace-page .human-intervention-form > label { display: grid; gap: 4px; color: #b9c6d0; font-size: 11px; }
 .workspace-page .human-intervention-form select { min-height: 34px; padding: 6px 8px; font-size: 12px; }
@@ -779,6 +788,9 @@
 .workspace-page .strategy-process-controls:has(.session-start-link) {
   display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
+.workspace-page .strategies-session-selection { flex: 1 1 100%; min-width: 0; }
+.workspace-page .strategies-session-selection .strategy-process-controls:has(.session-start-link) { display: flex; flex: 1 1 100%; flex-direction: column; align-items: flex-start; gap: 8px; width: min(520px, 100%); max-width: 100%; min-width: 0; }
+.workspace-page .strategies-session-selection .research-strategy-selection { width: 100%; max-width: none; min-width: 0; }
 .workspace-page .strategy-process-controls .session-start-link {
   display: inline; width: auto; min-width: 0; min-height: 0;
   margin: 0; padding: 2px 0; border: 0; border-radius: 0;

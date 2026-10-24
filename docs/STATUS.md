@@ -4921,3 +4921,31 @@ requests. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed on the
 merged branch, including cloud auth/workspace/spending/fake-provider scenarios,
 Ruff/format, Pyright (0 diagnostics), frontend typecheck, and production build.
 No cloud resources, live Google OAuth, or paid provider calls were used.
+
+### T43.1 operator UI follow-up: strategy selection and Human Guidance (2026-10-23)
+
+On the existing `gray/t43-1-operator-followups` branch, the multi-strategy
+selection is now laid out as a left-aligned compact list: checkbox inputs have
+fixed dimensions, strategy titles share one aligned column, and Start/Cancel
+flow below the options. Human Guidance is a native keyboard-accessible
+disclosure styled as an outlined Outcome subsection and remains open by default
+to preserve visibility of the intervention form and history.
+
+- Real Chrome `browser_checks/t43_1_strategy_selection.py` passed at 1440px and
+  390px, verifying checkbox/title alignment, left alignment, stacked actions,
+  and no horizontal overflow. Screenshots are in `/tmp` as documented in
+  `browser_checks/README.md`.
+- Real Chrome `browser_checks/t29_intervention.py` passed the complete
+  deterministic guidance lifecycle, disclosure collapse/reopen, full-width
+  summary alignment, saved provenance, and mobile overflow check.
+- `./sigma test` passed backend, CLI, cloud/security, lint/format, Pyright,
+  frontend typecheck, and production build. Existing Starlette/httpx
+  deprecation warnings remain.
+- `browser_checks/a17_research.py` was attempted but stopped earlier in its
+  AI-connection-settings dialog scenario (the expected dialog did not open
+  with this checkout's current local authentication configuration), before
+  reaching the strategy-picker scenario. The focused real-Chrome picker check
+  above covers the changed behavior directly.
+
+No research provider calls were made. PR #63 remains open for coordinator
+review; no merge was performed.

@@ -110,3 +110,37 @@ Verification:
 Real Google OAuth remains UNVERIFIED and requires the operator's third manual
 acceptance pass. No paid provider calls, live OAuth, or cloud provisioning
 were performed. PR #63 remains open for coordinator review; do not merge.
+
+Strategy picker and Human Guidance follow-up (2026-10-23)
+--------------------------------------------------------
+Continued on the same `gray/t43-1-operator-followups` branch and PR #63.
+
+- Reworked multi-strategy selection into a compact list aligned with the left
+  edge of the Strategies pane. Checkboxes use a fixed 16px size; strategy
+  labels share a column; Start and Cancel sit beneath the options.
+- Made Human Guidance collapsible with a native `<details>` disclosure. It is
+  initially open to preserve the current visibility of the input and saved
+  guidance history, and uses the same outlined card and summary treatment as
+  Outcome subsections.
+- Added `browser_checks/t43_1_strategy_selection.py` and expanded the T29
+  guidance browser regression for collapse/reopen and full-width summary.
+
+Validation:
+- `./sigma test` passed all lifecycle, API, CLI, security/cloud, lint/format,
+  Pyright, frontend typecheck, and production build checks. Existing
+  Starlette/httpx deprecation warnings remain.
+- Real Chrome `browser_checks/t43_1_strategy_selection.py` passed at 1440px and
+  390px. It verified compact checkbox sizing, aligned labels, left alignment,
+  stacked actions, and no horizontal overflow. Screenshots:
+  `/tmp/sigma-t43-1-strategy-selection-desktop.png` and
+  `/tmp/sigma-t43-1-strategy-selection-mobile.png`.
+- Real Chrome `browser_checks/t29_intervention.py` passed deterministic
+  guidance submission, no provider call on submission, acknowledgment and
+  provenance, collapse/reopen, full-width summary, and mobile overflow checks.
+- `browser_checks/a17_research.py` was attempted but stopped in its earlier
+  AI-connection-settings dialog scenario because the expected dialog did not
+  open with the checkout's local auth configuration. It did not reach the
+  later strategy-picker scenario; the dedicated check above covers that UI.
+
+No research provider calls or live OAuth were made. PR #63 remains open; do not
+merge. Final branch head SHA will be recorded after the update is pushed.

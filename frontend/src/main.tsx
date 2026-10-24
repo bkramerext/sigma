@@ -302,8 +302,9 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-general"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids?.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>{!!session.outcome.caveats?.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
 
-      {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <section className="human-interventions" aria-label="Human research guidance">
-        <h4>Human guidance</h4>
+      {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <details className="human-interventions outcome-subsection" aria-label="Human research guidance" open>
+        <summary><DisclosureChevron expanded={false}/>Human guidance</summary>
+        <div className="human-interventions-content">
         {!supportsIntervention && <p className="human-intervention-note">Guidance is unavailable for this legacy session because it has no strategy-bound execution steps.</p>}
         {supportsIntervention && interventionWindowOpen && interventionCount.filter(item => item.status !== 'rejected').length >= 24 && <p className="human-intervention-note">This session reached its 24-guidance limit.</p>}
         {canIntervene && <form className="human-intervention-form" onSubmit={submitIntervention}>
@@ -321,7 +322,8 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
           {item.rejection_reason && <small>{item.rejection_reason}</small>}
           {!!item.deliveries.length && <ul>{item.deliveries.map((delivery, index) => <li key={`${delivery.strategy_id}:${delivery.role}:${index}`}><span>{targetStrategies.find(strategy => strategy.strategy_id === delivery.strategy_id)?.strategy_title ?? 'Strategy'} · {delivery.role}{delivery.target_cycle ? ` · cycle ${delivery.target_cycle === 'next_eligible' ? 'pending' : delivery.target_cycle}` : ''}</span><span>{delivery.status}{delivery.uptake ? ` · ${delivery.uptake}` : ''}</span>{delivery.rationale && <small>{delivery.rationale}</small>}{delivery.attempts.length > 1 && <small>{delivery.attempts.length} delivery attempts; interrupted attempts remain in the audit.</small>}</li>)}</ul>}
         </li>)}</ol>}
-      </section>}
+        </div>
+      </details>}
 
       <div className="outcome-subsections">
         <details className="outcome-subsection">
@@ -2000,8 +2002,10 @@ function ProcessControlsView({ controls, disabled }: { controls: ProcessControls
           const atLimit = (controls.selectedStrategyIds?.length ?? 0) >= (controls.selectionLimit ?? 0);
           return <label key={strategy.id}><input type="checkbox" checked={selected} disabled={disabled || !selected && atLimit} onChange={event => controls.onStrategySelectionChange?.(strategy.id, event.target.checked)}/><span>{strategy.title}</span></label>;
         })}</fieldset></details>}
+        <span className="session-selection-actions">
         <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled || !(controls.selectedStrategyIds?.length) || (controls.selectedStrategyIds?.length ?? 0) > (controls.selectionLimit ?? 0)} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
+        </span>
       </> : <>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
@@ -2424,8 +2428,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <div className="strategies-heading-right">
           <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
+          {!processControls.confirming && <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>}
         </div>
+        {processControls.confirming && <div className="strategies-session-selection"><ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/></div>}
       </header>
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
       <p className="sr-only" role="status">{announcement}</p>
