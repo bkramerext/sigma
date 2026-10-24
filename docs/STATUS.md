@@ -1,5 +1,73 @@
 # SIGMA status
 
+## T43.1 third-pass operator acceptance fixes (2026-10-24)
+
+Implemented on `gray/t43-1-operator-followups`, based on current `main`
+`0424854` (including T42 deployment-readiness integration). The P0 Google
+issue had two linked causes. First, the active local
+runtime reported Google auth disabled: checkout `.env` had OAuth client
+credentials, but `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` was not present in the
+launcher environment. That address was configured in `~/.bashrc`, which the
+launcher intentionally does not execute; a shell that has not sourced that
+file does not export the value. Second, `CloudAuthGate` discarded local auth
+status when auth was disabled, so the Home pill could only show “Coming Soon”
+and could not explain the missing setting.
+
+Local status now reports missing variable names only. The Home and project
+Google pill remains available as a setup disclosure, changes its state to
+“Setup required”, and gives exact shell/configuration and restart steps. It
+offers Continue with Google only when auth is enabled and ready. `./sigma start`
+also prints an actionable warning when OAuth client settings exist but the
+bootstrap Gmail is absent from the launch environment. The launcher does not
+source arbitrary shell code or infer an administrator identity. Existing
+verified-email, persistent Google-subject, and local/hosted authorization checks
+are unchanged. `docs/CLOUD-AUTH.md` now explains that the bootstrap value must
+be exported in the launching shell.
+
+The ChatGPT Connected popup now uses the same small underlined action treatment
+for Manage usage, Disconnect, Connect another account, Retry connection, and
+Cancel sign-in. The redundant standalone “Using ChatGPT plan” label and Switch
+account selector are removed; the active account remains unchanged, and the
+provider's allowance/permission/uncertainty guidance is retained. Artwork
+credits display in Title Case and sit 5px from the bottom-right viewport edge.
+Unmapped legacy Recent project types are grouped under Other instead of showing
+an “Unavailable” category; the projects themselves remain in Recent.
+
+Verification:
+
+- `./sigma test` passed, including `tests/cloud_auth.py` (15 tests), launcher
+  setup/warning checks, Ruff, formatting, Pyright (zero diagnostics), frontend
+  typecheck, and production build. Existing Starlette/httpx deprecation
+  warnings remain.
+- Real Chrome `browser_checks/t43_1_manual_acceptance.py` passed against an
+  isolated Vite/API pair using this checkout's `.env`. Its actual local auth
+  status reported disabled with the missing bootstrap variable; only project
+  list and ChatGPT connection responses were deterministic fixtures. Google
+  setup disclosure, no-login action, keyboard dismissal/focus, recent-category
+  recovery, credits position/title case, ChatGPT popup simplification/actions,
+  and 1440px/390px layouts passed. Sign-in attempt/cancel styling used a local
+  deterministic fixture; no OAuth request was made. Screenshots:
+  `/tmp/sigma-t43-1-google-setup-1440.png`,
+  `/tmp/sigma-t43-1-google-setup-390.png`,
+  `/tmp/sigma-t43-1-home-1440.png`, `/tmp/sigma-t43-1-home-390.png`,
+  `/tmp/sigma-t43-1-recent-1440.png`, `/tmp/sigma-t43-1-recent-390.png`, and
+  `/tmp/sigma-t43-1-connected-popup-390.png`.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed deterministic signed-out,
+  administrator and member flows, Google controls, account management, and
+  desktop/mobile layout. The existing live listeners on 8000/5173 were left
+  untouched; browser checks used ports 8014/5190.
+- Deterministic local Google OIDC tests cover state, nonce, PKCE, ID-token,
+  bootstrap email/subject binding, and authorization. No paid provider calls or
+  cloud provisioning were made.
+
+Acceptance: **MET** — configuration diagnosis and actionable setup flow,
+authorization invariants, ChatGPT popup and Recent/credits fixes, deterministic
+tests, and real Chrome desktop/narrow checks. **UNVERIFIED** — the operator's
+real local Google OAuth round trip. The launch environment used for this check
+did not include the bootstrap Gmail, so it correctly stayed disabled; the
+operator must source the configured shell value and perform the requested
+third manual acceptance pass. No real ChatGPT OAuth handoff was performed.
+
 ## T43 manual acceptance fixes (2026-10-23)
 
 Implemented on `gray/t43-manual-acceptance-fixes`, based on current `main`

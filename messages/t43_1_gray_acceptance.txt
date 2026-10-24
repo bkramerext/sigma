@@ -1,0 +1,30 @@
+T43.1 — Third-pass operator acceptance fixes
+Owner: Gray
+Base: current main at 0424854 (including T42 deployment-readiness integration)
+Branch: gray/t43-1-operator-followups
+Status: R4R handoff pending PR creation
+
+Root cause and security disposition
+The active local API reported Google auth `enabled: false`. This checkout's `.env` had Google OAuth client credentials, and `~/.bashrc` contained the bootstrap-email export, but the actual launcher environment lacked `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`. The launcher intentionally reads checkout `.env` without executing shell files; when the launching shell has not sourced `.bashrc`, the bootstrap value is unavailable. A second UI defect compounded this: CloudAuthGate omitted local identity context when auth was disabled, so the Home pill showed “Coming Soon” and could not explain the missing setting.
+
+SIGMA does not infer the first administrator from the Google OAuth client or silently enable authentication. The pill now opens a setup diagnostic listing missing variable names only. It presents Continue with Google only when auth is enabled and ready. The launcher prints an actionable warning for OAuth client credentials without the bootstrap email. The operator can load the configured value in the launching shell with `source ~/.bashrc`, verify presence with `test -n "$SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"`, and restart using `./sigma start --nav`. Email/subject binding, verified Google identity, local/hosted separation, and authorization enforcement remain intact.
+
+Acceptance matrix
+- MET — Google setup state is no longer “Coming Soon” or a dead disabled pill. The missing bootstrap setting and exact restart guidance are visible and keyboard accessible.
+- MET — Configured local auth still receives local mode from the launcher; deterministic OIDC tests cover bootstrap identity/subject binding and auth security.
+- UNVERIFIED — Real Google OAuth was not exercised because the actual runtime environment lacked the bootstrap email. Operator must source the configured shell variable and perform the third manual acceptance pass.
+- MET — Connected ChatGPT popup removes standalone “Using ChatGPT plan” and Switch account, retains useful provider allowance/permission/uncertainty guidance, and keeps the current account unchanged.
+- MET — Manage usage, Disconnect, Connect another account, Retry connection, and Cancel sign-in use the small underlined action style.
+- MET — Credits are Title Case and positioned exactly 5px from the bottom/right viewport edge.
+- MET — Invalid legacy Recent project types group under Other; no “Unavailable” category is rendered and projects remain recoverable.
+- UNVERIFIED — Real ChatGPT OAuth handoff was not run; the popup and cancel interactions used deterministic local UI fixtures. No paid provider calls or cloud provisioning occurred.
+
+Verification
+- `uv run --locked --no-sync python tests/cloud_auth.py` — 15 tests passed.
+- `uv run --locked --no-sync python tests/tooling.py` — passed launcher env propagation, setup warning, and lifecycle scenarios.
+- `./sigma test` — passed all backend/API/CLI scenarios, Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production build. Existing Starlette/httpx deprecation warnings remain.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5190 SIGMA_BROWSER_API_URL=http://127.0.0.1:8014 uv run --with playwright python browser_checks/t43_1_manual_acceptance.py` — real Chrome passed using this checkout's `.env` and actual updated local auth status endpoint; only project-list/AI connection and OAuth-interaction states were deterministic fixtures. Desktop 1440px and narrow 390px checks passed.
+- Same isolated Chrome setup with `browser_checks/t40_cloud_ui.py` — deterministic signed-out/admin/member Google and administrator acceptance passed.
+- Existing listeners on 8000/5173 were left untouched. Screenshots are recorded in `docs/STATUS.md` under T43.1.
+
+No live Google/ChatGPT OAuth, paid model calls, or cloud provisioning were used. A third operator-led manual acceptance pass remains required.

@@ -1677,10 +1677,13 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
-  const recentGroups = projects.reduce<Array<{ type: string | null; projects: RecentProject[] }>>((groups, project) => {
-    const group = groups.find(item => item.type === project.investigation_type);
+  const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+    const type: ResearchMode = project.investigation_type && Object.hasOwn(researchTypeLabels, project.investigation_type)
+      ? project.investigation_type as ResearchMode
+      : 'default';
+    const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
-    else groups.push({ type: project.investigation_type, projects: [project] });
+    else groups.push({ type, projects: [project] });
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
@@ -2547,7 +2550,7 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
+type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudFunding = { target: 'local' | 'hosted'; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean };
@@ -2635,20 +2638,34 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
       window.location.assign('/');
     } catch (cause) { setError(errorMessage(cause)); }
   }
-  const description = cloud?.authenticated ? 'Open Google account settings' : cloud?.enabled ? 'Open Google sign-in' : 'Google sign-in is unavailable in this local workspace.';
+  const canSignIn = !!cloud?.enabled && cloud.ready;
+  const setupMissing = cloud?.local_setup_missing ?? [];
+  const description = cloud?.authenticated ? 'Open Google account settings' : canSignIn ? 'Open Google sign-in' : 'Open Google sign-in setup';
   return <>
-    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} disabled={!cloud?.enabled} onClick={() => { setError(''); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google sign-in</span>{(cloud?.authenticated || !cloud?.enabled) && <small>{cloud?.authenticated ? 'Signed in' : 'Coming soon'}</small>}
+    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google sign-in</span>{cloud?.authenticated && <small>Signed in</small>}{!cloud?.authenticated && !canSignIn && <small>Setup required</small>}
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
-      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby="google-account-title" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
-      <h2 id="google-account-title">Connect your Google account</h2>
-      <p className="google-account-target">{target}</p>
-      {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
-      {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-      {!cloud?.authenticated && <a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a>}
-      {cloud?.authenticated && <><button type="button" className="google-text-action" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button></>}
+      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby="google-account-title" tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
+      {!cloud ? <>
+        <h2 id="google-account-title">Checking Google sign-in</h2>
+        <p>SIGMA is checking the local Google authentication configuration.</p>
+      </> : !canSignIn && !cloud.authenticated ? <>
+        <h2 id="google-account-title">Google sign-in setup required</h2>
+        <p>Local Google sign-in is unavailable because the current SIGMA launch is missing required configuration.</p>
+        {setupMissing.length > 0 && <p className="google-setup-missing">Missing: {setupMissing.map(name => <code key={name}>{name}</code>)}</p>}
+        {setupMissing.length === 0 && <p>Local Google authentication is not enabled for this server process. Restart using <code>./sigma start --nav</code> after exporting the required settings.</p>}
+        <p>Set the missing values in the environment used to start SIGMA. Put the Google OAuth client ID and secret in this checkout’s <code>.env</code>. Set <code>SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL</code> to the operator’s actual Gmail address. If that value is in <code>~/.bashrc</code>, run <code>source ~/.bashrc</code> in the launching shell, then restart with <code>./sigma start --nav</code>.</p>
+        <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
+      </> : <>
+        <h2 id="google-account-title">Connect your Google account</h2>
+        <p className="google-account-target">{target}</p>
+        {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
+        {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
+        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a>}
+        {cloud?.authenticated && <><button type="button" className="google-text-action" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button></>}
+      </>}
       {error && <p role="alert">{error}</p>}
       </div>
     </>, document.body)}
@@ -2839,9 +2856,9 @@ function CloudAuthGate() {
     } finally { setBusy(false); }
   }
   const funding: CloudFunding = { target: status?.target ?? 'local', budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated };
-  const context: CloudIdentityState | null = status?.enabled ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
+  const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
-  if (!status.enabled) return <AIProvider><App/></AIProvider>;
+  if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   const target = status.target ?? 'hosted';

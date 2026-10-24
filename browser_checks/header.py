@@ -112,11 +112,11 @@ with sync_playwright() as playwright:
     expect(model_control).to_have_text("Model · Sol $$")
     expect(thinking_control).to_have_text("Thinking · High")
     expect(difficulty_control).to_have_text("Difficulty · Medium")
-    expect(google_signin).to_contain_text("Google Sign-in")
-    expect(google_signin).to_contain_text("Coming soon")
-    expect(google_signin).to_be_disabled()
+    expect(google_signin).to_contain_text("Google sign-in")
+    expect(google_signin).to_contain_text("Setup required")
+    expect(google_signin).to_be_enabled()
     expect(google_signin).to_have_attribute(
-        "aria-label", "Google sign-in is unavailable in this local workspace."
+        "aria-label", "Open Google sign-in setup"
     )
     assert google_signin.locator(".connection-dot").count() == 1
     assert (
@@ -130,6 +130,10 @@ with sync_playwright() as playwright:
     page.on("request", lambda request: auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None)
     google_signin.click(force=True)
     assert not auth_requests
+    expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_be_visible()
+    expect(page.locator(".google-setup-missing code")).to_contain_text(
+        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"
+    )
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
     model_box = model_control.bounding_box()

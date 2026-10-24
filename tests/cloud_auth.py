@@ -665,6 +665,24 @@ class CloudAuthTests(TestCase):
             self.assertFalse(self.client.get("/api/cloud-auth/status").json()["enabled"])
             self.assertEqual(self.client.get("/api/research-tools").status_code, 200)
 
+    def test_local_status_reports_missing_bootstrap_without_exposing_credentials(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "false",
+                "GOOGLE_OIDC_CLIENT_ID": CLIENT_ID,
+                "GOOGLE_OIDC_CLIENT_SECRET": "local-test-secret",
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            },
+        ):
+            response = self.client.get("/api/cloud-auth/status")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["enabled"])
+        self.assertEqual(body["local_setup_missing"], ["SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"])
+        self.assertNotIn("local-test-secret", response.text)
+        self.assertNotIn("admin@example.org", response.text)
+
 
 if __name__ == "__main__":
     main()

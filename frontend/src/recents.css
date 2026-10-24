@@ -222,8 +222,10 @@ button.project-google-signin:disabled { border-color: #5b5148; background: #0918
 .admin-save-row p { margin: 0 auto 0 0; color: #c0cad2; font-size: 11px; }
 .admin-feedback { margin: 8px 0 0; color: #d6be9c; font-size: 12px; }
 .admin-feedback[role="alert"] { color: #f0a89b; }
-.home-page .home-art-credit { color: #d6a16e; font: small-caps 500 12px/1.3 Georgia, 'Times New Roman', serif; letter-spacing: .075em; text-shadow: 0 1px 8px #05101dcc, 0 0 14px #b8643c55; }
-.home-page .home-art-credit time { color: #bd8053; font: small-caps 500 9px/1.3 Georgia, 'Times New Roman', serif; letter-spacing: .15em; }
+.home-page .home-art-credit { right: 5px; bottom: 5px; color: #d6a16e; font: 500 12px/1.3 Georgia, 'Times New Roman', serif; font-variant: normal; letter-spacing: .015em; text-shadow: 0 1px 8px #05101dcc, 0 0 14px #b8643c55; }
+.home-page .home-art-credit time { color: #bd8053; font: 500 9px/1.3 Georgia, 'Times New Roman', serif; font-variant: normal; letter-spacing: .04em; }
+.google-connection-details .google-setup-missing { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
+.google-connection-details .google-setup-missing code { color: #f0cca0; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 @media (max-width: 700px) {
   .home-page .administrator-settings-link { top: 46px; left: 22px; font-size: 10px; }
   .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 78px; height: 78px; }

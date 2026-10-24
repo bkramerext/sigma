@@ -68,6 +68,23 @@ def stop_servers(children: list[subprocess.Popen[bytes]]) -> None:
             ) from None
 
 
+def local_google_configuration_warning() -> str | None:
+    """Explain a partial local OAuth setup without reading or evaluating shell files."""
+    has_client_setting = any(
+        os.environ.get(key, "").strip()
+        for key in ("GOOGLE_OIDC_CLIENT_ID", "GOOGLE_OIDC_CLIENT_SECRET")
+    )
+    if has_client_setting and not os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip():
+        return (
+            "Google OAuth client settings were found, but local Google sign-in is disabled "
+            "because SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL is missing from this launch "
+            "environment. Export the operator's actual Gmail address before starting SIGMA; "
+            "if it is in ~/.bashrc, run `source ~/.bashrc` in the launching shell, then "
+            "restart with `./sigma start --nav`."
+        )
+    return None
+
+
 def ready(url: str, instance_id: str | None = None) -> bool:
     try:
         with urlopen(url, timeout=0.3) as response:
@@ -108,6 +125,8 @@ def run_ui(*, navigate: bool = False) -> int:
                     "Local Google sign-in needs SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "
                     "set to the operator's actual Google account."
                 )
+        elif warning := local_google_configuration_warning():
+            print(warning, file=sys.stderr, flush=True)
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:

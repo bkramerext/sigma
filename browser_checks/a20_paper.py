@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+from itertools import pairwise
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -80,15 +81,11 @@ with sync_playwright() as playwright:
         expect(action_buttons.nth(1)).to_have_attribute("data-tooltip", "Generate Lean proof (coming soon)")
         expect(page.locator(".project-difficulty-badge")).to_have_attribute("title", "This project is considered easy. Click to cycle through easy, medium, and hard.")
         expect(page.locator(".project-difficulty-badge")).to_have_attribute("data-tooltip", "This project is considered easy. Click to cycle through easy, medium, and hard.")
-        expect(page.locator(".project-google-signin")).to_have_attribute(
-            "title", "Google sign-in is unavailable in the local workspace and is coming soon."
-        )
-        expect(page.locator(".project-google-signin")).to_have_attribute(
-            "data-tooltip", "Google sign-in is unavailable in the local workspace and is coming soon."
-        )
-        expect(page.locator(".project-google-signin")).to_contain_text("Google Sign-in")
-        expect(page.locator(".project-google-signin")).to_contain_text("Coming soon")
-        assert page.locator(".project-google-signin").get_attribute("role") == "status"
+        expect(page.locator(".project-google-signin")).to_have_attribute("aria-label", "Open Google sign-in setup")
+        expect(page.locator(".project-google-signin")).to_have_attribute("data-tooltip", "Open Google sign-in setup")
+        expect(page.locator(".project-google-signin")).to_contain_text("Google sign-in")
+        expect(page.locator(".project-google-signin")).to_contain_text("Setup required")
+        expect(page.locator(".project-google-signin")).to_be_enabled()
         model_tooltip = page.locator(".project-model-pill").get_attribute("data-tooltip")
         assert model_tooltip and model_tooltip.startswith("The selected model is ") and ". Its relative published API token cost is " in model_tooltip and model_tooltip.endswith(" Click to cycle through available models."), model_tooltip
         expect(page.locator(".project-thinking-pill")).to_have_attribute("data-tooltip", "The thinking level is set to high. Click to cycle through levels supported by this model.")
@@ -111,7 +108,7 @@ with sync_playwright() as playwright:
         assert all(abs(box["y"] + box["height"] / 2 - tex_box["y"] - tex_box["height"] / 2) <= 3 for box in action_boxes), action_boxes
         gaps = [
             next_box["x"] - box["x"] - box["width"]
-            for box, next_box in zip(action_boxes, action_boxes[1:])
+            for box, next_box in pairwise(action_boxes)
         ]
         assert [round(gap) for gap in gaps] == [16, 11, 6], gaps
         visual_boxes = [
@@ -123,7 +120,7 @@ with sync_playwright() as playwright:
         assert all(visual_boxes), visual_boxes
         visual_gaps = [
             next_box["x"] - box["x"] - box["width"]
-            for box, next_box in zip(visual_boxes, visual_boxes[1:])
+            for box, next_box in pairwise(visual_boxes)
         ]
         assert max(visual_gaps) - min(visual_gaps) <= 1, visual_gaps
 
@@ -142,7 +139,12 @@ with sync_playwright() as playwright:
     lean_button.hover()
     expect(page.get_by_role("tooltip")).to_have_text("Generate Lean proof (coming soon)")
     page.locator(".project-google-signin").hover()
-    expect(page.get_by_role("tooltip")).to_have_text("Google sign-in is unavailable in the local workspace and is coming soon.")
+    expect(page.get_by_role("tooltip")).to_have_text("Open Google sign-in setup")
+    page.locator(".project-google-signin").click()
+    expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_be_visible()
+    expect(page.locator(".google-setup-missing code")).to_contain_text(
+        "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"
+    )
     page.locator(".project-difficulty-badge").hover()
     expect(page.get_by_role("tooltip")).to_have_text("This project is considered easy. Click to cycle through easy, medium, and hard.")
     page.locator(".project-chatgpt-signin summary").hover()

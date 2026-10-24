@@ -81,6 +81,16 @@ as this local installation's administrator. Every later login must match both
 values. Other identities need an explicit authorization entry. The bootstrap
 administrator cannot be revoked through Access Management.
 
+The launcher intentionally does not execute or source shell startup files.
+The bootstrap email must be exported into the same shell environment that runs
+`./sigma start --nav`. For example, if it is stored in `~/.bashrc`, run
+`source ~/.bashrc` in that shell first (or configure the startup file used by
+your shell). You can verify presence without printing the address with
+`test -n "$SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"`. When OAuth client credentials
+are present but the bootstrap email is absent from the launch environment,
+SIGMA keeps local single-user mode and reports which setting is missing; it does
+not silently enable Google authentication or infer an administrator identity.
+
 Local OAuth is strictly loopback HTTP: its session cookies are `HttpOnly` and
 `SameSite=Lax` but cannot be `Secure` on localhost. The callback origin is
 hard-coded by the launcher; the auth service accepts only the exact loopback
