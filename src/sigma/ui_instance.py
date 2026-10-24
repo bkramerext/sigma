@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shlex
 import signal
 import socket
 import stat
@@ -92,6 +93,8 @@ class Instance:
             record = json.loads(self.owner_path.read_text(encoding="utf-8"))
             if record["identity"] != self.identity or type(record["pid"]) is not int:
                 raise ValueError("identity")
+            if record.get("root", str(self.root)) != str(self.root):
+                raise ValueError("root")
             pid = record["pid"]
             current = self._process(pid)
             if current is None:
@@ -210,6 +213,7 @@ class Instance:
             raise RuntimeError("Cannot verify current SIGMA launcher.")
         record = {
             "identity": self.identity,
+            "root": str(self.root),
             "pid": os.getpid(),
             "start": process["start"],
             "command": process["command"],
@@ -394,3 +398,234 @@ class Instance:
             self.owner_path.unlink(missing_ok=True)
             self.registered = False
         self.unlock()
+
+
+def _record_root(record: object) -> Path | None:
+    """Resolve a checkout from an owner record, including pre-root records."""
+    if not isinstance(record, dict) or not isinstance(record.get("identity"), str):
+        return None
+    raw_root = record.get("root")
+    if isinstance(raw_root, str):
+        root = Path(raw_root)
+    else:
+        command = record.get("command")
+        if not isinstance(command, str):
+            return None
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            return None
+        entry = next((Path(token) for token in tokens if token.endswith("/.venv/bin/sigma")), None)
+        if entry is None:
+            return None
+        root = entry.parents[2]
+    try:
+        root = root.resolve(strict=True)
+        if identity(root) != record["identity"]:
+            return None
+    except (OSError, RuntimeError, KeyError):
+        return None
+    return root
+
+
+def _safe_state_directory(path: Path) -> bool:
+    try:
+        info = path.lstat()
+    except OSError:
+        return False
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and info.st_mode & 0o077 == 0
+
+
+def _clean_stale_files(directory: Path, owner_path: Path) -> None:
+    """Remove stale metadata only while its per-checkout lock is held."""
+    owner_path.unlink(missing_ok=True)
+    for temporary in directory.glob("owner.*.tmp"):
+        try:
+            info = temporary.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid():
+            temporary.unlink(missing_ok=True)
+
+
+def _clean_unregistered_state(directory: Path) -> bool:
+    """Remove abandoned sockets/temporary files when no launcher owns the lock."""
+    lock_path = directory / "launch.lock"
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise RuntimeError("Unsafe SIGMA launch lock; refusing stale-state cleanup.")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        socket_path = directory / "control.sock"
+        try:
+            socket_info = socket_path.lstat()
+        except FileNotFoundError:
+            socket_info = None
+        if socket_info is not None:
+            if not stat.S_ISSOCK(socket_info.st_mode) or socket_info.st_uid != os.getuid():
+                raise RuntimeError("Unverifiable SIGMA control record; refusing stale cleanup.")
+            with socket.socket(socket.AF_UNIX) as probe:
+                probe.settimeout(0.2)
+                try:
+                    probe.connect(str(socket_path))
+                except OSError as exc:
+                    if exc.errno not in (errno.ECONNREFUSED, errno.ENOENT):
+                        raise RuntimeError("Cannot verify SIGMA control socket; leaving it intact.")
+                    socket_path.unlink(missing_ok=True)
+                else:
+                    return False
+        for temporary in directory.glob("owner.*.tmp"):
+            try:
+                temporary_info = temporary.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(temporary_info.st_mode) and temporary_info.st_uid == os.getuid():
+                temporary.unlink(missing_ok=True)
+        return True
+    finally:
+        os.close(fd)
+
+
+def _clean_stale_registered_state(directory: Path, owner_path: Path) -> bool:
+    """Clear a dead owner record only when its control socket is also dead."""
+    fd = os.open(directory / "launch.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        lock_info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(lock_info.st_mode)
+            or lock_info.st_uid != os.getuid()
+            or lock_info.st_mode & 0o077
+        ):
+            raise RuntimeError("Unsafe SIGMA launch lock; refusing stale-state cleanup.")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        try:
+            owner_info = owner_path.lstat()
+        except FileNotFoundError:
+            return True
+        if not stat.S_ISREG(owner_info.st_mode) or owner_info.st_uid != os.getuid():
+            raise RuntimeError("Unsafe SIGMA owner record; refusing stale-state cleanup.")
+        socket_path = directory / "control.sock"
+        try:
+            socket_info = socket_path.lstat()
+        except FileNotFoundError:
+            socket_info = None
+        if socket_info is not None:
+            if not stat.S_ISSOCK(socket_info.st_mode) or socket_info.st_uid != os.getuid():
+                raise RuntimeError("Unverifiable SIGMA control record; refusing stale cleanup.")
+            with socket.socket(socket.AF_UNIX) as probe:
+                probe.settimeout(0.2)
+                try:
+                    probe.connect(str(socket_path))
+                except OSError as exc:
+                    if exc.errno not in (errno.ECONNREFUSED, errno.ENOENT):
+                        raise RuntimeError("Cannot verify SIGMA control socket; leaving it intact.")
+                    socket_path.unlink(missing_ok=True)
+                else:
+                    return False
+        owner_path.unlink(missing_ok=True)
+        for temporary in directory.glob("owner.*.tmp"):
+            try:
+                temporary_info = temporary.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(temporary_info.st_mode) and temporary_info.st_uid == os.getuid():
+                temporary.unlink(missing_ok=True)
+        return True
+    finally:
+        os.close(fd)
+
+
+def stop_registered_instances(*, exclude_identity: str | None = None) -> list[str]:
+    """Stop every verifiable UI launcher registered by this OS user.
+
+    Per-checkout control sockets and owner records are stored below one private
+    directory, so a launcher in any local checkout can request an orderly stop
+    without guessing PIDs or treating a port as ownership evidence.
+    """
+    base = STATE_ROOT / f"sigma-ui-{os.getuid()}"
+    if not base.exists():
+        return []
+    if not _safe_state_directory(base):
+        raise RuntimeError("Unsafe SIGMA instance registry; refusing global cleanup.")
+    failures: list[str] = []
+    for directory in sorted(base.iterdir()):
+        if not _safe_state_directory(directory):
+            failures.append(f"Unverifiable instance state at {directory}; left untouched.")
+            continue
+        owner_path = directory / "owner.json"
+        try:
+            info = owner_path.lstat()
+        except FileNotFoundError:
+            try:
+                cleaned = _clean_unregistered_state(directory)
+                if not cleaned:
+                    failures.append(
+                        f"SIGMA state at {directory} is locked by an unregistered launcher; "
+                        "left untouched. Retry after it finishes starting."
+                    )
+            except (OSError, RuntimeError) as exc:
+                failures.append(f"Could not clean stale SIGMA state at {directory}: {exc}")
+            continue
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            failures.append(f"Unsafe SIGMA owner record at {owner_path}; left untouched.")
+            continue
+        try:
+            record = json.loads(owner_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeError):
+            failures.append(f"Unreadable SIGMA owner record at {owner_path}; left untouched.")
+            continue
+        if not isinstance(record, dict):
+            failures.append(f"Malformed SIGMA owner record at {owner_path}; left untouched.")
+            continue
+        owner_identity = record.get("identity")
+        if not isinstance(owner_identity, str) or len(owner_identity) != 64:
+            failures.append(f"Malformed SIGMA owner identity at {owner_path}; left untouched.")
+            continue
+        if directory.name != owner_identity[:24]:
+            failures.append(f"SIGMA owner identity mismatch at {owner_path}; left untouched.")
+            continue
+        if exclude_identity is not None and owner_identity == exclude_identity:
+            continue
+        root = _record_root(record)
+        if root is None:
+            pid = record.get("pid")
+            current = Instance._process(pid) if type(pid) is int else None
+            if (
+                current is None
+                or current.get("uid") != str(os.getuid())
+                or current.get("start") != record.get("start")
+                or current.get("command") != record.get("command")
+            ):
+                try:
+                    if _clean_stale_registered_state(directory, owner_path):
+                        print(f"Removed stale SIGMA owner metadata at {directory}.", flush=True)
+                except (OSError, RuntimeError) as exc:
+                    failures.append(f"Could not clean stale SIGMA state at {directory}: {exc}")
+            else:
+                failures.append(
+                    f"SIGMA launcher PID {pid} is live but its checkout cannot be verified; left untouched."
+                )
+            continue
+        try:
+            instance = Instance(root, shutdown_only=True)
+            with instance:
+                # A refused/stale control socket is removed by replace(). The
+                # exclusive lock makes removing its dead owner record race-safe.
+                try:
+                    verified = instance._verified_owner()
+                except RuntimeError as exc:
+                    if "identity changed" not in str(exc):
+                        raise
+                    verified = None
+                if verified is None:
+                    _clean_stale_files(directory, owner_path)
+        except (OSError, RuntimeError) as exc:
+            failures.append(f"Could not stop SIGMA instance at {root}: {exc}")
+    return failures

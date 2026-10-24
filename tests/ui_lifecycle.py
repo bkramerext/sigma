@@ -238,9 +238,8 @@ def main():
             check_ports()
             print("PASS suspended-launcher recovery and explicit sigma shutdown")
 
-            # A different canonical checkout must never replace this one's instance.
-            owner, ownerlog = launch(direct=True)
-            ready(owner, ownerlog)
+            # Shutdown and startup from a different checkout now use the
+            # per-user instance registry to stop the prior verified owner.
             other = base / "different-checkout"
             other.mkdir()
             for name in ("sigma", "pyproject.toml", "uv.lock"):
@@ -254,11 +253,31 @@ def main():
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            owner, ownerlog = launch(direct=True)
+            ready(owner, ownerlog)
+            stopped_from_other = subprocess.run(
+                [str(other / ".venv/bin/sigma"), "shutdown"],
+                check=False,
+                cwd=base,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            assert stopped_from_other.returncode == 0, stopped_from_other.stderr
+            assert "shutdown complete" in stopped_from_other.stdout
+            assert owner.wait(timeout=10) == 0
+            check_ports()
+            print("PASS shutdown from a second checkout stops the verified owner")
+
+            owner, ownerlog = launch(direct=True)
+            ready(owner, ownerlog)
             conflict, conflictlog = launch(other)
-            assert conflict.wait(timeout=20) == 1
-            assert "cannot safely replace" in conflictlog.read_text()
-            assert owner.poll() is None and get("/api/ai/connection")["status"] == "connected"
-            stop(owner, signal.SIGTERM)
+            ready(conflict, conflictlog)
+            assert owner.wait(timeout=10) == 0
+            assert "Stopping existing SIGMA instance" in conflictlog.read_text()
+            assert get("/api/ai/connection")["status"] == "connected"
+            stop(conflict, signal.SIGTERM)
             for port in (8000, 5173):
                 with socket.socket() as listener:
                     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -267,9 +286,10 @@ def main():
                     conflict, conflictlog = launch()
                     assert conflict.wait(timeout=20) == 1
                     assert f"Port {port}" in conflictlog.read_text()
+                    assert "PID" in conflictlog.read_text()
                     assert listener.getsockname()[1] == port  # Our process/listener survived.
             print(
-                "PASS different checkout and unrelated listeners survive safe conflicts; SIGTERM cleanup"
+                "PASS cross-checkout startup replacement and unrelated listeners survive with PID/port diagnostics"
             )
 
             # Hard-kill only our own directly launched supervisor. Pipe EOF owns cleanup.
