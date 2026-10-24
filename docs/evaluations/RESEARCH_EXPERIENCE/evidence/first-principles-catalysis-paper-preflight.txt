@@ -1,0 +1,13 @@
+Academic paper using LaTeX
+Close
+
+This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. ChatGPT plan usage is subject to provider allowance.
+
+Selected model: gpt-6.1-sol. No research session will be started.
+
+Generation bounds: the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.
+
+Use expanded multi-section authoring for a more detailed paper
+Generate paper
+
+Use your ChatGPT plan for eligible requests, or choose optional API-key billing. Manual research needs no connection.

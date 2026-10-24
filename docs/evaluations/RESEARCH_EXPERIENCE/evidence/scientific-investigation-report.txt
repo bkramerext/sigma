@@ -1,0 +1,26 @@
+Investigate an Unexpected Oscillation in a Controlled Experiment v1
+===================================================================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: A laboratory reports a repeatable-looking oscillation in a precision sensor after a new control algorithm was deployed. Raw observations, calibration records, environmental logs, and software version history have not yet been supplied. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.
+
+Project ID: f7b96490-ef66-42e7-b0f2-a13cf0617713
+
+Research type: Physics
+
+Difficulty: Medium
+
+Strategies
+----------
+No strategies are recorded.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

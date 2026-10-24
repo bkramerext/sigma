@@ -1,0 +1,62 @@
+Skip to project content
+Back to home
+Σ
+Riemann Hypothesis: A Research Portfolio v1
+Difficulty · Hard
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Riemann Hypothesis: A Research Portfolio v1
+
+Determine whether every nontrivial zero of the Riemann zeta function has real part 1/2, by proving the statement or producing a valid counterexample. The objective is open; do not assume it is true or that a proof is within reach. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source search or formal proof-assistant tools. Local scientific Python or SageMath computation is permitted only when the session execution_tools explicitly reports an available runtime; otherwise no numerical or symbolic runtime is available. Require saved execution evidence for every computation claim; never claim to have searched, computed, or machine-verified anything without that evidence. Finite computation is not proof of a statement about all zeros. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.
+
+Strategies
+New
+Generate
+
+4 strategies
+
+Try to falsify the operator correspondence enabled.
+
+STRATEGY
+Explicit formula and prime-counting consequences
+Disable
+Fork
+Remove
+
+Examine whether a precise explicit-formula route can connect zero locations to a quantitative statement about prime counting. State the exact implication being targeted, list analytic hypotheses and smoothing/error terms, and attempt to prove one bounded lemma. Test whether the argument actually forces every zero onto the critical line or only gives weaker density or error information. No numerical data or references may be invented.
+
+Spectral realization with operator obligations
+Disable
+Fork
+Remove
+
+Investigate a spectral route in which imaginary parts of zeros would arise from spectral data. Replace analogy with a concrete operator, domain, inner product, and proposed trace relation. The central obligations are self-adjointness, correspondence in both directions, and exact treatment of multiplicity and trivial zeros. If no operator satisfying them can be constructed, record the obstruction rather than treating a formal analogy as progress.
+
+Zero-free region and density estimates
+Disable
+Fork
+Remove
+
+Seek a rigorous partial theorem that narrows where zeros may lie or bounds their density, then identify the precise gap between that result and the Riemann Hypothesis. Make every estimate's range and constants explicit. Challenge extrapolations from finite computations and distinguish a zero-free region near Re(s)=1 from a proof on the full critical strip.
+
+Try to falsify the operator correspondence
+Disable
+Fork
+Remove
+
+Before any spectral analogy, write down one candidate operator's domain and inner product. Identify the first exact unproved correspondence to zeta zeros; test whether self-adjointness alone would imply the required two-way relation. If no concrete operator exists, save that obstruction and stop rather than call the program a proof. Evaluator-authored local obligation.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

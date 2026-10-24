@@ -1,0 +1,99 @@
+Skip to project content
+Back to home
+Sequel to Stories of Your Life / Arrival v1
+Difficulty · Hard
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Sequel to Stories of Your Life / Arrival v1
+
+LITERARY RESEARCH CHALLENGE. Develop a distinctive, coherent, emotionally compelling UNOFFICIAL sequel concept inspired by Ted Chiang's 'Story of Your Life' and the film 'Arrival'. This is a creative research sample, not a claim to be authorized by the rights holders or to imitate Chiang's prose. The novelty target is an original plot mechanism and narrative structure that reinterprets the initial encounter and foreknowledge rather than merely reproducing the first work's nonlinear-time revelation.
+
+USER-ESTABLISHED PREMISES TO EXAMINE, NOT ASSUME TRUE. A roughly 3,000-year history separates the arrival and a consequential encounter. Human societies and their understanding of heptapod language change over that period. Rare prescients have incomplete foresight: initially decades, perhaps centuries later, with real blind spots. The heptapods may be no more advanced and their semagraphic language may be a limitation rather than a gift. A 142-year multigenerational interstellar expedition reaches their world, then a period of settlement and translation follows. The heptapods may be nearing the end of a 100-million-year existence and transferring a responsibility humanity does not yet understand. Each premise is contestable: explore alternatives, identify contradictions and compare with the original novella's and film's different continuities.
+
+CONCRETE GOAL. Produce at least three genuinely different candidate story engines (not merely different endings), and choose a leading one via adversarial comparison. Every option needs (1) a causal plot question driving the 3,000-year arc; (2) explicit rules for heptapod language and prescience that preserve meaningful agency; (3) a reason for the 142-year journey and a costly decision by characters who cannot observe the story's whole; (4) a discovery with a specific mechanism and consequences that changes what earlier events meant; and (5) a stand-alone ending that resolves the central dramatic action while acknowledging irreducible uncertainty. Preserve intimate human stakes and character transformation across generational handoffs; do not let a timeline lecture substitute for dramatized causation.
+
+CONSTRAINTS. Resolve or explicitly separate divergences between Chiang's novella and Villeneuve's film. Avoid copying iconic dialogue, scenes, narrative voice or a signature reveal; this is an original speculative sequel proposal, not an imitation. Do not treat fan theories or hypothesized sequel events as canonical facts. Distinguish philosophical consistency from literal scientific proof and give each future-facing character information only they could plausibly have. Evaluate conflicts among deterministic time, perceived choice, knowledge limits and the reader's information. Keep the heptapods' purpose intellectually unsettling without deus ex machina, and do not rely on sequel bait for the final scene.
+
+EXIT CRITERIA. An ACCEPTED NOVEL STORY DESIGN requires: (1) three structurally distinct pitches and a comparison table documenting their central reveal, cost, protagonist, chronology, and thematic consequence; (2) a selected beat-by-beat narrative architecture with at least five turning points across the millennia, the 142-year expedition and a final dramatic decision; (3) two fully specified principal character arcs or a credible cross-generational inheritance mechanism; (4) explicit prescience rules and a causal consistency audit with at least three attempted counterexamples; (5) a literary prior-art/overlap check against Arrival/Story of Your Life and a shortlist of similar familiar science-fiction devices, documenting how this treatment differs; (6) an adversarial review finding and repairing at least three major plot or thematic weaknesses; and (7) a 1,500-3,000-word original treatment with a self-contained conclusion and an unresolved but meaningful final implication. Novelty is a reasoned creative judgment, not objectively proven by the checklist. If no version clears consistency and originality challenges, output REVISE/UNRESOLVED with precise failures rather than claiming completion. Individual research strategies are narrow design experiments; none is expected to write the full sequel alone.
+
+Strategies
+Generate
+
+6 strategies
+
+Test agency with one costly scene enabled.
+
+Generate a strategy
+Generate
+Cancel
+
+Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.
+
+Using ChatGPT plan · gpt-6.1-sol · High · call limit from this project’s settingsManage usage
+
+Use your ChatGPT plan for eligible requests, or choose optional API-key billing. Manual research needs no connection.
+
+Generation context & starting point (optional)
+Starting point (optional)
+
+An optional idea or mechanism to investigate, not an assumption to accept uncritically. Leave empty for an independent research direction.
+
+Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Cancelling disconnects the active run; provider usage may already count toward the selected plan or billing mode.
+
+STRATEGY
+Invent three different 3,000-year story engines
+Disable
+Fork
+Remove
+
+Construct three alternative macroplot mechanisms for why the heptapods arrive and what humanity must do after 3,000 years. Vary the causal mechanism and emotional conflict, not just the ending. Identify each engine's dramatic question, reveal, cost, and formal relationship to the original. Reject an engine if it merely repeats nonlinear-time revelation or requires an unearned cosmic twist.
+
+Formalize limited prescience and agency
+Disable
+Fork
+Remove
+
+Define how a character obtains, misinterprets and acts on long-range knowledge, including what cannot be known. Contrast Chiang's teleological framing with the film's stakes without conflating them. Construct three narrative paradox/counterexample tests (self-fulfilling actions, shared predictions and possible avoidance), and select a coherent rule set with costs.
+
+Design the 142-year generational voyage
+Disable
+Fork
+Remove
+
+Design a plot with an inciting discovery, departure bargain, a major generational handoff, a genuine mid-voyage reversal and the first negotiation after arrival. Define why the duration matters beyond spectacle, how institutions fail or adapt, and which individual choices matter despite long horizons.
+
+Make the final discovery reframe the beginning
+Disable
+Fork
+Remove
+
+Test multiple versions of the 'heptapods are limited and nearing extinction' possibility and a genuinely different explanation. For each, identify three early events retrospectively reinterpreted, what evidence could lead humanity to the truth, and how the revelation raises rather than dissolves moral stakes.
+
+Integrate, audit and finish the story
+Disable
+Fork
+Remove
+
+Choose an architecture and synthesize a 1,500-3,000-word original plot treatment and clear final scene. Track five era changes, two character arcs or their generational equivalents, causality, suspense, thematic coherence and reader knowledge. Compare against familiar SF tropes and the source works; repair at least three significant issues. Grade the outcome as accepted/revise/unresolved with evidence; do not assert the result is authorized or proven unique.
+
+Test agency with one costly scene
+Disable
+Fork
+Remove
+
+Before a full treatment, write two short alternative decision scenes for a voyager with the same incomplete prediction. Compare what information the character has, what irreversible cost follows, and whether the outcome is earned under each prescience rule. Reject a rule that lets foreknowledge dissolve the decision. Evaluator-authored design experiment; no scene generated.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

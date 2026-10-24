@@ -1,0 +1,41 @@
+Skip to project content
+Back to home
+Σ
+Counting Constrained Binary Strings v1
+Difficulty · Not set
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Counting Constrained Binary Strings v1
+
+For each integer n >= 0, count binary strings of length n containing no two consecutive 1s. The empty string counts for n = 0. Derive and justify a general formula or recurrence for the count, including the necessary initial values. Check the result on small n. Do not assume a particular proof method.
+
+Strategies
+New
+Generate
+
+1 strategy
+
+Partition by the final bit enabled.
+
+STRATEGY
+Partition by the final bit
+Disable
+Fork
+Remove
+
+For n>=2 compare valid strings ending in 0 with those ending in 01. Establish bijections to length n-1 and n-2 strings. Independently enumerate n=0..5 and state both initial counts. Reject an argument that double counts or omits the empty string. Evaluator-authored proof plan; no SIGMA solution claimed.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

@@ -1,0 +1,26 @@
+Counting Constrained Binary Strings v1
+======================================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: For each integer n >= 0, count binary strings of length n containing no two consecutive 1s. The empty string counts for n = 0. Derive and justify a general formula or recurrence for the count, including the necessary initial values. Check the result on small n. Do not assume a particular proof method.
+
+Project ID: 88ae4205-43f5-4e6a-9911-d820d7416e5a
+
+Research type: Mathematics
+
+Strategies
+----------
+Partition by the final bit (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+For n>=2 compare valid strings ending in 0 with those ending in 01. Establish bijections to length n-1 and n-2 strings. Independently enumerate n=0..5 and state both initial counts. Reject an argument that double counts or omits the empty string. Evaluator-authored proof plan; no SIGMA solution claimed.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

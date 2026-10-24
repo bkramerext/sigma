@@ -1,0 +1,39 @@
+Skip to project content
+Back to home
+Σ
+Counting Pairwise Handshakes v1
+Difficulty · Easy
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Counting Pairwise Handshakes v1
+
+A group has n people, and each pair shakes hands exactly once. Determine the total number of handshakes for general positive integer n. Justify the counting argument and state clearly whether a person may shake their own hand.
+
+Strategies
+New
+Generate
+
+1 strategy
+
+STRATEGY
+Direct counting
+Disable
+Fork
+Remove
+
+Derive a general count from the stated setup. Check small group sizes, explain why every handshake is counted exactly once, and identify any assumption that changes the answer.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

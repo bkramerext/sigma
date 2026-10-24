@@ -1,0 +1,32 @@
+Settings
+Save
+Cancel
+Main
+Limits
+
+Choose this project’s research type and AI settings. Edit its title and description directly on the project page.
+
+Research type
+Chemistry
+Difficulty
+Easy
+Medium
+Hard
+LLM Model
+Luna · Economy · $ · access unverified
+Sol · Balanced · $$ · access unverified
+Astra · Advanced · $$$ · access unverified
+
+ChatGPT plan allowance or credits · connection required for generation. Balance research capability and cost. No reviewed model is verified accessible. Sol/High is an unverified offline preference; manual research remains available.
+
+Thinking level
+Low
+Medium
+High
+Extra high
+
+Applies to future AI proposals. Higher thinking can take longer and consume more usage. API cost tiers are relative; current token prices. Earlier strategy provenance stays unchanged.
+
+Project location
+/private/tmp/sigma-research-experience-blue/projects/first-principles-catalysis.sigma
+Editing the display name never renames or moves this directory.

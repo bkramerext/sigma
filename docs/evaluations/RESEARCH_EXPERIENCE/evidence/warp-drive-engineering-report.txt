@@ -1,0 +1,24 @@
+Warp Drive Feasibility v1
+=========================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Develop a scientifically grounded engineering assessment of proposed warp-drive concepts. Distinguish mathematical spacetime metrics from physically realizable propulsion systems. Review the assumptions about stress-energy, energy density, stability, causality, control, materials, and navigation; trace claims to primary sources; and test quantitative estimates for dimensional and physical consistency. Identify which obstacles are established by current theory or evidence, which depend on unresolved physics, and what experiment or calculation could reduce the uncertainty. Set aside the assumption that a warp drive must violate the speed-of-light limit: assess how proposed spacetime geometries distinguish local motion from effective travel over distance. Do not treat a proposed metric by itself as a complete engineering design.
+
+Project ID: 7dca67c1-d189-411a-a754-e9fe363deb1f
+
+Research type: Engineering
+
+Strategies
+----------
+No strategies are recorded.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

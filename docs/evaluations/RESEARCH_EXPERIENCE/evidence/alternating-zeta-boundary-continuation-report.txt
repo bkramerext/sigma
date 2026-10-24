@@ -1,0 +1,36 @@
+The Alternating Zeta Series and Analytic Continuation v1
+========================================================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Starting from ζ(s) = Σ(n≥1) n^(-s) on Re(s) > 1, analyze η(s) = Σ(n≥1) (-1)^(n-1)n^(-s) as a complex series. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing ζ(s) into 0 < Re(s) ≤ 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.
+
+Project ID: e86f12ef-c1fb-40e8-af28-c17e2bc1bb75
+
+Research type: Mathematics
+
+Difficulty: Hard
+
+Strategies
+----------
+Abel summation and compact-uniform convergence (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Use bounded partial sums of the alternating signs with summation by parts. Establish convergence uniformly on each compact subset of the proposed half-plane, then use the theorem on locally uniform limits of holomorphic functions. Separately derive the relation with ζ only in its original absolute-convergence region and analyze whether algebraic division creates exceptional points.
+
+Pairing terms and continuation boundary audit (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Group neighboring terms to expose cancellation and estimate the tail on compact subsets of the s-plane. Independently derive the relation to the original Dirichlet series by separating even and odd indices where rearrangement is licensed. Audit the pole and possible zeros of the multiplier before claiming continuation; identify what further argument would be needed beyond the half-plane reached by this series.
+
+Audit the vanished multiplier (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Solve 1-2^(1-s)=0 explicitly. Separate s=1 from the other points on Re(s)=1; identify which cancellation argument is needed at each before claiming a holomorphic quotient. Start with a uniform tail bound on Re(s)>=delta>0. Evaluator-authored proof obligation, not a completed derivation.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

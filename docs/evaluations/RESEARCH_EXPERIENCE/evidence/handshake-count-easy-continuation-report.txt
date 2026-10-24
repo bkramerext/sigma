@@ -1,0 +1,32 @@
+Counting Pairwise Handshakes v1
+===============================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: A group has n people, and each pair shakes hands exactly once. Determine the total number of handshakes for general positive integer n. Justify the counting argument and state clearly whether a person may shake their own hand.
+
+Project ID: e8b729c4-ace3-4d22-a2e7-feba90100381
+
+Research type: Mathematics
+
+Difficulty: Easy
+
+Strategies
+----------
+Direct counting (saved)
+~~~~~~~~~~~~~~~
+Derive a general count from the stated setup. Check small group sizes, explain why every handshake is counted exactly once, and identify any assumption that changes the answer.
+
+Check unordered pairs without self-pairs (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Label people 1..n and count pairs i<j. Check n=1,2,3 and compare summing each person's partners with the double-count correction. Stop once the bijection and assumptions are clear. Evaluator-authored plan; not an AI result.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.
