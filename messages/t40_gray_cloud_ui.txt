@@ -1,6 +1,6 @@
 T40 coordinator handoff — R4R
 Branch: gray/t40-cloud-ui-admin
-Base: current main 42bfb3a
+Base: current main 1aff185 (includes scope decision 42bfb3a)
 PR: https://github.com/bkramerext/sigma/pull/57 (rebased; open and mergeable)
 
 Implemented the coordinator clarification. The user-facing fake administrator

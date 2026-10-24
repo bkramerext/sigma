@@ -3,7 +3,8 @@
 ## T40 local Google administrator bootstrap and account UI (2026-10-23)
 
 Implemented the clarified T40 behavior on `gray/t40-cloud-ui-admin`, based on
-`main` commit `42bfb3a`. The simulated administrator command and Vite middleware
+`main` commit `1aff185` (including the T40 scope decision `42bfb3a`). The
+simulated administrator command and Vite middleware
 were removed, as was the separate real-auth CLI switch. `./sigma start --nav`
 now opens the existing Home and, when the actual bootstrap email is configured
 alongside Google OAuth client credentials, automatically starts real
@@ -19,7 +20,7 @@ authorization, session, nonce, state, ID-token and CSRF checks remain active.
 The existing Home, identity pills, access-management table, staged updates and
 copper artwork credit remain in place.
 
-Validation rerun on the T40 branch rebased onto `42bfb3a`:
+Validation rerun on the T40 branch rebased onto current `main` `1aff185`:
 
 - `./sigma test` passed, including the 13 focused cloud-auth scenarios, CLI
   option rejection/`--nav` help, automatic local auth environment propagation,
