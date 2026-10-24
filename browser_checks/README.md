@@ -1,5 +1,24 @@
 # A7 browser checks
 
+T46 About-dialog acceptance uses a local UI and the deterministic provider
+fixture. Start them in separate terminals:
+
+```sh
+uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8026
+npm --prefix frontend run dev -- --port 5193 --strictPort
+```
+
+Then run the real-Chrome check:
+
+```sh
+uv run --with playwright python browser_checks/about.py
+```
+
+The check covers Home and Project at 1440px and 390px, keyboard dismissal,
+focus restoration, state preservation, and no request on opening About. It saves
+screenshots to `/tmp/sigma-t46-about-*.png`. Set `SIGMA_BROWSER_FIXTURE_URL` or
+`SIGMA_BROWSER_BASE_URL` to use different local ports.
+
 These checks create temporary projects and use an explicitly identified HTTP
 provider fixture. They never call OpenAI or use real credentials. The fixture is
 not loaded by `sigma ui` and never belongs in a production launch. Test context

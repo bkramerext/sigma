@@ -1208,6 +1208,42 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   </div>;
 }
 
+function AboutAction() {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  function open() {
+    if (!dialog.current?.open) {
+      dialog.current?.showModal();
+      requestAnimationFrame(() => closeButton.current?.focus());
+    }
+  }
+  function close() {
+    dialog.current?.close();
+  }
+  return <>
+    <button ref={trigger} type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={open}>?</button>
+    <dialog ref={dialog} className="project-settings-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === dialog.current) close(); }} onClose={() => requestAnimationFrame(() => trigger.current?.focus())}>
+      <header className="settings-header">
+        <h2 id="about-heading">About SIGMA</h2>
+        <div className="settings-actions"><button ref={closeButton} className="settings-cancel" type="button" onClick={close}>Close</button></div>
+      </header>
+      <div className="settings-body about-body">
+        <p className="about-lede">Hard questions benefit from more than one approach. SIGMA is a research workspace for exploring ideas, challenging reasoning, and keeping the evidence and uncertainty visible.</p>
+        <p id="about-message" className="about-message">Strategies propose. Sessions investigate. Outcomes answer. Reports communicate.</p>
+        <div className="about-principles">
+          <section><h3>Strategies propose</h3><p>Choose a narrow, durable line of investigation. Strategies can be revised or branched, and new directions can build on earlier outcomes.</p></section>
+          <section><h3>Sessions investigate</h3><p>Investigator and Skeptic agents develop and challenge reasoning across bounded cycles. Inspect evidence, experiments, objections, and guide the work.</p></section>
+          <section><h3>Outcomes answer</h3><p>See what the evidence supports so far, including partial findings, limitations, and open questions. A session need not settle its project's question.</p></section>
+          <section><h3>Reports communicate</h3><p>Export reports and TeX papers that present findings alongside their supporting evidence, failed attempts, and unresolved objections.</p></section>
+        </div>
+        <section className="about-start"><h3>Try an investigation</h3><ol><li>Open a sample or create a project with a question you want to explore.</li><li>Write or generate a strategy, then start a research session.</li><li>Review the findings and objections; branch a strategy or export a report when useful.</li></ol></section>
+        <p className="about-boundary">Model-generated reasoning and computations need human review. SIGMA does not independently verify proofs. Connected models, optional computation, paper generation, and hosted features depend on your environment and configuration.</p>
+      </div>
+    </dialog>
+  </>;
+}
+
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   const cloud = useCloudIdentity();
@@ -1228,6 +1264,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <GoogleIdentityPill compact/>
       <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
+    <AboutAction/>
     </div>
   </header>;
 }
@@ -1866,7 +1903,7 @@ function Home({ initialPath, onOpen }: {
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
       {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Administrator Settings</a>}
-      <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div>
+      <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/><AboutAction/></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">

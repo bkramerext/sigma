@@ -1,5 +1,30 @@
 # SIGMA status
 
+## T46 Home and Project About dialog (2026-10-24)
+
+Added one shared About action and modal dialog to both Home and Project headers.
+The copper-outlined `?` action has the same accessible name and tooltip on each
+page. The dialog uses the established project-settings header/body styling, puts
+Close immediately after its heading, and uses native modal semantics. Escape,
+Close, and backdrop dismissal return focus to the trigger; opening About makes no
+API or model request and does not change the Home tab or Project route. The
+mobile Home header now lays out its existing Google and connection controls with
+the About action without overlap. Copy follows the approved four-part message
+and states the limits of model-generated reasoning without claiming independent
+proof verification.
+
+Verification on 2026-10-24: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma
+test` passed all scenarios, Ruff, formatting, Pyright, frontend typecheck and
+production build. `uv run --with playwright python browser_checks/about.py`
+passed in real Chrome at desktop (1440px) and narrow mobile (390px) widths from
+both Home and Project, including native modal semantics, tooltip/accessibility,
+focus restoration, unchanged navigation/tab state, no API requests on open, and
+viewport fit. Visual screenshots are `/tmp/sigma-t46-about-home-desktop.png`,
+`/tmp/sigma-t46-about-home-mobile.png`,
+`/tmp/sigma-t46-about-project-desktop.png`, and
+`/tmp/sigma-t46-about-project-mobile.png`. The browser check used the local
+deterministic provider fixture; no live provider calls were made.
+
 ## Strategy-generation architecture correction (2026-10-24)
 
 The earlier Operation Narrow Passage repair correctly removed hard-coded call
