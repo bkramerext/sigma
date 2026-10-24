@@ -1,5 +1,30 @@
 # SIGMA status
 
+## A18 follow-up — Concurrent preflight failure audit attribution (2026-10-23)
+
+Local research portfolio preflight failures now append a `call.preflight_failed`
+event before dispatch with the strategy ID/title, role, preflight stage, safe
+failure kind, and `dispatched: false`. Event messages are generic; raw exception
+text, provider inputs, and credential data are not added to this audit event.
+Coverage includes context assembly, project snapshot/binding, account
+verification/binding, and model configuration. Existing failure, scheduling,
+call-budget, pause, resume, and retry behavior is unchanged.
+
+Added a mixed-wave regression: one strategy's project snapshot preflight fails
+while its sibling completes an Investigator call. The persisted audit identifies
+the failed strategy and role; the sibling retains its completed step; only the
+sibling's one dispatched call is counted. Existing configuration-failure and
+preflight-timeout tests now assert event metadata. The timeout case still pauses
+with zero calls and resumes successfully.
+
+Verification: `uv run --locked --no-sync python tests/research_sessions.py`
+passed. `./sigma test` passed all backend scenarios, Ruff check/format, Pyright
+(zero diagnostics), frontend typecheck, and production build. The suite emitted
+the existing Starlette/httpx deprecation warnings. No real-browser check was
+run because no UI changed; the additive event fields were exercised through the
+research-session service/API scenarios. No provider inference or credential
+access was used. Review and handoff: `messages/a18_concurrent_preflight_audit_r4r.txt`.
+
 ## T40 local Google administrator bootstrap and account UI (2026-10-23)
 
 Implemented the clarified T40 behavior on `gray/t40-cloud-ui-admin`, based on
