@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 from typing import Any, cast
 
+from sigma.research_epistemics import argument_availability, verification_label
+
 
 def _value(value: Any) -> str:
     if value is None:
@@ -115,6 +117,13 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             lines += ["Outcome caveats:"]
             lines += [f"- {item}" for item in _items(outcome.get("caveats"))]
             lines.append("")
+        review_raw = outcome.get("solution_review")
+        presentation_review = review_raw if isinstance(review_raw, dict) else None
+        lines += [f"Verification: {verification_label(presentation_review)}"]
+        lines += [
+            argument_availability(presentation_review, _rows(session.get("artifacts")))["label"],
+            "",
+        ]
         metrics_raw = outcome.get("metrics")
         metrics = cast(dict[str, Any], metrics_raw) if isinstance(metrics_raw, dict) else {}
         operational = _rows(metrics.get("operational"))
@@ -129,7 +138,12 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
                     continue
                 lines += [heading, "~" * len(heading)]
                 for item in items:
-                    lines.append(f"{_value(item.get('label'))}: {_value(item.get('value'))}")
+                    value = (
+                        verification_label(presentation_review)
+                        if item.get("label") in {"Verification", "Verification status"}
+                        else _value(item.get("value"))
+                    )
+                    lines.append(f"{_value(item.get('label'))}: {value}")
                 lines.append("")
         solution_review = outcome
         solution_review = solution_review.get("solution_review")
