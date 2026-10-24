@@ -49,6 +49,51 @@ only local authorization records. UNVERIFIED — the operator's real localhost
 Google OAuth round trip, to be completed after merge. No real OAuth credentials
 were supplied for this acceptance run.
 
+## T41 — Sponsored cloud inference verification (2026-10-23)
+
+Audited the cloud inference implementation first on `origin/main` (`773847c`).
+The ticket was added to `main` at `1aff185` during this work and was read before
+finalizing scope. The T41 branch has now been rebased onto current `main`
+(`087196e`). Current R4R PR: #58. Existing production support already binds
+cloud inference
+to the server-only `SIGMA_CLOUD_OPENAI_API_KEY`, permits it only in bounded
+research sessions, validates the chosen model using server-side model
+discovery, and enforces workspace-scoped reservations, user/global spending
+ceilings, token/session caps, exhaustion behavior, and durable unknown holds.
+No product or UI implementation change was needed.
+
+Strengthened `tests/cloud_research_api.py` from a mocked research `_call` to a
+deterministic fake OpenAI HTTP provider behind the production FastAPI route.
+The fake exercises actual cloud credential selection, model discovery,
+Responses payloads, usage settlement, and ledger reconciliation. The test sets
+a conflicting local `OPENAI_API_KEY` and verifies all provider requests use
+the cloud service credential; it also verifies successful sponsored inference
+without a personal ChatGPT session, idempotency, cross-workspace isolation,
+pre-dispatch allowance exhaustion with saved-session reads, and retention of
+the full reservation as unknown after either HTTP 500 or timeout, with no
+automatic retry. Missing service credentials return an explicit unconfigured
+state without provider I/O; missing/revoked principals are denied.
+
+Existing `tests/cloud_research.py` covers same-user concurrent spend-reservation
+contention, unknown charge persistence, and restart/recovery behavior. Existing
+`tests/cloud_auth.py` and `tests/cloud_workspaces.py` cover server-side
+authorization and workspace isolation.
+
+No provider billing, cloud provisioning, budget increases, UI edits, or T40
+changes were made. Real-browser verification is not applicable to this
+backend-test-only change. Hosted deployment and live provider behavior remain
+unverified.
+
+After the T40 merge, the rebased T41 tree passed
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`, including all cloud
+scenarios, Ruff check/format, Pyright, frontend typecheck, and production build.
+The exported bootstrap-email variable was set in this runner without its
+corresponding OAuth client settings. The first unmodified-environment run
+therefore stopped in T40's launcher test; no T40 source or tests were changed.
+The initial clean worktree lacked `node_modules`; `./sigma setup` installed
+locked local deps.
+
+
 ## Lean toolbar color feedback (2026-10-23)
 
 Changed the disabled Lean logo in mathematical projects from its darker copper
