@@ -1,0 +1,419 @@
+{
+  "revision": "6059d67",
+  "browser_version": "156.0.8078.47",
+  "results": [
+    {
+      "slug": "algorithm-design",
+      "title": "Design and Verify an Incremental Dependency Scheduler",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/algorithm-design.sigma",
+      "session_ids": [],
+      "stock_strategies": [],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.27
+    },
+    {
+      "slug": "alternating-zeta-boundary",
+      "title": "The Alternating Zeta Series and Analytic Continuation",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/alternating-zeta-boundary.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Abel summation and compact-uniform convergence",
+        "Pairing terms and continuation boundary audit"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.3
+    },
+    {
+      "slug": "arrival-sequel",
+      "title": "Sequel to Stories of Your Life / Arrival",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/arrival-sequel.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Invent three different 3,000-year story engines",
+        "Formalize limited prescience and agency",
+        "Design the 142-year generational voyage",
+        "Make the final discovery reframe the beginning",
+        "Integrate, audit and finish the story"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.53
+    },
+    {
+      "slug": "counting-constrained-binary-strings",
+      "title": "Counting Constrained Binary Strings",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/counting-constrained-binary-strings.sigma",
+      "session_ids": [],
+      "stock_strategies": [],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.17
+    },
+    {
+      "slug": "euler-product-primes",
+      "title": "Prime Factorization and the Euler Product",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/euler-product-primes.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Finite products and unique factorization",
+        "Logarithmic derivatives and prime powers"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.29
+    },
+    {
+      "slug": "first-principles-catalysis",
+      "title": "Can We Predict Chemical Reactions from Quantum Mechanics?",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/first-principles-catalysis.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Prior-art and reproducible quantum baseline",
+        "Find a conditional barrier-error mechanism",
+        "Predict pathway-order inversions",
+        "Rule out methodological artifacts",
+        "Independent generalization and calibrated exit"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.54
+    },
+    {
+      "slug": "handshake-count-easy",
+      "title": "Counting Pairwise Handshakes",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/handshake-count-easy.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Direct counting"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.16
+    },
+    {
+      "slug": "jesus-cannabis",
+      "title": "Did Jesus Use Cannabis?",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/jesus-cannabis.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Textual evidence",
+        "Language and translation",
+        "Archaeology and material culture",
+        "Historical context and plausibility",
+        "Claim genealogy and adversarial review"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.39
+    },
+    {
+      "slug": "maximum-regions-by-lines",
+      "title": "Maximum Regions Formed by Lines",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/maximum-regions-by-lines.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Incremental region counting with an explicit maximizing arrangement"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.23
+    },
+    {
+      "slug": "nonconsecutive-subset-sums",
+      "title": "Nonconsecutive Subset Sums Modulo 3",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/nonconsecutive-subset-sums.sigma",
+      "session_ids": [
+        "1a9a0c44-48ae-49e7-8bea-0e8d47297f9d",
+        "1aabbfc0-e642-4581-a96f-2e33ac17ee19",
+        "f7301d22-fd90-4675-95cd-17b006262ef9",
+        "6c552b3c-44e4-4b57-8b93-e5a645d057d1",
+        "7c70ca6e-3fb2-4cda-b75a-72702ee10d97"
+      ],
+      "stock_strategies": [
+        "Periodic transfer matrix",
+        "Roots-of-unity weighted Fibonacci polynomials",
+        "Gap removal and Gaussian binomial sums"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 13.51
+    },
+    {
+      "slug": "operation-narrow-passage",
+      "title": "Operation Narrow Passage",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/operation-narrow-passage.sigma",
+      "session_ids": [],
+      "stock_strategies": [],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.26
+    },
+    {
+      "slug": "riemann-hypothesis-research",
+      "title": "Riemann Hypothesis: A Research Portfolio",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/riemann-hypothesis-research.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Explicit formula and prime-counting consequences",
+        "Spectral realization with operator obligations",
+        "Zero-free region and density estimates"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.37
+    },
+    {
+      "slug": "scientific-investigation",
+      "title": "Investigate an Unexpected Oscillation in a Controlled Experiment",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/scientific-investigation.sigma",
+      "session_ids": [],
+      "stock_strategies": [],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.18
+    },
+    {
+      "slug": "theta-functional-equation",
+      "title": "Theta Symmetry and the Zeta Functional Equation",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/theta-functional-equation.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Mellin transform with a split at one",
+        "Symmetrized completed-zeta integral"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.24
+    },
+    {
+      "slug": "warp-drive-engineering",
+      "title": "Warp Drive Feasibility",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/warp-drive-engineering.sigma",
+      "session_ids": [],
+      "stock_strategies": [],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.16
+    },
+    {
+      "slug": "warp-drive-physics",
+      "title": "Warp Drive Design",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/warp-drive-physics.sigma",
+      "session_ids": [],
+      "stock_strategies": [],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.14
+    },
+    {
+      "slug": "xenopus-tail-regeneration",
+      "title": "Why Do Xenopus Tadpoles Temporarily Lose Tail Regeneration?",
+      "copy_path": "/private/tmp/sigma-research-experience-blue/projects/xenopus-tail-regeneration.sigma",
+      "session_ids": [],
+      "stock_strategies": [
+        "Establish the known-mechanism frontier",
+        "Find a novel temporal coupling, not another marker",
+        "Test a spatial or cell-composition alternative",
+        "Design a decisive rescue-versus-block perturbation",
+        "Adversarial novelty and external validation"
+      ],
+      "dimensions": [
+        {
+          "width": 390,
+          "scrollWidth": 390,
+          "bodyWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320,
+          "bodyWidth": 320
+        }
+      ],
+      "elapsed_seconds": 1.62
+    }
+  ],
+  "page_errors": [],
+  "source_sha256": {
+    "samples/jesus-cannabis/project.json": "bfa48c4e3740e1a8d1e41a0817aba4bd2273ca13c9a9940a411ac13ca797ed37",
+    "samples/riemann-hypothesis-research/project.json": "60e101c24381078a7f9381464321d4857c836321d1e6d067c35455407882fb75",
+    "samples/warp-drive-engineering/project.json": "87d9f757f1366de75fbd498c2e8d2fc1bb33e0420396578d8924aabd22b00dbb",
+    "samples/nonconsecutive-subset-sums/sample-evidence.json": "1a149cbd3fa079a676fa8c8417a4762b4fb3f9ebeec87ffbd0282e0f8870a8d0",
+    "samples/nonconsecutive-subset-sums/project.json": "cb4e67fe05d521776bc3afb67fef800d112fefa550db4957fa36d399829463b8",
+    "samples/maximum-regions-by-lines/project.json": "bf8a59e5feda7dc856022d7a3c7ce2e282788886ede80322ce88ec7c35c37365",
+    "samples/theta-functional-equation/project.json": "887d311f3f66bed9f1c780f35c4103c342e6198120e3bbb1499f53c49cf1ff00",
+    "samples/arrival-sequel/project.json": "1fdf9ab93e76387115fd56db76e7f07850bab961fbc86570085c9c30971e9a6c",
+    "samples/alternating-zeta-boundary/project.json": "b0b4cdd855c87b1c7312abc9a9c3a13978a4a2d3a1e6ee0629597be13619d30f",
+    "samples/operation-narrow-passage/scenario.md": "a18416ad103d221de889e40e5ad10bcbd745f7a8452384314c6dfd29a66c0558",
+    "samples/operation-narrow-passage/project.json": "12c561e911937735ffe0902ded40093b6feba276b1836298f1c58e9b311d0581",
+    "samples/first-principles-catalysis/project.json": "fb10020e94905c3747dab27b4dffe3d889a3ca703497721ac2fc9ea1c7a652d7",
+    "samples/euler-product-primes/project.json": "f24d6596b29aeb77e251b53d2f3aa221d78418da5cf1b436c228f622f61850e2",
+    "samples/algorithm-design/project.json": "5b9cb114597cf2f93d6af35f1be0568c1d4c0dac88f7affaf5a98df31cf4f70d",
+    "samples/counting-constrained-binary-strings/project.json": "e31ce6a79ecb2143af1881f7449e110c7b011bfb1275e59a1f38912a2b59d8d0",
+    "samples/xenopus-tail-regeneration/project.json": "e2acf3288c73d00db1a7062f49c5bc6eb85565980237df46933335720c8e6f7b",
+    "samples/scientific-investigation/project.json": "43f3ab6dc4484d027e8b6c6812f3e2954ac71de04ebb96bbfdbabbadef65ea6e",
+    "samples/handshake-count-easy/project.json": "b57ef2d223893da4f08f367a82bf7b33be855308fd9188a75e40d8a273b068b2",
+    "samples/warp-drive-physics/project.json": "e0a911ea2c049f4ce1c7af9b12e9c445bc8e8f04bd7fa0b681a5c4bc7431b6d9"
+  }
+}

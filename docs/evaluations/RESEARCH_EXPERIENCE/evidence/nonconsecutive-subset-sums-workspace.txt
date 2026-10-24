@@ -1,0 +1,375 @@
+Skip to project content
+Back to home
+Σ
+Nonconsecutive Subset Sums Modulo 3 v1
+Difficulty · Not set
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Nonconsecutive Subset Sums Modulo 3 v1
+
+For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+Strategies
+New
+Generate
+
+3 strategies
+
+STRATEGY
+Periodic transfer matrix
+Disable
+Fork
+Remove
+
+Use a dynamic-programming state (r,b), with r in {0,1,2} the sum of selected indices modulo 3 and b indicating whether the most recently processed index was selected. On processing i, either omit i, which resets b=0, or include i only if b=0, updating r to r+i mod 3. Encode this as a 6-by-6 transition matrix T_i. Because T_{i+3}=T_i, calculate the three-step matrix and seek a polynomial identity satisfied by each residue-class subsequence of a_n. First tests: independently enumerate admissible subsets for n=0,...,8 and compare all three residues. Proof obligations: derive an exact constant-coefficient recurrence, list sufficient initial values, and bound nontrivial residue modes strongly enough to prove asymptotic equidistribution. If the matrix characteristic polynomial is unnecessarily large, look for invariant subspaces or symmetry reduction; do not infer a recurrence solely from samples.
+
+Roots-of-unity weighted Fibonacci polynomials
+Disable
+Fork
+Remove
+
+Define P_n(q)=sum q^{sum_{i in S} i} over nonconsecutive subsets S of {1,...,n}. Separating subsets according to whether n is present yields P_n(q)=P_{n-1}(q)+q^n P_{n-2}(q), with P_0(q)=1 and P_1(q)=1+q. For a primitive cube root omega, use a_n=(P_n(1)+P_n(omega)+P_n(omega^2))/3. At q=1 use ordinary Fibonacci growth; at omega and omega^2 examine the periodic 2-by-2 transfer matrices to derive a recurrence over n -> n+3. Combine their annihilating polynomials into a proved integer-coefficient recurrence for a_n. First tests: evaluate P_n modulo q^3-1 for n<=12 and cross-check the six-state DP. Proof obligation: control both complex terms relative to P_n(1) for the 1/3 limit. Do not confuse pointwise evaluation at a root of unity with extracting a coefficient.
+
+Gap removal and Gaussian binomial sums
+Disable
+Fork
+Remove
+
+For a nonconsecutive k-subset 1<=i_1<...<i_k<=n, set y_j=i_j-(j-1). Then 1<=y_1<...<y_k<=n-k+1 and sum i_j=sum y_j+k(k-1)/2. The ordinary k-subset weight enumerator gives P_n(q)=sum_{k>=0} q^{k^2} [n-k+1 choose k]_q, with Gaussian q-binomials and k<=ceil(n/2). Derive this carefully, verify low-n polynomials, then evaluate its 3-dissection using q=1,omega,omega^2; explore q-Lucas identities at cube roots or elementary residue-block arguments. Seek an independent demonstration of the recurrence and asymptotic density, or a clear algebraic reduction to one of those statements. Discriminating test: check any proposed closed form against the weighted-Fibonacci recurrence for several complete periods, not just for n divisible by 3.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+5 sessions, 0 running
+
+Session #1
+Remove
+Ended
+Mixed · partial progress, unresolved
+Cycle 1 of 1 · 2/6 calls
+Outcome
+Mixed · partial progress, unresolved
+Conclusion
+### Historical session
+
+No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.
+
+The tentative recurrence a_(n+3)=a_(n+2)+a_n is false; the original problem remains open.
+
+Outcome evidence: Artifact 1
+
+Reasoning / proof
+
+Investigated: For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+Bounded strategy: Use a dynamic-programming state (r,b), with r in {0,1,2} the sum of selected indices modulo 3 and b indicating whether the most recently processed index was selected. On processing i, either omit i, which resets b=0, or include i only if b=0, updating r to r+i mod 3. Encode this as a 6-by-6 transition matrix T_i. Because T_{i+3}=T_i, calculate the three-step matrix and seek a polynomial identity satisfied by each residue-class subsequence of a_n. First tests: independently enumerate admissible subsets for n=0,...,8 and compare all three residues. Proof obligations: derive an exact constant-coefficient recurrence, list sufficient initial values, and bound nontrivial residue modes strongly enough to prove asymptotic equidistribution. If the matrix characteristic polynomial is unnecessarily large, look for invariant subspaces or symmetry reduction; do not infer a recurrence solely from samples.
+
+Claim: The tentative recurrence a_(n+3)=a_(n+2)+a_n is false; the original problem remains open.
+
+Skeptic response: Deterministic fixture result (not live-model output). This Skeptic response is a deterministic local fixture, not a live-model review. The computed values are [1,1,1,2,3,5,8,12,19]. The candidate relation holds for n=0,1 but fails at n=2: a_5=5 whereas a_4+a_2=3+1=4. This refutes only the tentative recurrence, not the original counting problem.
+
+Skeptic objections: The proposed three-step recurrence has the explicit n=2 counterexample a_5=5 != a_4+a_2=4.
+
+No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.
+
+Findings by strategy
+Periodic transfer matrix · partial
+
+The tentative recurrence a_(n+3)=a_(n+2)+a_n is false; the original problem remains open.
+
+Execution status: ended
+
+Failure detail: Stop budget exhausted
+
+No structured reasoning steps were preserved for this finding.
+
+Objections: The proposed three-step recurrence has the explicit n=2 counterexample a_5=5 != a_4+a_2=4.
+
+Open obligations: Check the proposed relation beyond the first two transitions. · Derive a general transition identity before claiming any recurrence. · Replace the false pattern with a general transfer-matrix identity.
+
+Sources: Artifact 1
+
+Assumptions: The enumeration includes the empty subset and tests adjacency on the bit mask.
+
+Proof obligations considered: Derive a general recurrence from the periodic transition matrices. · Prove the requested asymptotic limit.
+
+Still open: Check the proposed relation beyond the first two transitions. · Derive a general transition identity before claiming any recurrence. · Replace the false pattern with a general transfer-matrix identity.
+
+Unresolved objections: No general recurrence or asymptotic proof has been established.
+
+Caveats:
+Agent-reported evidence is unverified; agreement is not independent verification.
+The saved argument remains incomplete; no solution is claimed.
+No general recurrence or asymptotic proof has been established.
+Open obligations remain; inspect the saved artifacts before relying on this result.
+Status
+Strategy Assessments
+Metrics
+Provenance
+Citations, Evidence & Obligations
+Session #2
+Remove
+Ended
+Mixed · partial progress, unresolved
+Cycle 1 of 1 · 2/6 calls
+Outcome
+Mixed · partial progress, unresolved
+Conclusion
+### Historical session
+
+No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.
+
+Deterministic fixture result (not live-model output): the candidate step-three recurrence and a_12=128 are consistent with finite computation, but no global proof is recorded.
+
+Outcome evidence: Artifact 1
+
+Reasoning / proof
+
+Investigated: For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+Bounded strategy: Define P_n(q)=sum q^{sum_{i in S} i} over nonconsecutive subsets S of {1,...,n}. Separating subsets according to whether n is present yields P_n(q)=P_{n-1}(q)+q^n P_{n-2}(q), with P_0(q)=1 and P_1(q)=1+q. For a primitive cube root omega, use a_n=(P_n(1)+P_n(omega)+P_n(omega^2))/3. At q=1 use ordinary Fibonacci growth; at omega and omega^2 examine the periodic 2-by-2 transfer matrices to derive a recurrence over n -> n+3. Combine their annihilating polynomials into a proved integer-coefficient recurrence for a_n. First tests: evaluate P_n modulo q^3-1 for n<=12 and cross-check the six-state DP. Proof obligation: control both complex terms relative to P_n(1) for the 1/3 limit. Do not confuse pointwise evaluation at a root of unity with extracting a coefficient.
+
+Claim: Deterministic fixture result (not live-model output): the candidate step-three recurrence and a_12=128 are consistent with finite computation, but no global proof is recorded.
+
+Skeptic response: This Skeptic response is a deterministic local fixture, not a live-model review. The finite DP supports a_12=128 and all tested recurrence residuals vanish, but neither computation proves a general recurrence. The written matrix argument must show the product order and n=0 boundary explicitly. The claimed limit additionally needs a bound on the nontrivial modes; observed ratios are not a proof.
+
+Skeptic objections: A finite range cannot establish the recurrence for all n. · The n=0 transition is outside the stated n>=2 weighted recurrence and needs a separate check. · No analytic estimate yet proves the nontrivial terms are negligible compared with F_(n+2).
+
+No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.
+
+Findings by strategy
+Roots-of-unity weighted Fibonacci polynomials · partial
+
+Deterministic fixture result (not live-model output): the candidate step-three recurrence and a_12=128 are consistent with finite computation, but no global proof is recorded.
+
+Execution status: ended
+
+Failure detail: Stop budget exhausted
+
+No structured reasoning steps were preserved for this finding.
+
+Objections: A finite range cannot establish the recurrence for all n. · The n=0 transition is outside the stated n>=2 weighted recurrence and needs a separate check. · No analytic estimate yet proves the nontrivial terms are negligible compared with F_(n+2).
+
+Open obligations: Show the three-step matrix product for each residue class, including the n=0 boundary. · Prove the omega terms grow strictly slower than F_(n+2), rather than relying on finite ratios. · Verify the omega matrix identity at n=0 and for all later residue blocks. · Bound the omega and conjugate contributions relative to Fibonacci growth.
+
+Sources: Artifact 1
+
+Assumptions: F_(n+2) is the unweighted count of nonconsecutive subsets. · The two nontrivial root-of-unity values are complex conjugates.
+
+Proof obligations considered: Multiply the three phase matrices and verify trace 1, determinant -1. · Combine characteristic polynomials with the q=1 Fibonacci component. · Establish the asymptotic ratio rigorously.
+
+Still open: Show the three-step matrix product for each residue class, including the n=0 boundary. · Prove the omega terms grow strictly slower than F_(n+2), rather than relying on finite ratios. · Verify the omega matrix identity at n=0 and for all later residue blocks. · Bound the omega and conjugate contributions relative to Fibonacci growth.
+
+Unresolved objections: General matrix identity and asymptotic bound are not independently verified.
+
+Caveats:
+Agent-reported evidence is unverified; agreement is not independent verification.
+The saved argument remains incomplete; no solution is claimed.
+General matrix identity and asymptotic bound are not independently verified.
+Open obligations remain; inspect the saved artifacts before relying on this result.
+Status
+Strategy Assessments
+Metrics
+Provenance
+Citations, Evidence & Obligations
+Session #3
+Remove
+Ended
+Mixed · partial progress, unresolved
+Cycle 1 of 1 · 2/6 calls
+Outcome
+Mixed · partial progress, unresolved
+Conclusion
+### Historical session
+
+No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.
+
+Deterministic fixture result (not live-model output): the gap-removal bijection gives P_n(q)=sum_k q^(k^2) [n-k+1 choose k]_q, with finite coefficient agreement through n=18.
+
+Outcome evidence: Artifact 1
+
+Reasoning / proof
+
+Investigated: For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+Bounded strategy: For a nonconsecutive k-subset 1<=i_1<...<i_k<=n, set y_j=i_j-(j-1). Then 1<=y_1<...<y_k<=n-k+1 and sum i_j=sum y_j+k(k-1)/2. The ordinary k-subset weight enumerator gives P_n(q)=sum_{k>=0} q^{k^2} [n-k+1 choose k]_q, with Gaussian q-binomials and k<=ceil(n/2). Derive this carefully, verify low-n polynomials, then evaluate its 3-dissection using q=1,omega,omega^2; explore q-Lucas identities at cube roots or elementary residue-block arguments. Seek an independent demonstration of the recurrence and asymptotic density, or a clear algebraic reduction to one of those statements. Discriminating test: check any proposed closed form against the weighted-Fibonacci recurrence for several complete periods, not just for n divisible by 3.
+
+Claim: Deterministic fixture result (not live-model output): the gap-removal bijection gives P_n(q)=sum_k q^(k^2) [n-k+1 choose k]_q, with finite coefficient agreement through n=18.
+
+Skeptic response: This Skeptic response is a deterministic local fixture, not a live-model review. The gap-removal bijection and q-binomial formula are correct as a combinatorial identity, and exact polynomial arithmetic reproduces the first 19 polynomials. This is a useful independent encoding, but the finite check does not finish a recurrence proof or the asymptotic limit.
+
+No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.
+
+Findings by strategy
+Gap removal and Gaussian binomial sums · partial
+
+Deterministic fixture result (not live-model output): the gap-removal bijection gives P_n(q)=sum_k q^(k^2) [n-k+1 choose k]_q, with finite coefficient agreement through n=18.
+
+Execution status: ended
+
+Failure detail: Stop productive conclusion
+
+No structured reasoning steps were preserved for this finding.
+
+Open obligations: Use a correctly stated q-Lucas or residue-class argument to obtain a general recurrence from the identity. · Supply a rigorous asymptotic estimate for the nontrivial cube-root terms. · Derive the recurrence globally from a justified root-of-unity evaluation. · Prove a_n/F_(n+2) tends to 1/3.
+
+Sources: Artifact 1
+
+Assumptions: The inverse map i_j=y_j+(j-1) preserves the nonconsecutive condition. · Gaussian q-binomial coefficients use integer polynomial coefficients.
+
+Proof obligations considered: Derive a general linear recurrence with integer coefficients. · Prove the asymptotic density limit rather than extrapolating from finite coefficients.
+
+Still open: Use a correctly stated q-Lucas or residue-class argument to obtain a general recurrence from the identity. · Supply a rigorous asymptotic estimate for the nontrivial cube-root terms. · Derive the recurrence globally from a justified root-of-unity evaluation. · Prove a_n/F_(n+2) tends to 1/3.
+
+Unresolved objections: No complete proof of the recurrence or the limit is recorded.
+
+Caveats:
+Agent-reported evidence is unverified; agreement is not independent verification.
+The saved argument remains incomplete; no solution is claimed.
+No complete proof of the recurrence or the limit is recorded.
+Open obligations remain; inspect the saved artifacts before relying on this result.
+Status
+Strategy Assessments
+Metrics
+Provenance
+Citations, Evidence & Obligations
+Session #4
+Remove
+Ended
+Mixed · partial progress, unresolved
+Cycle 1 of 1 · 2/6 calls
+Outcome
+Mixed · partial progress, unresolved
+Conclusion
+### Historical session
+
+No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.
+
+Deterministic fixture result (not live-model output): a finite exact DP through n=60 is consistent with the candidate order-12 step-three recurrence; the general recurrence and limiting ratio remain unproved in this record.
+
+Outcome evidence: Artifact 1
+
+Reasoning / proof
+
+Investigated: For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+Bounded strategy: Use a dynamic-programming state (r,b), with r in {0,1,2} the sum of selected indices modulo 3 and b indicating whether the most recently processed index was selected. On processing i, either omit i, which resets b=0, or include i only if b=0, updating r to r+i mod 3. Encode this as a 6-by-6 transition matrix T_i. Because T_{i+3}=T_i, calculate the three-step matrix and seek a polynomial identity satisfied by each residue-class subsequence of a_n. First tests: independently enumerate admissible subsets for n=0,...,8 and compare all three residues. Proof obligations: derive an exact constant-coefficient recurrence, list sufficient initial values, and bound nontrivial residue modes strongly enough to prove asymptotic equidistribution. If the matrix characteristic polynomial is unnecessarily large, look for invariant subspaces or symmetry reduction; do not infer a recurrence solely from samples.
+
+Claim: Deterministic fixture result (not live-model output): a finite exact DP through n=60 is consistent with the candidate order-12 step-three recurrence; the general recurrence and limiting ratio remain unproved in this record.
+
+Skeptic response: This Skeptic response is a deterministic local fixture, not a live-model review. The exact six-state DP is a useful independent finite check, and the earlier counterexample correctly rejects only the simpler order-three guess. Agreement through n=48 does not imply a recurrence for all n. The report also needs to show the ordered block matrices and their characteristic relation, not just cite the candidate inherited from the roots-of-unity session.
+
+Skeptic objections: Finite recurrence residuals through n=48 are corroboration, not a proof for arbitrary n. · The transfer matrices are periodic but do not commute in general; the three-step product order must be stated and verified. · Even a proved recurrence and a_12 value would not by itself establish the requested limiting ratio without control of characteristic roots and coefficients.
+
+No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.
+
+Findings by strategy
+Periodic transfer matrix · partial
+
+Deterministic fixture result (not live-model output): a finite exact DP through n=60 is consistent with the candidate order-12 step-three recurrence; the general recurrence and limiting ratio remain unproved in this record.
+
+Execution status: ended
+
+Failure detail: Stop budget exhausted
+
+No structured reasoning steps were preserved for this finding.
+
+Objections: Finite recurrence residuals through n=48 are corroboration, not a proof for arbitrary n. · The transfer matrices are periodic but do not commute in general; the three-step product order must be stated and verified. · Even a proved recurrence and a_12 value would not by itself establish the requested limiting ratio without control of characteristic roots and coefficients.
+
+Open obligations: Derive the order-12 recurrence from exact phase-ordered transfer-matrix products for every n. · Verify all initial/boundary indices algebraically rather than only by DP. · Prove the nontrivial root-of-unity terms are negligible compared with F_(n+2). · Compute the exact three-step matrix product for each phase and show it yields the claimed recurrence. · State enough initial values and check the n=0 boundary exactly. · Prove the asymptotic contribution of the two nontrivial residue modes is o(F_(n+2)).
+
+Sources: Artifact 1
+
+Assumptions: The recurrence residual script uses exact Python integers. · No inference from finite ratios or finite recurrence checks is treated as proof.
+
+Proof obligations considered: Show the ordered transfer-matrix polynomial identity symbolically. · Establish a rigorous asymptotic bound for the nontrivial modes.
+
+Still open: Derive the order-12 recurrence from exact phase-ordered transfer-matrix products for every n. · Verify all initial/boundary indices algebraically rather than only by DP. · Prove the nontrivial root-of-unity terms are negligible compared with F_(n+2). · Compute the exact three-step matrix product for each phase and show it yields the claimed recurrence. · State enough initial values and check the n=0 boundary exactly. · Prove the asymptotic contribution of the two nontrivial residue modes is o(F_(n+2)).
+
+Unresolved objections: The general recurrence has not been derived from the matrices in this artifact. · The requested limiting density remains unproved.
+
+Caveats:
+Agent-reported evidence is unverified; agreement is not independent verification.
+The saved argument remains incomplete; no solution is claimed.
+The general recurrence has not been derived from the matrices in this artifact.
+The requested limiting density remains unproved.
+Open obligations remain; inspect the saved artifacts before relying on this result.
+Status
+Strategy Assessments
+Metrics
+Provenance
+Citations, Evidence & Obligations
+Session #5
+Remove
+Ended
+Mixed · partial progress, unresolved
+Cycle 1 of 1 · 2/6 calls
+Outcome
+Mixed · partial progress, unresolved
+Conclusion
+### Historical session
+
+No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.
+
+Deterministic fixture result (not live-model output): the standard q-binomial shift corrects the previous exponent explanation, and exact polynomials agree through n=18; the global recurrence and limit remain unproved.
+
+Outcome evidence: Artifact 1
+
+Reasoning / proof
+
+Investigated: For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.
+
+Bounded strategy: For a nonconsecutive k-subset 1<=i_1<...<i_k<=n, set y_j=i_j-(j-1). Then 1<=y_1<...<y_k<=n-k+1 and sum i_j=sum y_j+k(k-1)/2. The ordinary k-subset weight enumerator gives P_n(q)=sum_{k>=0} q^{k^2} [n-k+1 choose k]_q, with Gaussian q-binomials and k<=ceil(n/2). Derive this carefully, verify low-n polynomials, then evaluate its 3-dissection using q=1,omega,omega^2; explore q-Lucas identities at cube roots or elementary residue-block arguments. Seek an independent demonstration of the recurrence and asymptotic density, or a clear algebraic reduction to one of those statements. Discriminating test: check any proposed closed form against the weighted-Fibonacci recurrence for several complete periods, not just for n divisible by 3.
+
+Claim: Deterministic fixture result (not live-model output): the standard q-binomial shift corrects the previous exponent explanation, and exact polynomials agree through n=18; the global recurrence and limit remain unproved.
+
+Skeptic response: This Skeptic response is a deterministic local fixture, not a live-model review. The Investigator correctly distinguishes the formula from its earlier explanation: the standard Gaussian-binomial convention uses the offset k(k+1)/2 for subsets of {1,...,m}, so the total exponent is k(k-1)/2 + k(k+1)/2 = k^2. The exact polynomial comparison supports the identity for the tested finite range. The previous artifact's prose error is repaired here, but finite equality checks do not establish the identity for all n, the requested recurrence, or the density limit.
+
+Skeptic objections: The standard q-binomial identity should be stated with its precise subset-indexing convention; the previous artifact's explanatory factor was incorrect. · The polynomial equality is tested only for n<=18 and still needs a symbolic bijection/generating-function proof. · The recurrence and asymptotic density remain separate open goals.
+
+No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.
+
+Findings by strategy
+Gap removal and Gaussian binomial sums · partial
+
+Deterministic fixture result (not live-model output): the standard q-binomial shift corrects the previous exponent explanation, and exact polynomials agree through n=18; the global recurrence and limit remain unproved.
+
+Execution status: ended
+
+Failure detail: Stop budget exhausted
+
+No structured reasoning steps were preserved for this finding.
+
+Objections: The standard q-binomial identity should be stated with its precise subset-indexing convention; the previous artifact's explanatory factor was incorrect. · The polynomial equality is tested only for n<=18 and still needs a symbolic bijection/generating-function proof. · The recurrence and asymptotic density remain separate open goals.
+
+Open obligations: Derive the required constant-coefficient recurrence globally from a justified root-of-unity or transfer-matrix identity. · Prove a_n/F_(n+2) tends to 1/3 with a bound on the nontrivial modes. · Rewrite the q-binomial derivation with the standard k(k+1)/2 normalization and prove it for every n. · Derive the constant-coefficient recurrence and sufficient initial values. · Prove the limiting ratio rather than extrapolating from finite coefficients.
+
+Sources: Artifact 1
+
+Assumptions: The q-binomial is partition-normalized and enumerates k-subsets with the baseline sum k(k+1)/2 removed. · The shift i_j to y_j is reversible and preserves the stated bounds.
+
+Proof obligations considered: Prove the generating identity for all n and k under the stated convention. · Derive a general recurrence and establish the density limit.
+
+Still open: Derive the required constant-coefficient recurrence globally from a justified root-of-unity or transfer-matrix identity. · Prove a_n/F_(n+2) tends to 1/3 with a bound on the nontrivial modes. · Rewrite the q-binomial derivation with the standard k(k+1)/2 normalization and prove it for every n. · Derive the constant-coefficient recurrence and sufficient initial values. · Prove the limiting ratio rather than extrapolating from finite coefficients.
+
+Unresolved objections: Finite exact checks through n=18 do not prove the all-n generating identity. · No complete recurrence or asymptotic proof is recorded.
+
+Caveats:
+Agent-reported evidence is unverified; agreement is not independent verification.
+The saved argument remains incomplete; no solution is claimed.
+Finite exact checks through n=18 do not prove the all-n generating identity.
+No complete recurrence or asymptotic proof is recorded.
+Open obligations remain; inspect the saved artifacts before relying on this result.
+Status
+Strategy Assessments
+Metrics
+Provenance
+Citations, Evidence & Obligations

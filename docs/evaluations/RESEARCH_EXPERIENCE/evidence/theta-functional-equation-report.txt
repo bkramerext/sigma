@@ -1,0 +1,32 @@
+Theta Symmetry and the Zeta Functional Equation v1
+==================================================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Assume the Gaussian theta transformation θ(t) = t^(-1/2)θ(1/t) for t > 0, where θ(t) = Σ(n∈ℤ) exp(-πn²t). Starting from the Dirichlet series definition of ζ(s) on Re(s) > 1, derive a meromorphic continuation and the functional equation for the completed zeta function, with all normalization constants stated and checked. Then derive the resulting symmetries of nontrivial zeros and explain why symmetry about the critical line does not imply that every zero lies on it. Justify the Mellin transform, integral split, analytic continuation, and every interchange of sum and integral. Treat the theta identity as a supplied premise, not as evidence that this investigation proved Poisson summation. No outside references or computation tools are available.
+
+Project ID: 29840dd6-2e3b-45f4-ac00-d5b2e07f071b
+
+Research type: Mathematics
+
+Difficulty: Hard
+
+Strategies
+----------
+Mellin transform with a split at one (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Take the Mellin transform of θ(t)-1 in the initial convergence region. Split the integral at t=1, apply the supplied inversion only to the lower interval, and transform it to an upper-interval integral plus explicit elementary terms. Track Γ(s/2), powers of π, poles, and the s ↔ 1-s symmetry without suppressing boundary terms.
+
+Symmetrized completed-zeta integral (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Build an integral representation symmetric under t ↔ 1/t before identifying it with the completed zeta function. Derive continuation from the compact-range and tail behavior separately, then recover the functional equation by the substitution. Independently check residues and zero symmetries against the normalization; flag any step that depends on a theorem not supplied in the project.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

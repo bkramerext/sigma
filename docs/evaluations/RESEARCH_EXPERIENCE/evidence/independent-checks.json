@@ -1,0 +1,178 @@
+{
+  "provenance": "Independent evaluator Python check, not a SIGMA research session or proof checker.",
+  "enumeration_a_0_to_16": [
+    1,
+    1,
+    1,
+    2,
+    3,
+    5,
+    8,
+    12,
+    19,
+    31,
+    49,
+    79,
+    128,
+    205,
+    331,
+    536,
+    864
+  ],
+  "a12": 128,
+  "false_short_rule_at_n2": {
+    "lhs": 5,
+    "rhs": 4
+  },
+  "candidate_recurrence_residuals": [
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "exact_phase_products": [
+    {
+      "phase": 0,
+      "matrix": [
+        [
+          [
+            1,
+            -1
+          ],
+          [
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            0,
+            -1
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ],
+      "trace": [
+        1,
+        0
+      ],
+      "determinant": [
+        -1,
+        0
+      ]
+    },
+    {
+      "phase": 1,
+      "matrix": [
+        [
+          [
+            2,
+            1
+          ],
+          [
+            0,
+            -1
+          ]
+        ],
+        [
+          [
+            2,
+            0
+          ],
+          [
+            -1,
+            -1
+          ]
+        ]
+      ],
+      "trace": [
+        1,
+        0
+      ],
+      "determinant": [
+        -1,
+        0
+      ]
+    },
+    {
+      "phase": 2,
+      "matrix": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            -1
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      "trace": [
+        1,
+        0
+      ],
+      "determinant": [
+        -1,
+        0
+      ]
+    }
+  ],
+  "gap_explanation": {
+    "incorrect_total_at_k2": 2,
+    "required_k_squared_at_k2": 4,
+    "correct_offset_total_at_k2": 4
+  },
+  "maximum_regions_intersections": [
+    {
+      "i": 1,
+      "k": 2,
+      "x": -3,
+      "y": -2
+    },
+    {
+      "i": 1,
+      "k": 3,
+      "x": -4,
+      "y": -3
+    },
+    {
+      "i": 2,
+      "k": 3,
+      "x": -5,
+      "y": -6
+    },
+    {
+      "i": 1,
+      "k": 4,
+      "x": -5,
+      "y": -4
+    },
+    {
+      "i": 2,
+      "k": 4,
+      "x": -6,
+      "y": -8
+    },
+    {
+      "i": 3,
+      "k": 4,
+      "x": -7,
+      "y": -12
+    }
+  ]
+}

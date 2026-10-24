@@ -1,0 +1,75 @@
+Skip to project content
+Back to home
+Did Jesus Use Cannabis? v1
+Difficulty · Not set
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Did Jesus Use Cannabis? v1
+
+Investigate whether the historical Jesus used cannabis, for any purpose. Evaluate direct and indirect evidence from early texts, historical languages, archaeology, and first-century social practices. Distinguish whether cannabis existed in the region, whether it was used by some people, and whether there is credible evidence that Jesus personally used it. Do not assume either answer; identify uncertainty and explain what evidence would change the conclusion.
+
+Strategies
+New
+Generate
+
+6 strategies
+
+Audit one attribution chain enabled.
+
+STRATEGY
+Textual evidence
+Disable
+Fork
+Remove
+
+Examine the earliest Christian writings for descriptions of Jesus using intoxicating plants, medicinal preparations, anointing oils, or incense. Distinguish what a text actually says from later interpretations and later sources. Track approximate composition dates, manuscript transmission, genre, and the difference between silence and negative evidence. A useful result may be that no surviving source directly attests cannabis use.
+
+Language and translation
+Disable
+Fork
+Remove
+
+Investigate claims that Hebrew, Aramaic, Greek, or related ancient terms for fragrant reeds, oils, or medicines refer to cannabis. Compare proposed etymologies against historical dictionaries, cognates, usage in other ancient texts, and mainstream translation alternatives. Especially separate Hebrew Bible terminology from first-century accounts of Jesus. Test whether the cannabis identification survives without assuming the desired conclusion.
+
+Archaeology and material culture
+Disable
+Fork
+Remove
+
+Survey archaeological and archaeobotanical evidence for cannabis in the southern Levant and surrounding regions before and during the first century CE. Evaluate dates, provenience, chemical identification, contamination, and whether evidence from one site or century can support a claim about a specific individual. Distinguish regional availability from personal use.
+
+Historical context and plausibility
+Disable
+Fork
+Remove
+
+Reconstruct the religious, medical, trade, and social practices of first-century Galilee and Judea. Ask whether cannabis could have been known or available, and whether there is evidence of its use in comparable communities. Compare anointing, incense, medicine, and intoxication without treating them as interchangeable. Make explicit the inferential distance from general plausibility to an assertion about Jesus.
+
+Claim genealogy and adversarial review
+Disable
+Fork
+Remove
+
+Trace prominent modern claims that Jesus used cannabis to their earliest identifiable sources and examine their citations. Classify each assertion as direct ancient testimony, translation hypothesis, archaeological inference, analogy, or modern speculation. Seek the strongest counterarguments and independent corroboration; avoid counting repeated retellings as multiple sources. End with an evidence-weighted conclusion, including 'not established' if warranted.
+
+Audit one attribution chain
+Disable
+Fork
+Remove
+
+Select one modern claim and trace its citations back to the earliest accessible text or material finding. Record date, location, wording, proposed plant identification and the exact inferential step to Jesus personally. Reject circular citation chains and treat missing direct testimony as not established, rather than proof of nonuse. No sources retrieved by SIGMA; evaluator-authored plan.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

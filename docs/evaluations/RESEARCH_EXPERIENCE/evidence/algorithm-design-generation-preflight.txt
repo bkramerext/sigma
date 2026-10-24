@@ -1,0 +1,56 @@
+Skip to project content
+Back to home
+Design and Verify an Incremental Dependency Scheduler v1
+Difficulty · Medium
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Design and Verify an Incremental Dependency Scheduler v1
+
+Design an algorithm for a build system that maintains a directed dependency graph under edge additions and removals, answers whether the graph contains a cycle, and, when acyclic, produces a valid build order. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.
+
+Strategies
+Generate
+
+1 strategy
+
+Baseline before incremental claims enabled.
+
+Generate a strategy
+Generate
+Cancel
+
+Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.
+
+Using ChatGPT plan · gpt-6.1-sol · High · call limit from this project’s settingsManage usage
+
+Use your ChatGPT plan for eligible requests, or choose optional API-key billing. Manual research needs no connection.
+
+Generation context & starting point (optional)
+Starting point (optional)
+
+An optional idea or mechanism to investigate, not an assumption to accept uncritically. Leave empty for an independent research direction.
+
+Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Cancelling disconnects the active run; provider usage may already count toward the selected plan or billing mode.
+
+STRATEGY
+Baseline before incremental claims
+Disable
+Fork
+Remove
+
+Define duplicate insertion and missing deletion as idempotent operations. Maintain adjacency sets; recompute a topological order with Kahn's algorithm on queries and return a cycle witness when it fails. Prove the invariant before measuring. Compare chain, fan-out, repeated back-edge insertion/deletion and disconnected updates. Record update/query mix and include full-order output cost. Evaluator-authored plan; no benchmark has run.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

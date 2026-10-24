@@ -1,0 +1,28 @@
+Settings
+Save
+Cancel
+Main
+Limits
+
+Choose this project’s research type and AI settings. Edit its title and description directly on the project page.
+
+Research type
+Military
+Difficulty
+Not set
+Easy
+Medium
+Hard
+LLM Model
+gpt-6.1-sol · unavailable/unreviewed
+
+ChatGPT plan allowance or credits · connection required for generation. Checking model availability…
+
+Thinking level
+High · preserved
+
+Applies to future AI proposals. Higher thinking can take longer and consume more usage. API cost tiers are relative; current token prices. Earlier strategy provenance stays unchanged.
+
+Project location
+/private/tmp/sigma-research-experience-blue/projects/operation-narrow-passage.sigma
+Editing the display name never renames or moves this directory.

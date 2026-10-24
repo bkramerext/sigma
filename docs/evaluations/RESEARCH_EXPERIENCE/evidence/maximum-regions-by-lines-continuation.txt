@@ -1,0 +1,52 @@
+Skip to project content
+Back to home
+Σ
+Maximum Regions Formed by Lines v1
+Difficulty · Easy
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Maximum Regions Formed by Lines v1
+
+For each integer n >= 0, determine the maximum number of regions into which n distinct straight lines can divide the Euclidean plane. Lines may be placed arbitrarily. Derive a formula for the maximum, prove that no arrangement can exceed it, and show that an arrangement attaining it exists for every n. Include the n = 0 case and check small values. Do not assume a particular proof method.
+
+Strategies
+New
+Generate
+
+2 strategies
+
+Separate the bound from attainment enabled.
+
+STRATEGY
+Incremental region counting with an explicit maximizing arrangement
+Disable
+Fork
+Remove
+
+Define a region as a connected component of the plane after removing the lines. With no lines, the whole plane is one region, so R(0) = 1.
+
+For the upper bound, insert the lines one at a time. The kth line meets the preceding k − 1 lines in at most k − 1 distinct points. Those points divide the new line into at most k open intervals or rays. Each such piece lies in an existing region. Every existing region is convex: it is the intersection of the open half-planes specifying which side of each existing line its points occupy. Consequently, a region cannot contain two separated pieces of the new line. A region met by a piece is split into exactly two regions, since it is open and convex and has points on both sides of the new line. Thus the kth line adds at most k regions. Summing gives R(n) ≤ 1 + ∑(k = 1 to n) k = 1 + n(n + 1)/2.
+
+For attainment, take the n lines L_k: y = kx + k², for k = 1, …, n. When L_k is inserted, its intersection with L_i, where i < k, has x-coordinate −(i + k). These k − 1 coordinates are distinct. Hence L_k is divided into exactly k pieces by the earlier lines. By the convex-region argument above, these pieces lie in distinct existing regions, each of which is split in two. Therefore L_k adds exactly k regions. This arrangement attains 1 + n(n + 1)/2 for every positive n; the empty arrangement attains it for n = 0. Together with the upper bound, this proves the formula.
+
+Separate the bound from attainment
+Disable
+Fork
+Remove
+
+Prove a new line crosses at most n-1 distinct old intersection points, then show its pieces split distinct convex regions. Independently verify an explicit family with no parallel pairs or triple concurrence. Include n=0 and n=1. Evaluator-authored plan, not a saved session result.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

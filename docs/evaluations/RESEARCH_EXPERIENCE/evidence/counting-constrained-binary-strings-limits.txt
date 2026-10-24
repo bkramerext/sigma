@@ -1,0 +1,31 @@
+Settings
+Save
+Cancel
+Main
+Limits
+
+Research limits apply to future sessions. For local strategy generation, the model-call limit also sets the call budget. Existing sessions keep the limits captured when they started.
+
+Skeptic iterations
+
+Investigator/Skeptic iterations, from 1 to 5.
+
+Maximum agent calls
+
+Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic; local strategy generation uses this as its call ceiling.
+
+Maximum session duration
+Minutes
+Hours
+Days
+
+Elapsed wall time from start, 1 minute to 7 days. Time spent paused counts.
+
+Maximum output tokens per call
+
+256 to 16,384 tokens. SIGMA sends this limit where supported and enforces it against reported output usage or a conservative response-size bound.
+
+Maximum estimated session cost (USD)
+
+API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage pause further calls when a cap is set.
+[{"id": "research-rounds", "value": "3"}, {"id": "research-calls", "value": "30"}, {"id": "research-duration-value", "value": "1"}, {"id": "research-output-tokens", "value": "12000"}, {"id": "research-cost-limit", "value": ""}]

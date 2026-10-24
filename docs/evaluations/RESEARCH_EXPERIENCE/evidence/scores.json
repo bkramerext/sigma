@@ -1,0 +1,325 @@
+[
+  {
+    "slug": "algorithm-design",
+    "scores": [
+      4,
+      "N/O",
+      "N/O",
+      3,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "alternating-zeta-boundary",
+    "scores": [
+      4,
+      4,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "arrival-sequel",
+    "scores": [
+      3,
+      3,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "counting-constrained-binary-strings",
+    "scores": [
+      4,
+      "N/O",
+      "N/O",
+      3,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      2,
+      3
+    ],
+    "continue": "No",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "euler-product-primes",
+    "scores": [
+      4,
+      4,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "first-principles-catalysis",
+    "scores": [
+      3,
+      3,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "handshake-count-easy",
+    "scores": [
+      4,
+      3,
+      "N/O",
+      3,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      2,
+      3
+    ],
+    "continue": "No",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "jesus-cannabis",
+    "scores": [
+      4,
+      4,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "maximum-regions-by-lines",
+    "scores": [
+      4,
+      4,
+      4,
+      3,
+      2,
+      2,
+      3,
+      4,
+      3,
+      3
+    ],
+    "continue": "Yes",
+    "progress": "Partial (historical)",
+    "trust": "Conditional",
+    "coverage": "stock browser + supplementary historical provider record"
+  },
+  {
+    "slug": "nonconsecutive-subset-sums",
+    "scores": [
+      4,
+      4,
+      4,
+      2,
+      3,
+      3,
+      3,
+      4,
+      3,
+      3
+    ],
+    "continue": "Yes",
+    "progress": "Partial (fixture)",
+    "trust": "Conditional",
+    "coverage": "browser + five archived fixtures"
+  },
+  {
+    "slug": "operation-narrow-passage",
+    "scores": [
+      2,
+      "N/O",
+      "N/O",
+      3,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      2,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "riemann-hypothesis-research",
+    "scores": [
+      3,
+      3,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "scientific-investigation",
+    "scores": [
+      4,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "theta-functional-equation",
+    "scores": [
+      4,
+      4,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "warp-drive-engineering",
+    "scores": [
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "No",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "warp-drive-physics",
+    "scores": [
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "No",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  },
+  {
+    "slug": "xenopus-tail-regeneration",
+    "scores": [
+      3,
+      3,
+      "N/O",
+      4,
+      3,
+      "N/O",
+      "N/O",
+      4,
+      3,
+      3
+    ],
+    "continue": "Maybe",
+    "progress": "Not observable",
+    "trust": "Conditional",
+    "coverage": "browser/scaffolding"
+  }
+]

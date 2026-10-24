@@ -1,0 +1,46 @@
+Skip to project content
+Back to home
+Σ
+Theta Symmetry and the Zeta Functional Equation v1
+Difficulty · Hard
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+Theta Symmetry and the Zeta Functional Equation v1
+
+Assume the Gaussian theta transformation θ(t) = t^(-1/2)θ(1/t) for t > 0, where θ(t) = Σ(n∈ℤ) exp(-πn²t). Starting from the Dirichlet series definition of ζ(s) on Re(s) > 1, derive a meromorphic continuation and the functional equation for the completed zeta function, with all normalization constants stated and checked. Then derive the resulting symmetries of nontrivial zeros and explain why symmetry about the critical line does not imply that every zero lies on it. Justify the Mellin transform, integral split, analytic continuation, and every interchange of sum and integral. Treat the theta identity as a supplied premise, not as evidence that this investigation proved Poisson summation. No outside references or computation tools are available.
+
+Strategies
+New
+Generate
+
+2 strategies
+
+STRATEGY
+Mellin transform with a split at one
+Disable
+Fork
+Remove
+
+Take the Mellin transform of θ(t)-1 in the initial convergence region. Split the integral at t=1, apply the supplied inversion only to the lower interval, and transform it to an upper-interval integral plus explicit elementary terms. Track Γ(s/2), powers of π, poles, and the s ↔ 1-s symmetry without suppressing boundary terms.
+
+Symmetrized completed-zeta integral
+Disable
+Fork
+Remove
+
+Build an integral representation symmetric under t ↔ 1/t before identifying it with the completed zeta function. Derive continuation from the compact-range and tail behavior separately, then recover the functional equation by the substitution. Independently check residues and zero symmetries against the normalization; flag any step that depends on a theorem not supplied in the project.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.

@@ -1,0 +1,26 @@
+Warp Drive Design v1
+====================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Investigate whether a physically coherent framework for effective faster-than-light interstellar travel could exist, with the ultimate objective of a warp-drive concept. Do not constrain the investigation to technologies, materials, energy sources, or engineering methods available today. You may propose extensions, reinterpretations, or replacements of established physical theories, provided each proposal states its mathematical assumptions, internal consistency requirements, compatibility with existing observations, and potentially falsifiable consequences. Analyze the distinction between local motion faster than light and effective superluminal travel through spacetime geometry. Consider causality, horizons, energy conditions, quantum field effects, stability, backreaction, conservation laws, controllability, and the status of exotic stress-energy; do not assume any speculative mechanism works. Compare general-relativistic metric-engineering approaches with at least one fundamentally different conceptual framework. Identify concrete proof obligations, order-of-magnitude constraints where justified, decisive theoretical calculations or observations, and failure criteria. Separate established results, contested literature, hypotheses, and engineering conjectures. Produce a staged research program and a conditional conceptual design, not an unsupported claim of a working drive.
+
+Project ID: c0c3c222-900d-4660-a86e-3feea9c61eff
+
+Research type: Physics
+
+Difficulty: Hard
+
+Strategies
+----------
+No strategies are recorded.
+
+Research sessions
+-----------------
+No research sessions are recorded.
+
+Agentic runs
+------------
+No agentic runs are recorded.

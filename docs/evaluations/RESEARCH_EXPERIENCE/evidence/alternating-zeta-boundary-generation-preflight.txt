@@ -1,0 +1,71 @@
+Skip to project content
+Back to home
+Σ
+The Alternating Zeta Series and Analytic Continuation v1
+Difficulty · Hard
+Model ·
+Sol $$
+Thinking · High
+Dollar signs show relative published API token price tiers. They are not actual research session charges.
+Saved model access is not verified; settings were preserved.
+Google sign-in setup required
+ChatGPT sign-in · Google sign-in required
+Project
+TEX
+The Alternating Zeta Series and Analytic Continuation v1
+
+Starting from ζ(s) = Σ(n≥1) n^(-s) on Re(s) > 1, analyze η(s) = Σ(n≥1) (-1)^(n-1)n^(-s) as a complex series. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing ζ(s) into 0 < Re(s) ≤ 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.
+
+Strategies
+Generate
+
+3 strategies
+
+Audit the vanished multiplier enabled.
+
+Generate a strategy
+Generate
+Cancel
+
+Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.
+
+Using ChatGPT plan · gpt-6.1-sol · High · call limit from this project’s settingsManage usage
+
+Use your ChatGPT plan for eligible requests, or choose optional API-key billing. Manual research needs no connection.
+
+Generation context & starting point (optional)
+Starting point (optional)
+
+An optional idea or mechanism to investigate, not an assumption to accept uncritically. Leave empty for an independent research direction.
+
+Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Cancelling disconnects the active run; provider usage may already count toward the selected plan or billing mode.
+
+STRATEGY
+Abel summation and compact-uniform convergence
+Disable
+Fork
+Remove
+
+Use bounded partial sums of the alternating signs with summation by parts. Establish convergence uniformly on each compact subset of the proposed half-plane, then use the theorem on locally uniform limits of holomorphic functions. Separately derive the relation with ζ only in its original absolute-convergence region and analyze whether algebraic division creates exceptional points.
+
+Pairing terms and continuation boundary audit
+Disable
+Fork
+Remove
+
+Group neighboring terms to expose cancellation and estimate the tail on compact subsets of the s-plane. Independently derive the relation to the original Dirichlet series by separating even and odd indices where rearrangement is licensed. Audit the pole and possible zeros of the multiplier before claiming continuation; identify what further argument would be needed beyond the half-plane reached by this series.
+
+Audit the vanished multiplier
+Disable
+Fork
+Remove
+
+Solve 1-2^(1-s)=0 explicitly. Separate s=1 from the other points on Re(s)=1; identify which cancellation argument is needed at each before claiming a holomorphic quotient. Start with a uniform tail bound on Re(s)>=delta>0. Evaluator-authored proof obligation, not a completed derivation.
+
+Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.
+
+Sessions
+
+0 sessions, 0 running
+
+No sessions yet. Use Play in Strategies to start one.
