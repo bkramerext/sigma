@@ -86,6 +86,16 @@ def test_incomplete_chatgpt_paper_stream_is_rejected() -> None:
             raise AssertionError("Partial provider streams must not produce a paper draft")
 
 
+def test_long_tex_compiler_source_bound_is_configurable() -> None:
+    with patch("sigma.project_reports.shutil.which", return_value="tectonic-fixture"):
+        try:
+            papers._compile_pdf("x" * 101, max_source_bytes=100)
+        except RuntimeError as exc:
+            assert "100 byte source limit" in str(exc)
+        else:
+            raise AssertionError("The TeX compiler must enforce the configured source bound")
+
+
 def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
     async def check() -> None:
         started = asyncio.Event()
@@ -110,6 +120,7 @@ def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
             "path": str(path),
             "expected_project_id": inspect_project(path).project.id,
             "expected_binding": credential["identity"],
+            "expected_snapshot_sha256": papers._snapshot(str(path))[1],
         }
         await queue.put(
             {"type": "http.request", "body": json.dumps(body).encode(), "more_body": False}
@@ -151,8 +162,222 @@ def test_api_disconnect_cancels_paper_before_publication(path: Path) -> None:
     asyncio.run(check())
 
 
+def test_api_paper_stream_reports_progress_and_completion() -> None:
+    async def check() -> None:
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "streamed.sigma"
+            initialize_project(path, "Streamed paper", "A paper question")
+            project_id = inspect_project(path).project.id
+
+            async def fake_generate(
+                _path,
+                _binding,
+                _project_id,
+                *,
+                progress,
+                force_long_form,
+                expected_snapshot_sha256,
+            ):
+                await progress("evidence", 1, 2)
+                assert force_long_form is False
+                assert len(expected_snapshot_sha256) == 64
+                return {"paper_id": "fixture-paper"}
+
+            with patch.object(papers, "generate", new=fake_generate):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+                ) as client:
+                    response = await client.post(
+                        "/api/projects/papers",
+                        json={
+                            "path": str(path),
+                            "expected_project_id": project_id,
+                            "expected_binding": "chatgpt:fixture",
+                            "expected_snapshot_sha256": "a" * 64,
+                        },
+                    )
+            assert response.status_code == 200
+            assert response.headers["content-type"].startswith("text/event-stream")
+            assert '"stage":"evidence"' in response.text
+            assert '"type": "complete"' in response.text or '"type":"complete"' in response.text
+
+    asyncio.run(check())
+
+
+def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
+    sample_path = (
+        Path(__file__).resolve().parents[1] / "samples/xenopus-tail-regeneration/project.json"
+    )
+    sample = json.loads(sample_path.read_text(encoding="utf-8"))
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "xenopus-v2.sigma"
+        initialize_project(path, sample["title"] + " v2", sample["problem"])
+        project_view = inspect_project(path)
+        base_export = {
+            "project": {
+                "id": project_view.project.id,
+                "title": project_view.project.title,
+                "problem": sample["problem"],
+                "strategies": [],
+            },
+            "research_sessions": [],
+            "agentic_runs": [
+                {"run_id": "large-experiment", "steps": [{"step_id": "step-1", "output": ""}]}
+            ],
+        }
+        with patch("sigma.api.export_project_view", return_value=base_export):
+            empty_snapshot, _ = papers._snapshot(str(path))
+        target_bytes = 483_485
+        filler_size = target_bytes - len(papers._json(empty_snapshot))
+        assert filler_size > 0
+        base_export["agentic_runs"][0]["steps"][0]["output"] = "x" * filler_size
+        with patch("sigma.api.export_project_view", return_value=base_export):
+            snapshot, _ = papers._snapshot(str(path))
+        assert len(papers._json(snapshot)) == target_bytes
+        batch_count = len(papers._evidence_batches(snapshot))
+        assert batch_count > 1
+        with patch("sigma.api.export_project_view", return_value=base_export):
+            preflight = papers.preflight(str(path))
+        assert preflight["long_form"] is True
+        assert preflight["snapshot_bytes"] == target_bytes
+        assert preflight["evidence_batches"] == batch_count
+
+        credential = {"identity": "chatgpt:fixture", "mode": "chatgpt", "token": "fixture"}
+        config = {
+            "available": True,
+            "binding": credential["identity"],
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+        }
+        with (
+            patch("sigma.api.export_project_view", return_value=base_export),
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(
+                papers,
+                "_provider_structured",
+                side_effect=AssertionError("preflight mismatch must stop before provider use"),
+            ),
+        ):
+            try:
+                asyncio.run(
+                    papers.generate(
+                        str(path),
+                        credential["identity"],
+                        project_view.project.id,
+                        expected_snapshot_sha256="0" * 64,
+                    )
+                )
+            except ProjectError as exc:
+                assert "changed after paper preflight" in str(exc)
+            else:
+                raise AssertionError("Changed research must invalidate the preflight confirmation")
+        provider_calls = 0
+        fail_first_section = True
+        ref = f"project:{project_view.project.id}"
+
+        async def fake_structured(input_value, _binding, _config, *, response_model, **_kwargs):
+            nonlocal provider_calls, fail_first_section
+            provider_calls += 1
+            if response_model is papers.EvidenceBatchResult:
+                batch_refs = sorted({field["source_ref"] for field in input_value["fields"]})
+                return (
+                    papers.EvidenceBatchResult(
+                        notes=[
+                            papers.EvidenceNote(
+                                statement="The saved record contains an experiment transcript.",
+                                kind="context",
+                                evidence_refs=[batch_refs[0]],
+                            )
+                        ],
+                        conflicts_or_gaps=[],
+                    ),
+                    config["model"],
+                )
+            if response_model is papers.LongPaperPlan:
+                base = draft(ref)
+                return (
+                    papers.LongPaperPlan(
+                        title="A Bounded Long-Form Xenopus Research Paper",
+                        abstract=base.abstract,
+                        abstract_claim_ids=["C1"],
+                        problem_framing=base.problem_framing,
+                        problem_framing_claim_ids=["C1"],
+                        methods=base.methods,
+                        methods_claim_ids=["C1"],
+                        claims=base.claims,
+                        sections=[
+                            papers.LongSectionPlan(
+                                heading="Evidence inventory",
+                                purpose="Describe the saved source records and their scope.",
+                                evidence_refs=[ref],
+                                claim_ids=["C1"],
+                            ),
+                            papers.LongSectionPlan(
+                                heading="Experimental interpretation",
+                                purpose="Explain the supported interpretation and its limits.",
+                                evidence_refs=[ref],
+                                claim_ids=["C1"],
+                            ),
+                        ],
+                        limitations=base.limitations,
+                        open_obligations=base.open_obligations,
+                        conclusions=base.conclusions,
+                        conclusion_claim_ids=["C1"],
+                        validation_warnings=[],
+                    ),
+                    config["model"],
+                )
+            if fail_first_section:
+                fail_first_section = False
+                raise ProjectError("fixture interruption after the outline was saved")
+            return (
+                papers.LongSectionDraft(
+                    paragraphs=["The saved experimental record is discussed with its limitations."]
+                ),
+                config["model"],
+            )
+
+        with (
+            patch("sigma.api.export_project_view", return_value=base_export),
+            patch.object(papers, "auth_context", new=lambda: asyncio.sleep(0, result=credential)),
+            patch.object(
+                papers, "configuration", new=lambda **_kwargs: asyncio.sleep(0, result=config)
+            ),
+            patch.object(papers, "_provider_structured", new=fake_structured),
+            patch.object(papers, "_compile_pdf", new=lambda _tex, **_kwargs: b"%PDF-fixture"),
+        ):
+            try:
+                asyncio.run(papers.generate(str(path), credential["identity"]))
+            except ProjectError as exc:
+                assert "fixture interruption" in str(exc)
+            else:
+                raise AssertionError("The fixture should interrupt after saving a section plan")
+            calls_before_resume = provider_calls
+            checkpoint = papers._load_work(str(path))
+            assert checkpoint is not None and checkpoint["plan"]
+            assert checkpoint["next_batch"] == len(papers._evidence_batches(snapshot))
+            assert papers.list_papers(str(path)) == []
+            result = asyncio.run(papers.generate(str(path), credential["identity"]))
+
+        saved = papers.get_paper(str(path), result["paper_id"])
+        assert saved["snapshot_sha256"] == result["snapshot_sha256"]
+        assert len(papers._json(saved["snapshot"])) == target_bytes
+        assert saved["generation"]["long_form"] is True
+        assert saved["generation"]["call_limit"] == papers.MAX_LONG_PAPER_CALLS
+        assert saved["generation"]["provider_calls_attempted"] == provider_calls
+        assert provider_calls > 3
+        assert provider_calls - calls_before_resume == 2
+        assert papers._load_work(str(path)) is None
+        assert len(saved["draft"]["sections"]) == 2
+
+
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
+    test_long_tex_compiler_source_bound_is_configurable()
+    test_api_paper_stream_reports_progress_and_completion()
     with TemporaryDirectory() as temporary:
         cancelled_path = Path(temporary) / "cancelled.sigma"
         initialize_project(cancelled_path, "Cancelled paper", "A bounded saved question")
@@ -388,7 +613,7 @@ def main() -> None:
                 papers, "configuration", new=lambda **kwargs: asyncio.sleep(0, result=config)
             ),
             patch.object(papers, "_provider", new=fake_provider),
-            patch.object(papers, "_compile_pdf", new=lambda _: b"%PDF-fixture"),
+            patch.object(papers, "_compile_pdf", new=lambda *_args, **_kwargs: b"%PDF-fixture"),
         ):
             first = asyncio.run(papers.generate(str(path), credential["identity"]))
             second = asyncio.run(papers.generate(str(path), credential["identity"]))
@@ -464,7 +689,7 @@ def main() -> None:
                 papers, "configuration", new=lambda **kwargs: asyncio.sleep(0, result=config)
             ),
             patch.object(papers, "_provider", new=exploratory_provider),
-            patch.object(papers, "_compile_pdf", new=lambda _: b"%PDF-fixture"),
+            patch.object(papers, "_compile_pdf", new=lambda *_args, **_kwargs: b"%PDF-fixture"),
         ):
             exploratory = asyncio.run(papers.generate(str(exploratory_path)))
         exploratory_record = papers.get_paper(str(exploratory_path), exploratory["paper_id"])

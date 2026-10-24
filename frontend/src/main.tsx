@@ -796,7 +796,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
-type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; long_form?: boolean; evidence_batch_count?: number } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
@@ -809,6 +809,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [longForm, setLongForm] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -846,21 +847,67 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   async function generatePaper() {
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Freezing the complete evidence snapshot…'); setError('');
-    const finishProvider = beginProviderRequest('ai-paper');
-    const timer = window.setTimeout(() => setPhase('Authoring, validating evidence references, and compiling PDF…'), 350);
+    setBusy(true); setPhase('Checking the frozen evidence size…'); setError('');
+    let finishProvider = () => {};
+    let timer = 0;
     try {
+      const preflightResponse = await fetch(`/api/projects/papers/preflight?${new URLSearchParams({ path, long_form: String(longForm) })}`, { cache: 'no-store', signal: controller.signal });
+      const preflight = await preflightResponse.json();
+      if (!preflightResponse.ok) throw new Error(preflight.error ?? 'Could not size the evidence snapshot.');
+      if (preflight.long_form && !window.confirm(
+        `This frozen snapshot is ${Number(preflight.snapshot_bytes).toLocaleString()} bytes across ${Number(preflight.source_count).toLocaleString()} saved sources. Long-form authoring will use ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then a plan and separate section calls. The run may make up to ${Number(preflight.maximum_provider_calls).toLocaleString()} provider calls. ${mode === 'api_key' ? 'API-key mode can incur separate usage charges.' : 'ChatGPT-plan usage is subject to provider allowance.'} Continue?`
+      )) {
+        setPhase('Large paper generation was not started; no provider calls were made.');
+        return;
+      }
+      finishProvider = beginProviderRequest('ai-paper');
+      setPhase(preflight.long_form
+        ? `Indexing ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then authoring the planned sections…`
+        : 'Authoring and validating the paper, then compiling the PDF…');
+      timer = window.setTimeout(() => setPhase(preflight.long_form
+        ? 'Long-form evidence indexing and section authoring are in progress…'
+        : 'Authoring, validating evidence references, and compiling PDF…'), 350);
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }) });
-      const result = await response.json().catch(() => null);
-      if (!result) throw new Error(`Paper generation failed with an invalid server response (${response.status}). No version was published.`);
-      if (!response.ok) throw new Error(result.error ?? 'Paper generation failed; no version was published.');
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: longForm }) });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null);
+        throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
+      }
+      if (!response.headers.get('content-type')?.includes('text/event-stream') || !response.body)
+        throw new Error(`Paper generation failed with an invalid server response (${response.status}). No version was published.`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let result: { paper_id: string } | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const frames = buffer.split('\n\n'); buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find(item => item.startsWith('data: '));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6));
+          if (event.type === 'error') throw new Error(event.error ?? 'Paper generation failed.');
+          if (event.type === 'complete') result = event.result as { paper_id: string };
+          if (event.type === 'progress') {
+            const stage = event.stage === 'snapshot' ? 'Frozen the complete evidence snapshot'
+              : event.stage === 'evidence' ? `Indexing evidence batch ${event.completed} of ${event.total}`
+              : event.stage === 'index' ? 'Consolidating the source-linked evidence index'
+              : event.stage === 'outline' ? 'Planning the complete paper outline'
+              : event.stage === 'compile' ? 'Compiling the complete TeX document and validating the PDF'
+              : `Authoring paper section ${event.completed} of ${event.total}`;
+            setPhase(`${stage}…`);
+          }
+        }
+        if (done) break;
+      }
+      if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
       setPhase('Saved a new immutable paper version.');
       await refresh(result.paper_id);
     } catch (cause) {
-      if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
-      else setPhase('Generation cancelled. No new version was published.');
-    } finally { window.clearTimeout(timer); finishProvider(); if (request.current === controller) request.current = null; setBusy(false); }
+      if (controller.signal.aborted) setPhase('Generation cancelled. No new version was published.');
+      else { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+    } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
@@ -868,7 +915,8 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
-      <p className="settings-hint"><strong>Limits:</strong> complete evidence snapshot up to 100,000 bytes; larger snapshots are rejected without omitting evidence. One provider call, up to 12,000 output tokens and a 1 MB response cap in API-key mode, a 4 MB streamed-response cap in ChatGPT-plan mode, and a 120-second timeout. Up to 50 saved versions, each capped at 12 MB including its PDF.</p>
+      <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
+      <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
       <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
       {(busy || phase.startsWith('Generation cancelled.')) && <p role="status" aria-live="polite">{phase}</p>}
       {error && <p role="alert" className="error">{error}</p>}
@@ -884,7 +932,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
         <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
         <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
         <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
-        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}</p>
+        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} provider call attempts` : ''}</p>
         {selected.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
         {(selected.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
         {selected.draft.sections.map(section => <section key={section.heading}><h4>{section.heading}</h4>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}

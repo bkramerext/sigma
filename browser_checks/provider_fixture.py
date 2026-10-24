@@ -37,7 +37,101 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
-    if body["text"]["format"]["name"] == "sigma_research_paper":
+    schema_name = body["text"]["format"]["name"]
+    if schema_name in {
+        "sigma_paper_evidence_batch",
+        "sigma_paper_evidence_reduction",
+        "sigma_long_paper_plan",
+        "sigma_long_paper_section",
+    }:
+        if schema_name in {"sigma_paper_evidence_batch", "sigma_paper_evidence_reduction"}:
+            if schema_name == "sigma_paper_evidence_batch":
+                refs = list(dict.fromkeys(field["source_ref"] for field in context["fields"]))[:3]
+            else:
+                refs = list(
+                    dict.fromkeys(ref for note in context for ref in note["evidence_refs"])
+                )[:3]
+            output = {
+                "notes": [
+                    {
+                        "statement": "The frozen record contains a saved research objective and source-linked study context.",
+                        "kind": "context",
+                        "evidence_refs": [reference],
+                    }
+                    for reference in refs
+                ],
+                "conflicts_or_gaps": [],
+            }
+        elif schema_name == "sigma_long_paper_plan":
+            reference = context["indexed_source_ids"][0]
+            output = {
+                "title": "A Long-Form Experimental Research Synthesis",
+                "abstract": "This paper organizes the saved experimental question, its evidence base, and the limitations recorded in the frozen research snapshot. The manuscript distinguishes observations from hypotheses and proposed future tests.",
+                "abstract_claim_ids": ["C1"],
+                "problem_framing": [
+                    "The saved project defines an experimentally anchored question whose interpretation depends on the available records."
+                ],
+                "problem_framing_claim_ids": ["C1"],
+                "methods": [
+                    "We organized the frozen source record into bounded evidence batches and retained each source reference."
+                ],
+                "methods_claim_ids": ["C1"],
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "The frozen project records an experimental research objective.",
+                        "status": "established",
+                        "evidence_refs": [reference],
+                        "reasoning": "The objective appears in the saved project source in the complete snapshot.",
+                    }
+                ],
+                "sections": [
+                    {
+                        "heading": "Experimental question and prior context",
+                        "purpose": "Describe the saved question and distinguish established context from open hypotheses.",
+                        "evidence_refs": [reference],
+                        "claim_ids": ["C1"],
+                    },
+                    {
+                        "heading": "Evidence, limitations, and next tests",
+                        "purpose": "Explain the available records, gaps, and discriminating experimental work.",
+                        "evidence_refs": [reference],
+                        "claim_ids": ["C1"],
+                    },
+                ],
+                "limitations": [
+                    "This deterministic browser fixture is not biological evidence or an independent review."
+                ],
+                "open_obligations": [
+                    "Review the underlying biological sources and validate the proposed experiments."
+                ],
+                "conclusions": [
+                    "The saved evidence supports an exploratory synthesis, not a validated biological mechanism."
+                ],
+                "conclusion_claim_ids": ["C1"],
+                "validation_warnings": [],
+            }
+        else:
+            output = {
+                "paragraphs": [
+                    "The saved material is described with explicit source references and with its uncertainty intact. The research question is treated as an experimental problem; hypotheses and future interventions are not presented as observations.",
+                    "The appropriate interpretation is limited by the records currently preserved. Independent samples, suitable controls, and a falsifiable perturbation would be needed before claiming a new mechanism.",
+                ]
+            }
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(output)}],
+                    }
+                ],
+            },
+        )
+    if schema_name == "sigma_research_paper":
         sources = context["sources"]
         project_source = next(item for item in sources if item["kind"] == "project")
         project_data = project_source["data"]
