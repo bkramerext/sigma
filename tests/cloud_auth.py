@@ -18,6 +18,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from sigma import cloud_auth
 from sigma.api import app
+from sigma.projects import initialize_project
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 CLIENT_ID = "sigma-test.apps.googleusercontent.com"
@@ -305,11 +306,13 @@ class CloudAuthTests(TestCase):
             self.assertEqual([row["email"] for row in rows], ["member@example.org"])
 
     def test_local_mode_keeps_project_and_provider_apis_unauthenticated(self):
+        local_project = self.root / "local-project.sigma"
+        initialize_project(local_project, "Local test", "Test local API access")
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
             self.assertEqual(self.client.get("/api/cloud-auth/status").json()["enabled"], False)
             self.assertNotEqual(
                 self.client.get(
-                    "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                    "/api/projects/research-sessions", params={"path": str(local_project)}
                 ).status_code,
                 401,
             )

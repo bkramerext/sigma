@@ -38,7 +38,8 @@ The first GitHub Actions run on the rebased PR exposed that deleting the empty
 RH sample placeholder also removed the tracked `projects/` parent directory
 from clean checkouts, although it remains the default local project root. A
 root-level sentinel restores that directory without restoring the RH sample
-placeholder.
+placeholder. The local-mode authentication test now initializes its own
+temporary project instead of depending on the deleted RH sample path.
 
 ## Operation Narrow Passage strategy-generation repair (2026-10-24)
 
