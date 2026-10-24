@@ -6,6 +6,33 @@ only hosting target in this plan is one Linux Compute Engine VM in Oregon
 billing activation, live Google OAuth exchange, or OpenAI request was performed
 for this readiness work.
 
+## Public hostname and DNS
+
+The selected initial public hostname is `sigma-research.duckdns.org`, registered
+by the operator with DuckDNS. Set `SIGMA_DOMAIN=sigma-research.duckdns.org` in
+the private deployment environment. This is a free DuckDNS subdomain, not a
+purchased custom domain; a custom domain can be considered later without
+changing the application architecture.
+
+Before deployment, update the DuckDNS A record to the reserved static external
+IPv4 address of the Google Cloud VM. The IP shown during initial registration
+must not be assumed to belong to the VM. Keep the DuckDNS update token private,
+out of source control, chat, logs, and worker instructions. The token shown in
+the registration screenshot should be considered exposed and rotated before
+production use. Do not record the token or the screenshot's current IP in this
+runbook.
+
+Caddy will obtain and renew the HTTPS certificate after DNS resolves to the VM
+and inbound TCP 80/443 are reachable. Configure the production Google OAuth
+authorized origin as `https://sigma-research.duckdns.org` and the exact
+redirect URI as
+`https://sigma-research.duckdns.org/api/cloud-auth/callback`. Keep the
+hostname stable after registering the production OAuth client.
+
+DuckDNS supplies DNS hosting for this hostname without a Google Cloud DNS zone
+charge. If a paid custom domain or Cloud DNS is adopted later, update the
+configuration and cost estimate explicitly.
+
 ## Package and runtime shape
 
 `Dockerfile` builds the Python 3.12 FastAPI service from `uv.lock`; the
@@ -94,18 +121,18 @@ budget allowance, not its provisioned disk size.
 | Regional standard snapshots | Budget 100 GiB stored at $0.000068493/GiB-h | $5.00 | $14.79 |
 | Cloud Storage backup copy | 50 GiB single-region Standard at $0.02/GiB-month | $1.00 | $3.00 |
 | Internet egress | 10 GiB/month to North America; first 1 GiB/month free, then $0.12/GiB | $1.08 | $3.24 |
-| Cloud DNS | One managed zone (~$0.20/mo) and 500k queries (~$0.20/mo) | $0.40 | $1.20 |
+| DNS hosting | DuckDNS subdomain; no Google Cloud DNS zone | $0.00 | $0.00 |
 | Secret Manager | Two active versions and low-volume reads within current free limits | $0.00 | $0.00 |
 | Cloud Logging | Not enabled; Docker local log rotation, no GCP ingest | $0.00 | $0.00 |
-| **Estimated total** | Domain registration and OpenAI API usage excluded | **$132.97** | **$393.54** |
+| **Estimated total** | DuckDNS hostname is free; OpenAI API usage excluded | **$132.57** | **$392.34** |
 
 At this deliberately always-on estimate, the $300 trial credit would be used up
-around day 69 of a 90-day trial. The remaining 21 days are about $93.54 of usage with no
-trial credit available; under Google's current trial rules resources stop when
-the credit is exhausted or 90 days elapse if the account is not upgraded. Do not
-assume unused time or free-tier eligibility offsets this bill. An existing
-domain/registrar is assumed; domain purchase or renewal is additional and
-requires a separate quote. A 10 GiB/month egress assumption is small, but
+around day 69 of a 90-day trial. The remaining usage over 90 days is about
+$92.34 beyond the trial credit; under Google's current trial rules resources
+stop when the credit is exhausted or 90 days elapse if the account is not
+upgraded. Do not assume unused time or free-tier eligibility offsets this bill.
+The estimate uses the free DuckDNS subdomain and excludes a future paid custom
+domain, if one is chosen. A 10 GiB/month egress assumption is small, but
 downloads, artifacts, image builds, and unusual traffic can exceed it. If Cloud
 Logging is enabled, retention and ingest must be priced/approved separately.
 
@@ -114,7 +141,6 @@ Pricing references (official Google sources, checked 2026-10-23):
 - [E2 general-purpose Compute Engine pricing](https://cloud.google.com/products/compute/pricing/general-purpose)
 - [Persistent Disk and snapshot pricing](https://cloud.google.com/compute/disks-image-pricing)
 - [External IPv4 and internet egress pricing](https://cloud.google.com/vpc/pricing)
-- [Cloud DNS pricing](https://cloud.google.com/dns/pricing)
 - [Secret Manager pricing and free usage](https://cloud.google.com/secret-manager/pricing)
 - [Google Cloud $300/90-day trial terms](https://cloud.google.com/free/docs/free-cloud-features)
 
@@ -161,8 +187,9 @@ checkbox before the corresponding external action.
    cannot access a rootful Docker socket. Set exact service limits from the
    approved env file. The example begins with one globally active research job,
    $2 default/user and $15 global inference ceilings.
-7. Point DNS to the VM's external address, allow Caddy to acquire HTTPS, and
-   verify production OAuth with two explicitly authorized test users, a denied
+7. Update the DuckDNS A record to the VM's reserved static external address,
+   allow Caddy to acquire HTTPS, and verify production OAuth with two explicitly
+   authorized test users, a denied
    identity, administrator revocation, workspace isolation, budget exhaustion,
    and fake-provider failure/unknown-charge paths. No real inference is part of
    this readiness approval.
@@ -329,13 +356,13 @@ does not satisfy any checkbox.
   as an implicit continuation.
 - [ ] Approve the modeled ~$133 normalized month / ~$395 for 90 days, the
   expected ~$95 beyond $300, external OpenAI spending as a separate budget,
-  domain renewal if applicable, backup retention, logging choice, and maximum
+  any future paid domain, backup retention, logging choice, and maximum
   authorized recurring spend. Create a budget alert and verify it is not a hard
   cap.
 - [ ] Approve enabling Compute Engine and Secret Manager APIs, creating the
   dedicated service account, exact IAM bindings, OS Login/IAP grants, VPC,
-  firewall rules, public IP, VM, both disks, backup bucket, snapshots, DNS
-  zone/records, and all cleanup/retention policies individually.
+  firewall rules, public IP, VM, both disks, backup bucket, snapshots, the DuckDNS A-record update, and all cleanup/retention
+  policies individually.
 - [ ] Approve the dedicated `sigma-sandbox` host account, Docker Engine/rootless
   daemon layout, exact UID/GID/socket path, app-user socket access, and a target
   Linux security test proving runner isolation. Reject deployment if it requires
