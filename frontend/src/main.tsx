@@ -212,7 +212,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; strategyChoices?: Strategy[]; selectedStrategyIds?: string[]; selectionLimit?: number; onStrategySelectionChange?: (strategyId: string, selected: boolean) => void };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -251,8 +251,7 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   const [interventionKind, setInterventionKind] = useState<ResearchIntervention['kind']>('priority');
   const [interventionText, setInterventionText] = useState('');
   const [interventionStrategy, setInterventionStrategy] = useState('*');
-  const [targetInvestigator, setTargetInvestigator] = useState(true);
-  const [targetSkeptic, setTargetSkeptic] = useState(true);
+  const [targetAgentRole, setTargetAgentRole] = useState<'investigator' | 'skeptic'>('investigator');
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [interventionError, setInterventionError] = useState('');
   useEffect(() => {
@@ -273,12 +272,12 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
     && interventionCount.filter(item => item.status !== 'rejected').length < 24
     && interventionCount.length < 32;
   const interventionHelp = session.status === 'paused' || session.status === 'stopped'
-    ? 'Saves this guidance for the selected agents if you resume; no provider call starts now.'
-    : 'Queues guidance for the selected agents’ next eligible step; no provider call starts now.';
+    ? 'Applies after resume; no call starts now.'
+    : 'Applies on a later call; no call starts now.';
   async function submitIntervention(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const agentRoles = [targetInvestigator ? 'investigator' : null, targetSkeptic ? 'skeptic' : null].filter((role): role is 'investigator' | 'skeptic' => role !== null);
-    if (!interventionText.trim() || !agentRoles.length) return;
+    const agentRoles = [targetAgentRole];
+    if (!interventionText.trim()) return;
     setInterventionBusy(true); setInterventionError('');
     try {
       await post<ResearchSession>(`research-sessions/${session.id}/interventions`, {
@@ -305,24 +304,24 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-general"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids?.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>{!!session.outcome.caveats?.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
 
-      {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <details className="human-interventions outcome-subsection" aria-label="Human research guidance" open>
-        <summary><DisclosureChevron expanded={false}/>Human guidance</summary>
+      {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <details className="human-interventions outcome-subsection" aria-label="Human research feedback" open>
+        <summary><DisclosureChevron expanded={false}/>Human feedback</summary>
         <div className="human-interventions-content">
-        {!supportsIntervention && <p className="human-intervention-note">Guidance is unavailable for this legacy session because it has no strategy-bound execution steps.</p>}
-        {supportsIntervention && interventionWindowOpen && interventionCount.filter(item => item.status !== 'rejected').length >= 24 && <p className="human-intervention-note">This session reached its 24-guidance limit.</p>}
+        {!supportsIntervention && <p className="human-intervention-note">Feedback is unavailable for this legacy session because it has no strategy-bound execution steps.</p>}
+        {supportsIntervention && interventionWindowOpen && interventionCount.filter(item => item.status !== 'rejected').length >= 24 && <p className="human-intervention-note">This session reached its 24-feedback limit.</p>}
         {canIntervene && <form className="human-intervention-form" onSubmit={submitIntervention}>
-          <label>Type<select value={interventionKind} onChange={event => setInterventionKind(event.target.value as ResearchIntervention['kind'])}><option value="priority">Priority</option><option value="objection">Objection</option><option value="evidence">New evidence</option></select></label>
-          <label>Strategy<select value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
-          <fieldset><legend>Send to</legend><label><input type="checkbox" checked={targetInvestigator} onChange={event => setTargetInvestigator(event.target.checked)}/> Investigator</label><label><input type="checkbox" checked={targetSkeptic} onChange={event => setTargetSkeptic(event.target.checked)}/> Skeptic</label></fieldset>
-          <label className="human-intervention-text">Guidance<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a bounded research instruction or evidence note."/></label>
-          <div className="human-intervention-submit"><small id={`human-guidance-help-${session.id}`}>{interventionText.length}/1,200 · {interventionHelp}</small><button type="submit" className="text-view-link" aria-describedby={`human-guidance-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim() || (!targetInvestigator && !targetSkeptic)}>{interventionBusy ? 'Queueing…' : 'Send Guidance'}</button></div>
+          <fieldset className="human-intervention-type" aria-label="Feedback type"><label><input type="radio" name={`feedback-type-${session.id}`} value="priority" checked={interventionKind === 'priority'} onChange={() => setInterventionKind('priority')}/> Priority</label><label><input type="radio" name={`feedback-type-${session.id}`} value="objection" checked={interventionKind === 'objection'} onChange={() => setInterventionKind('objection')}/> Objection</label><label><input type="radio" name={`feedback-type-${session.id}`} value="evidence" checked={interventionKind === 'evidence'} onChange={() => setInterventionKind('evidence')}/> New Evidence</label></fieldset>
+          <fieldset className="human-intervention-target" aria-label="Feedback recipient"><label><input type="radio" name={`feedback-target-${session.id}`} value="investigator" checked={targetAgentRole === 'investigator'} onChange={() => setTargetAgentRole('investigator')}/> For investigator</label><label><input type="radio" name={`feedback-target-${session.id}`} value="skeptic" checked={targetAgentRole === 'skeptic'} onChange={() => setTargetAgentRole('skeptic')}/> For skeptic</label></fieldset>
+          <label className="human-intervention-strategy"><span className="sr-only">Strategy</span><select aria-label="Strategy" value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
+          <label className="human-intervention-text">Feedback<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a research instruction or evidence note."/></label>
+          <div className="human-intervention-submit"><button type="submit" className="text-view-link" aria-describedby={`human-feedback-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim()}>{interventionBusy ? 'Adding…' : 'Add'}</button><small id={`human-feedback-help-${session.id}`}>{interventionText.length}/1,200 · {interventionHelp}</small></div>
           {interventionError && <p className="error" role="alert">{interventionError}</p>}
         </form>}
         {!!session.interventions?.length && <ol className="human-intervention-history">{session.interventions.slice(-8).reverse().map(item => <li key={item.id}>
-          <div><strong>{item.kind.replaceAll('_', ' ')}</strong><span>{item.status.replaceAll('_', ' ')}</span></div>
+          <div><strong>{item.kind.replaceAll('_', ' ')}</strong>{item.status !== 'queued' && <span>{item.status.replaceAll('_', ' ')}</span>}</div>
           <p>{item.text}</p>
           {item.rejection_reason && <small>{item.rejection_reason}</small>}
-          {!!item.deliveries.length && <ul>{item.deliveries.map((delivery, index) => <li key={`${delivery.strategy_id}:${delivery.role}:${index}`}><span>{targetStrategies.find(strategy => strategy.strategy_id === delivery.strategy_id)?.strategy_title ?? 'Strategy'} · {delivery.role}{delivery.target_cycle ? ` · cycle ${delivery.target_cycle === 'next_eligible' ? 'pending' : delivery.target_cycle}` : ''}</span><span>{delivery.status}{delivery.uptake ? ` · ${delivery.uptake}` : ''}</span>{delivery.rationale && <small>{delivery.rationale}</small>}{delivery.attempts.length > 1 && <small>{delivery.attempts.length} delivery attempts; interrupted attempts remain in the audit.</small>}</li>)}</ul>}
+          {!!item.deliveries.length && <ul>{item.deliveries.map((delivery, index) => <li key={`${delivery.strategy_id}:${delivery.role}:${index}`}><span>{targetStrategies.find(strategy => strategy.strategy_id === delivery.strategy_id)?.strategy_title ?? 'Strategy'} · {delivery.role}{delivery.target_cycle ? ` · cycle ${delivery.target_cycle === 'next_eligible' ? 'pending' : delivery.target_cycle}` : ''}</span>{delivery.status !== 'queued' && <span>{delivery.status}{delivery.uptake ? ` · ${delivery.uptake}` : ''}</span>}{delivery.rationale && <small>{delivery.rationale}</small>}{delivery.attempts.length > 1 && <small>{delivery.attempts.length} delivery attempts; interrupted attempts remain in the audit.</small>}</li>)}</ul>}
         </li>)}</ol>}
         </div>
       </details>}
@@ -497,13 +496,17 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
       if (!validateLimitDraft(draftLimits(currentLimits)).value) {
         throw new Error('Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
       }
-      const selectionLimit = Math.min(12, Math.floor(currentLimits.model_calls / 2));
-      setPendingStrategyIds(current => {
-        const retained = current.filter(id => eligible.some(strategy => strategy.id === id)).slice(0, selectionLimit);
-        return retained.length ? retained : eligible.slice(0, 1).map(strategy => strategy.id);
-      });
-      setConfig(current); setLimits(currentLimits);
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
+      if (eligible.length > 12) {
+        throw new Error('A session can include at most 12 enabled strategies. Disable strategies before starting.');
+      }
+      if (eligible.length * 2 > currentLimits.model_calls) {
+        throw new Error(
+          `The ${eligible.length} enabled strategies need at least ${eligible.length * 2} model calls for their Investigator/Skeptic pairs, but the budget allows ${currentLimits.model_calls}. Disable strategies or increase the model-call limit in Project Settings.`,
+        );
+      }
+      setPendingStrategyIds(eligible.map(strategy => strategy.id));
+      setConfig(current); setLimits(currentLimits);
       setConfirmStart(true);
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -536,7 +539,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
 
   const interventionSaved = useCallback(async (sessionId: string) => {
     await load(sessionId);
-    setAnnouncement('Human guidance queued for a later agent step. No provider call was made.');
+    setAnnouncement('Human feedback added for a later agent step. No provider call was made.');
   }, [load]);
 
   function requestResume(target: ResearchSession) {
@@ -579,28 +582,20 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     if (activeSession || !eligible.length) return;
     setConfirmStart(false);
     void begin();
-  }, [activeSession, busy, eligible.length, readError, path]);
+  }, [activeSession, busy, eligible, readError, path]);
   const stop = useCallback(() => {
     if (activeSession?.status === 'running' && !busy && !readError) void control('stop', activeSession);
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      strategyChoices: eligible,
-      selectedStrategyIds: pendingStrategyIds,
-      selectionLimit: Math.floor((limits?.model_calls ?? 0) / 2),
-      onStrategySelectionChange: (strategyId, selected) => setPendingStrategyIds(current => {
-        const maximum = Math.floor((limits?.model_calls ?? 0) / 2);
-        if (selected) return current.includes(strategyId) || current.length >= maximum ? current : [...current, strategyId];
-        return current.filter(id => id !== strategyId);
-      }),
       playDisabled: busy || !!readError || confirmStart || (activeSession
         ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible, limits?.model_calls, onControlsChange, pendingStrategyIds, stop, play, playLabel, readError, sessions]);
+  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -696,9 +691,9 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'audit' | 'text' | 'html' | 'tex'>('audit');
+  const [exportType, setExportType] = useState<'audit' | 'text' | 'html'>('audit');
   const isReport = exportType !== 'audit';
-  const reportFormat = exportType === 'text' ? 'txt' : exportType === 'tex' ? 'tex' : 'html';
+  const reportFormat = exportType === 'text' ? 'txt' : 'html';
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -751,7 +746,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
           opened.document.body.replaceChildren(pre);
         }
       }
-      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : exportType === 'tex' ? 'application/x-tex;charset=utf-8' : 'text/plain;charset=utf-8';
+      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
       const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
@@ -778,7 +773,6 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
           <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
-          <label><input type="radio" name="export-type" value="tex" checked={exportType === 'tex'} onChange={() => setExportType('tex')}/> LaTeX report</label>
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
@@ -1999,15 +1993,8 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        {!!controls.strategyChoices?.length && controls.strategyChoices.length > 1 && <details className="research-strategy-selection"><summary>Strategies ({controls.selectedStrategyIds?.length ?? 0} selected)</summary><p>Select up to {controls.selectionLimit} strategies. Each selected strategy gets an Investigator/Skeptic pair within the shared call limit.</p><fieldset><legend>Enabled strategies</legend>{controls.strategyChoices.map(strategy => {
-          const selected = controls.selectedStrategyIds?.includes(strategy.id) ?? false;
-          const atLimit = (controls.selectedStrategyIds?.length ?? 0) >= (controls.selectionLimit ?? 0);
-          return <label key={strategy.id}><input type="checkbox" checked={selected} disabled={disabled || !selected && atLimit} onChange={event => controls.onStrategySelectionChange?.(strategy.id, event.target.checked)}/><span>{strategy.title}</span></label>;
-        })}</fieldset></details>}
-        <span className="session-selection-actions">
-        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled || !(controls.selectedStrategyIds?.length) || (controls.selectedStrategyIds?.length ?? 0) > (controls.selectionLimit ?? 0)} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
-        </span>
       </> : <>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
@@ -2428,11 +2415,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          {!processControls.confirming && <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>}
+          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
         </div>
-        {processControls.confirming && <div className="strategies-session-selection"><ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/></div>}
       </header>
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
       <p className="sr-only" role="status">{announcement}</p>
@@ -2449,8 +2435,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => {
-              if (ordering || dragId || activeMode !== null) return;
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+              if (ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
                 if (!enterMode(owner)) return;

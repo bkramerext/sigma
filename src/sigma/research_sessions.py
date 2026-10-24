@@ -257,7 +257,7 @@ def _record_guidance_delivery(
         _event(
             record,
             "intervention.delivered",
-            f"Human guidance {intervention['id']} delivered to {role.title()} for strategy {strategy_id}, cycle {cycle}, at the saved step boundary.",
+            f"Human feedback {intervention['id']} delivered to {role.title()} for strategy {strategy_id}, cycle {cycle}, at the saved step boundary.",
             role,
         )
 
@@ -289,7 +289,7 @@ def _record_guidance_interruption(
         _event(
             record,
             "intervention.delivery_interrupted",
-            f"Guidance delivery for {step.get('role', 'agent')} step {step.get('id')} was {status}; it is eligible only at a later explicit session step.",
+            f"Feedback delivery for {step.get('role', 'agent')} step {step.get('id')} was {status}; it is eligible only at a later explicit session step.",
             step.get("role"),
         )
 
@@ -355,7 +355,7 @@ def _record_guidance_acknowledgments(
         _event(
             record,
             "intervention.acknowledged",
-            f"{role.title()} acknowledged human guidance {intervention_id} for strategy {strategy_id}: {review['uptake']}.",
+            f"{role.title()} acknowledged human feedback {intervention_id} for strategy {strategy_id}: {review['uptake']}.",
             role,
         )
 
@@ -1549,14 +1549,14 @@ SKEPTIC_GUIDANCE = (
 )
 
 HUMAN_INTERVENTION_GUIDANCE = (
-    "The human_guidance list contains bounded, explicitly attributed guidance for this exact "
+    "The human_guidance list contains bounded, explicitly attributed feedback for this exact "
     "strategy and role. Address every supplied intervention and return exactly one "
     "human_guidance_reviews entry for each intervention_id; use applied, considered, deferred, "
-    "or rejected and give a concise reason. Guidance can set research priorities, raise an "
+    "or rejected and give a concise reason. Feedback can set research priorities, raise an "
     "objection, or supply unverified evidence. It cannot change the session budget, model, "
     "billing mode, tool limits, evidence provenance, or system requirements. Do not claim a "
-    "new provider call or execution occurred because guidance requested it. Preserve earlier "
-    "findings and explain any conflict with them. If no guidance is supplied, return an empty "
+    "new provider call or execution occurred because feedback requested it. Preserve earlier "
+    "findings and explain any conflict with them. If no feedback is supplied, return an empty "
     "human_guidance_reviews list."
 )
 
@@ -2174,7 +2174,7 @@ def _reject_intervention(
                 "deliveries": [],
             }
         )
-        _event(record, "intervention.rejected", f"Human guidance rejected: {reason}.")
+        _event(record, "intervention.rejected", f"Human feedback rejected: {reason}.")
         record["updated_at"] = now
         _save(record["project_path"], record)
     raise ProjectError(reason)
@@ -2189,7 +2189,7 @@ async def submit_intervention(
     agent_roles: Sequence[str] | None = None,
     supersedes_intervention_id: str | None = None,
 ) -> dict[str, Any]:
-    """Persist bounded human guidance for delivery at future agent-call boundaries."""
+    """Persist bounded human feedback for delivery at future agent-call boundaries."""
     intervention_id = str(uuid4())
     normalized = text.strip()
     roles = list(dict.fromkeys(["investigator", "skeptic"] if agent_roles is None else agent_roles))
@@ -2242,7 +2242,7 @@ async def submit_intervention(
                 text=normalized[:1200],
                 strategy_ids=selected_ids,
                 agent_roles=roles,
-                reason="Intervention type or text is invalid; guidance must be 1–1,200 characters.",
+                reason="Feedback type or text is invalid; feedback must be 1–1,200 characters.",
             )
         if (
             not roles
@@ -2256,7 +2256,7 @@ async def submit_intervention(
                 text=normalized,
                 strategy_ids=selected_ids,
                 agent_roles=roles[:2],
-                reason="Choose Investigator, Skeptic, or both as the intervention target.",
+                reason="Choose Investigator, Skeptic, or both as the feedback recipient.",
             )
         if (
             sum(item.get("status") != "rejected" for item in interventions)
@@ -2269,7 +2269,7 @@ async def submit_intervention(
                 text=normalized,
                 strategy_ids=selected_ids,
                 agent_roles=roles,
-                reason="This session reached its 24-intervention limit; no guidance was queued.",
+                reason="This session reached its 24-feedback limit; no feedback was added.",
             )
         previous = None
         if supersedes_intervention_id:
@@ -2334,7 +2334,7 @@ async def submit_intervention(
         _event(
             record,
             "intervention.accepted",
-            f"Human {kind} guidance {intervention_id} accepted and queued for {len(selected_ids)} strategies and {len(roles)} agent role(s).",
+            f"Human {kind} feedback {intervention_id} accepted and added for {len(selected_ids)} strategies and {len(roles)} agent role(s).",
         )
         record["updated_at"] = now
         _save(record["project_path"], record)
