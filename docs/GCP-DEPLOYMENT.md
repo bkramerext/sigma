@@ -6,6 +6,11 @@ only hosting target in this plan is one Linux Compute Engine VM in Oregon
 billing activation, live Google OAuth exchange, or OpenAI request was performed
 for this readiness work.
 
+For the approved resource setup sequence, operator inputs, and commands, see
+the [GCP provisioning runbook](GCP-PROVISIONING-RUNBOOK.md). It keeps VM
+preparation independent of domain selection and gates public ingress and app
+launch on later DNS/OAuth approval.
+
 ## Package and runtime shape
 
 `Dockerfile` builds the Python 3.12 FastAPI service from `uv.lock`; the

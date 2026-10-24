@@ -4796,3 +4796,38 @@ requests. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed on the
 merged branch, including cloud auth/workspace/spending/fake-provider scenarios,
 Ruff/format, Pyright (0 diagnostics), frontend typecheck, and production build.
 No cloud resources, live Google OAuth, or paid provider calls were used.
+
+## T44 Google Cloud provisioning runbook (2026-10-23)
+
+Added `docs/GCP-PROVISIONING-RUNBOOK.md` as an operator-executable companion
+to the existing deployment guide. It separates preflight/budget/API preparation,
+IAM/network/disk/IP/VM resource creation, and post-VM deployment. It makes the
+VM and attached static IP independent of domain selection, keeps public web
+ingress and Compose startup gated on DNS/OAuth/secret approvals, and includes
+exact commands, human authorization points, trial cost assumptions, and
+post-provision checks. No deployment architecture, launcher, or UI code changed.
+
+**MET:** reviewed the existing GCE package and documented a custom VPC, IAP-only
+SSH, named operator roles, a keyless runtime service account with secret-level
+access, a separately retained state disk, static IPv4, required APIs, public
+firewall deferred to launch, budget notifications, and domain-later sequencing.
+Documented the existing estimated $132.97 normalized month / $393.54 over 90
+days and the $300/90-day trial closure behavior. The runbook discloses that
+budgets notify but do not cap spend, and that stopped VMs retain disk and
+attached-IP costs.
+
+**UNMET:** none for the requested documentation deliverables. Provisioning,
+production deployment, and real OAuth remain intentionally unperformed under
+the assignment's restrictions.
+
+**UNVERIFIED:** project ownership/billing link, trial eligibility and start/end
+dates, organization policy, actual `us-west1-b` quota/capacity, final price
+quote, alert delivery, API availability, target-VM security, production OAuth,
+and certificate issuance must be checked/approved by the operator. Documented
+`gcloud` commands were syntax-checked locally only and were not sent to Google.
+
+**Checks:** all shell code fences in the runbook passed `bash -n`; local
+assertions verified the staged phase headings, API/IAM/VM/disk/address/firewall
+commands, no-domain path, budget alert, trial caveat, and required validation
+checklist. `./sigma test` passed. No `gcloud` command, cloud resource,
+credential, or provider endpoint was used.
