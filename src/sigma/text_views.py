@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from sigma.projects import (
+    MAX_STRATEGY_APPROACH,
     Project,
     ProjectError,
     ProjectView,
@@ -114,7 +115,7 @@ def _load(path: Path, project: Project) -> dict[str, Any]:
                     "warnings",
                 }:
                     raise ProjectError("Invalid text version")
-                limit = 20000 if key == "project" else 10000
+                limit = 20000 if key == "project" else MAX_STRATEGY_APPROACH
                 if (
                     not isinstance(version["body"], str)
                     or not version["body"].strip()

@@ -11,7 +11,7 @@ from uuid import uuid4
 import httpx
 from pydantic import ValidationError
 
-from sigma import agentic, chatgpt_auth
+from sigma import agentic, chatgpt_auth, research_sessions
 from sigma.agentic_evidence import get_run, list_runs
 from sigma.agentic_evidence import save as save_evidence
 from sigma.api import agentic_runs_view, app, export_project_view
@@ -69,7 +69,18 @@ async def collect(path: str):
     return [event async for event in agentic.agentic_events(path)]
 
 
-async def exercise(path: str, outputs: list[dict], before: bytes):
+async def exercise(
+    path: str,
+    outputs: list[dict],
+    before: bytes,
+    *,
+    call_limit: int = 6,
+    expected_problem_prefix: str = "For each integer n >= 0",
+):
+    limits = dict(research_sessions.DEFAULT_LIMITS)
+    limits["model_calls"] = call_limit
+    limits["research_rounds"] = min(limits["research_rounds"], call_limit // 2)
+    research_sessions.save_limits(path, limits)
     calls: list[dict] = []
 
     async def handler(request):
@@ -78,7 +89,7 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
         payload = json.loads(request.content)
         assert payload["model"] == MODEL and payload["store"] is False
         assert payload["reasoning"] == {"effort": "high"}
-        assert payload["max_output_tokens"] == 6000
+        assert payload["max_output_tokens"] == agentic.MAX_OUTPUT_TOKENS
         assert payload["text"]["format"]["strict"] is True
         assert payload["text"]["format"]["name"].startswith("strategy_")
         role = payload["text"]["format"]["name"]
@@ -88,8 +99,11 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
         elif role == "strategy_revise":
             assert "Revise the actual solution" in payload["instructions"]
             assert "rather than substituting a plan" in payload["instructions"]
+        elif role == "strategy_challenge":
+            assert "not an established solution" in payload["instructions"]
+            assert "external evidence" in payload["instructions"]
         context = json.loads(payload["input"])
-        assert context["project"]["research_problem"].startswith("For each integer n >= 0")
+        assert context["project"]["research_problem"].startswith(expected_problem_prefix)
         calls.append({"role": payload["text"]["format"]["name"], "context": context})
         return httpx.Response(200, json=provider_output(outputs.pop(0)))
 
@@ -101,7 +115,8 @@ async def exercise(path: str, outputs: list[dict], before: bytes):
     assert (Path(path) / "project.json").read_bytes() == before
     assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
     assert len({event["run_id"] for event in events}) == 1
-    assert len(calls) <= 6 and not outputs
+    assert events[0]["type"] == "run.started" and events[0]["max_calls"] == call_limit
+    assert len(calls) <= call_limit and not outputs
     return events, calls
 
 
@@ -238,7 +253,12 @@ async def main_async(root: Path):
         "strategy_challenge",
     ]
     assert any(event.get("outcome") == "revise" for event in events)
-    events, calls = await exercise(path, [CANDIDATE, OVERLAP, CANDIDATE, OVERLAP], before)
+    events, calls = await exercise(
+        path,
+        [CANDIDATE, OVERLAP, CANDIDATE, OVERLAP],
+        before,
+        call_limit=4,
+    )
     assert events[-1]["type"] == "run.stopped" and len(calls) == 4
     stopped_trace = get_run(path, events[-1]["run_id"])
     assert stopped_trace["terminal"]["status"] == "stopped"
@@ -248,12 +268,100 @@ async def main_async(root: Path):
         path,
         [ALTERNATIVE, review_revision, ALTERNATIVE, OVERLAP, ALTERNATIVE, review_revision],
         before,
+        call_limit=6,
     )
-    assert events[-1]["type"] == "run.failed" and "Six-call" in events[-1]["summary"]
-    assert len(calls) == agentic.MAX_CALLS
+    assert events[-1]["type"] == "run.stopped"
+    assert "6 of 6 configured model calls" in events[-1]["summary"]
+    assert "passed independent review" in events[-1]["summary"]
+    assert len(calls) == 6
     assert len(inspect_project(path).project.strategies) == 1
+
+    # A settings-backed eight-call budget can finish the targeted revision and
+    # independent review that the old hard-coded six-call cap prevented.
+    events, calls = await exercise(
+        path,
+        [
+            ALTERNATIVE,
+            review_revision,
+            ALTERNATIVE,
+            review_revision,
+            ALTERNATIVE,
+            review_revision,
+            ALTERNATIVE,
+            DISTINCT,
+        ],
+        before,
+        call_limit=8,
+    )
+    assert events[-1]["type"] == "run.completed"
+    assert len(calls) == 8
+    assert calls[-1]["role"] == "strategy_challenge"
+    assert get_run(path, events[-1]["run_id"])["steps"][-1]["call_index"] == 8
+
+    # Strategy length grows well beyond the legacy limit, with room for
+    # reviewer-facing mechanism and evidence notes in the assembled field.
+    long_candidate = agentic.Candidate.model_validate(
+        {
+            **CANDIDATE,
+            "approach": "A" * 40000,
+            "first_tests": "T" * 700,
+            "assumptions": "S" * 600,
+            "failure_modes": "F" * 700,
+            "mechanism": "M" * 800,
+            "evidence_boundary": "E" * 800,
+        }
+    )
+    assembled = (
+        f"{long_candidate.approach}\n\nMechanism\n{long_candidate.mechanism}"
+        f"\n\nEvidence status\n{long_candidate.evidence_boundary}"
+    )
+    assert 10_000 < len(assembled) < agentic.MAX_CANDIDATE_APPROACH
+    assert (
+        agentic.Proposal.model_validate(
+            {
+                **long_candidate.model_dump(exclude={"mechanism", "evidence_boundary"}),
+                "approach": assembled,
+            }
+        ).approach
+        == assembled
+    )
+
+    events, calls = await exercise(
+        path,
+        [item for _ in range(15) for item in (CANDIDATE, OVERLAP)],
+        before,
+        call_limit=30,
+    )
+    assert events[-1]["type"] == "run.stopped" and len(calls) == 30
+    assert "passed independent review" in events[-1]["summary"]
+    assert events[-1]["sequence"] > 32
+    assert events[-1]["sequence"] <= agentic.MAX_EVENTS
+
+    narrow_path = open_sample_project("operation-narrow-passage").path
+    narrow_view = inspect_project(narrow_path)
+    assert not narrow_view.project.strategies
+    assert research_sessions.get_limits(narrow_path)["model_calls"] == 30
+    narrow_before = (Path(narrow_path) / "project.json").read_bytes()
+    events, calls = await exercise(
+        narrow_path,
+        [
+            ALTERNATIVE,
+            review_revision,
+            ALTERNATIVE,
+            review_revision,
+            ALTERNATIVE,
+            review_revision,
+            ALTERNATIVE,
+            DISTINCT,
+        ],
+        narrow_before,
+        call_limit=30,
+        expected_problem_prefix="OPERATION NARROW PASSAGE",
+    )
+    assert events[-1]["type"] == "run.completed" and len(calls) == 8
+    assert inspect_project(narrow_path).project.strategies == ()
     print(
-        "PASS later novelty corpus, duplicate retry, skeptical revision, exhausted no-proposal branch and no mutation"
+        "PASS settings-backed call budgets, extended candidate fields, narrow-passage sample flow, skeptical revision and no mutation"
     )
 
     async def bad_handler(request):

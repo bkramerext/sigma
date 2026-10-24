@@ -414,6 +414,16 @@ async def handler(request):
             "assumptions": "The disk boundary meets each line in two points and contains all pairwise intersections; general position means no parallel pair and no triple intersection.",
             "failure_modes": "Miscounting boundary edges or confusing the exterior face with a region changes the Euler calculation.",
         }
+    if agentic and seed == "long-fixture":
+        details = "\n".join(
+            f"Review item {index}: record the controlling assumption, confirming evidence, decision owner, deadline, alternate path, and consequence if unconfirmed."
+            for index in range(1, 100)
+        )
+        draft = {
+            **draft,
+            "title": "Long strategy field regression",
+            "approach": f"{draft['approach']}\n\n{details}",
+        }
     if agentic and body["text"]["format"]["name"] == "strategy_challenge":
         if regions:
             draft = {

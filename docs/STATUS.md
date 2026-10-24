@@ -1,5 +1,89 @@
 # SIGMA status
 
+## Operation Narrow Passage strategy-generation repair (2026-10-24)
+
+Investigated the existing Operation Narrow Passage working copy from the
+latest fetched `main` (`9bdd4b7`). Its saved failed run used the project's
+30-call setting but stopped after six calls. Explore and Challenge produced
+distinct candidates, while the reviewer repeatedly requested revision; the
+fixed coordinator budget then failed instead of using the configured limit.
+Several candidate fields also ended at their schema maxima, and a later
+Challenge exceeded the former 120-second per-call deadline. In actual retries,
+the reviewer additionally treated unavailable geopolitical, legal and
+operational evidence as a prerequisite to presenting a human-review draft.
+
+Local generation now reads each project's configured `model_calls` limit
+(2–30), reserves Explore/Challenge pairs, budgets revisions only when another
+pair remains, and stops cleanly when no candidate passes review. Run events
+support the expanded bounded call count. Per-call time is up to 240 seconds,
+with total runtime scaled to the configured limit and capped at two hours. The
+candidate schema allows a 48,000-character solution in the 50,000-character
+strategy field; the former 10,000-character bound was arbitrary for complex
+plans. Explore and revise choose detail from problem complexity with no fixed
+length target. Multi-actor military plans are prompted for strategic/operational
+structure, including phases, decisions, branches, authorities, information
+needs, sustainment, protection and escalation controls. The field ceiling is a
+provider/storage bound. Auxiliary checks, assumptions, risks, mechanism and
+evidence-boundary fields remain concise. The reviewer now keeps unknown
+real-world facts as visible obligations and requests revision for material
+flaws that are fixable from supplied context. The UI describes the project
+settings-backed cap instead of a fixed six-call/two-candidate limit. Terminal
+messages distinguish an unsuccessful review from a lack of distinct ideas.
+
+Real verification used the existing copy with the same project ID and a
+30-call setting. Three unsuccessful repaired runs were retained as failed or
+stopped evidence; a later ChatGPT-plan run completed Explore and Challenge in
+two calls. It generated **Verified Standstill With Afloat Philippine
+Continuity**. Its review found the mechanism distinct and suitable for human
+review, while listing open questions about vessel availability, safe stationing,
+Chinese acceptance and compliance, Philippine approval, and alternative
+courses. Those uncertainties remain explicit in the draft. The generated
+record is `a4818b64985c4b9a86b831cb1d281f4c`. No strategy was silently saved;
+the project's strategy count remains zero pending human acceptance. The
+API-key environment credential was unset, so generation used the already
+connected ChatGPT-plan mode rather than separate API-key billing.
+
+Verification on 2026-10-24: `./sigma test` passed all scenarios, Ruff,
+formatting, Pyright, frontend typecheck and production build. Real Chrome
+`browser_checks/a16_agentic.py` passed with the isolated fixture, including
+generation, independent review, cancellation and retry, editable unsaved draft,
+explicit acceptance, export, and unchanged Sample source. The browser check's
+fixture port was configurable because another checkout already used port 8002.
+The project research data remains unchanged apart from its new auditable agentic
+run records. Changes remain uncommitted on `fix/narrow-passage-generation`.
+
+### Adaptive-length follow-up (2026-10-24)
+
+The 10,000-character approach limit was inherited from the original project
+schema and had been treated as a generation target. That is too small for
+complex plans. Strategy creation, editing, validation, forking, text conversion,
+and browser editors now accept up to 50,000 characters. The agentic candidate
+allows 48,000 characters before concise mechanism/evidence notes, and API-key
+calls allow 24,000 output tokens. Prompts ask the model to select the necessary
+length from problem complexity, without a target word count; the remaining
+ceiling bounds storage and provider output.
+
+A fresh live attempt on a disposable copy of the exact Narrow Passage sample
+completed in two calls (Explore, Challenge) at the configured 30-call limit.
+The unsaved candidate, **Reciprocal Standstill with Philippine Continuity**, is
+15,393 characters and has eight concrete phases, authority and objective
+hierarchy, first-hour information requirements, reciprocal terms, operational
+verification, two continuity modes, alliance measures, failure branches,
+longer-term arrangements, and success measures. The review found it coherent
+and suitable for human review; it left Chinese compliance, physical continuity,
+and asset availability unresolved. Run ID:
+`9c373badaf1a4ef3af97e5cf5b132ed2`. The source sample remains unchanged and the
+disposable project's strategy count is zero; the result remains a draft until
+human acceptance. The generated JSON was retained with the disposable run
+project outside the repository.
+
+The real-Chrome A16 check now also generates, edits, saves, and reloads a
+strategy longer than 10,000 characters. It passed against the isolated fixture
+on 2026-10-24. The complete `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+run passed all scenarios, Ruff, formatting, Pyright, frontend typecheck,
+and production build. The variable is unset because the inherited local value
+changes the tooling test's expected bootstrap state.
+
 ## T43.1 third-pass operator acceptance fixes (2026-10-24)
 
 Implemented on `gray/t43-1-operator-followups`, based on current `main`
