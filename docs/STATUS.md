@@ -34,6 +34,11 @@ SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed again, including all
 scenarios, Ruff, formatting, Pyright, frontend typecheck and production build.
 Real Chrome `browser_checks/a16_agentic.py` also passed against the isolated
 provider and UI on ports 8025 and 5192; existing listeners were left untouched.
+The first GitHub Actions run on the rebased PR exposed that deleting the empty
+RH sample placeholder also removed the tracked `projects/` parent directory
+from clean checkouts, although it remains the default local project root. A
+root-level sentinel restores that directory without restoring the RH sample
+placeholder.
 
 ## Operation Narrow Passage strategy-generation repair (2026-10-24)
 
