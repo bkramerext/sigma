@@ -4630,3 +4630,58 @@ frontend typecheck and build. Real Chrome checks passed for
 `browser_checks/a17_research.py` (isolated Vite/provider fixture ports), and
 `browser_checks/nonconsecutive_sample.py` (desktop and 390px/320px mobile).
 No paid provider calls were made.
+
+## T42 Google Cloud Compute Engine readiness (2026-10-23)
+
+Prepared a reproducible local Docker deployment package for the Python/FastAPI
+backend, built SPA, Caddy HTTPS edge, and the existing Python/SageMath research
+runners. The selected hosted target is one `us-west1` Compute Engine VM; no
+other hosting provider is proposed. The backend uses the existing T40/T41 cloud
+authorization/workspace and sponsored inference services with mounted
+server-side secrets and the existing durable spend ledger. Spending ceilings,
+reservations, unknown-charge behavior, and workspace isolation remain enabled.
+No personal ChatGPT/API connection is needed in cloud mode; invalid or ambiguous
+secret configuration fails closed.
+
+**MET:** pinned amd64 backend/frontend/research images; local Compose startup,
+SPA/API health, backend restart and container recreation with persistent auth
+SQLite; sandbox execution of deterministic `print(6 * 7)` in both Python and
+SageMath; rootless separate sandbox-socket contract in the GCE Compose setup;
+least-privilege IAM, OAuth, HTTPS, firewall, secrets, backup/restore,
+update/rollback procedures, operator approval gates, and an itemized trial cost
+estimate documented in `docs/GCP-DEPLOYMENT.md`. Local Docker image sizes were
+backend 120 MB, frontend 29 MB, Python runner 190 MB, and SageMath runner 1.47
+GB. The local Apple Silicon host ran linux/amd64 images under emulation.
+
+**UNMET:** deployment has not been performed on Compute Engine and is not
+operator-ready for immediate public use until the approval checklist, target VM
+security review, IAM/OAuth/DNS/HTTPS setup, backup restore rehearsal, and
+runtime measurements are completed. The plan assumes a reviewed rootless Docker
+daemon boundary whose isolation still requires target-Linux security testing.
+
+**UNVERIFIED:** actual regional invoice and trial eligibility/terms; GCE Sage
+build startup time, peak memory and multi-user capacity; rootless sandbox
+adversarial isolation on the target kernel; production Google OAuth, Secret
+Manager permissions, HTTPS certificate issuance, VM boot recovery, and backup
+restore. The listed estimate is planning only: $132.97 per normalized month and
+$393.54 over 90 days, approximately $93.54 beyond a $300 credit. OpenAI API
+charges are separately budgeted and excluded. Confirm current prices and trial
+terms before any operator-approved activation.
+
+**Checks:** `uv run --locked --no-sync python tests/deployment_package.py`,
+`tests/python_sandbox.py`, `tests/cloud_auth.py` (13 cases), focused Ruff and
+format checks all passed. `./deploy/validate-local.sh` passed using dummy local
+secret files; it contacted only local HTTP endpoints. Existing Python and
+SageMath runner images built locally and each returned `42` through the actual
+sandbox adapter with `--network=none`, 512/1024 MiB memory caps, one CPU, 64
+process limit, read-only root and UID 65532. No Google Cloud action, paid
+provider request, credential access, or remote deployment was performed.
+
+The first `./sigma test` invocation failed only in the known T40 launcher test
+because the invoking shell exports `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`. The
+rerun as `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+backend scenarios (including cloud authorization/workspace isolation, cloud
+spend admission and deterministic fake-provider API cases), Ruff check/format,
+Pyright (0 diagnostics), frontend typecheck, and production build. Existing
+Starlette/httpx deprecation warnings remain. No Gray launcher/UI files were
+changed.

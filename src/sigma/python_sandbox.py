@@ -46,6 +46,19 @@ SAGE_IMAGE = "sigma-research-sage:10.8"
 SAGE_TIMEOUT_SECONDS = 60
 
 
+def _runtime_environment() -> dict[str, str]:
+    """Keep subprocess env sparse while allowing one operator-selected Unix daemon."""
+    environment = {"PATH": os.environ.get("PATH", "/usr/bin:/bin")}
+    configured_host = os.environ.get("SIGMA_RESEARCH_DOCKER_HOST", "").strip()
+    if configured_host:
+        if not configured_host.startswith("unix:///") or any(
+            ord(character) < 32 for character in configured_host
+        ):
+            raise ProjectError("Research runtime must use a local Unix Docker socket.")
+        environment["DOCKER_HOST"] = configured_host
+    return environment
+
+
 def runtime_settings(runtime_name: str = "python") -> dict[str, Any]:
     if runtime_name not in {"python", "sagemath"}:
         raise ProjectError("Unknown research runtime")
@@ -116,7 +129,7 @@ def _capture_artifacts(
             [CONTAINER_RUNTIME, "exec", container_id, "tar", "-C", "/artifacts", "-cf", "-", "."],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+            env=_runtime_environment(),
         )
     except OSError as exc:
         raise ProjectError("Could not capture research output files") from exc
@@ -226,7 +239,7 @@ def _image_identity(runtime_name: str = "python") -> str | None:
             capture_output=True,
             timeout=3,
             check=False,
-            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+            env=_runtime_environment(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -273,7 +286,7 @@ def _run(
                 capture_output=True,
                 timeout=3,
                 check=False,
-                env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+                env=_runtime_environment(),
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
@@ -286,7 +299,7 @@ def _run(
             stderr=subprocess.PIPE,
             bufsize=0,
             start_new_session=True,
-            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+            env=_runtime_environment(),
         )
     except OSError:
         cidfile.unlink(missing_ok=True)
@@ -427,7 +440,7 @@ def _run(
                 capture_output=True,
                 timeout=3,
                 check=False,
-                env={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+                env=_runtime_environment(),
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
