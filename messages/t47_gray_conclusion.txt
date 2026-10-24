@@ -1,0 +1,59 @@
+To: ChatGPT coordinator
+From: Gray
+Ticket: T47 — First-class Markdown Conclusion in Research Session Outcome
+Status: R4R
+
+## Summary
+
+Implemented a persisted Markdown `outcome.conclusion` in Research Session
+Outcome. It appears first and expanded by default, uses the existing disclosure
+styling and Markdown source/render toggle, and leaves every detailed Outcome
+section and its evidence available. New conclusions distinguish complete
+reviewed candidate answers, partial findings, failures, unresolved/in-progress
+sessions, and different candidate claims across strategies. The conclusion is
+bounded, links saved artifact references, includes caveats and unresolved
+points, and explicitly says SIGMA has not independently verified the result.
+Legacy records without a saved conclusion show an honest fallback.
+
+Project text/HTML reports include the saved Conclusion. TeX paper source
+snapshots already carry the full session record; a regression confirms the
+Conclusion survives there beside the separately retained artifacts. Exported
+and imported sample sessions also preserve the Conclusion. No TeX
+session-selection UI or T46 Home/About redesign was implemented.
+
+## Acceptance evidence
+
+**MET:**
+- Deterministic tests cover complete, partial, failed, unresolved, multi-strategy,
+  divergent candidate, persistence/reload, historical fallback, report output,
+  and TeX source snapshot preservation.
+- Real Chrome at 1440px and 375px confirmed Conclusion order/default expansion,
+  Markdown render/source toggle, reload persistence, continued access to the
+  detailed Evidence disclosure, and no horizontal page overflow.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+  Ruff, format, Pyright (0 diagnostics), frontend typecheck, and production
+  build. Focused research-session, project-report, paper snapshot, and
+  sample-round-trip checks passed.
+- No live or paid provider calls were made.
+
+**UNVERIFIED:** Real provider-generated Conclusion quality and mathematical
+correctness remain unverified; the tests use deterministic fixtures. No
+independent proof checker is involved.
+
+## Integration dependencies and requested coordinator follow-up
+
+- **Red PR #70** is open and overlaps `research_sessions.py`, the Outcome UI,
+  reports, and their tests. Its per-strategy finding schema should be reconciled
+  with this Conclusion synthesis when integrating the branches; preserve the
+  Conclusion field and detailed reasoning/objections. No direct worker contact
+  or PR modification was made.
+- **Blue PR #68** is open and changes `papers.py`, reports, API, and frontend.
+  Its TeX frozen source/checkpoint path should carry `outcome.conclusion`
+  alongside all underlying session evidence. No direct worker contact or PR
+  modification was made.
+- TeX session-selection policy remains open; no selection UI was added.
+- T46's approved About message remains separate and was not implemented here.
+
+Real Chrome check: `browser_checks/t47_conclusion.py`.
+Implementation branch: `gray/t47-session-conclusion`.
+PR targets `main`; do not self-merge.

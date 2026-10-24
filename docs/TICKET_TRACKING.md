@@ -60,6 +60,7 @@
 | T37 | Trustworthy research memory, evidence selection, and continuity | Engineering done; PR #45 merged, live-agent quality unverified | Blue · [ticket](tickets/t37.md) · [PR #45](https://github.com/bkramerext/sigma/pull/45) |
 | T45 | **HIGH:** Investigate long-form TeX paper generation under output/context limits | Proposed; investigation only | Suggested: Green · [ticket](tickets/t45.md) |
 | T46 | Home About action and polished product introduction | Proposed; UI/onboarding | Suggested: Gray · [ticket](tickets/t46.md) |
+| T47 | First-class Markdown Conclusion in Research Session Outcome | Implemented; R4R pending PR publication | Gray · [ticket](tickets/t47.md) |
 
 ### T23.1 scope
 

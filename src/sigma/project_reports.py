@@ -108,6 +108,9 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
         ]
         if outcome.get("summary"):
             lines += [f"Outcome summary: {_value(outcome.get('summary'))}", ""]
+        conclusion = outcome.get("conclusion")
+        if isinstance(conclusion, str) and conclusion.strip():
+            lines += ["Conclusion", "~~~~~~~~~~", conclusion.strip(), ""]
         if _items(outcome.get("caveats")):
             lines += ["Outcome caveats:"]
             lines += [f"- {item}" for item in _items(outcome.get("caveats"))]
