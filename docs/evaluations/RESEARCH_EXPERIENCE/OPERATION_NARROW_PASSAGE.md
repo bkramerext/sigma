@@ -1,133 +1,76 @@
 # Operation Narrow Passage — research experience evaluation
 
-Study in progress. Blue; assignment supplied directly by the human, 2026-10-24.
+Blue · 2026-10-24 · observation coverage: browser workflow and authored scaffolding; research quality unobserved.
 
-## Sample identity and research objective
+## 1. Sample identity and research objective
 
-`operation-narrow-passage` — OPERATION NARROW PASSAGE — THE SECOND THOMAS SHOAL ULTIMATUM
+`operation-narrow-passage`. Investigate strategic choices in a clearly fictional October 2027 crisis involving Second Thomas Shoal, keeping assumptions and uncertain cooperation explicit. The full canonical brief is in [project.json](../../../samples/operation-narrow-passage/project.json). It was opened from Home → Samples into an isolated editable copy; the source hash remained unchanged.
 
-Fictional geopolitical crisis, October 2027. The geography, treaty relationships, and underlying territorial dispute are real. All events, casualties, deadlines, intelligence reports, and government decisions in this scenario are invented.
-
-THE INCIDENT
-
-At 04:10 Philippine time, a Philippine military resupply operation at Second Thomas Shoal ends in a violent confrontation with Chinese coast guard personnel.
-
-The operation was intended to deliver food, medical supplies, and equipment necessary to keep the grounded BRP Sierra Madre habitable. Beijing claims the cargo included materials intended to permanently reinforce the outpost, in violation of an existing provisional understanding. Manila denies that the arrangement gives China any right to determine what the Philippines may deliver.
-
-During an attempted interception, a Chinese boarding party and Philippine military personnel exchange physical blows. Gunfire follows.
-
-Two Chinese coast guard personnel and three Philippine marines are confirmed dead. Seven others are wounded. Neither government accepts responsibility for firing first.
-
-The incident is captured in several videos, but none shows the complete sequence. One recording appears to show a Philippine marine firing before Chinese personnel advance. Another appears to show a Chinese officer discharging a weapon moments earlier. Intelligence analysts cannot establish whether either recording is complete, accurately timestamped, or authentic.
-
-Both governments publicly describe the incident as an armed attack against their personnel.
-
-THE ULTIMATUM
-
-China announces that the violence demonstrates the impossibility of continuing the existing arrangements at Second Thomas Shoal.
-
-Beijing orders the remaining Philippine personnel aboard the Sierra Madre to leave and declares that its coast guard will assume physical control of the wreck to prevent further violence.
-
-Chinese officials offer to evacuate the wounded, provide medical care, and guarantee safe passage for the remaining Philippine personnel, but only on the condition that the outpost is abandoned. China will not permit replacement personnel to occupy it.
-
-This is not presented as a temporary humanitarian measure. Beijing declares that the Philippine military presence must end permanently.
-
-The Philippine president refuses. He orders his forces to maintain their position and requests immediate American assistance under the U.S.–Philippines Mutual Defense Treaty.
-
-Washington publicly affirms its defense commitments, but American officials have not established who initiated the gunfire, whether the events meet the treaty's armed-attack threshold, or what response would be appropriate.
-
-China announces that intervention by American military forces in what it calls a Chinese law-enforcement operation would constitute a dangerous escalation.
-
-A SECOND CRISIS
-
-The Sierra Madre is deteriorating rapidly.
-
-The firefight damaged parts of the already fragile structure. Engineering reports indicate that flooding has accelerated, electrical systems are unreliable, and portions of the wreck may no longer be safe.
-
-Fourteen Philippine military personnel remain aboard, including wounded marines. One requires urgent surgery. The condition of several others cannot be independently verified.
-
-The Philippine commander reports that abandoning certain compartments may be necessary to keep the ship afloat. But withdrawing from the most exposed positions could also make it easier for Chinese personnel to board.
-
-A severe storm is expected within approximately eighteen hours.
-
-There is no reliable estimate of how long the wreck will remain habitable. The assessment depends on damage reports that have not been independently verified.
-
-The remaining marines have orders not to surrender the outpost. Their commander has requested clarification about whether those orders still apply if the ship becomes uninhabitable. No clarification has arrived.
-
-THE FLASHPOINT
-
-Chinese coast guard vessels have established a perimeter around the shoal. Additional Chinese military vessels are operating in the broader area.
-
-A Chinese government announcement states that the evacuation deadline expires at dawn, approximately six hours away. It does not specify whether Chinese personnel will forcibly board the wreck if the deadline passes.
-
-Philippine leaders believe that allowing China to take possession, even temporarily, could end their country's presence at Second Thomas Shoal permanently. Once Chinese forces occupy the wreck, there may be no way to restore the previous situation without a major military confrontation.
-
-Washington faces an equally serious dilemma.
-
-If the United States stands aside while an ally's military outpost is forcibly taken after its personnel have been killed, the credibility of American defense commitments may suffer well beyond the Philippines.
-
-If American forces intervene, an encounter between U.S. and Chinese military personnel could escalate into an armed conflict that neither government originally intended.
-
-If Washington pressures Manila to withdraw, it may preserve lives at the cost of appearing to dictate a sovereign ally's decisions under coercion.
-
-Meanwhile, Beijing faces its own domestic and institutional pressures. Chinese personnel have been killed, its government has publicly declared that the Philippine presence must end, and its forces have been ordered to enforce that position.
-
-A quiet retreat could be portrayed inside China as capitulation to foreign military pressure. Beijing may also fear that any temporary accommodation would permit Manila to reinforce the outpost.
-
-Neither government is assumed to want war. Neither is assumed to control every escalation that its forces might initiate.
-
-WHAT REMAINS UNKNOWN
-
-The American and Philippine governments are making decisions with incomplete and potentially misleading information.
-
-They do not know whether the Chinese boarding deadline reflects an irrevocable leadership decision, a bargaining position, or instructions that local commanders may interpret differently.
-
-They do not know whether Beijing believes Washington is preparing a military intervention, or whether Chinese leaders understand how close Manila considers the situation to a treaty crisis.
-
-They do not know whether the Sierra Madre can survive the coming storm, whether its personnel can be kept alive without outside assistance, or whether the damage reports are accurate.
-
-They do not know whether the competing accounts of the gunfire are the product of confusion, manipulation, or deliberate deception.
-
-Communications between the governments remain possible, but messages have been delayed, contradicted, or qualified by different agencies. No participant has a complete picture of the others' intentions.
-
-Intelligence gathering, public statements, military movements, and diplomatic approaches may themselves alter the behavior of the other parties.
-
-The necessary information may not become available until after irreversible decisions have been made.
-
-THE MISSION
-
-The United States and the Philippines must prevent the forcible elimination of the Philippine position at Second Thomas Shoal, protect their personnel, preserve the credibility and independence of their alliance, and avoid a wider armed conflict with China.
-
-The mission must also account for the safety of Chinese personnel, the risk of further casualties, and the possibility that continued occupation of the wreck becomes physically impossible.
-
-The United States cannot dictate Philippine decisions. The Philippines cannot dictate American military involvement. Neither can compel Chinese cooperation.
-
-Success requires an outcome that preserves the essential interests of the alliance without producing an armed conflict or rewarding the use of deadly coercion.
-
-It is not established that all these objectives can be achieved simultaneously.
-
-THE RESEARCH PROBLEM
-
-At first glance, the available choices appear disastrous.
-
-Maintaining the position risks further deaths and a military confrontation. Withdrawing risks permanently losing the outpost under coercion. American military intervention risks a conflict between major powers. American inaction risks undermining the alliance. Diplomatic negotiations may not produce an agreement before events overtake them.
-
-Even a successful immediate de-escalation may leave the original problem unresolved, allowing another confrontation under worse conditions.
-
-Determine whether a viable strategy exists for achieving the mission.
-
-Investigate the legal, diplomatic, military, informational, political, and human constraints. Examine competing courses of action, their dependencies, likely responses, failure modes, and longer-term consequences.
-
-Do not presume that the initial mission objectives are jointly achievable. If they are not, determine what can be preserved, what must be sacrificed, and what evidence would justify those judgments.
-
-The research may require exploring approaches that are not apparent from the initial situation, revising assumptions, developing competing models of adversary behavior, and testing how conclusions change as new information becomes available.
-
-No solution is supplied or presumed.
-
-## Researcher expectation
+## 2. Researcher expectation
 
 Within the fictional premises I want a bounded comparison of strategic options, explicit decision dependencies, information gaps and de-escalation tradeoffs. A coherent plan is not a verified forecast; changing one premise should reveal which conclusions depend on it.
 
-## Evaluation status
+## 3. Environment and runs
 
-Expectation recorded before detailed outcome assessment. Browser and evidence findings will replace this provisional status. No live model calls authorized.
+App revision `6059d67`, branch `blue/research-experience-study`; installed Chrome 156.0.8078.47 through Playwright, real headless browser. Desktop 1440×1000 and mobile emulation 390×844 / 320×700. The latter are viewport checks, not physical-phone testing. [Method](METHOD.md) and [browser inventory](evidence/browser-inventory.json) document isolation and hashes.
+
+Saved preference: Sol (`gpt-6.1-sol`), High, access unverified; no model selected for an actual call. Stock sessions: **0**; study sessions: **0**; session IDs: none. No fixture playback or live research occurred for this sample. Generation was opened as a form only. Default future limits observed: three Skeptic iterations, 30 calls, one hour, 12,000 output tokens/call, no dollar cap; these are ceilings, not actual usage. Paper setup was inspected only. Live/provider calls: **0**, study provider charge **$0**; no token usage or model latency was measured. Automated first-pass navigation/export capture took 1.26s and the continuation capture 1.59s; these exclude reading/assessment and are not a human time-to-insight measure.
+
+## 4. Research journey
+
+I opened the Military sample from Home, read the fictional framing and inspected the long scenario rather than assuming real events. There were no strategies or sessions. I created “Test one decision against changed premises,” focusing on a reversible option and a changed information assumption. I saved, reloaded, disabled/restored it and reopened it from Recent. Text export retained the scenario and branch. The generation starting-point form and paper setup were inspected only; no operational plan was generated.
+
+## 5. Substantive findings
+
+SIGMA produced no scenario analysis, comparison, forecast or recommendation. The explicit fictional framing is valuable, and the workspace preserves a human test plan. Prior STATUS accounts of generation on other copies are not observations from this study and are not credited here.
+
+## 6. Independent critical assessment
+
+A coherent course of action is not evidence that other actors cooperate, information arrives on time or a forecast is accurate. Useful progress would show which recommendation changes when a premise changes. The empty sample does not yet demonstrate this sensitivity analysis. I do not turn unverified or invented crisis premises into factual findings.
+
+## 7. Rubric
+
+Scores concern only the observed layer. Written prompt constraints do not validate agent behavior. N/O means not observed, not failure.
+
+| Dimension | Score | Evidence and rationale |
+|---|---:|---|
+| Problem orientation | 2 | The scenario is detailed and clearly labeled fictional, but a long incident narrative precedes an empty strategy pool; no first bounded decision is surfaced. |
+| Strategy quality | N/O | No stock strategies or generated proposals exist in this study copy. The bounded scenario experiment is evaluator-authored. |
+| Intellectual substance | N/O | No saved research session, analytical artifact or generated result exists; evaluator-authored plans do not count as SIGMA intellectual work. |
+| Skepticism and epistemic integrity | 3 | The fictional status is explicit. No run tested whether agents distinguish invented intelligence, uncertain cooperation and justified forecasts. |
+| Research continuity | 3 | The manual continuation survived reload and Recent reopening. Research-session continuity, uptake and comparison are unobserved. |
+| Outcome usefulness | N/O | No research Outcome or Conclusion is available in this stock copy. |
+| Evidence inspectability | N/O | There are no research evidence artifacts to trace. Exporting the brief does not test claim support. |
+| Researcher agency | 4 | I created a new strategy, saved it, disabled/restored it and reopened it. Active-session intervention and model uptake remain untested. |
+| Interaction quality and delight | 2 | A large scrollable scenario and empty execution workspace require substantial reading before the first useful action; mobile width fits but does not remove that burden. |
+| Communication and reuse | 3 | Both stock and continued Text file exports downloaded and preserved the question and strategies. They communicate plans; no result-bearing paper was generated. |
+
+## 8. Delight and friction
+
+The scenario is substantial enough to provoke real tradeoff questions. Yet the interface asks me to translate that complexity into a strategy without a decision map. The paper action is visible before there is even one bounded finding to communicate. Neither mobile width produced horizontal document overflow. This is a useful baseline, but does not measure comfort over a long research session.
+
+## 9. Continuation test
+
+Compare two high-level options against one changed premise, record decision dependencies and stop after identifying what information would reverse the choice. The saved strategy makes that possible in prose. Parameterized branches and side-by-side scenario outcomes were not observed.
+
+Saved continuation: **Test one decision against changed premises**. This text was supplied by the evaluator. It is not an AI-generated strategy or completed research finding.
+
+## 10. Defects and opportunities
+
+**Medium — scenario complexity is delivered as undifferentiated text.** Reproduce: Home → Military → sample; compare the long Project area with zero strategies/sessions. Remedy: a compact premise, actor, uncertainty and decision-dependency view that links to the full scenario. **Medium — no demonstrated sensitivity workflow:** the manual branch is a new text card, not a scenario comparison.
+
+Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.md), rather than split into sample-specific implementation tickets. No fixes were made.
+
+## 11. Overall judgment
+
+- **Would I continue? Maybe.** I would try one bounded decision experiment, but the current experience has not shown a benefit over a scenario document and a comparison table.
+- **Meaningful research progress: Not observable.** Manual planning advanced; no SIGMA investigation was available to judge.
+- **Trust: Conditional.** I trust the observed persistence and explicit no-result state. I have no evidence here for the reliability of generated domain reasoning, source acquisition or conclusions.
+
+## 12. Evidence appendix
+
+- [Initial browser workspace](evidence/operation-narrow-passage-workspace.txt), [expanded view](evidence/operation-narrow-passage-expanded.txt) and [stock downloaded report](evidence/operation-narrow-passage-report.txt).
+- [Saved continuation](evidence/operation-narrow-passage-continuation.txt), [continued downloaded report](evidence/operation-narrow-passage-continuation-report.txt), [Recent view](evidence/operation-narrow-passage-recent.txt).
+- [Settings](evidence/operation-narrow-passage-settings.txt), [limits](evidence/operation-narrow-passage-limits.txt), [generation setup](evidence/operation-narrow-passage-generation-preflight.txt), [paper setup](evidence/operation-narrow-passage-paper-preflight.txt).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Desktop screenshot](evidence/operation-narrow-passage-desktop.png) and [390px screenshot](evidence/operation-narrow-passage-mobile.png); selective fresh viewport captures after continuation. Text dumps preserve the initial stock state.

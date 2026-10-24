@@ -1,5 +1,47 @@
 # SIGMA status
 
+## Blue: end-to-end research experience study (2026-10-24)
+
+Documentation-only study on `blue/research-experience-study`, based on current
+`main` at `6059d67`. [Cross-sample synthesis](evaluations/RESEARCH_EXPERIENCE/SYNTHESIS.md)
+links substantive assessments of all 17 actual stock samples; inventory exactly
+matches the assignment. No implementation changes or new point tickets.
+
+Actual verification: installed Chrome 156.0.8078.47 opened every sample from
+Home into an isolated managed copy; inspected questions/strategies, available
+Outcomes and artifacts, downloaded text reports, viewed limits/generation/paper
+setup, and saved a domain-specific evaluator continuation. All 17 continuations
+survived reload, Disable/Enable and reopening from Recent. Desktop 1440×1000 and
+390×844/320×700 emulation showed no horizontal document overflow. Canonical
+sample SHA-256 values remained unchanged. One copy's binary-counting limits were
+reduced to one iteration/two calls and verified after reload.
+
+Research evidence coverage is limited: 16 stock samples have no saved sessions;
+Nonconsecutive Subset Sums has five explicitly deterministic archived fixtures.
+The study also opened an unchanged supplementary historical Maximum Regions
+provider export, inspected its proof/objections and findings-fork draft, then
+downloaded HTML and opened it in Chrome. No argument enrichment was applied.
+Independent evaluator arithmetic checked specific subset counts and phase
+products outside SIGMA. Source access attempts outside SIGMA are recorded
+separately. These do not establish live research quality.
+
+Findings include an `incomplete` review displayed as “Convincing but unverified,”
+a historical proof obscured by structured-field absence, stale obligations in
+continuation drafts, and friction between audit preservation and a readable
+current research state. These are proposals for product prioritization; no fixes
+were implemented. All reports distinguish browser, static, archived fixture,
+historical-provider and independent-evaluator observations, with N/O where
+research quality was not observed.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps on this
+app revision, including scenarios, Ruff, formatting, Pyright, frontend typecheck
+and production build. Full log and browser evidence are preserved under
+`docs/evaluations/RESEARCH_EXPERIENCE/evidence/`. No live provider inference,
+AI paper generation, new sandbox execution, active-session control exercise,
+provisioning or worker communication occurred. Study provider calls: 0; study
+provider charges: $0. Current live domain reasoning and paper quality remain
+UNVERIFIED. This is product-assessment evidence, not live alpha acceptance.
+
 ## Strategy-generation architecture correction (2026-10-24)
 
 The earlier Operation Narrow Passage repair correctly removed hard-coded call

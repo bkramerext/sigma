@@ -1,0 +1,40 @@
+BLUE — SIGMA End-to-End Research Experience Study
+
+Status: R4R; one documentation-only PR, no merge authorized/performed.
+Branch: blue/research-experience-study; base main at 6059d67.
+Primary handoff: docs/evaluations/RESEARCH_EXPERIENCE/SYNTHESIS.md.
+All 17 actual samples reconciled and covered in individual reports.
+
+Evaluated: real Chrome Home/sample opening; questions/stock approaches;
+manual new/fork/save/reload/Disable/Enable/Recent; text downloads; settings,
+limits, generation and paper setup; desktop and 390px/320px layouts.
+All 17 continuations persist/reopen and canonical source hashes are unchanged.
+Five deterministic subset fixtures received detailed evidence/criticism review.
+One separately imported unchanged historical Maximum Regions provider archive
+received proof/objection review, fork-prefill inspection and HTML export/opening.
+Evaluator arithmetic and external source attempts are explicitly separate.
+
+Partially evaluated: research continuity and communication through those two
+histories; scientific readiness through briefs and limited external access;
+resource usefulness through visible ceilings and historical metadata only.
+
+Untested: current live generation/research in every domain; active feedback
+uptake and pause/resume/stop; fresh Python/Sage runs; source ingestion/analysis;
+creative treatments; AI paper output/PDF compilation; live OAuth.
+Provider calls 0; study provider charges $0. No fixture portrayed as live research.
+
+Observed priorities: faithful epistemic states; reconciled claim/obligation
+history; direct evidence navigation and compact narratives; bounded first
+experiments with readiness gates; domain-specific comparison/reuse.
+No implementation fixes, seventeen tickets, provisioning or merge.
+
+Actual validation: env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test passed
+all steps. Chrome 156.0.8078.47, 1440x1000 and 390x844/320x700 emulation.
+Evidence and reproducible study instruments: docs/evaluations/RESEARCH_EXPERIENCE/evidence/.
+No claim that engineering pass means research usefulness or live acceptance.
+
+Coordinator action: review assessment and prioritize product directions;
+separately decide whether to authorize a budgeted live quality trial.
+Do not coordinate or communicate directly with other Codex workers. Report
+dependencies, conflicts, and requests for other workers to your ChatGPT
+coordinator through the human.
