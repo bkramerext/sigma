@@ -776,6 +776,137 @@ def main() -> None:
     assert source_map["run:run-1"]["data"] == {"run_id": "run-1"}
     assert source_map["step:run-1:step-1"]["data"] == evidence_export["agentic_runs"][0]["steps"][0]
     assert normalized["schema"] == "sigma-paper-evidence-v2" and len(fingerprint) == 64
+
+    # Cross-domain contract fixture: the paper retains the published reasoning
+    # and review shape from PR #70, alongside experimental negative findings.
+    fidelity_package = {
+        "sources": [
+            {
+                "id": "artifact:math-session:proof",
+                "kind": "artifact",
+                "data": {
+                    "reasoning_steps": [
+                        {
+                            "number": 1,
+                            "title": "Upper bound",
+                            "argument": "Each inserted line splits at most k existing regions.",
+                            "epistemic_status": "deduction",
+                            "basis_artifact_ids": ["proof"],
+                            "review": {
+                                "disposition": "challenged",
+                                "rationale": "The argument does not establish the required general position.",
+                                "objection": "The construction case remains unresolved.",
+                                "basis_artifact_ids": ["skeptic-note"],
+                            },
+                        }
+                    ],
+                    "objective_review": {
+                        "status": "partial",
+                        "argument_steps": [
+                            {
+                                "argument": "The induction step follows from the recorded recurrence.",
+                                "review": {"disposition": "unresolved"},
+                            }
+                        ],
+                        "unresolved_objections": ["Prove attainment in general position."],
+                    },
+                    "skeptic_output": {
+                        "reasoning_assessments": [
+                            {
+                                "step_number": 1,
+                                "disposition": "challenged",
+                                "rationale": "A boundary case is missing.",
+                                "objection": "Check the base case.",
+                            }
+                        ]
+                    },
+                    "failed_approaches": ["The first construction violates general position."],
+                },
+            },
+            {
+                "id": "session:xenopus-negative",
+                "kind": "session",
+                "data": {
+                    "findings": ["Late-inhibition cohort showed zero observed regeneration."],
+                    "negative_findings": [
+                        "No regeneration was observed in the late-inhibition cohort."
+                    ],
+                    "contradictions": [
+                        "The early-inhibition session reports regeneration under a different dose."
+                    ],
+                },
+            },
+            {
+                "id": "session:xenopus-positive",
+                "kind": "session",
+                "data": {
+                    "findings": [
+                        "Early-inhibition cohort showed tail regeneration under the lower dose."
+                    ]
+                },
+            },
+        ]
+    }
+    integrity_records = papers._long_paper_integrity_records(
+        fidelity_package,
+        {
+            "preserved_evidence_notes": [
+                {
+                    "kind": "negative",
+                    "statement": "The replicate did not restore tail growth.",
+                    "evidence_refs": ["session:xenopus-negative"],
+                }
+            ],
+            "conflict_notes": [
+                {
+                    "statement": "Sessions disagree across dose conditions.",
+                    "evidence_refs": ["session:xenopus-negative", "session:xenopus-positive"],
+                }
+            ],
+        },
+    )
+    integrity_json = json.dumps(integrity_records, ensure_ascii=False)
+    for required in (
+        "Upper bound",
+        "deduction",
+        "challenged",
+        "general position",
+        "reasoning_assessments",
+        "No regeneration was observed",
+        "Early-inhibition cohort showed tail regeneration",
+        "Sessions disagree across dose conditions",
+    ):
+        assert required in integrity_json
+    integrity_tex = papers._tex(
+        draft(),
+        [],
+        "b" * 64,
+        integrity_records=integrity_records,
+        material_omissions=[
+            {"field": "data/negative_findings", "source_ref": "session:xenopus-negative"}
+        ],
+    )
+    assert r"\section{Structured reasoning and review records}" in integrity_tex
+    assert r"\section*{Important evidence coverage limitation}" in integrity_tex
+    assert integrity_tex.index("Important evidence coverage limitation") < integrity_tex.index(
+        r"\section{Problem framing}"
+    )
+    material = papers._material_evidence_omissions(
+        [
+            {"field": "data/id", "source_ref": "artifact:math-session:proof"},
+            {
+                "field": "data/reasoning_steps/0/argument",
+                "source_ref": "artifact:math-session:proof",
+            },
+        ]
+    )
+    assert len(material) == 1
+    limited = papers._apply_omission_limits(draft().model_copy(deep=True), material)
+    assert limited.claims[0].status == "unresolved"
+    assert "Material evidence coverage limitation" in limited.abstract
+    assert limited.abstract.startswith("Material evidence coverage limitation:")
+    assert "Material evidence coverage limitation" in limited.conclusions[0]
+
     large_export = {
         "project": {"id": "pid", "problem": "x" * 81_900},
         "research_sessions": [],

@@ -112,3 +112,32 @@ the maximum requested API-key output-token ceiling. This is not expected token
 consumption or a dollar estimate; no live model output quality, real account
 allowance, or API cost was measured. ChatGPT-plan use is described in terms of
 provider allowance because the client cannot convert it to dollars.
+
+## Research integrity (issue #71)
+
+The bounded index is an aid to synthesis, not a substitute for retained
+reasoning. Long-form TeX adds a source-linked appendix from the frozen records
+for structured reasoning steps, epistemic status, artifact references, Skeptic
+assessments and objections, methods, negative findings, contradictions, and
+unresolved obligations. Negative and limitation notes plus source-linked
+conflict/gap notes are retained across checkpointing and index reduction and
+appear in the appendix. This is deterministic rendering of saved records; it
+does not claim independent scientific or mathematical verification.
+
+Every field the extractor marks omitted remains listed with its saved source,
+field pointer, and reason. Omissions of research fields are treated as material
+unless the pointer names known record bookkeeping (IDs, timestamps, or record
+kind). A material omission replaces the abstract and conclusion with a
+prominent scope warning, marks every `established` claim `unresolved`, and
+retains the full snapshot and omission ledger for review. This conservative
+policy avoids presenting a result as established when the index cannot show
+that the relevant evidence was considered.
+
+The paper consumer accepts the structured outcome shape defined in Red's
+PR #70 and the shared contract in issue #71 without scenario-specific logic.
+Deterministic math and experimental fixtures exercise the saved shape, step
+reviews, cross-session conflicts, and omissions. PR #70 remains a separate,
+open producer change at this revision; until it is integrated, the paper can
+preserve only structured outcome data actually present in a project's frozen
+records. The consumer tests do not replace integration verification against
+the merged producer.

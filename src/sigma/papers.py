@@ -621,6 +621,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
         "provider_calls_total",
         "prior_runs",
         "evidence_notes",
+        "preserved_evidence_notes",
         "omitted_evidence",
         "reduction_note_compaction_events",
         "reduction_source_refs_omitted",
@@ -638,6 +639,7 @@ def _load_work(path: str) -> dict[str, Any] | None:
     value.setdefault("provider_calls_total", value.get("provider_calls", 0))
     value.setdefault("prior_runs", [])
     value.setdefault("omitted_evidence", [])
+    value.setdefault("preserved_evidence_notes", value.get("evidence_notes", []))
     value.setdefault("reduction_note_compaction_events", 0)
     value.setdefault("reduction_source_refs_omitted", [])
     value["schema_version"] = 2
@@ -675,12 +677,16 @@ def _load_work(path: str) -> dict[str, Any] | None:
         for run in prior_runs
     ):
         raise ProjectError("Long-paper checkpoint attempt history is invalid")
-    for key in ("evidence_notes", "conflict_notes"):
+    for key in ("evidence_notes", "preserved_evidence_notes", "conflict_notes"):
         if not isinstance(value.get(key), list) or len(value[key]) > (
-            4096 if key == "evidence_notes" else 32
+            4096
+            if key == "evidence_notes"
+            else 1536
+            if key == "preserved_evidence_notes"
+            else MAX_EVIDENCE_BATCHES * 4
         ):
             raise ProjectError("Long-paper checkpoint evidence index is invalid")
-    for note in value["evidence_notes"]:
+    for note in [*value["evidence_notes"], *value["preserved_evidence_notes"]]:
         EvidenceNote.model_validate(note)
     omitted = value.get("omitted_evidence", [])
     if not isinstance(omitted, list) or len(omitted) > 200_000:
@@ -1007,6 +1013,132 @@ def _reconcile_obligations(draft: PaperDraft, package: dict[str, Any]) -> list[d
     return result
 
 
+_RESEARCH_RECORD_KEYS = {
+    "reasoning_steps",
+    "argument_steps",
+    "reasoning_assessments",
+    "skeptic_response",
+    "skeptic_objections",
+    "objections",
+    "unresolved_objections",
+    "resolved_objections",
+    "open_obligations",
+    "proof_obligations",
+    "remaining_obligations",
+    "negative_findings",
+    "findings",
+    "results",
+    "failed_approaches",
+    "contradictions",
+    "contradictory_findings",
+    "method",
+}
+
+
+def _research_integrity_records(package: dict[str, Any]) -> list[dict[str, Any]]:
+    """Retain substantive saved research records outside the lossy evidence index."""
+    records: list[dict[str, Any]] = []
+    seen_by_source: dict[str, set[bytes]] = {}
+
+    def visit(source_ref: str, value: Any, path: str = "") -> None:
+        seen_content = seen_by_source.setdefault(source_ref, set())
+
+        if isinstance(value, dict):
+            for key, child in value.items():
+                child_path = f"{path}/{key}" if path else str(key)
+                if key in _RESEARCH_RECORD_KEYS and child not in (None, "", [], {}):
+                    encoded = _json(child)
+                    if encoded not in seen_content:
+                        seen_content.add(encoded)
+                        records.append(
+                            {
+                                "source_ref": source_ref,
+                                "field": child_path,
+                                "content": child,
+                            }
+                        )
+                visit(source_ref, child, child_path)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(source_ref, child, f"{path}/{index}")
+
+    for source in package.get("sources", []):
+        visit(str(source.get("id", "unknown-source")), source.get("data", {}))
+    return records
+
+
+def _long_paper_integrity_records(
+    package: dict[str, Any], state: dict[str, Any]
+) -> list[dict[str, Any]]:
+    records = _research_integrity_records(package)
+    for note in state.get("preserved_evidence_notes", []):
+        if note.get("kind") in {"negative", "limitation", "question"}:
+            records.append(
+                {
+                    "source_ref": ", ".join(note.get("evidence_refs", [])),
+                    "field": f"evidence index / {note['kind']}",
+                    "content": note["statement"],
+                }
+            )
+    for index, conflict in enumerate(state.get("conflict_notes", []), start=1):
+        records.append(
+            {
+                "source_ref": ", ".join(conflict.get("evidence_refs", [])),
+                "field": f"evidence index / conflict or gap {index}",
+                "content": conflict["statement"],
+            }
+        )
+    return records
+
+
+_ADMINISTRATIVE_FIELDS = {
+    "id",
+    "run_id",
+    "step_id",
+    "sequence",
+    "created_at",
+    "updated_at",
+    "submitted_at",
+    "timestamp",
+    "cycle",
+    "strategy_cycle",
+    "kind",
+}
+
+
+def _material_evidence_omissions(omissions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Treat omitted research fields as material; ignore only known record bookkeeping."""
+    return [
+        item
+        for item in omissions
+        if item.get("field", "").rstrip("/").rsplit("/", 1)[-1] not in _ADMINISTRATIVE_FIELDS
+    ]
+
+
+def _apply_omission_limits(draft: PaperDraft, omissions: list[dict[str, Any]]) -> PaperDraft:
+    if not omissions:
+        return draft
+    disclosure = (
+        f"Material evidence coverage limitation: the evidence index omitted {len(omissions)} "
+        "saved research field fragment(s). Conclusions are provisional, and claims that would "
+        "depend on the omitted material are not established by this paper. Consult the complete "
+        "frozen evidence snapshot and omission ledger before relying on these findings."
+    )
+    draft.abstract = disclosure
+    draft.limitations = [disclosure, *draft.limitations[:11]]
+    draft.validation_warnings = [disclosure, *draft.validation_warnings[:11]]
+    draft.conclusions = [disclosure]
+    for claim in draft.claims:
+        if claim.status == "established":
+            claim.status = "unresolved"
+            claim.reasoning = (
+                "Material evidence was omitted from the extracted index; this claim cannot be "
+                "treated as established until the complete frozen evidence is reviewed. "
+                + claim.reasoning
+            )[:2400]
+    return draft
+
+
 def _walk(value: Any):
     yield value
     if isinstance(value, dict):
@@ -1028,6 +1160,8 @@ def _tex(
     *,
     math_style: bool = False,
     obligation_reconciliation: list[dict[str, Any]] | None = None,
+    integrity_records: list[dict[str, Any]] | None = None,
+    material_omissions: list[dict[str, Any]] | None = None,
 ) -> str:
     esc = _latex
     prose = _latex_prose
@@ -1057,6 +1191,26 @@ def _tex(
         prose(draft.abstract),
         r"\end{abstract}",
     ]
+    if material_omissions:
+        affected_sources = sorted(
+            {item.get("source_ref", "unknown") for item in material_omissions}
+        )
+        parts += [
+            r"\section*{Important evidence coverage limitation}",
+            prose(
+                f"The evidence index omitted {len(material_omissions)} material saved research "
+                f"field fragment(s) across {len(affected_sources)} source(s). Conclusions are "
+                "provisional, and claims that depend on omitted evidence are not established. "
+                "Review the complete frozen snapshot and its omission ledger before relying on "
+                "the interpretation. Affected source records: "
+                + ", ".join(affected_sources[:80])
+                + (
+                    "; additional sources are listed in generation metadata."
+                    if len(affected_sources) > 80
+                    else "."
+                )
+            ),
+        ]
     if draft.abstract_claim_ids:
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.abstract_claim_ids)))
     parts.append(r"\section{Introduction}" if math_style else r"\section{Problem framing}")
@@ -1128,6 +1282,20 @@ def _tex(
         parts.append(r"\textit{Claims discussed: }" + esc(", ".join(draft.conclusion_claim_ids)))
     if math_style:
         claim_register()
+    if integrity_records:
+        parts += [
+            r"\appendix",
+            r"\section{Structured reasoning and review records}",
+            prose(
+                "The following material is transcribed from the frozen research snapshot to "
+                "preserve recorded reasoning, Skeptic assessments, negative findings, "
+                "contradictions, and unresolved objections that may not fit in the synthesized "
+                "narrative. These records are not independent verification."
+            ),
+        ]
+        for item in integrity_records:
+            parts.append(r"\subsection{" + esc(item["source_ref"] + ": " + item["field"]) + "}")
+            parts.append(prose(json.dumps(item["content"], ensure_ascii=False, indent=2)))
     parts += [
         r"\section*{Evidence and authorship note}",
         esc("Snapshot SHA-256: " + snapshot_hash),
@@ -1415,6 +1583,8 @@ distinct whenever merging would obscure differences between sessions or experime
                         f"Evidence index cited a source outside batch {batch['batch_id']}: {', '.join(unknown[:3])}"
                     )
                 notes.append(note)
+            preserved_notes = state.setdefault("preserved_evidence_notes", [])
+            preserved_notes.extend(item.model_dump() for item in parsed.notes)
             for conflict in parsed.conflicts_or_gaps:
                 if set(conflict.evidence_refs) - batch_refs:
                     raise ProjectError(
@@ -1432,15 +1602,18 @@ distinct whenever merging would obscure differences between sessions or experime
                 }
                 for item in parsed.omitted_fields
             )
-            if len(conflict_notes) < 32:
+            if len(conflict_notes) < MAX_EVIDENCE_BATCHES * 4:
                 conflict_notes.extend(
                     item.model_dump()
-                    for item in parsed.conflicts_or_gaps[: 32 - len(conflict_notes)]
+                    for item in parsed.conflicts_or_gaps[
+                        : MAX_EVIDENCE_BATCHES * 4 - len(conflict_notes)
+                    ]
                 )
             state.update(
                 {
                     "next_batch": batch_index + 1,
                     "evidence_notes": [item.model_dump() for item in notes],
+                    "preserved_evidence_notes": preserved_notes,
                     "conflict_notes": conflict_notes,
                     "conflict_note_count": conflict_note_count,
                     "omitted_evidence": omitted_evidence,
@@ -1800,6 +1973,11 @@ async def generate(
             )
             model = config["model"]
             long_form = True
+        material_omissions = (
+            _material_evidence_omissions(work.get("omitted_evidence", [])) if long_form else []
+        )
+        if material_omissions:
+            draft = _apply_omission_limits(draft, material_omissions)
         validation_warnings = _validate(draft, package)
         obligation_reconciliation = _reconcile_obligations(draft, package)
         final_auth = await auth_context()
@@ -1859,6 +2037,10 @@ async def generate(
                     len(work.get("omitted_evidence", [])) if long_form else 0
                 ),
                 "omitted_evidence": (work.get("omitted_evidence", []) if long_form else []),
+                "material_evidence_omissions": material_omissions,
+                "research_integrity_record_count": (
+                    len(_long_paper_integrity_records(package, work)) if long_form else 0
+                ),
                 "evidence_conflict_note_count": (
                     int(work.get("conflict_note_count", 0)) if long_form else 0
                 ),
@@ -1886,6 +2068,10 @@ async def generate(
                 snapshot_hash,
                 math_style=math_style,
                 obligation_reconciliation=obligation_reconciliation,
+                integrity_records=_long_paper_integrity_records(package, work)
+                if long_form
+                else None,
+                material_omissions=material_omissions,
             )
             if progress:
                 await progress("compile", 1, 1)
