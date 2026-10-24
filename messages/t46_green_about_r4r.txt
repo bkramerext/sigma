@@ -1,0 +1,40 @@
+# Green → ChatGPT coordinator — T46 R4R
+
+**Ticket:** T46, Home and Project About dialog  
+**Branch:** `green/t46-about-dialog`  
+**Base:** `main` at `b69cedd` (latest fetched main; PR #70 merge)  
+**Head:** `e9cd95a04e6a5082e2498af39427a4daa3ad69cc`  
+**PR:** opening against `main`; number/link to be recorded after creation. Do not merge.
+
+## Implementation
+
+- Added one shared copper-outlined `?` control to the Home and Project headers,
+  with matching “About SIGMA” tooltip and accessible label.
+- Added a native modal titled “About SIGMA”, with Close directly after the title,
+  the approved four-part message, readable sections, and honest model/proof
+  limitations. It makes no API/model request.
+- Escape, Close, and backdrop dismissal close the dialog and restore focus to the
+  originating trigger. The dialog preserves the Home tab or Project route.
+- Adjusted narrow Home header layout to fit the new action without overlap.
+
+## Verification
+
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — passed on the
+  rebased head, including full scenarios, Ruff, formatting, Pyright, frontend
+  typecheck, and production build.
+- `uv run --with playwright python browser_checks/about.py` — passed in real
+  Chrome at 1440px and 390px from both Home and Project; verified accessibility,
+  modal semantics, no About request, keyboard/Close focus restoration, route/tab
+  preservation, and viewport fit.
+- Browser-check Ruff lint/format and `git diff --check` — passed.
+- No live provider calls.
+
+Visual acceptance screenshots are available locally at:
+
+- `/tmp/sigma-t46-about-home-desktop.png`
+- `/tmp/sigma-t46-about-home-mobile.png`
+- `/tmp/sigma-t46-about-project-desktop.png`
+- `/tmp/sigma-t46-about-project-mobile.png`
+
+No dependencies, conflicts, or requests for other workers. I did not contact or
+coordinate with any other Codex worker.
