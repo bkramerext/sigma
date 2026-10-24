@@ -224,11 +224,11 @@ with sync_playwright() as playwright:
     expect(dialog).to_be_visible()
     expect(dialog.get_by_role("button", name="Close", exact=True)).to_be_visible()
     expect(dialog).to_contain_text("gpt-6.1-sol")
-    expect(dialog).to_contain_text("complete evidence snapshot up to 100,000 bytes")
-    expect(dialog).to_contain_text("One provider call")
-    expect(dialog).to_contain_text("4 MB streamed-response cap in ChatGPT-plan mode")
-    expect(dialog).to_contain_text("1 MB response cap in API-key mode")
-    expect(dialog).to_contain_text("120-second timeout")
+    expect(dialog).to_contain_text("complete snapshot is archived up to 20 MB")
+    expect(dialog).to_contain_text("48 KB evidence batches")
+    expect(dialog).to_contain_text("at most 512 batches, 48 sections, and 593 provider calls")
+    expect(dialog).to_contain_text("1 MB response cap")
+    expect(dialog).to_contain_text("TeX compilation allows 50 MB and 300 seconds")
 
     def reject_provider(route):
         route.fulfill(

@@ -46,10 +46,11 @@ independent proof checker is involved.
   integration. The structured outcome fields and T47 Conclusion are retained
   together, with a focused persistence/display integration test. No direct
   worker contact was made.
-- **Blue PR #68** is open and changes `papers.py`, reports, API, and frontend.
-  Its TeX frozen source/checkpoint path should carry `outcome.conclusion`
-  alongside all underlying session evidence. No direct worker contact or PR
-  modification was made.
+- **Blue PR #68** merged into `main` at `25fa630`; PR #72 now includes that
+  current-main integration. Paper snapshots, reports, API, and frontend
+  preserve the Conclusion alongside the saved session evidence. The full test
+  suite and T47 Chrome checks passed on the combined tree. No direct worker
+  contact was made.
 - TeX session-selection policy remains open; no selection UI was added.
 - T46's approved About message remains separate and was not implemented here.
 

@@ -42,7 +42,7 @@ Research Python execution requires a working Docker-compatible container runtime
 docker build -t sigma-research-python:0.1 sandbox-poc
 ```
 
-The runtime does not pull or install packages during an experiment. The container has no network access or host project mounts and runs with bounded resources. See [Getting Started](docs/GETTING-STARTED.md) and [Research Python Execution](docs/RESEARCH_PYTHON_EXECUTION.md) for setup, security assumptions, and resource limits.
+The runtime does not pull or install packages during an experiment. The container has no network access or host project mounts and runs with bounded resources. See [Getting Started](docs/GETTING_STARTED.md) and [Research Python Execution](docs/RESEARCH_PYTHON_EXECUTION.md) for setup, security assumptions, and resource limits.
 
 ## Research quality and current limits
 
