@@ -188,8 +188,9 @@
   .workspace-page .project-art-back-row { left: auto; right: 40px; }
   .workspace-page .project-back-label { display: none; }
   .workspace-page .current-project { padding-top: 0; }
-  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) 44px; grid-template-areas: "difficulty about" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
-  .workspace-page .project-art-header .about-action { justify-self: end; }
+  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto; grid-template-areas: "difficulty difficulty" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
+  .workspace-page .project-art-header .about-action { position: absolute; top: 0; right: 0; grid-area: auto; justify-self: end; }
+  .workspace-page .project-art-header .project-difficulty-badge { width: calc(100% - 52px); justify-self: start; align-self: center; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
   .workspace-page .expansion { font-size: 8px; letter-spacing: .06em; max-width: 240px; }
   .workspace-page .header-controls { align-self: flex-start; gap: 0; }

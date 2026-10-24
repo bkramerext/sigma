@@ -25,7 +25,8 @@ viewport fit. Visual screenshots are `/tmp/sigma-t46-about-home-desktop.png`,
 `/tmp/sigma-t46-about-home-mobile.png`,
 `/tmp/sigma-t46-about-project-desktop.png`, and
 `/tmp/sigma-t46-about-project-mobile.png`; the mobile Project check also verifies
-the hit area and opens via its outer edge. The browser check used the local
+the hit area and opens via its outer edge. The header arrangement is captured in
+`/tmp/sigma-t46-about-project-header-mobile.png`. The browser check used the local
 deterministic provider fixture; no live provider calls were made.
 
 ## Strategy-generation architecture correction (2026-10-24)

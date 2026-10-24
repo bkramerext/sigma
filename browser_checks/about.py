@@ -109,6 +109,7 @@ with sync_playwright() as playwright:
     assert about_box is not None and controls_box is not None and difficulty_box is not None
     assert about_box["width"] >= 44 and about_box["height"] >= 44, about_box
     assert about_box["x"] + about_box["width"] <= controls_box["x"] + controls_box["width"]
+    assert difficulty_box["x"] + difficulty_box["width"] <= about_box["x"]
     assert (
         abs(
             (about_box["y"] + about_box["height"] / 2)
@@ -118,6 +119,8 @@ with sync_playwright() as playwright:
     ), "Mobile About action is not alongside the top-right header controls"
     compact_pill = about_button().evaluate("element => getComputedStyle(element, '::before').inset")
     assert compact_pill == "7px", compact_pill
+    about_button().evaluate("element => element.blur()")
+    page.screenshot(path=f"{screenshots}/sigma-t46-about-project-header-mobile.png")
     button, dialog = open_about(click_position={"x": 2, "y": 22})
     assert_dialog_fits(390)
     page.screenshot(path=f"{screenshots}/sigma-t46-about-project-mobile.png", full_page=True)
