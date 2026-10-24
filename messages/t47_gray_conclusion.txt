@@ -56,4 +56,5 @@ independent proof checker is involved.
 
 Real Chrome check: `browser_checks/t47_conclusion.py`.
 Implementation branch: `gray/t47-session-conclusion`.
-PR targets `main`; do not self-merge.
+PR #72: https://github.com/bkramerext/sigma/pull/72 (targets `main`).
+Do not self-merge.
