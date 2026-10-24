@@ -390,7 +390,12 @@ def main() -> None:
             add_panel.get_by_label("New ChatGPT allowance").fill("4.50")
             add_box = add_panel.get_by_role("button", name="Add", exact=True).bounding_box()
             cancel_box = add_panel.get_by_role("button", name="Cancel", exact=True).bounding_box()
-            assert add_box and cancel_box and cancel_box["x"] > add_box["x"]
+            assert add_box and cancel_box
+            assert abs(cancel_box["x"] - add_box["x"]) <= 2, (add_box, cancel_box)
+            assert cancel_box["y"] >= add_box["y"] + add_box["height"] - 1, (
+                add_box,
+                cancel_box,
+            )
             assert not any(request.startswith("POST ") and "/grants" in request for request in admin_requests)
             add_panel.get_by_role("button", name="Cancel", exact=True).click()
             expect(page.get_by_role("group", name="Add authorized user")).to_have_count(0)
