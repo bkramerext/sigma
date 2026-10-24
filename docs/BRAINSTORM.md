@@ -19,7 +19,7 @@ Open ideas and possible follow-up work, not implementation commitments. Complete
 - **2026-10-20 9:30 AM** — Adversarially test claims; passing finite tests is not proof.
 - **2026-10-20 10:00 AM** — Separate research agents, independent evaluators, and deterministic scheduling.
 - **2026-10-20 10:00 AM** — Bound evaluation work; retain evidence, uncertainty, and rubric versions.
-- **2026-10-20 10:00 AM** — Schedule by promise, uncertainty, information value, cost, and hard limits.
+- **2026-10-20 10:00 AM** — SIGMA autonomously prioritizes and schedules strategies by promise, uncertainty, information value, cost, and hard limits, while preserving human overrides and auditable decisions.
 
 ## Human control and interfaces
 
@@ -36,7 +36,7 @@ Open ideas and possible follow-up work, not implementation commitments. Complete
 
 ## Configuration, spending, and progress notifications
 
-Some base settings and limits now exist. The entries below concern additional strategy-level controls, spending presentation, and notifications.
+Some base settings and limits now exist. The entries below concern additional strategy-level controls, spending presentation, and notifications. **Notifications remain deferred.**
 
 - **2026-10-20 1:00 PM** — Project settings: model, budget, agent limits, reporting, rubric, notifications.
 - **2026-10-20 1:00 PM** — Strategy settings: priority, scheduling state, spending ceiling; inherit project defaults.
@@ -56,9 +56,6 @@ Some base settings and limits now exist. The entries below concern additional st
 
 - **2026-10-21** — Treat every network-bound operation as fallible (provider inference, conversions, API requests, saves, status/discovery). On failure, show an accessible, non-disruptive toast with an actionable, accurate explanation; never silently fail or falsely indicate success. Pair the toast with the appropriate UI state transition: retain the last valid persisted content and prior view, preserve unsaved edits where applicable, clear loading states, and do **not** switch into Markdown/Rendered when Markdown generation fails. On successful conversion, transition only after durable save is confirmed. Test HTTP failures, timeouts, disconnects, cancellation, and stale responses without unintended view changes or duplicate requests.
 
-## Project-type identity and artwork (deferred)
-
-- **2026-10-22** — Design custom **copper-themed logos/icons for each project type** to give projects recognizable visual identities within SIGMA's notebook interface. Examples: an integral sign (∫) for mathematics, a military insignia or related motif for military/operational planning, a laboratory beaker for chemistry, and scales of justice for law. Maintain a coherent copper visual language while making each symbol distinct and legible at small sizes. This is a future visual-design task, not an implementation commitment; define the project-type taxonomy and icon placements when scoped.
 
 ## Context management and retrieval
 
