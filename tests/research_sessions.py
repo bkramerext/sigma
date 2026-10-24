@@ -31,9 +31,34 @@ def provider_response(value):
     value = dict(value)
     if "claim" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("claim_is_conditional", False)
+        value.setdefault(
+            "reasoning_steps",
+            [
+                {
+                    "title": "Current bounded result",
+                    "argument": "A saved research step states the local claim and the evidence used to support it.",
+                    "epistemic_status": "deduction",
+                    "basis_artifact_ids": [],
+                }
+            ],
+        )
     if "assessment" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("claim_is_conditional", False)
         value.setdefault("obligation_reviews", [])
+        value.setdefault(
+            "reasoning_assessments",
+            [
+                {
+                    "step_number": 1,
+                    "disposition": "accepted",
+                    "rationale": "The cited local argument follows from its stated evidence and assumptions.",
+                    "objection": "",
+                    "basis_artifact_ids": [],
+                }
+            ],
+        )
     return {
         "status": "completed",
         "usage": {
@@ -51,6 +76,15 @@ def investigation(n):
     return {
         "claim": f"Claim {n}: a candidate consequence follows from cycle {n}.",
         "method": f"Derive the consequence using the strategy in cycle {n}.",
+        "reasoning_steps": [
+            {
+                "title": f"Cycle {n} bounded consequence",
+                "argument": f"The cycle {n} strategy yields its stated local consequence under the recorded assumption.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+        ],
+        "claim_is_conditional": False,
         "assumptions": [f"Assumption {n}"],
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
@@ -73,6 +107,16 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "objective_status": "partial",
         "solution_claim": "A partial consequence follows from the saved work.",
         "argument_summary": "The result uses the stated mechanism but does not settle the full objective.",
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "The stated local consequence follows from its supplied premise for this cycle.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            }
+        ],
+        "claim_is_conditional": False,
         "assumptions_reviewed": [f"Assumption {n}"],
         "proof_obligations": [f"Check obligation {n}"],
         "unresolved_objections": [],
@@ -2449,6 +2493,25 @@ def test_outcome_classification():
     )
     pending = research_sessions._outcome({"status": "running", "artifacts": []})
     assert pending["assessment"] == "pending" and pending["provisional"]
+    failed_portfolio = research_sessions._outcome(
+        {
+            "status": "failed",
+            "artifacts": [],
+            "strategy_runs": [
+                {
+                    "strategy_id": "failed-route",
+                    "strategy_title": "Failed route",
+                    "status": "failed",
+                    "reason": "Provider failed before a complete cycle.",
+                }
+            ],
+        }
+    )
+    failed_finding = failed_portfolio["solution_review"]["strategy_findings"][0]
+    assert failed_finding["strategy_id"] == "failed-route"
+    assert failed_finding["status"] == "execution_failed"
+    assert failed_finding["failure_reason"] == "Provider failed before a complete cycle."
+    assert failed_finding["research_artifact_ids"] == []
     partial = research_sessions._outcome(
         {
             "status": "ended",
@@ -2480,6 +2543,85 @@ def test_outcome_classification():
     )
     assert legacy_outcome["solution_review"]["verification_status"] == "unknown"
     assert "verification_status" not in legacy_review  # derived default does not mutate evidence
+    strategy_step = {
+        "number": 1,
+        "title": "Bounded branch result",
+        "argument": "This is an explicit partial derivation for one strategy.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": [],
+        "research_artifact_id": "a1",
+        "review": {
+            "disposition": "unresolved",
+            "rationale": "The branch needs a second lemma.",
+            "objection": "The bound is not yet established.",
+        },
+    }
+    portfolio = research_sessions._outcome(
+        {
+            "status": "ended",
+            "strategy_id": "s1",
+            "strategy_title": "Branch one",
+            "strategy_runs": [
+                {"strategy_id": "s1", "strategy_title": "Branch one", "status": "ended"},
+                {
+                    "strategy_id": "s2",
+                    "strategy_title": "Branch two",
+                    "status": "ended",
+                },
+                {
+                    "strategy_id": "s3",
+                    "strategy_title": "Failed before first artifact",
+                    "status": "failed",
+                    "reason": "Provider timed out before a complete research cycle.",
+                    "artifacts": [],
+                },
+            ],
+            "artifacts": [
+                {
+                    **artifact,
+                    "id": "a1",
+                    "strategy_id": "s1",
+                    "strategy_title": "Branch one",
+                    "reasoning_steps": [strategy_step],
+                    "objective_review": {
+                        "status": "partial",
+                        "claim": "A bound candidate.",
+                        "argument_steps": [strategy_step],
+                    },
+                },
+                {
+                    **artifact,
+                    "id": "a2",
+                    "strategy_id": "s2",
+                    "strategy_title": "Branch two",
+                    "reasoning_steps": [{**strategy_step, "research_artifact_id": "a2"}],
+                    "objective_review": {
+                        "status": "achieved",
+                        "claim": "A reviewed conclusion.",
+                        "argument_steps": [{**strategy_step, "research_artifact_id": "a2"}],
+                    },
+                },
+            ],
+        }
+    )
+    findings = portfolio["solution_review"]["strategy_findings"]
+    assert [item["strategy_title"] for item in findings] == [
+        "Branch one",
+        "Branch two",
+        "Failed before first artifact",
+    ]
+    assert (
+        findings[0]["reasoning_steps"][0]["review"]["objection"]
+        == "The bound is not yet established."
+    )
+    assert findings[0]["status"] == "partial"
+    assert findings[0]["research_artifact_ids"] == ["a1"]
+    assert findings[1]["research_artifact_ids"] == ["a2"]
+    assert findings[2]["status"] == "execution_failed"
+    assert findings[2]["execution_status"] == "failed"
+    assert findings[2]["research_artifact_ids"] == []
+    assert "timed out" in findings[2]["failure_reason"]
+    assert "timed out" in findings[2]["open_obligations"][0]
     # A reported assertion without a completed evidence review cannot become success.
     unsupported = research_sessions._outcome(
         {
@@ -2521,8 +2663,13 @@ def test_outcome_classification():
             ],
         }
     )
-    assert positive_but_failed["assessment"] == "positive" and any(
-        "Execution failed" in caveat for caveat in positive_but_failed["caveats"]
+    assert (
+        positive_but_failed["assessment"] == "mixed"
+        and any(
+            "no structured argument steps" in caveat.lower()
+            for caveat in positive_but_failed["caveats"]
+        )
+        and any("Execution failed" in caveat for caveat in positive_but_failed["caveats"])
     )
     assessments = research_sessions._strategy_assessments(
         {
@@ -2595,12 +2742,136 @@ def test_outcome_classification():
     ]
 
 
+def test_deliberate_argument_gap_is_preserved_and_not_complete():
+    long_gap = (
+        "At most n−1 crossings give at most n pieces; the argument asserts that every piece contributes a new region. "
+        * 48
+    )
+    assert len(long_gap) > 3000
+    assert (
+        research_sessions.ResearchReasoningStep.model_validate(
+            {
+                "title": "Extended insertion claim",
+                "argument": long_gap,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+        ).argument
+        == long_gap
+    )
+    investigation_record = {
+        "reasoning_steps": [
+            {
+                "title": "Intersections divide the new line",
+                "argument": "At most n-1 crossings give at most n pieces.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Each piece adds a new region",
+                "argument": long_gap,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+        ]
+    }
+    skeptic_record = {
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "The crossing bound gives at most n line pieces.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 2,
+                "disposition": "challenged",
+                "rationale": "This conclusion does not follow from the piece count alone.",
+                "objection": "The piece count alone does not show that each piece lies in a distinct old region or that each region met in its interior is split into two.",
+                "basis_artifact_ids": [],
+            },
+        ]
+    }
+    argument = research_sessions._reviewed_argument(investigation_record, skeptic_record)
+    assert len(argument) == 2
+    assert argument[1]["argument"] == long_gap
+    assert argument[1]["review"]["disposition"] == "challenged"
+    assert "distinct old region" in argument[1]["review"]["objection"]
+    assert not research_sessions._argument_is_complete(argument)
+    conjectured = [
+        {
+            "epistemic_status": "conjecture",
+            "review": {
+                "disposition": "accepted",
+                "rationale": "The plausible pattern matches every supplied finite example.",
+                "objection": "",
+            },
+        }
+    ]
+    assert research_sessions._argument_is_complete(conjectured)
+    assert not research_sessions._argument_is_complete(conjectured, mathematical_proof=True)
+    accepted_assumption = [
+        {
+            "argument": "The equation holds under premise P.",
+            "epistemic_status": "assumption",
+            "review": {
+                "disposition": "accepted",
+                "rationale": "This premise is explicitly stated as a condition of the claim.",
+                "objection": "",
+            },
+        }
+    ]
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=[],
+        reviewed_assumptions=[],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=[],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["A different premise."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert (
+        research_sessions._claim_scope(
+            {"claim_is_conditional": True}, {"claim_is_conditional": False}
+        )
+        == "disputed"
+    )
+
+
 async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     problem = (
         "For each integer n >= 0, determine the maximum number of regions formed by n lines. "
         "Derive a formula, prove the upper bound, and show an arrangement attains it, including n=0."
     )
-    view = initialize_project(path, "Maximum Regions Formed by Lines", problem)
+    view = initialize_project(
+        path, "Maximum Regions Formed by Lines", problem, research_mode="mathematical"
+    )
     strategy = create_strategy(
         path,
         "Incremental region counting with an explicit maximizing arrangement",
@@ -2617,7 +2888,46 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     proof = {
         "claim": "R(n) = 1 + n(n+1)/2 for every n >= 0.",
         "method": "Each region is an intersection of open half-planes: points with a fixed choice of side for every line form a convex set, and different side choices cannot belong to the same component. The kth line meets at most k-1 earlier lines, so adds at most k regions. Two different pieces of an inserted line cannot lie in the same region, since convexity would put an intervening point on an earlier line in that region. Each encountered region is open, so a small disk around an intersection has points on both sides of the inserted line. Lines y=kx+k^2 meet each earlier line at distinct x coordinates, attaining k increments. Summing gives the formula; the empty arrangement has one region.",
+        "reasoning_steps": [
+            {
+                "title": "Scope and assumptions",
+                "argument": "Lines are distinct straight lines in the Euclidean plane.",
+                "epistemic_status": "assumption",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "At most n new regions",
+                "argument": "The nth line has at most n−1 distinct intersection points with earlier lines. These points divide it into at most n pieces. Each piece lies in one old region, and adding the line can split that region into at most two, so at most n new regions are created.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "An intersection splits a region",
+                "argument": "Each old region is an intersection of open half-planes and therefore convex. Along the inserted line, distinct pieces cannot lie in one old region: if they did, convexity would include the intervening crossing point on an old line, outside that region. Every open region met by the new line has points on both sides, so it is split into two.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Attaining every increment",
+                "argument": "For lines y=kx+k², k=1,…,n, line k meets earlier line i at x=−(i+k). These x-coordinates are distinct as i varies, and the pairwise intersections are not triple intersections. Thus line k has k−1 distinct crossings and is cut into k pieces, each splitting a different old region.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Recurrence and base case",
+                "argument": "The upper bound gives R(k)≤R(k−1)+k, and the construction attains k new regions at every insertion, so R(k)=R(k−1)+k for the maximizing arrangement. The empty arrangement has R(0)=1.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Closed form",
+                "argument": "Induction gives R(n)=1+Σ(k=1…n)k=1+n(n+1)/2: it holds at n=0, and adding n to 1+(n−1)n/2 yields 1+n(n+1)/2.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+        ],
         "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
+        "claim_is_conditional": True,
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
@@ -2635,7 +2945,52 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "objective_status": "achieved",
         "solution_claim": "R(n) = 1 + n(n+1)/2 for all n >= 0.",
         "argument_summary": "At most k regions are added at step k, and the explicit family y=kx+k^2 attains every increment; sum the increments, the empty arrangement gives R(0)=1, and verify the small values.",
-        "assumptions_reviewed": ["Distinct straight lines in the Euclidean plane."],
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "The domain and general-position conditions are explicit and match the construction used for attainability.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 2,
+                "disposition": "accepted",
+                "rationale": "At most n−1 crossings create at most n line pieces, each able to split at most one prior region.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 3,
+                "disposition": "accepted",
+                "rationale": "Convexity prevents separated pieces sharing one region, and openness guarantees both sides of each cut.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 4,
+                "disposition": "accepted",
+                "rationale": "The pairwise intersection coordinates are distinct for fixed k, with no triple intersections, so all k pieces are realized.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 5,
+                "disposition": "accepted",
+                "rationale": "The universal insertion bound and the attaining family give matching recurrence increments from the empty arrangement.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 6,
+                "disposition": "accepted",
+                "rationale": "The sum identity follows by induction from n=0 and addition of the nth increment.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+        ],
+        "claim_is_conditional": True,
+        "assumptions_reviewed": ["Lines are distinct straight lines in the Euclidean plane."],
         "proof_obligations": [
             "Insertion lemma splits each affected region into two [cycle 1].",
             "The insertion bound proves the upper bound [cycle 1].",
@@ -2713,8 +3068,29 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             if item["id"] == finished["id"]
         )
         assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "t37-v1"
+        assert (
+            exported_session["outcome"]["solution_review"]["argument_steps"]
+            == finished["outcome"]["solution_review"]["argument_steps"]
+        )
+        from sigma.project_reports import render_report
+
+        report, _ = render_report(export_project_view(str(path)), "txt")
+        assert isinstance(report, str)
+        assert "At most n new regions" in report
+        assert "the pairwise intersection coordinates are distinct" in report.lower()
+        assert "Skeptic rationale: At most n−1 crossings" in report
+        paper_snapshot, _ = papers._snapshot(str(path))
+        paper_artifact = next(
+            item for item in paper_snapshot["sources"] if item["kind"] == "artifact"
+        )
+        assert paper_artifact["data"]["reasoning_steps"][1]["title"] == "At most n new regions"
+        assert "Attaining every increment" in json.dumps(paper_snapshot, ensure_ascii=False)
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
+        assert finished["outcome"]["solution_review"]["claim_scope"] == "conditional"
+        assert finished["outcome"]["solution_review"]["claim"].startswith(
+            "Conditional on: Lines are distinct straight lines in the Euclidean plane."
+        )
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
         assert finished["artifacts"][0]["coordinator_decision"] == "stop_productive_conclusion"
         assert any(
@@ -2730,27 +3106,53 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert finished["outcome"]["solution_review"]["basis_artifact_ids"] == [
             finished["artifacts"][0]["id"]
         ]
+        saved_argument = finished["outcome"]["solution_review"]["argument_steps"]
+        assert len(saved_argument) == 6
+        assert saved_argument[1]["title"] == "At most n new regions"
+        assert "at most n pieces" in saved_argument[1]["argument"]
+        assert saved_argument[1]["research_artifact_id"] == finished["artifacts"][0]["id"]
+        assert saved_argument[1]["review"]["disposition"] == "accepted"
+        argument_titles = [item["title"].lower() for item in saved_argument]
+        assert any("assumption" in title for title in argument_titles)
+        assert any("attain" in title for title in argument_titles)
+        assert any("recurrence" in title for title in argument_titles)
+        assert all(item["epistemic_status"] == "deduction" for item in saved_argument[1:])
+        full_argument = " ".join(item["argument"] for item in saved_argument)
+        assert "at most n" in full_argument and "different old region" in full_argument
+        assert "R(k)=R(k−1)+k" in full_argument and "R(0)=1" in full_argument
+        assert "1+n(n+1)/2" in full_argument
+        assert all(item["review"]["disposition"] == "accepted" for item in saved_argument)
         assert any("unverified" in item.lower() for item in finished["outcome"]["caveats"])
         rows = finished["strategy_assessments"]
         assert [row["assessment"] for row in rows] == ["contributed_to_solution", "not_used"]
         assert rows[0]["basis_artifact_ids"] == [finished["artifacts"][0]["id"]]
         assert rows[1]["basis_artifact_ids"] == []
 
-        # The same candidate language must not override a Skeptic's material,
-        # unresolved objection. Before the evidence-contract fix this passed
-        # the special-case keyword checklist and was incorrectly promoted.
+        # An achieved summary with no remaining obligations still cannot
+        # override a Skeptic's challenge to one logical proof step.
         incomplete_review = {
             **review,
             "assessment": "continue",
             "stop_reason": "recoverable_objection",
-            "response": "No mathematical counterexample is apparent, but the central component-identification step remains asserted.",
-            "objections": ["The region/sign-set identification remains asserted."],
-            "remaining_obligations": ["Justify that each sign set is exactly one component."],
+            "response": "The crossing count alone does not justify that each line piece splits a different old region.",
+            "objections": [],
+            "remaining_obligations": [],
             "next_question": "Review the component-identification step.",
-            "objective_status": "not_achieved",
+            "objective_status": "achieved",
             "proof_obligations": ["Review the insertion argument."],
-            "verification_status": "incomplete",
-            "unresolved_objections": ["The region/sign-set identification remains asserted."],
+            "verification_status": "convincing_unverified",
+            "unresolved_objections": [],
+            "reasoning_assessments": [
+                {
+                    **item,
+                    "disposition": "challenged",
+                    "rationale": "The piece-count bound alone does not show that every piece splits a different old region.",
+                    "objection": "The argument must show that the pieces lie in distinct old regions and that each region met in its interior is split into two.",
+                }
+                if item["step_number"] == 2
+                else item
+                for item in review["reasoning_assessments"]
+            ],
             "strategy_contribution": "productive",
         }
         research_sessions.save_limits(
@@ -2769,10 +3171,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         )
         incomplete = await wait_for(path, incomplete_started["id"])
         assert incomplete["outcome"]["assessment"] == "mixed"
-        assert incomplete["outcome"]["solution_review"]["status"] == "not_achieved"
-        assert "region/sign-set" in " ".join(
-            incomplete["outcome"]["solution_review"]["unresolved_objections"]
-        )
+        assert incomplete["outcome"]["solution_review"]["status"] == "partial"
+        challenged = incomplete["outcome"]["solution_review"]["argument_steps"][1]
+        assert challenged["review"]["disposition"] == "challenged"
+        assert "pieces lie in distinct old regions" in challenged["review"]["objection"]
         research_sessions.save_limits(str(path), research_sessions.DEFAULT_LIMITS)
 
         # Three cycles can distribute the proof across saved artifacts. The
@@ -5675,6 +6077,7 @@ def main():
         asyncio.run(test_changed_bindings_pause_before_provider(root / "binding.sigma"))
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
         asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
+        test_deliberate_argument_gap_is_preserved_and_not_complete()
         asyncio.run(
             test_maximum_regions_solution_and_frozen_attribution(root / "maximum-regions.sigma")
         )

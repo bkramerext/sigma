@@ -1322,7 +1322,7 @@ Domain ownership, billing approvals, Cloudflare account creation, target VM/regi
 # Part 5: External-host feasibility notes
 
 
-**Status:** Planning only. Not an implementation assignment or an authorization to change SIGMA's architecture.  
+**Status:** Planning only. Not an implementation assignment or an authorization to change SIGMA's architecture.
 **Date:** October 21, 2026
 
 ## Purpose and guiding constraint

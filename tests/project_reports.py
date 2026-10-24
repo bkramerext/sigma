@@ -49,7 +49,23 @@ def fixture() -> dict:
                     },
                     "solution_review": {
                         "claim": "Candidate formula",
+                        "claim_scope": "conditional",
                         "argument_summary": "Upper bound and attaining construction.",
+                        "argument_steps": [
+                            {
+                                "number": 1,
+                                "title": "Insertion recurrence",
+                                "argument": "The nth line has at most n-1 crossings and therefore creates at most n regions.",
+                                "epistemic_status": "deduction",
+                                "basis_artifact_ids": ["artifact-1"],
+                                "research_artifact_id": "artifact-1",
+                                "review": {
+                                    "disposition": "accepted",
+                                    "rationale": "The crossing count partitions the line into at most n pieces.",
+                                    "basis_artifact_ids": ["artifact-1"],
+                                },
+                            }
+                        ],
                         "assumptions": ["Euclidean lines"],
                         "proof_obligations": ["Verify n=0"],
                         "verification_status": "convincing_unverified",
@@ -159,6 +175,78 @@ def test_unequal_metric_groups() -> None:
         )
 
 
+def test_report_retains_reviewed_argument_steps() -> None:
+    data = fixture()
+    data["research_sessions"][0]["outcome"]["solution_review"]["strategy_findings"] = [
+        {
+            "strategy_title": "Branch A",
+            "status": "partial",
+            "claim": "A partial bound.",
+            "research_artifact_id": "artifact-1",
+            "reasoning_steps": [
+                {
+                    "number": 1,
+                    "title": "Partial lemma",
+                    "argument": "The finite bound follows under the stated condition.",
+                    "epistemic_status": "deduction",
+                    "review": {
+                        "disposition": "unresolved",
+                        "rationale": "The other direction is missing.",
+                        "objection": "No attainment argument.",
+                    },
+                }
+            ],
+            "objections": ["No attainment argument."],
+            "open_obligations": ["Construct an attaining case."],
+        },
+        {
+            "strategy_title": "Branch B",
+            "status": "execution_failed",
+            "execution_status": "failed",
+            "failure_reason": "Provider timed out before a complete cycle.",
+            "claim": "No research artifact was saved for this strategy.",
+            "research_artifact_id": "",
+            "research_artifact_ids": [],
+            "reasoning_steps": [],
+            "objections": [],
+            "open_obligations": ["Provider timed out before a complete cycle."],
+        },
+    ]
+    plain, _ = render_report(data, "txt")
+    html_report, _ = render_report(data, "html")
+    assert isinstance(plain, str) and isinstance(html_report, str)
+    assert "Insertion recurrence" in plain
+    assert "at most n pieces" in plain
+    assert "Skeptic rationale: The crossing count" in plain
+    assert "Insertion recurrence" in html_report
+    assert "at most n pieces" in html_report
+    assert "Branch A · partial" in plain
+    assert "Branch B · execution_failed" in plain
+    assert "Strategy execution status: failed" in plain
+    assert "Provider timed out before a complete cycle." in plain
+    assert "No attainment argument." in plain
+
+    single_failure = fixture()
+    single_failure["research_sessions"][0]["outcome"]["solution_review"]["strategy_findings"] = [
+        {
+            "strategy_title": "Only selected route",
+            "status": "execution_failed",
+            "execution_status": "failed",
+            "failure_reason": "Provider unavailable.",
+            "claim": "No research artifact was saved for this strategy.",
+            "research_artifact_id": "",
+            "research_artifact_ids": [],
+            "reasoning_steps": [],
+            "objections": [],
+            "open_obligations": ["Provider unavailable."],
+        }
+    ]
+    single_report, _ = render_report(single_failure, "txt")
+    assert isinstance(single_report, str)
+    assert "Only selected route · execution_failed" in single_report
+    assert "Provider unavailable." in single_report
+
+
 def test_context_manifest_is_reported() -> None:
     data = fixture()
     data["research_sessions"][0]["artifacts"][0]["skeptic_output"] = {
@@ -236,6 +324,7 @@ def main() -> None:
         "Research-quality metrics",
         "Verification: Convincing, unverified",
         "Solution claim: Candidate formula",
+        "Claim scope: conditional",
         "Verification status: convincing_unverified",
         "Strategy Assessments",
         "Productive: The linked counterexample attempt clarified the boundary case.",

@@ -5507,3 +5507,118 @@ settings. The full rerun as
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including
 Ruff, formatting, Pyright (0 diagnostics), frontend typecheck, and production
 build. Existing Starlette/httpx deprecation warnings remain.
+## Substantive research outcome contract (2026-10-24)
+
+The outcome pipeline retained full Investigator methods and Skeptic responses in
+session artifacts, but an `argument_summary` alone could satisfy the achieved
+candidate gate. The main Outcome view put that summary first and kept detailed
+role outputs behind artifact disclosure; project reports likewise favored the
+summary. History review found the compact-summary/separate-artifact shape in
+A17.4, with T20.1 refining the presentation and T24 adding metrics/provenance;
+no persistence change was found that deliberately deleted the original method.
+The regression was that completeness and synthesis did not require carrying the
+actual reasoning through to the outcome.
+
+Investigator responses now include ordered, typed reasoning steps with explicit
+justifications and evidence references. Skeptics return a numbered assessment
+for every step, including a concrete objection when a step is challenged or
+unresolved. An achieved mathematical candidate now requires a complete set of
+accepted reviews with explanatory rationales, supported deductions, and the
+existing objective, evidence, obligation, and counterexample checks. Unproven
+assumptions are conditional premises, not established steps. Missing
+or mismatched reviews cannot close the argument. The source artifact preserves
+the original role outputs plus the joined reasoning; an incomplete argument
+retains its challenged steps and objections. Historical achieved records without
+structured steps are projected as incomplete rather than being silently treated
+as complete proofs.
+
+The derived outcome exposes the investigated objective and strategy, stepwise
+argument, Skeptic response, assumptions, evidence references, considered proof
+obligations, unresolved objections, and work still open in the existing Outcome
+area. Portfolio outcomes retain each strategy's latest finding. Text/HTML
+reports include the reasoning and branch findings; paper evidence snapshots
+already include complete session artifacts and now receive the structured
+reasoning through that saved artifact path. No changes were made to T45's paper
+generation implementation or Blue's branch.
+
+Follow-up review closed the assumption-scope gap: mathematical assumption steps
+can contribute only to a claim marked conditional by both roles, and the exact
+premise must be declared and included in the Skeptic's reviewed assumptions.
+The claim is serialized with a visible “Conditional on …” scope. Scope
+disagreement blocks completion. Step arguments can now carry 12,000 characters;
+the 24-step bound remains, and prompts require an explicit partial result and
+named missing obligation rather than compression when a bound is insufficient.
+
+The A17 lifecycle rule is intentional: a portfolio's overall session status is
+`failed` only when every selected branch fails. If a branch fails while a sibling
+produces evidence or reaches a bounded terminal state, the overall session is
+`ended` and the portfolio decision records the failed branch as
+`hold_after_failure`; successful sibling artifacts remain available. The
+updated real-Chrome assertion verifies this mixed result.
+
+Added `docs/OUTCOME_QUALITY.md` to document the contract and pipeline diagnosis.
+The Maximum Regions deterministic case covers conditional domain assumptions, the insertion upper
+bound, why pieces split distinct regions, a general-position attaining family,
+recurrence/base case, and closed form. It verifies persistence/reload, report
+generation, and downstream paper evidence. A negative session supplies an
+`achieved` summary but a Skeptic challenge to the distinct-region inference with
+no other open-obligation signal; the saved outcome must preserve the precise
+objection and remain partial. A >3,000-character argument fixture verifies the
+schema and reviewed projection preserve long text while the missing inference
+still blocks completion. A separate portfolio projection test verifies partial
+findings survive alongside another branch's result; ordinary bounded non-math
+sessions remain covered by the shared session scenarios.
+
+The RH showcase is seed material only and has no saved session history in this
+checkout. Its bounded objective, scoped strategy obligations, and T39
+evaluation guidance already distinguish exact partial results from unbounded
+RH claims. It was not edited and no research history was fabricated. Deterministic
+fixtures do not establish live-provider reasoning quality; no live or paid
+provider calls were made.
+
+**Checks:** `uv run python tests/research_sessions.py` and
+`uv run python tests/project_reports.py` passed, including the Maximum Regions
+proof object/reload/report/paper snapshot, step-gap downgrade, portfolio partial
+finding retention, and report escaping. `npm --prefix frontend run typecheck`
+passed. The final `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed
+all lifecycle, project, RH oracle, session, report, paper, cloud, lint/format,
+Pyright (0 errors), frontend typecheck, and production build checks. Existing
+Starlette/httpx deprecation warnings remain.
+
+Real Chrome `browser_checks/t17_8_saved_session.py` passed against an isolated
+copy with a deterministic six-step argument fixture; it confirmed the current
+Outcome view displays the derivation, challenge/review status and source
+references, with no provider requests. The updated
+`browser_checks/a17_research.py` passed in real Chrome against the local
+deterministic provider, including the mixed portfolio lifecycle case and the
+current export/outcome contracts. Its stale export-count, artifact-count, and
+terminal-status assertions were corrected to match the implemented UI and
+coordinator semantics. No live or paid provider calls were made.
+
+## PR #70 reconciliation with current main (2026-10-24)
+
+Reconciled `red/substantive-research-outcomes` with current `main` at
+`254cfd4`. The merge had no unresolved file conflicts. Current-main documentation
+consolidation and removals were retained; no deleted documentation or placeholder
+files were restored. The contract document is named `docs/OUTCOME_QUALITY.md`.
+
+Outcome synthesis now includes each selected strategy, even if it failed before
+producing an artifact. Such a branch is explicitly marked as an execution
+failure, retains its reason, and has no invented evidence reference. Branches
+with research artifacts retain all artifact IDs and the latest attributed
+argument, review, objections, and obligations. The existing outcome display and
+reports show execution status, failure detail, and source references. This does
+not change mixed-portfolio lifecycle semantics: a failed branch does not make
+the session fail when a sibling completes; a wholly failed portfolio remains
+failed.
+
+Regression coverage checks no-artifact failure attribution, multi-branch source
+IDs, and report rendering. Conditional-premise completeness, 12,000-character
+step support, and the agent-reviewed/unverified distinction remain unchanged.
+
+**Reconciliation verification:** focused research-session and project-report
+tests passed; the full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed on the reconciled implementation; and real Chrome
+`browser_checks/a17_research.py` passed against the restarted deterministic
+provider fixture, including mixed-portfolio lifecycle and failed-branch outcome
+presentation. No live or paid provider calls were made.
