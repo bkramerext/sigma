@@ -6,22 +6,24 @@ not authorize resource creation. The commands below are for one `us-west1` VM
 and require review and explicit approval by the project and billing owners.
 Do not paste secrets into shell commands, GitHub, chat, or source control.
 
-## Provisioning can start before a domain is selected
+## Provision the VM before public launch
 
-The VM, persistent disks, VPC, IAP-only administration path, and reserved
-regional static IPv4 address do not require a domain or production OAuth
-client. Reserve the static address and attach it to the VM now; keep web
-firewall ingress closed while the VM is prepared. Record the address. It can
-be used when a domain is selected later.
+The selected and registered hostname is
+`sigma-research.duckdns.org`. VM provisioning, persistent disks, VPC,
+IAP-only administration, and the reserved regional static IPv4 do not depend
+on DNS propagation or production OAuth. Reserve and attach the static IP,
+record it, then update the DuckDNS A record to that address. DNS may resolve
+before public service is ready; keep web firewall ingress closed until the
+launch gates below are met.
 
 Do not start the SIGMA Compose stack yet. `deploy/compose.yaml` requires
-`SIGMA_DOMAIN`, a production Google OAuth client ID, secret files, and the
-rootless sandbox socket. Caddy obtains a public certificate for the domain.
-Before domain selection, provision and harden the VM, mount the state disk,
-install Docker, stage the reviewed release, build the pinned images, and
-validate the VM privately through IAP/SSH and local health requests. Do not
-open TCP 80/443 or configure Caddy publicly until DNS, OAuth, secrets, and the
-production domain are approved.
+`SIGMA_DOMAIN`, the production Google OAuth client ID, secret files, and the
+rootless sandbox socket. It is configured for HTTPS at the selected hostname.
+Provision and harden the VM, mount the state disk, install Docker, stage the
+reviewed release, build the pinned images, and validate privately through
+IAP/SSH and local health requests. Do not open TCP 80/443 or start Compose until
+DNS resolves to the reserved IP, production OAuth and secrets are ready, and
+the required operator approvals are recorded.
 
 ## Prerequisites and operator decisions
 
@@ -42,8 +44,10 @@ Before proceeding, the operator must identify and approve:
 - Runtime service account name `sigma-runtime`, two Secret Manager resource
   names, and named owners authorized to create/update their versions. Secret
   payloads must come from their owners through the approved secure entry flow.
-- Domain selection is deliberately deferred. Domain registrar purchase and
-  renewal are outside this estimate and assignment.
+- Confirm access to the registered DuckDNS hostname and its approved secure
+  update path. Never place a DuckDNS account token in this runbook, source
+  control, or the application env file. No domain purchase is needed for the
+  selected hostname.
 
 Placeholders below are deliberately conspicuous. Set them only in the
 operator's reviewed terminal; never export secret values.
@@ -61,6 +65,7 @@ export SUBNET_CIDR='10.42.0.0/24' # approve against network plan first
 export RUNTIME_SA='sigma-runtime'
 export OAUTH_SECRET='sigma-google-oauth-client-secret'
 export OPENAI_SECRET='sigma-sponsored-openai-api-key'
+export SIGMA_DOMAIN='sigma-research.duckdns.org'
 export TRIAL_START_DATE='YYYY-MM-DD' # confirmed trial credit start date
 export TRIAL_END_DATE='YYYY-MM-DD'   # confirmed 90-day trial end date
 ```
@@ -74,7 +79,7 @@ cloud resources.
 
 ```sh
 gcloud auth list --filter='status:ACTIVE' --format='table(account,status)'
-gcloud config set project "$PROJECT_ID"
+gcloud config get-value project
 gcloud projects describe "$PROJECT_ID" --format='yaml(projectId,lifecycleState,parent)'
 gcloud billing projects describe "$PROJECT_ID"
 gcloud compute zones describe "$ZONE" --project="$PROJECT_ID"
@@ -144,7 +149,8 @@ Safeguards:
 ### APIs to enable after authorization
 
 Enable only APIs needed here. `iap.googleapis.com` is needed for IAP SSH.
-Cloud DNS and Cloud Logging stay disabled until separately approved. API
+Cloud DNS is not part of the selected DuckDNS setup; Cloud Logging stays off
+unless separately approved. API
 activation changes the project, though these APIs have no direct per-request
 price.
 
@@ -153,7 +159,6 @@ gcloud services enable \
   compute.googleapis.com \
   iam.googleapis.com \
   cloudresourcemanager.googleapis.com \
-  serviceusage.googleapis.com \
   secretmanager.googleapis.com \
   iap.googleapis.com \
   billingbudgets.googleapis.com \
@@ -221,8 +226,9 @@ gcloud compute firewall-rules create sigma-allow-iap-ssh \
 ```
 
 There is no public TCP/22 rule. Do not create ingress for 8000, 5173, 2375,
-or 2376. Public TCP 80/443 is deferred to Phase 3 until domain, DNS, OAuth,
-and secret setup are approved.
+or 2376. Public TCP 80/443 is deferred to Phase 3 until the selected hostname
+resolves to the reserved IP, production OAuth and secrets are ready, and
+operator approvals are recorded.
 
 ### IAM grants for named humans
 
@@ -250,10 +256,10 @@ to make a failed command pass.
 ### State disk, reserved address, and VM
 
 Create the independent state disk first so VM deletion cannot remove it.
-Reserve a regional static external IPv4 now and attach it to the VM; domain
-selection is not needed. Record the address. The assigned address costs the
-in-use rate even before DNS points to it. Do not leave it unassigned; unused
-static IPs cost more. Keep public web ingress closed until Phase 3.
+Reserve a regional static external IPv4 now and attach it to the VM; DNS
+propagation is not a prerequisite. Record the address. The assigned address
+costs the in-use rate even before DNS points to it. Do not leave it unassigned;
+unused static IPs cost more. Keep public web ingress closed until Phase 3.
 
 ```sh
 gcloud compute disks create sigma-state --project="$PROJECT_ID" \
@@ -261,10 +267,19 @@ gcloud compute disks create sigma-state --project="$PROJECT_ID" \
   --labels=app=sigma,environment=production
 gcloud compute addresses create sigma-web-ip --project="$PROJECT_ID" \
   --region="$REGION" --network-tier=PREMIUM \
-  --description='SIGMA production endpoint; domain to be selected'
-gcloud compute addresses describe sigma-web-ip --project="$PROJECT_ID" \
-  --region="$REGION" --format='value(address)'
+  --description='SIGMA production endpoint for sigma-research.duckdns.org'
+export STATIC_IP="$(gcloud compute addresses describe sigma-web-ip \
+  --project="$PROJECT_ID" --region="$REGION" --format='value(address)')"
+printf 'Reserved static IP: %s\n' "$STATIC_IP"
 ```
+
+Once `STATIC_IP` has been returned, the hostname owner must update the DuckDNS
+A record for `sigma-research.duckdns.org` to exactly that IPv4 address using
+DuckDNS's approved account/update path. Never put the DuckDNS token in command
+history, project metadata, `/etc/sigma/deploy.env`, or this repository. Verify
+the A record using a public DNS resolver. Do not create a Cloud DNS zone or
+add an AAAA record unless IPv6 is separately configured and approved. This
+DNS update does not open the VM or authorize application launch.
 
 After recording the returned IP and reviewing the create plan, create the VM
 with the attached non-auto-delete state disk. This enables OS Login, blocks
@@ -314,7 +329,7 @@ operations/transfer. Do not create it under this runbook without approval.
 
 ## Phase 3 — deployment after the VM exists
 
-### Private host setup before a domain
+### Private host setup before public launch
 
 1. Through IAP, verify Ubuntu release, disk identity/size, OS Login, shielded
    state, package-update policy, time sync, and absence of public SSH. Format
@@ -335,33 +350,34 @@ operations/transfer. Do not create it under this runbook without approval.
 
 `deploy/compose.yaml` requires `SIGMA_DOMAIN`, a production OAuth client ID,
 secret files, and the rootless socket, so full Compose startup is deliberately
-after domain selection. VM creation, disk mount, Docker installation, and
-image builds are independent of the domain.
+after all launch gates. VM creation, disk mount, Docker installation, and
+image builds can complete before DNS propagation/OAuth/secret approval.
 
-### Domain, production OAuth, secrets, public ingress, launch
+### Selected hostname, production OAuth, secrets, public ingress, launch
 
 Each action below needs explicit operator approval:
 
-1. Choose an existing approved domain and DNS host. Point its A record to the
-   reserved IP. If Cloud DNS is chosen, approve/enable `dns.googleapis.com`,
-   zone costs, registrar nameserver delegation, and exact record. Do not buy a
-   domain here.
+1. Confirm the DuckDNS A record `sigma-research.duckdns.org` equals the
+   reserved `STATIC_IP`; resolve it from an external resolver. No Cloud DNS
+   API, zone, delegation, or purchase is needed. If DNS does not match, stop.
 2. Create a production Google OAuth Web client, separate from localhost
-   testing, with origin `https://APPROVED_DOMAIN` and exact callback
-   `https://APPROVED_DOMAIN/api/cloud-auth/callback`. Verify consent-screen
-   policy and approved admin/test-user list. Secret owner stores OAuth secret
-   and separately authorized OpenAI key in the approved Secret Manager
-   resources through the secure interface.
-3. Set the approved domain, TLS contact, admin/contact, OAuth client ID,
+   testing, with origin `https://sigma-research.duckdns.org` and exact callback
+   `https://sigma-research.duckdns.org/api/cloud-auth/callback`. Verify
+   consent-screen policy and approved admin/test-user list. Secret owner stores
+   OAuth secret and separately authorized OpenAI key in the approved Secret
+   Manager resources through the secure interface.
+3. Set `SIGMA_DOMAIN=sigma-research.duckdns.org`, TLS contact, admin/contact,
+   OAuth client ID,
    release SHA, state mount, and actual rootless socket/GID in
    `/etc/sigma/deploy.env`. Keep only file paths for secret settings. Set root
    ownership and mode `0600`.
-4. Run `sudo deploy/fetch-secrets.sh "$PROJECT_ID" "$OAUTH_SECRET"
-   "$OPENAI_SECRET"`. Check owner/mode/size without displaying payloads. Do
-   not start until sponsored inference budgets/access were separately
-   approved.
-5. Verify DNS A/AAAA propagation. Then create web ingress, add the web tag,
-   and start Compose. Caddy obtains HTTPS only after DNS and firewall checks.
+4. Run `sudo /opt/sigma/current/deploy/fetch-secrets.sh "$PROJECT_ID"
+   "$OAUTH_SECRET" "$OPENAI_SECRET"`. Check owner/mode/size without
+   displaying payloads. Confirm sponsored inference budgets/access and every
+   required operator approval are recorded.
+5. Once DNS resolves to the reserved IP and OAuth, secrets, and approvals are
+   ready, create web ingress, add the web tag, and start Compose. Caddy obtains
+   HTTPS only after DNS and firewall checks.
 
 ```sh
 gcloud compute firewall-rules create sigma-allow-web \
@@ -388,9 +404,17 @@ before any release update.
 
 ## Cost estimate and trial limitations
 
-Planning estimate carried from `docs/GCP-DEPLOYMENT.md`, USD list prices as
+Planning estimate reconciled with `docs/GCP-DEPLOYMENT.md`, USD list prices
 checked 2026-10-23, 730 hours/month and 2,160 hours/90 days, before tax,
-discounts, changing prices, or OpenAI usage:
+discounts, price changes, and OpenAI use. The selected registered hostname is
+`sigma-research.duckdns.org`; it uses DuckDNS, so no Cloud DNS zone/query
+charges are included.
+
+### Before public launch
+
+Always-on VM, disks, and attached static IP, before public traffic, backups,
+or public Compose launch. One-time image/package download egress during setup
+is not measured or included; monitor actual transfer.
 
 | Item | Assumption | Monthly | 90 days |
 | --- | --- | ---: | ---: |
@@ -398,44 +422,55 @@ discounts, changing prices, or OpenAI usage:
 | 100 GiB standard boot disk | `$0.0000548`/GiB-h | $4.00 | $11.84 |
 | 200 GiB balanced state disk | `$0.00013699`/GiB-h | $20.00 | $59.18 |
 | In-use static external IPv4 | `$0.005`/h | $3.65 | $10.80 |
-| Snapshot storage allowance | 100 GiB at `$0.000068493`/GiB-h | $5.00 | $14.79 |
-| Cloud Storage backup copy | 50 GiB Standard at `$0.02`/GiB-month | $1.00 | $3.00 |
-| North America egress | 10 GiB/mo, first 1 GiB free, then `$0.12`/GiB | $1.08 | $3.24 |
-| Cloud DNS | One zone + 500k queries | $0.40 | $1.20 |
-| Secret Manager / Cloud Logging | Low-volume secret use / logging disabled | $0.00 | $0.00 |
-| **Total including later DNS/backups** | Domain registration excluded | **$132.97** | **$393.54** |
+| **Pre-launch baseline** |  | **$125.49** | **$371.31** |
 
-This scenario consumes the $300 trial credit around day 69 and exceeds it by
-about $93.54 over 90 days. DNS, backups, snapshots, egress, tax, regional
-pricing changes, and domain fees vary. A VM created before domain selection
-but left running costs roughly the same compute, disk, and attached-IP rates;
-DNS is deferred. An unused, unattached static address costs more than the
-in-use address. A stopped VM still incurs disk charges. See the [Pricing
-Calculator](https://cloud.google.com/products/calculator) and current [Compute](https://cloud.google.com/products/compute/pricing/general-purpose),
+The $300 credit covers about 73 days at this baseline; 90 continuously active
+days exceed the credit by about $71.31.
+
+### After public launch
+
+This is the baseline plus separately approved planned backup storage and an
+illustrative small traffic allowance. Snapshots/backups are not prerequisites
+for creating the VM; enable them only after approval.
+
+| Additional item | Assumption | Monthly | 90 days |
+| --- | --- | ---: | ---: |
+| Regional standard snapshots | 100 GiB allowance at `$0.000068493`/GiB-h | $5.00 | $14.79 |
+| Cloud Storage backup copy | 50 GiB Standard at `$0.02`/GiB-month | $1.00 | $3.00 |
+| Internet egress | 10 GiB/mo; first GiB free, then `$0.12`/GiB | $1.08 | $3.24 |
+| DuckDNS | Registered hostname; no GCP managed zone | $0.00 | $0.00 |
+| Secret Manager / Cloud Logging | Low-volume secret use / logging disabled | $0.00 | $0.00 |
+| **After-launch modeled total** | OpenAI API usage excluded | **$132.57** | **$392.34** |
+
+The after-launch model consumes $300 around day 69 and exceeds it by about
+$92.34 over 90 days. Egress, backups, tax, and regional prices vary. An
+unassigned static IPv4 costs more than an attached in-use address; stopping the
+VM removes CPU/RAM charges but not disk charges. See the [Pricing
+Calculator](https://cloud.google.com/products/calculator), current [Compute](https://cloud.google.com/products/compute/pricing/general-purpose),
 [disk/snapshot](https://cloud.google.com/compute/disks-image-pricing),
-[network/IP](https://cloud.google.com/vpc/pricing), [Cloud DNS](https://cloud.google.com/dns/pricing),
-and [Secret Manager](https://cloud.google.com/secret-manager/pricing) rates
-before approval. This is a planning estimate, not a quote.
+[network/IP](https://cloud.google.com/vpc/pricing), [Secret Manager](https://cloud.google.com/secret-manager/pricing),
+and [DuckDNS update API](https://www.duckdns.org/spec.jsp) before approval.
+This estimate is not a quote.
 
 Trial use requires explicit account-owner approval. Trial credit does not
-cover OpenAI API usage or domain purchase. Do not upgrade or add paid billing
-to avoid shutdown without explicit budget authorization. Budget alerts do not
-cap spend. Trial closure stops associated resources, so the state disk is not
-an independent backup; retain an approved backup and decide on recovery,
-shutdown, or paid continuation before the trial ends.
+cover OpenAI API usage. Do not upgrade to paid billing to avoid shutdown
+without explicit budget authorization. Budget alerts do not cap spend. Trial
+closure stops associated resources, so the state disk is not an independent
+backup; decide on recovery, shutdown, or paid continuation before trial end.
 
 ## Post-provision validation checklist
 
 - [ ] VM is in approved project/zone with the approved machine, Ubuntu amd64,
   shielded settings, deletion protection, and resource labels.
-- [ ] Static IPv4 is attached and recorded; no DNS change occurred before
-  domain approval.
+- [ ] Static IPv4 is attached and recorded; DuckDNS A record for
+  `sigma-research.duckdns.org` resolves to it.
 - [ ] State disk is the approved 200 GiB balanced volume, attached with
   auto-delete disabled, mounted at `/srv/sigma-state`, and survives VM restart.
 - [ ] IAP SSH works only for named maintainers; no public `:22`; OS Login is
   enabled; runtime service account has no key and only two secret-level grants.
-- [ ] Before domain approval only IAP TCP/22 is allowed; public 80/443 remain
-  closed. No app or Docker ports are public.
+- [ ] Until DNS, production OAuth, secrets, and all required approvals are
+  ready, only IAP TCP/22 is allowed; public 80/443 remain closed. No app or
+  Docker ports are public.
 - [ ] Budget and recipients are verified in Billing; operator understands it
   is an alert rather than a hard limit.
 - [ ] Docker/Compose, mount-before-start ordering, and rootless sandbox daemon
@@ -444,8 +479,8 @@ shutdown, or paid continuation before the trial ends.
 - [ ] Locked backend/frontend/Python/Sage images build locally. Bounded offline
   runner returns expected output under configured limits. Record build time,
   peak RAM, disk headroom, and image sizes.
-- [ ] Before public launch: OAuth origin/callback match domain; secret files
-  have correct ownership/mode without displaying values; Caddy has HTTPS;
+- [ ] Before public launch: OAuth origin/callback match the selected hostname;
+  secret files have correct ownership/mode without displaying values; Caddy has HTTPS;
   `/api/cloud-auth/status` reports `target=hosted`; workspace isolation,
   admin revocation, exhausted spend limits, provider failure, and uncertain
   charge behavior are checked using deterministic fake/local provider flows.

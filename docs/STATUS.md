@@ -4831,3 +4831,40 @@ assertions verified the staged phase headings, API/IAM/VM/disk/address/firewall
 commands, no-domain path, budget alert, trial caveat, and required validation
 checklist. `./sigma test` passed. No `gcloud` command, cloud resource,
 credential, or provider endpoint was used.
+
+### T44 selected-hostname and launch-gate follow-up
+
+Updated the existing T44 branch after the operator selected and registered
+`sigma-research.duckdns.org`. The runbook and deployment guide now require the
+DuckDNS A record to match the reserved static IPv4, specify the production
+OAuth origin/callback for that host, and defer public 80/443 ingress and
+Compose startup until DNS, OAuth, secrets, and operator approvals are ready.
+The Compose launch commands include `deploy/compose.gce.yaml`, which bind-mounts
+the attached state disk at `SIGMA_STATE_DISK_MOUNT`; the documented secret
+fetch path and runtime socket/env settings match the checked-in scripts and
+configuration. Costs now separate the pre-public baseline ($125.49/month;
+$371.31/90 days) from post-launch estimates ($132.57/month; $392.34/90 days),
+with no Cloud DNS charges. Image/package download egress before launch remains
+unmeasured and excluded. No application, launcher, or UI code changed.
+
+**MET:** selected hostname and DuckDNS-to-static-IP steps; no Cloud DNS zone;
+launch gates before public ingress/Compose; project/API/IAM/network/address/VM
+command review against official `gcloud` reference pages and the actual
+`deploy/compose.yaml`, `deploy/compose.gce.yaml`, `deploy/env.example`, and
+`deploy/fetch-secrets.sh`; updated staged estimates and approvals; local
+deployment/package validation and full project suite.
+
+**UNMET:** none for this documentation-only follow-up.
+
+**UNVERIFIED:** Google account/project/billing/trial state, actual reserved IP
+and DuckDNS record propagation, API quota/capacity, IAM changes, production
+OAuth, secrets, HTTPS certificate issuance, and actual GCP prices/charges remain
+operator checks. `gcloud` commands were reviewed as text and deliberately not
+executed. No cloud provisioning, billing/trial activation, purchases, or paid
+provider calls occurred.
+
+**Checks performed:** current `main` was fetched and matched this branch's
+base `042485464e2396b8b8497aed8883dbb71f03bbd8`; no rebase conflict. All shell
+fences in the edited runbook passed `bash -n`; deployment package and local
+Compose smoke checks passed; `./sigma test` passed. Coordinator handoff:
+`messages/t44_red_duckdns_update.txt`.
