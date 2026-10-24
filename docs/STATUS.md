@@ -5431,7 +5431,7 @@ produces evidence or reaches a bounded terminal state, the overall session is
 `hold_after_failure`; successful sibling artifacts remain available. The
 updated real-Chrome assertion verifies this mixed result.
 
-Added `docs/OUTCOME-QUALITY.md` to document the contract and pipeline diagnosis.
+Added `docs/OUTCOME_QUALITY.md` to document the contract and pipeline diagnosis.
 The Maximum Regions deterministic case covers conditional domain assumptions, the insertion upper
 bound, why pieces split distinct regions, a general-position attaining family,
 recurrence/base case, and closed form. It verifies persistence/reload, report
