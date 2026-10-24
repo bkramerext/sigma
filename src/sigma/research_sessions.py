@@ -407,7 +407,12 @@ def get_limits(path: str) -> dict[str, Any]:
     directory = _directory(path)
     target = directory / "limits.json"
     if not target.exists() and not target.is_symlink():
-        return dict(DEFAULT_LIMITS)
+        limits = dict(DEFAULT_LIMITS)
+        return (
+            cloud_research.evaluation_session_limits(limits)
+            if cloud_workspaces.enabled()
+            else limits
+        )
     if target.is_symlink() or not target.is_file() or target.stat().st_size > 4096:
         raise ProjectError("Research limits file is unsafe or too large")
     try:
@@ -417,15 +422,18 @@ def get_limits(path: str) -> dict[str, Any]:
     if not isinstance(raw, dict) or set(raw) != set(DEFAULT_LIMITS):
         raise ProjectError("Research limits are invalid")
     try:
-        return _validate_limits(raw)
+        limits = _validate_limits(raw)
     except ProjectError as current_error:
         try:
-            return _validate_previous_limits(raw)
+            limits = _validate_previous_limits(raw)
         except ProjectError:
             try:
-                return _validate_legacy_limits(raw)
+                limits = _validate_legacy_limits(raw)
             except ProjectError:
                 raise current_error
+    return (
+        cloud_research.evaluation_session_limits(limits) if cloud_workspaces.enabled() else limits
+    )
 
 
 def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -1657,6 +1665,8 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     limits = _validate_limits(raw)
+    if cloud_workspaces.enabled():
+        limits = cloud_research.evaluation_session_limits(limits)
     directory = _directory(path)
     target = directory / "limits.json"
     with _project_manager_lock(path):

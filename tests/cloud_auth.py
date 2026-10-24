@@ -106,6 +106,8 @@ class CloudAuthTests(TestCase):
                 "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.org",
                 "SIGMA_CLOUD_AUTH_HOME": str(self.root),
                 "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "access@example.org",
+                "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+                "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
                 "SIGMA_CLOUD_DEMO_AUDIT": str(
                     Path(__file__).resolve().parents[1] / "cloud-demo/handshake-demo-audit.json"
                 ),
@@ -377,6 +379,62 @@ class CloudAuthTests(TestCase):
         )
         self.assertEqual(removed.status_code, 200)
         self.assertIsNone(cloud_auth.resolve_session(member_cookie))
+        accounts = admin_client.get("/api/cloud-auth/admin/grants").json()["sessions"]
+        revoked = next(item for item in accounts if item["email"] == "member@example.org")
+        self.assertEqual(revoked["status"], "revoked")
+        self.assertFalse(revoked["authorized"])
+        self.assertIn("held_usd", revoked["spending"])
+
+    def test_spending_allowance_admin_policy_and_email_precedence(self):
+        admin_context = TestClient(app)
+        admin = admin_context.__enter__()
+        self.addCleanup(admin_context.__exit__, None, None, None)
+        admin_result = self.finish(client=admin)
+        admin.cookies.set(
+            cloud_auth.SESSION_COOKIE, admin_result.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        domain = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "domain", "value": "example.org", "allowance_usd": 5.0},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(domain.status_code, 200, domain.text)
+        user_context = TestClient(app)
+        user = user_context.__enter__()
+        self.addCleanup(user_context.__exit__, None, None, None)
+        signed = self.finish("member@example.org", "member-sub", client=user)
+        self.assertEqual(signed.status_code, 303)
+        self.assertEqual(cloud_auth.effective_spending_allowance("member@example.org", 2), 5.0)
+        # Domain policy is resolved for each verified email; a specific entry
+        # overrides it, including when that individual allowance is larger.
+        personal = admin.post(
+            "/api/cloud-auth/admin/grants",
+            json={"kind": "email", "value": "member@example.org", "allowance_usd": 8.0},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(personal.status_code, 200, personal.text)
+        self.assertEqual(cloud_auth.effective_spending_allowance("member@example.org", 2), 8.0)
+        self.assertEqual(cloud_auth.effective_spending_allowance("other@example.org", 2), 5.0)
+        lowered = admin.put(
+            "/api/cloud-auth/admin/grants/email/member%40example.org/allowance",
+            json={"allowance_usd": 0.5},
+            headers={"Origin": ORIGIN},
+        )
+        self.assertEqual(lowered.status_code, 200, lowered.text)
+        self.assertEqual(cloud_auth.effective_spending_allowance("member@example.org", 2), 0.5)
+        overview = admin.get("/api/cloud-auth/admin/grants")
+        self.assertEqual(overview.status_code, 200, overview.text)
+        records = overview.json()
+        member = next(item for item in records["sessions"] if item["email"] == "member@example.org")
+        self.assertEqual(member["allowance_usd"], 0.5)
+        self.assertIn("estimated_usage_usd", member["spending"])
+        self.assertIn("held_usd", member["spending"])
+        self.assertIn("remaining_usd", member["spending"])
+        email_grant = next(
+            item for item in records["grants"] if item["value"] == "member@example.org"
+        )
+        self.assertEqual(email_grant["effective_allowance_usd"], 0.5)
+        self.assertEqual(email_grant["allowance_usd"], 0.5)
 
     def test_session_expiration_is_enforced(self):
         signed_in = self.finish()

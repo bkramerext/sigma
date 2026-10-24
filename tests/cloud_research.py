@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -62,15 +64,17 @@ def job(workspace: str, *, session: str | None = None, key: str | None = None) -
         "project_id": "project-" + workspace,
         "idempotency_key": key or str(uuid4()),
         "mode": "api_key",
-        "maximum_estimated_cost_usd": 2.0,
+        "maximum_estimated_cost_usd": 0.25,
+        "call_limit": 6,
+        "duration_limit_minutes": 15,
         "cost_status": "available",
     }
 
 
-def workspace(root: Path, identifier: str) -> cloud_workspaces.Workspace:
+def workspace(root: Path, identifier: str, email: str | None = None) -> cloud_workspaces.Workspace:
     path = root / identifier
     path.mkdir(mode=0o700, exist_ok=True)
-    return cloud_workspaces.Workspace(identifier, identifier, path)
+    return cloud_workspaces.Workspace(identifier, identifier, path, email)
 
 
 def global_reserved_spend() -> float:
@@ -96,9 +100,9 @@ def test_orphaned_job_reconciliation(
             os.environ,
             {
                 **limits_env,
-                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "4",
-                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "8",
-                "SIGMA_CLOUD_USER_MAX_QUEUED": "3",
+                "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+                "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+                "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
                 "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "8",
                 "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000000",
             },
@@ -119,7 +123,7 @@ def test_orphaned_job_reconciliation(
                 "model_calls": 2,
                 "session_duration_minutes": 5,
                 "output_tokens_per_call": 256,
-                "maximum_estimated_cost_usd": 1.0,
+                "maximum_estimated_cost_usd": 0.25,
             }
             research_sessions.save_limits(project.path, session_limits)
             credential = {
@@ -272,7 +276,15 @@ def test_orphaned_job_reconciliation(
             research_sessions._save(project.path, running)
             ambiguous = derived_job("running")
             cloud_research.prepare_job(ambiguous)
+            # Seed a historical concurrent-running state while exercising recovery;
+            # admission itself correctly permits only one live session per owner.
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='paused' WHERE session_id=?", (running["id"],))
+            db.close()
             assert cloud_research.claim_job(ambiguous["id"])
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='running' WHERE session_id=?", (running["id"],))
+            db.close()
             call_id = str(uuid4())
             cloud_research.reserve_call(ambiguous["id"], call_id, 0.25, 100)
             cloud_research.mark_call_unknown(ambiguous["id"], call_id)
@@ -321,7 +333,10 @@ def test_orphaned_job_reconciliation(
             db.close()
 
             # With the orphan gone, another job can consume the recovered queue
-            # slot while the existing valid queued and unknown-call rows remain.
+            # slot once one of the independently verified queued rows is removed.
+            db = cloud_research._connect()
+            db.execute("DELETE FROM jobs WHERE session_id=?", (valid["id"],))
+            db.close()
             next_job = derived_job("queued")
             cloud_research.prepare_job(next_job)
         finally:
@@ -363,6 +378,227 @@ def test_orphaned_job_reconciliation(
             cloud_workspaces._CURRENT.reset(binding)
 
 
+def test_workspace_spend_budget(root: Path, ledger_root: Path) -> None:
+    """Spend is atomic across projects and remains attributed after reopening SQLite."""
+    owner = workspace(root, "e" * 32)
+    other = workspace(root, "f" * 32)
+    first_project = initialize_project(owner.path / "budget-one.sigma", "Budget one", "Question")
+    second_project = initialize_project(owner.path / "budget-two.sigma", "Budget two", "Question")
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
+        "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
+        "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
+        "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
+        "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "16",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            first = job(owner.workspace_id)
+            first.update(project_id=first_project.project.id, project_path=first_project.path)
+            cloud_research.prepare_job(first)
+            assert cloud_research.claim_job(first["id"])
+            cloud_research.reserve_call(first["id"], "known-usage", 0.15, 10)
+            cloud_research.settle_call(
+                first["id"],
+                "known-usage",
+                input_tokens=5,
+                output_tokens=5,
+                estimated_cost_usd=0.15,
+            )
+            db = cloud_research._connect()
+            db.execute("UPDATE jobs SET status='terminal' WHERE session_id=?", (first["id"],))
+            db.close()
+
+            second = job(owner.workspace_id)
+            second.update(project_id=second_project.project.id, project_path=second_project.path)
+            cloud_research.prepare_job(second)
+            assert cloud_research.claim_job(second["id"])
+            barrier = threading.Barrier(2)
+
+            def spend(attempt: str) -> bool:
+                context = cloud_workspaces._CURRENT.set(owner)
+                try:
+                    barrier.wait(timeout=5)
+                    cloud_research.reserve_call(second["id"], attempt, 0.10, 10)
+                    return True
+                except cloud_research.CloudResearchUnavailable:
+                    return False
+                finally:
+                    cloud_workspaces._CURRENT.reset(context)
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                accepted = list(pool.map(spend, ("race-a", "race-b")))
+            assert sorted(accepted) == [False, True], accepted
+            accepted_call = "race-a" if accepted[0] else "race-b"
+            cloud_research.mark_call_unknown(second["id"], accepted_call)
+            summary = cloud_research.snapshot()
+            assert summary["allowance_usd"] == 0.25
+            assert summary["estimated_usage_usd"] == 0.15
+            assert summary["held_usd"] == 0.10
+            assert summary["remaining_usd"] == 0
+            assert summary["unknown_provider_attempts"] == 1
+            # A new Python process sees the same persisted accounting and unknown charge.
+            script = (
+                "import json; from pathlib import Path; from sigma import cloud_research, cloud_workspaces; "
+                f"w=cloud_workspaces.Workspace('{owner.workspace_id}', 'subject', Path('{owner.path}')); "
+                "t=cloud_workspaces._CURRENT.set(w); print(json.dumps(cloud_research.snapshot(), sort_keys=True)); "
+                "cloud_workspaces._CURRENT.reset(t)"
+            )
+            child_env = {
+                **os.environ,
+                **env,
+                "SIGMA_CLOUD_WORKSPACES_ROOT": str(ledger_root),
+            }
+            restarted = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=Path(__file__).resolve().parents[1],
+                env=child_env,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            assert json.loads(restarted.stdout) == summary
+            try:
+                cloud_research.reserve_call(second["id"], "past-budget", 0.01, 1)
+                raise AssertionError("exhausted user allowance admitted another call")
+            except cloud_research.CloudResearchUnavailable as exc:
+                assert "saved research remains available" in str(exc)
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+        # Workspace B has an independent allowance and cannot forge A's job ID.
+        binding = cloud_workspaces._CURRENT.set(other)
+        try:
+            assert cloud_research.snapshot()["reserved_and_estimated_usd"] == 0
+            try:
+                cloud_research.reserve_call(second["id"], "forged-owner", 0.01, 1)
+                raise AssertionError("cross-workspace spending reservation succeeded")
+            except cloud_research.CloudResearchUnavailable:
+                pass
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+    # Missing, malformed, and over-policy allowances fail closed before queueing.
+    with patch.object(cloud_workspaces, "storage_root", return_value=ledger_root):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            for invalid in (None, "nan", "-1", "15.01", "garbage"):
+                overrides = (
+                    {} if invalid is None else {"SIGMA_CLOUD_USER_SPEND_CEILING_USD": invalid}
+                )
+                with patch.dict(os.environ, overrides, clear=False):
+                    if invalid is None:
+                        os.environ.pop("SIGMA_CLOUD_USER_SPEND_CEILING_USD", None)
+                    candidate = job(owner.workspace_id)
+                    try:
+                        cloud_research.prepare_job(candidate)
+                        raise AssertionError(
+                            f"invalid user spending configuration accepted: {invalid}"
+                        )
+                    except cloud_research.CloudResearchUnavailable:
+                        pass
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+    with patch.object(cloud_workspaces, "storage_root", return_value=ledger_root):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            for invalid in (None, "0", "15.01", "inf", "not-money"):
+                overrides = (
+                    {} if invalid is None else {"SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": invalid}
+                )
+                with patch.dict(os.environ, overrides, clear=False):
+                    if invalid is None:
+                        os.environ.pop("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", None)
+                    candidate = job(owner.workspace_id)
+                    try:
+                        cloud_research.prepare_job(candidate)
+                        raise AssertionError(
+                            f"invalid global spending configuration accepted: {invalid}"
+                        )
+                    except cloud_research.CloudResearchUnavailable:
+                        pass
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
+    root: Path, ledger_root: Path
+) -> None:
+    owner = workspace(root, "9" * 32, "researcher@example.org")
+    env = {
+        "SIGMA_CLOUD_AUTH_ENABLED": "true",
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "15.00",
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
+        "SIGMA_CLOUD_USER_TOKEN_BUDGET": "10000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch.object(cloud_workspaces, "storage_root", return_value=ledger_root),
+        patch("sigma.cloud_auth.effective_spending_allowance", return_value=5.0),
+    ):
+        binding = cloud_workspaces._CURRENT.set(owner)
+        try:
+            candidate = job(owner.workspace_id)
+            cloud_research.prepare_job(candidate)
+            assert cloud_research.claim_job(candidate["id"])
+            cloud_research.reserve_call(candidate["id"], "above-default", 0.30, 10)
+            cloud_research.mark_call_unknown(candidate["id"], "above-default")
+            assert cloud_research.snapshot()["allowance_usd"] == 5.0
+            with patch("sigma.cloud_auth.effective_spending_allowance", return_value=0.20):
+                summary = cloud_research.snapshot()
+                assert summary["allowance_usd"] == 0.20
+                assert summary["remaining_usd"] == 0
+                try:
+                    cloud_research.reserve_call(candidate["id"], "after-reduction", 0.01, 1)
+                    raise AssertionError("lowered allowance admitted another reservation")
+                except cloud_research.CloudResearchUnavailable as exc:
+                    assert "allowance" in str(exc)
+            db = cloud_research._connect()
+            try:
+                row = db.execute(
+                    "SELECT amount_usd,status FROM calls WHERE call_id='above-default'"
+                ).fetchone()
+                assert row["amount_usd"] == 0.30
+                assert row["status"] == "unknown"
+            finally:
+                db.close()
+        finally:
+            cloud_workspaces._CURRENT.reset(binding)
+
+
+def test_local_limits_remain_unmodified(root: Path) -> None:
+    legacy = cloud_research.evaluation_session_limits(
+        {
+            "research_rounds": 1,
+            "model_calls": 1,
+            "session_duration_minutes": 30,
+            "maximum_estimated_cost_usd": None,
+        }
+    )
+    assert legacy["model_calls"] == 2 and legacy["research_rounds"] == 1
+    project = initialize_project(root / "local-unlimited.sigma", "Local", "Question")
+    limits = {
+        "research_rounds": 5,
+        "model_calls": 30,
+        "session_duration_minutes": 60,
+        "output_tokens_per_call": 16384,
+        "maximum_estimated_cost_usd": None,
+    }
+    with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}, clear=False):
+        saved = research_sessions.save_limits(project.path, limits)
+        assert saved == limits
+        assert research_sessions.get_limits(project.path) == limits
+
+
 def main() -> None:
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
         root = Path(temp)
@@ -373,6 +609,7 @@ def main() -> None:
         settings = {
             "SIGMA_CLOUD_AUTH_ENABLED": "true",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
+            "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "2.00",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
             "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "1",
             "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
@@ -489,7 +726,7 @@ def main() -> None:
                     "model_calls": 2,
                     "session_duration_minutes": 5,
                     "output_tokens_per_call": 256,
-                    "maximum_estimated_cost_usd": 1.0,
+                    "maximum_estimated_cost_usd": 0.25,
                 }
                 research_sessions.save_limits(live_view.path, session_limits)
                 credential = {
@@ -847,8 +1084,18 @@ def main() -> None:
         recovery_ledger.mkdir(mode=0o700)
         test_orphaned_job_reconciliation(root, recovery_ledger, settings)
 
+        budget_ledger = root / "user-budget-ledger"
+        budget_ledger.mkdir(mode=0o700)
+        test_workspace_spend_budget(root, budget_ledger)
+        allowance_ledger = root / "allowance-ledger"
+        allowance_ledger.mkdir(mode=0o700)
+        test_rule_allowance_controls_reservation_and_reduction_keeps_unknown_hold(
+            root, allowance_ledger
+        )
+        test_local_limits_remain_unmodified(root)
+
     print(
-        "PASS cloud research admission, atomic limits, ambiguous accounting, owner isolation, and conservative orphan recovery"
+        "PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation"
     )
 
 

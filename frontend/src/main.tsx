@@ -1535,6 +1535,7 @@ function ResearchTypePicker({ value, onChange, fieldLabel = 'Research type' }: {
 function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: ProjectView; onSaved: (view: ProjectView) => void; onCancel: () => void }) {
   useDocumentScrollLock();
   const ai = useAI();
+  const cloud = useCloudIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
@@ -1635,6 +1636,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
       <p>These limits apply to future sessions. Existing sessions keep the limits captured when they started.</p>
+      {cloud?.enabled && <p className="settings-hint">Cloud research is capped at six calls, 15 minutes, and $0.25 estimated cost per session. Values above these limits are saved at the cloud cap.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
         <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2} max={30} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
@@ -1781,10 +1783,36 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
+type CloudResearchBudget = {
+  allowance_usd: number;
+  estimated_usage_usd: number;
+  held_usd: number;
+  reserved_and_estimated_usd: number;
+  remaining_usd: number;
+  unknown_provider_attempts: number;
+};
+
+function CloudResearchBudgetCard({ budget, error }: {
+  budget: CloudResearchBudget | null; error: string | null;
+}) {
+  const usd = (value: number) => new Intl.NumberFormat(undefined, {
+    style: 'currency', currency: 'USD', maximumFractionDigits: 9,
+  }).format(value);
+  return <section className="cloud-research-budget" aria-label="Cloud research budget" aria-live="polite">
+    <div><strong>Cloud research allowance</strong><span>{budget ? `${usd(budget.remaining_usd)} remaining of ${usd(budget.allowance_usd)}` : 'Loading allowance…'}</span></div>
+    {budget && <p>Estimated usage {usd(budget.estimated_usage_usd)} · held {usd(budget.held_usd)}{budget.unknown_provider_attempts ? ` · ${budget.unknown_provider_attempts} provider attempt${budget.unknown_provider_attempts === 1 ? '' : 's'} with unknown charges` : ''}</p>}
+    {error && <p role="status">{error} Saved projects and research remain available.</p>}
+    {budget && budget.remaining_usd <= 0 && <p role="status">The cloud inference allowance is exhausted. Saved projects and research remain available.</p>}
+    <small>Cloud sessions: up to 6 model calls, 15 minutes, and $0.25 estimated cost each.</small>
+  </section>;
+}
+
 function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
+  const [cloudBudget, setCloudBudget] = useState<CloudResearchBudget | null>(null);
+  const [cloudBudgetError, setCloudBudgetError] = useState<string | null>(null);
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -1797,6 +1825,24 @@ function Home({ initialPath, onOpen }: {
   const [creditStreaks, setCreditStreaks] = useState<number[]>([]);
   const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
+  useEffect(() => {
+    if (!cloud?.enabled || !cloud.authenticated) return;
+    let active = true;
+    const refresh = () => {
+      fetch('/api/cloud-research/budget', { credentials: 'same-origin', cache: 'no-store' })
+        .then(async response => {
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.detail || 'Cloud research budget is unavailable.');
+          return body as CloudResearchBudget;
+        })
+        .then(value => { if (active) { setCloudBudget(value); setCloudBudgetError(null); } })
+        .catch(error => { if (active) setCloudBudgetError(error instanceof Error ? error.message : 'Cloud research budget is unavailable.'); });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, [cloud?.enabled, cloud?.authenticated]);
   useEffect(() => {
     // CSS background-size: cover scales the source image by the larger of
     // viewport-width/image-width and viewport-height/image-height. Apply
@@ -1849,6 +1895,7 @@ function Home({ initialPath, onOpen }: {
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="cloud-home-prompt"><p>Private research workspace</p><h1>Sign in to access projects</h1><span>Your projects and research are available after an administrator authorizes your Google account.</span></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
+        {cloud?.enabled && cloud.authenticated && <CloudResearchBudgetCard budget={cloudBudget} error={cloudBudgetError}/>}
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
           <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
@@ -2537,8 +2584,8 @@ function App() {
 }
 
 type CloudStatus = { enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
-type CloudGrant = { kind: string; value: string; role: string; active: number };
-type CloudAccountSession = { email: string; role: string; expires_at: number };
+type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
+type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudIdentityState = CloudStatus & { deniedEmail: string | null; openAccessManagement: () => void };
 const CloudIdentityContext = createContext<CloudIdentityState | null>(null);
 function useCloudIdentity() { return useContext(CloudIdentityContext); }
@@ -2598,6 +2645,7 @@ function CloudAuthGate() {
   const [kind, setKind] = useState<'email' | 'domain'>('email');
   const [value, setValue] = useState('');
   const [role, setRole] = useState<'member' | 'admin'>('member');
+  const [allowance, setAllowance] = useState('');
   const [busy, setBusy] = useState(false);
   const [deniedEmail, setDeniedEmail] = useState<string | null>(null);
   const refresh = useCallback(async () => {
@@ -2623,10 +2671,19 @@ function CloudAuthGate() {
   async function addGrant(event: FormEvent) {
     event.preventDefault(); setBusy(true); setFailure('');
     try {
-      const response = await fetch('/api/cloud-auth/admin/grants', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, value, role: kind === 'domain' ? 'member' : role }) });
+      const response = await fetch('/api/cloud-auth/admin/grants', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, value, role: kind === 'domain' ? 'member' : role, allowance_usd: allowance.trim() ? Number(allowance) : null }) });
       if (!response.ok) throw new Error((await response.json() as { error?: string }).error || 'Access rule could not be saved.');
-      setValue(''); await loadGrants();
+      setValue(''); setAllowance(''); await loadGrants();
     } catch (error) { setFailure(error instanceof Error ? error.message : 'Access rule could not be saved.'); }
+    finally { setBusy(false); }
+  }
+  async function saveAllowance(grant: CloudGrant, input: HTMLInputElement) {
+    setBusy(true); setFailure('');
+    try {
+      const response = await fetch(`/api/cloud-auth/admin/grants/${grant.kind}/${encodeURIComponent(grant.value)}/allowance`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allowance_usd: input.value.trim() ? Number(input.value) : null }) });
+      if (!response.ok) throw new Error('Spending allowance could not be saved.');
+      await loadGrants();
+    } catch (error) { setFailure(error instanceof Error ? error.message : 'Spending allowance could not be saved.'); }
     finally { setBusy(false); }
   }
   async function revoke(grant: CloudGrant) {
@@ -2643,7 +2700,7 @@ function CloudAuthGate() {
   if (!status.enabled) return <AIProvider><App/></AIProvider>;
   if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
-  return <CloudIdentityContext.Provider value={context}><>{status.authenticated ? <AIProvider><App/></AIProvider> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}{accessOpen && <div className="cloud-access-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAccessOpen(false); }}><section className="cloud-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-access-title"><button className="cloud-access-close" onClick={() => setAccessOpen(false)} aria-label="Close access management">×</button><p className="cloud-auth-kicker">Administrator</p><h2 id="cloud-access-title">Access Management</h2><p>Invitations are authorization entries. SIGMA does not send email.</p><form onSubmit={addGrant}><label>Entry type<select value={kind} onChange={event => setKind(event.target.value as 'email' | 'domain')}><option value="email">Email address</option><option value="domain">Exact verified email domain</option></select></label><label>{kind === 'email' ? 'Email address' : 'Domain'}<input required value={value} onChange={event => setValue(event.target.value)} placeholder={kind === 'email' ? 'person@example.org' : 'example.org'}/></label>{kind === 'email' && <label>Access<select value={role} onChange={event => setRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Administrator</option></select></label>}<button disabled={busy}>Add authorization</button></form><h3>Accounts and sessions</h3><p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>{accountSessions.length ? <ul aria-label="Authorized account sessions">{accountSessions.map(session => <li key={session.email}><span><strong>{session.email}</strong><small>{session.role} · session expires {new Date(session.expires_at * 1000).toLocaleString()}</small></span></li>)}</ul> : <p className="cloud-access-bootstrap">No active authorized sessions.</p>}<h3>Authorized entries</h3><ul>{grants.map(grant => <li key={`${grant.kind}:${grant.value}`}><span><strong>{grant.value}</strong><small>{grant.kind} · {grant.role}{grant.active ? '' : ' · revoked'}</small></span>{grant.active === 1 && <button disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}</li>)}</ul>{failure && <p role="alert">{failure}</p>}</section></div>}</></CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}><>{status.authenticated ? <AIProvider><App/></AIProvider> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}{accessOpen && <div className="cloud-access-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAccessOpen(false); }}><section className="cloud-access-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-access-title"><button className="cloud-access-close" onClick={() => setAccessOpen(false)} aria-label="Close access management">×</button><p className="cloud-auth-kicker">Administrator</p><h2 id="cloud-access-title">Access Management</h2><p>Invitations are authorization entries. SIGMA does not send email.</p><form onSubmit={addGrant}><label>Entry type<select value={kind} onChange={event => setKind(event.target.value as 'email' | 'domain')}><option value="email">Email address</option><option value="domain">Exact verified email domain</option></select></label><label>{kind === 'email' ? 'Email address' : 'Domain'}<input required value={value} onChange={event => setValue(event.target.value)} placeholder={kind === 'email' ? 'person@example.org' : 'example.org'}/></label>{kind === 'email' && <label>Access<select value={role} onChange={event => setRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Administrator</option></select></label>}<label>USD inference allowance <small>Leave blank to use the configured default. Domain allowances apply separately to each person.</small><input type="number" min="0.01" max="15" step="0.01" value={allowance} onChange={event => setAllowance(event.target.value)} placeholder="Configured default"/></label><button disabled={busy}>Add authorization</button></form><h3>Accounts and spending</h3><p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>{accountSessions.length ? <ul aria-label="Authorized account sessions">{accountSessions.map(session => <li key={session.email}><span><strong>{session.email}</strong><small>{session.status} · {session.role} · allowance {session.allowance_usd === null ? '—' : `$${session.allowance_usd.toFixed(2)}`} · estimated ${session.spending?.estimated_usage_usd.toFixed(2) ?? '—'} · held ${session.spending?.held_usd.toFixed(2) ?? '—'} · remaining {session.spending?.remaining_usd === null || session.spending?.remaining_usd === undefined ? '—' : `$${session.spending.remaining_usd.toFixed(2)}`}</small><small>{session.expires_at ? `Session expires ${new Date(session.expires_at * 1000).toLocaleString()}` : 'No active session'}</small></span></li>)}</ul> : <p className="cloud-access-bootstrap">No active authorized sessions.</p>}<h3>Authorized entries</h3><p>Effective allowances are per person; a specific email rule overrides its domain rule. Existing spend and unknown charges remain recorded after edits or revocation.</p><ul>{grants.map(grant => <li key={`${grant.kind}:${grant.value}:${grant.allowance_usd ?? 'default'}`}><span><strong>{grant.value}</strong><small>{grant.kind} · {grant.role}{grant.active ? '' : ' · revoked'} · effective allowance {grant.effective_allowance_usd === null ? '—' : `$${grant.effective_allowance_usd.toFixed(2)}`}</small><input aria-label={`Allowance for ${grant.value}`} type="number" min="0.01" max="15" step="0.01" defaultValue={grant.allowance_usd ?? ''} placeholder="Configured default"/><button disabled={busy} onClick={event => { const input = event.currentTarget.parentElement?.querySelector('input'); if (input) void saveAllowance(grant, input); }}>Save allowance</button></span>{grant.active === 1 && <button disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}</li>)}</ul>{failure && <p role="alert">{failure}</p>}</section></div>}</></CloudIdentityContext.Provider>;
 }
 
 function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {

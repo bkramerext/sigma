@@ -106,34 +106,59 @@ authentication and filesystem-backed workspace implementation.
 ## Gate B research execution configuration
 
 Cloud research inference is enabled only when an operator explicitly supplies
-`SIGMA_CLOUD_OPENAI_API_KEY` and `SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Cloud
+`SIGMA_CLOUD_OPENAI_API_KEY`, `SIGMA_CLOUD_USER_SPEND_CEILING_USD`, and
+`SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD`. Initial pilot values are `$2.00` per
+verified Google subject and `$15.00` globally. The five initial invited
+accounts (including the administrator) start with `$2.00` each, leaving `$5.00`
+under the global ceiling for operator-directed testing and unresolved charges.
+The default allowance is configurable from `$0.01` through `$15.00`; an
+administrator can set a per-entry USD allowance in Access Management up to the
+global ceiling. An exact email rule overrides its matching domain rule. Domain
+allowances apply independently to each verified user's subject-backed
+workspace, never as a shared pool. The user's allowance is cumulative, does not
+reset automatically, and follows the stable verified subject across changed
+email addresses, sign-out, revocation, and new projects. The administrator has
+no spending exception. Lowering an allowance below recorded spend preserves
+all estimated and unknown charges and blocks further inference until the
+effective allowance again exceeds recorded spend. Cloud
 mode never falls back to a checkout's `OPENAI_API_KEY` or a locally connected
 ChatGPT plan. The service credential stays in the backend environment; the
 cloud UI cannot read, replace, or select it. Keep the deployment's secret
 store and backups access-controlled, and rotate the key through the operator's
 secret-management process.
 
-The global ceiling is in estimated USD and applies atomically across all
-workspaces. A call must reserve a conservative maximum cost before dispatch.
+Each call atomically reserves a conservative maximum cost against the
+authenticated user's remaining allowance and the global ceiling before
+dispatch.
 Confirmed provider token counts are priced using SIGMA's reviewed model price
 table; the reported cost remains an estimate. If a call times out, is canceled,
 or its response is lost before its usage is saved, the full reservation remains
 held and the attempt is recorded as unknown. Such a call is never automatically
-retried. Cloud research also requires a per-session cost limit in Research
-Limits, a priced model, and explicit token usage bounds.
+retried. Cloud sessions are capped at `$0.25` estimated cost, six model calls,
+and 15 minutes regardless of larger saved project limits. A priced model and
+explicit token usage bounds are required. The Home budget summary reports the
+owner's allowance, estimated usage, held reservations (including unknown
+charges), and remaining allowance. Exhaustion blocks new inference while
+saved projects and research remain readable.
 
 The service ledger also enforces these environment-configurable limits:
 
 | Variable | Default | Meaning |
 |---|---:|---|
 | `SIGMA_CLOUD_USER_MAX_CONCURRENT` | `1` | Running sessions per workspace |
-| `SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT` | `4` | Running sessions across the service |
+| `SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT` | `2` | Running sessions across the service |
 | `SIGMA_CLOUD_USER_MAX_QUEUED` | `2` | Queued sessions per workspace |
 | `SIGMA_CLOUD_GLOBAL_MAX_QUEUED` | `16` | Queued sessions across the service |
 | `SIGMA_CLOUD_USER_TOKEN_BUDGET` | `2000000` | Reserved or observed model tokens per workspace |
 
-Malformed or missing global spend configuration disables cloud research. Queue
-slots, active slots, provider attempts, token reservations and spend reservations
+Malformed or missing user or global spend configuration disables cloud
+research; configured default user allowance and individual entries are limited
+to `$15.00`, as is the global ceiling. Spend totals include completed estimates, live reservations, and
+unknown provider outcomes. A reservation is released only when the provider
+call is proven not to have been dispatched; age, restart, timeout, cancellation,
+and account revocation do not release uncertain charges. Accounting is shared
+across the user's projects and persists in the SQLite ledger. Queue slots,
+active slots, provider attempts, token reservations and spend reservations
 are stored in `cloud-research.sqlite3` beside the workspace mapping database,
 under the configured private workspaces root. Back up that file together with
 the auth database and workspace tree. The existing project session records

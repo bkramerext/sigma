@@ -47,6 +47,24 @@ with sync_playwright() as playwright:
             body=json.dumps(cloud_status),
         ),
     )
+    page.route(
+        "**/api/cloud-research/budget",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            headers={"Cache-Control": "no-store"},
+            body=json.dumps(
+                {
+                    "allowance_usd": 2.0,
+                    "estimated_usage_usd": 2.0,
+                    "held_usd": 0.0,
+                    "reserved_and_estimated_usd": 2.0,
+                    "remaining_usd": 0.0,
+                    "unknown_provider_attempts": 0,
+                }
+            ),
+        ),
+    )
 
     def begin_login(route):
         login_attempts.append(route.request.url)
@@ -124,10 +142,95 @@ with sync_playwright() as playwright:
     expect(page).to_have_url(UI + "/")
     expect(page.get_by_role("link", name="Continue with Google", exact=True)).to_be_visible()
     assert not cloud_status["authenticated"]
+
+    # Exhaustion is visible to the owner while saved projects remain available.
+    cloud_status.update(
+        authenticated=True,
+        user={"email": "reviewer@example.org", "role": "member"},
+    )
+    page.goto(UI + "/", wait_until="networkidle")
+    budget = page.get_by_role("region", name="Cloud research budget")
+    expect(budget).to_contain_text("$0.00 remaining of $2.00")
+    expect(budget).to_contain_text("allowance is exhausted")
+    expect(page.get_by_role("button", name="New", exact=True)).to_be_enabled()
+    page.get_by_role("tab", name="Recent").click()
+    created_title = created.json()["project"]["title"]
+    project_group = page.locator(".recent-type-group").filter(has_text=created_title)
+    project_group.locator("summary").click()
+    saved_project = page.get_by_role("button", name=created_title, exact=True)
+    expect(saved_project).to_be_visible()
+    saved_project.click()
+    expect(page.locator(".project-art-header")).to_be_visible()
+
+    # Access Management exposes effective policy plus persisted owner balances,
+    # and an administrator can edit an individual rule allowance in place.
+    grants_snapshot = {
+        "bootstrap_admin": "admin@example.org",
+        "grants": [
+            {
+                "kind": "domain",
+                "value": "example.org",
+                "role": "member",
+                "active": 1,
+                "allowance_usd": 5.0,
+                "effective_allowance_usd": 5.0,
+            },
+            {
+                "kind": "email",
+                "value": "reviewer@example.org",
+                "role": "member",
+                "active": 1,
+                "allowance_usd": None,
+                "effective_allowance_usd": 5.0,
+            },
+        ],
+        "sessions": [
+            {
+                "email": "reviewer@example.org",
+                "role": "member",
+                "authorized": True,
+                "status": "active",
+                "expires_at": 2_000_000_000,
+                "allowance_usd": 5.0,
+                "spending": {
+                    "estimated_usage_usd": 0.75,
+                    "held_usd": 0.25,
+                    "reserved_and_estimated_usd": 1.0,
+                    "remaining_usd": 4.0,
+                },
+            }
+        ],
+    }
+
+    def grants_route(route):
+        if route.request.method == "PUT":
+            assert route.request.post_data_json == {"allowance_usd": 3.5}
+            grants_snapshot["grants"][1]["allowance_usd"] = 3.5
+            grants_snapshot["grants"][1]["effective_allowance_usd"] = 3.5
+            grants_snapshot["sessions"][0]["allowance_usd"] = 3.5
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(grants_snapshot))
+
+    page.route("**/api/cloud-auth/admin/grants", grants_route)
+    page.route("**/api/cloud-auth/admin/grants/**", grants_route)
+    cloud_status.update(
+        authenticated=True,
+        user={"email": "admin@example.org", "role": "admin"},
+    )
+    page.goto(UI + "/", wait_until="networkidle")
+    page.get_by_role("button", name="Access Management", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Access Management")
+    expect(dialog).to_contain_text("estimated $0.75")
+    expect(dialog).to_contain_text("held $0.25")
+    expect(dialog).to_contain_text("remaining $4.00")
+    expect(dialog).to_contain_text("Domain allowances apply separately to each person")
+    researcher_row = dialog.locator("li").filter(has_text="reviewer@example.org").last
+    researcher_row.get_by_role("spinbutton", name="Allowance for reviewer@example.org").fill("3.5")
+    researcher_row.get_by_role("button", name="Save allowance").click()
+    expect(dialog).to_contain_text("effective allowance $3.50")
     assert not errors, errors
     browser.close()
 
 print(
     "PASS real Chrome cloud Google login route, signed-in project identity, sign-out transition, "
-    "desktop/mobile header placement, and no horizontal overflow; external Google OAuth was not invoked"
+    "desktop/mobile header placement, exhaustion with saved-project access, and no horizontal overflow; external Google OAuth was not invoked"
 )

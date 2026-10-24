@@ -179,6 +179,7 @@ def _initialize(path: Path) -> None:
                 role TEXT NOT NULL CHECK(role IN ('member','admin')),
                 active INTEGER NOT NULL CHECK(active IN (0,1)),
                 updated_at INTEGER NOT NULL,
+                allowance_usd REAL,
                 PRIMARY KEY(kind,value)
             );
             CREATE TABLE IF NOT EXISTS bootstrap_subject (
@@ -190,6 +191,11 @@ def _initialize(path: Path) -> None:
                 subject TEXT NOT NULL,
                 email TEXT NOT NULL,
                 expires_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS identities (
+                subject TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS flows (
                 state_hash TEXT PRIMARY KEY,
@@ -211,6 +217,9 @@ def _initialize(path: Path) -> None:
                 at INTEGER NOT NULL
             );
         """)
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(grants)")}
+        if "allowance_usd" not in columns:
+            db.execute("ALTER TABLE grants ADD COLUMN allowance_usd REAL")
     if not existed:
         path.chmod(0o600)
 
@@ -541,6 +550,10 @@ async def callback(
     raw = secrets.token_urlsafe(32)
     with _db(cfg) as db:
         db.execute(
+            "INSERT INTO identities(subject,email,updated_at) VALUES(?,?,?) ON CONFLICT(subject) DO UPDATE SET email=excluded.email,updated_at=excluded.updated_at",
+            (subject, email, _now()),
+        )
+        db.execute(
             "INSERT INTO sessions(token_hash,subject,email,expires_at) VALUES(?,?,?,?)",
             (_hash(raw), subject, email, _now() + SESSION_SECONDS),
         )
@@ -597,6 +610,77 @@ class GrantRequest(BaseModel):
     kind: str = Field(pattern="^(email|domain)$")
     value: str = Field(min_length=3, max_length=254)
     role: str = Field(default="member", pattern="^(member|admin)$")
+    allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+class AllowanceRequest(BaseModel):
+    allowance_usd: float | None = Field(default=None, ge=0.01, le=15.0)
+
+
+def effective_spending_allowance(email: str, default_usd: float) -> float:
+    """Resolve the verified identity's current allowance, never a browser claim."""
+    cfg = config()
+    normalized = _normalize_email(email)
+    if not cfg.enabled or cfg.error:
+        raise RuntimeError("Cloud access policy is unavailable.")
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT allowance_usd FROM grants WHERE kind='email' AND value=? AND active=1",
+            (normalized,),
+        ).fetchone()
+        if row is not None:
+            return float(row["allowance_usd"] if row["allowance_usd"] is not None else default_usd)
+        row = db.execute(
+            "SELECT allowance_usd FROM grants WHERE kind='domain' AND value=? AND active=1",
+            (normalized.rsplit("@", 1)[1],),
+        ).fetchone()
+        return float(
+            row["allowance_usd"] if row and row["allowance_usd"] is not None else default_usd
+        )
+
+
+def _configured_default_allowance() -> float | None:
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        value = Decimal(os.environ["SIGMA_CLOUD_USER_SPEND_CEILING_USD"])
+    except (KeyError, InvalidOperation):
+        return None
+    if not value.is_finite() or value < Decimal("0.01") or value > Decimal("15.00"):
+        return None
+    return float(value)
+
+
+def _admin_spending_snapshot(
+    subject: str, allowance: float | None
+) -> dict[str, float | int | None]:
+    from sigma import cloud_research, cloud_workspaces
+
+    workspace = cloud_workspaces.workspace_for_subject(subject)
+    return cloud_research.admin_workspace_spending(workspace.workspace_id, allowance)
+
+
+def _allowance_in_db(db: sqlite3.Connection, email: str, default: float | None) -> float | None:
+    explicit = db.execute(
+        "SELECT active,allowance_usd FROM grants WHERE kind='email' AND value=?",
+        (email,),
+    ).fetchone()
+    if explicit is not None:
+        if not explicit["active"]:
+            return None
+        if explicit["allowance_usd"] is not None:
+            return float(explicit["allowance_usd"])
+        return default
+    domain = db.execute(
+        "SELECT active,allowance_usd FROM grants WHERE kind='domain' AND value=?",
+        (email.rsplit("@", 1)[1],),
+    ).fetchone()
+    if domain is not None:
+        if not domain["active"]:
+            return None
+        if domain["allowance_usd"] is not None:
+            return float(domain["allowance_usd"])
+    return default
 
 
 @router.get("/admin/grants")
@@ -606,7 +690,7 @@ def list_grants():
         grants = [
             dict(row)
             for row in db.execute(
-                "SELECT kind,value,role,active,updated_at FROM grants ORDER BY kind,value"
+                "SELECT kind,value,role,active,updated_at,allowance_usd FROM grants ORDER BY kind,value"
             )
         ]
         sessions = db.execute(
@@ -618,14 +702,56 @@ def list_grants():
             if session["expires_at"] <= _now() or not role:
                 db.execute("DELETE FROM sessions WHERE token_hash=?", (session["token_hash"],))
                 continue
-            current = active.get(session["email"])
+            current = active.get(session["subject"])
             if current is None:
-                active[session["email"]] = {
+                active[session["subject"]] = {
                     "email": session["email"],
                     "role": role,
                     "expires_at": session["expires_at"],
                 }
-    users = list(active.values())
+        identities = {
+            row["subject"]: row["email"]
+            for row in db.execute("SELECT subject,email FROM identities")
+        }
+        # Include authenticated accounts from before the durable identity index
+        # migration when their session is still present.
+        for session in sessions:
+            identities.setdefault(session["subject"], session["email"])
+        default = _configured_default_allowance()
+        users: list[dict[str, object]] = []
+        for subject, email in identities.items():
+            role = _authorization_in_db(db, cfg, subject, email)
+            current = active.get(subject)
+            allowance = _allowance_in_db(db, email, default) if role else None
+            users.append(
+                {
+                    "email": email,
+                    "role": role or "member",
+                    "authorized": role is not None,
+                    "status": "active" if current else "authorized" if role else "revoked",
+                    "expires_at": current["expires_at"] if current else None,
+                    "allowance_usd": allowance,
+                    "subject": subject,
+                }
+            )
+    # Identity is server-derived and admin-only; balances come from the same
+    # subject-keyed ledger even when the user's session has been revoked.
+    for account in users:
+        raw_allowance = account["allowance_usd"]
+        allowance = (
+            float(raw_allowance)
+            if isinstance(raw_allowance, int | float) and not isinstance(raw_allowance, bool)
+            else None
+        )
+        account["spending"] = _admin_spending_snapshot(str(account["subject"]), allowance)
+        account.pop("subject", None)
+    users.sort(key=lambda account: str(account["email"]))
+    for grant in grants:
+        grant["effective_allowance_usd"] = (
+            grant["allowance_usd"]
+            if grant["allowance_usd"] is not None
+            else _configured_default_allowance()
+        )
     return {"grants": grants, "sessions": users, "bootstrap_admin": cfg.bootstrap_email}
 
 
@@ -638,19 +764,54 @@ def add_grant(body: GrantRequest, request: Request):
         )
         if body.kind == "domain" and body.role == "admin":
             raise ValueError("Domains cannot grant administrator access.")
+        if body.allowance_usd is not None and not (0.01 <= body.allowance_usd <= 15.0):
+            raise ValueError("Allowance must be between $0.01 and the $15 global ceiling.")
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     actor: Principal = request.state.cloud_principal
     with _db(cfg) as db:
         db.execute(
-            "INSERT INTO grants(kind,value,role,active,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1,updated_at=excluded.updated_at",
-            (body.kind, value, body.role, 1, _now()),
+            "INSERT INTO grants(kind,value,role,active,updated_at,allowance_usd) VALUES(?,?,?,?,?,?) ON CONFLICT(kind,value) DO UPDATE SET role=excluded.role,active=1,updated_at=excluded.updated_at,allowance_usd=COALESCE(excluded.allowance_usd,grants.allowance_usd)",
+            (body.kind, value, body.role, 1, _now(), body.allowance_usd),
         )
         db.execute(
             "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
             (actor.email, "grant", body.kind, value, _now()),
         )
-    return {"kind": body.kind, "value": value, "role": body.role, "active": True}
+    return {
+        "kind": body.kind,
+        "value": value,
+        "role": body.role,
+        "active": True,
+        "allowance_usd": body.allowance_usd,
+    }
+
+
+@router.put("/admin/grants/{kind}/{value:path}/allowance")
+def update_grant_allowance(kind: str, value: str, body: AllowanceRequest, request: Request):
+    cfg = config()
+    if kind not in {"email", "domain"}:
+        raise HTTPException(422, "Invalid access rule.")
+    try:
+        normalized = _normalize_email(value) if kind == "email" else _normalize_domain(value)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    actor: Principal = request.state.cloud_principal
+    with _db(cfg) as db:
+        row = db.execute(
+            "SELECT active FROM grants WHERE kind=? AND value=?", (kind, normalized)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Authorization entry not found.")
+        db.execute(
+            "UPDATE grants SET allowance_usd=?,updated_at=? WHERE kind=? AND value=?",
+            (body.allowance_usd, _now(), kind, normalized),
+        )
+        db.execute(
+            "INSERT INTO audit(actor,action,kind,value,at) VALUES(?,?,?,?,?)",
+            (actor.email, "allowance", kind, normalized, _now()),
+        )
+    return {"kind": kind, "value": normalized, "allowance_usd": body.allowance_usd}
 
 
 @router.delete("/admin/grants/{kind}/{value:path}")

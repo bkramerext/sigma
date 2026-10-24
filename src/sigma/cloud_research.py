@@ -12,6 +12,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -20,6 +21,12 @@ from sigma import cloud_workspaces
 from sigma.projects import ProjectError, inspect_project
 
 _PROCESS_EPOCH = uuid4().hex
+USD_UNITS = 1_000_000_000
+MAX_USER_SPEND_USD = Decimal("15.00")
+MAX_GLOBAL_SPEND_USD = Decimal("15.00")
+MAX_SESSION_SPEND_USD = 0.25
+MAX_SESSION_CALLS = 6
+MAX_SESSION_MINUTES = 15
 
 
 class CloudResearchUnavailable(RuntimeError):
@@ -46,19 +53,104 @@ def _positive_int(name: str, default: int) -> int:
     return parsed
 
 
-def _spend_ceiling() -> float:
-    value = os.environ.get("SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD", "").strip()
+def _money_ceiling(name: str, *, maximum: Decimal, message: str) -> Decimal:
+    value = os.environ.get(name, "").strip()
     try:
-        ceiling = float(value)
-    except ValueError as exc:
-        raise CloudResearchUnavailable(
-            "Cloud research is disabled until a global inference-spend ceiling is configured."
-        ) from exc
-    if not 0 < ceiling <= 1_000_000:
-        raise CloudResearchUnavailable(
-            "Cloud research is disabled until a valid global inference-spend ceiling is configured."
-        )
+        ceiling = Decimal(value)
+    except (InvalidOperation, ValueError) as exc:
+        raise CloudResearchUnavailable(message) from exc
+    if not ceiling.is_finite() or not Decimal("0.01") <= ceiling <= maximum:
+        raise CloudResearchUnavailable(message)
     return ceiling
+
+
+def _spend_ceiling_decimal() -> Decimal:
+    return _money_ceiling(
+        "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD",
+        maximum=MAX_GLOBAL_SPEND_USD,
+        message="Cloud research is disabled until a valid global inference-spend ceiling of at most $15 is configured.",
+    )
+
+
+def _user_spend_ceiling_decimal() -> Decimal:
+    return _money_ceiling(
+        "SIGMA_CLOUD_USER_SPEND_CEILING_USD",
+        maximum=MAX_USER_SPEND_USD,
+        message="Cloud research is disabled until a valid default per-user inference allowance of at most $15 is configured.",
+    )
+
+
+def _effective_user_spend_ceiling_decimal() -> Decimal:
+    default = _user_spend_ceiling_decimal()
+    workspace = cloud_workspaces.current()
+    if workspace is None or not workspace.email:
+        return default
+    try:
+        from sigma.cloud_auth import effective_spending_allowance
+
+        value = Decimal(str(effective_spending_allowance(workspace.email, float(default))))
+    except Exception as exc:
+        raise CloudResearchUnavailable("Cloud access spending policy is unavailable.") from exc
+    if not value.is_finite() or not Decimal("0.01") <= value <= MAX_GLOBAL_SPEND_USD:
+        raise CloudResearchUnavailable("Cloud access spending policy is invalid.")
+    return value
+
+
+def _spend_ceiling() -> float:
+    """Retain the existing helper for callers and diagnostics."""
+    return float(_spend_ceiling_decimal())
+
+
+def _usd_units(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise CloudResearchUnavailable("Cloud inference cost is invalid.")
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation as exc:
+        raise CloudResearchUnavailable("Cloud inference cost is invalid.") from exc
+    if not amount.is_finite() or amount < 0:
+        raise CloudResearchUnavailable("Cloud inference cost is invalid.")
+    return int((amount * USD_UNITS).to_integral_value(rounding=ROUND_CEILING))
+
+
+def _ceiling_units(value: Decimal) -> int:
+    return int((value * USD_UNITS).to_integral_value(rounding=ROUND_FLOOR))
+
+
+def _call_amount_units(db: sqlite3.Connection, where: str, parameters: tuple[Any, ...] = ()) -> int:
+    rows = db.execute(f"SELECT amount_usd FROM calls {where}", parameters).fetchall()
+    return sum(_usd_units(row["amount_usd"]) for row in rows)
+
+
+def _evaluation_queue_limits() -> tuple[int, int, int, int]:
+    per_user_running = _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 1)
+    global_running = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 2)
+    per_user_queued = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 2)
+    global_queued = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_QUEUED", 16)
+    if per_user_running > 1 or global_running > 2 or per_user_queued > 2:
+        raise CloudResearchUnavailable(
+            "Cloud research concurrency and queue limits exceed the external-evaluation policy."
+        )
+    return per_user_running, global_running, per_user_queued, global_queued
+
+
+def evaluation_session_limits(limits: dict[str, Any]) -> dict[str, Any]:
+    """Return the cloud trial caps without changing local research settings."""
+    result = dict(limits)
+    # Even legacy project records with a one-call allowance need room for the
+    # minimum Investigator/Skeptic pair; cloud limits never exceed the cap.
+    calls = min(max(int(result["model_calls"]), 2), MAX_SESSION_CALLS)
+    result["model_calls"] = calls
+    result["research_rounds"] = min(max(int(result["research_rounds"]), 1), calls // 2)
+    result["session_duration_minutes"] = min(
+        int(result["session_duration_minutes"]), MAX_SESSION_MINUTES
+    )
+    cost = result.get("maximum_estimated_cost_usd")
+    result["maximum_estimated_cost_usd"] = round(
+        min(float(cost), MAX_SESSION_SPEND_USD) if cost is not None else MAX_SESSION_SPEND_USD,
+        2,
+    )
+    return result
 
 
 def _database() -> Path:
@@ -170,11 +262,24 @@ def prepare_job(record: dict[str, Any]) -> None:
         raise CloudResearchUnavailable(
             "Cloud research requires a per-session cost limit and a model with a reviewed price."
         )
-    _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 1)
-    _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 4)
-    per_user_queue = _positive_int("SIGMA_CLOUD_USER_MAX_QUEUED", 2)
-    global_queue = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_QUEUED", 16)
-    _spend_ceiling()
+    _spend_ceiling_decimal()
+    _user_spend_ceiling_decimal()
+    _, _, per_user_queue, global_queue = _evaluation_queue_limits()
+    call_limit = record.get("call_limit")
+    duration_limit = record.get("duration_limit_minutes")
+    maximum_cost = record.get("maximum_estimated_cost_usd")
+    if (
+        type(call_limit) is not int
+        or not 2 <= call_limit <= MAX_SESSION_CALLS
+        or type(duration_limit) is not int
+        or not 1 <= duration_limit <= MAX_SESSION_MINUTES
+        or type(maximum_cost) not in {int, float}
+        or not isinstance(maximum_cost, (int, float))
+        or not 0.01 <= maximum_cost <= MAX_SESSION_SPEND_USD
+    ):
+        raise CloudResearchUnavailable(
+            "Cloud research sessions are capped at six calls, 15 minutes, and $0.25. Update Project Settings → Limits."
+        )
     workspace = cloud_workspaces.current()
     if workspace is None:
         raise CloudResearchUnavailable("Authenticated research workspace is unavailable.")
@@ -244,8 +349,7 @@ def prepare_job(record: dict[str, Any]) -> None:
 def claim_job(session_id: str) -> bool:
     """Acquire a per-user and global worker slot for one queued session."""
     owner = _workspace_id()
-    user_limit = _positive_int("SIGMA_CLOUD_USER_MAX_CONCURRENT", 1)
-    global_limit = _positive_int("SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT", 4)
+    user_limit, global_limit, _user_queue, _global_queue = _evaluation_queue_limits()
     try:
         with _transaction() as db:
             job = db.execute("SELECT * FROM jobs WHERE session_id=?", (session_id,)).fetchone()
@@ -478,9 +582,14 @@ def recover_job(session_id: str) -> None:
 def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reservation: int) -> None:
     """Write a conservative cost reservation before making provider I/O."""
     owner = _workspace_id()
-    ceiling = _spend_ceiling()
+    global_ceiling = _spend_ceiling_decimal()
+    user_ceiling = _effective_user_spend_ceiling_decimal()
+    global_ceiling_units = _ceiling_units(global_ceiling)
+    user_ceiling_units = _ceiling_units(user_ceiling)
+    amount_units = _usd_units(amount_usd)
+    reserved_amount = amount_units / USD_UNITS
     token_budget = _positive_int("SIGMA_CLOUD_USER_TOKEN_BUDGET", 2_000_000)
-    if not 0 < amount_usd <= ceiling:
+    if amount_units <= 0 or amount_units > global_ceiling_units:
         raise CloudResearchUnavailable(
             "The next provider call cannot be reserved within the global spend ceiling."
         )
@@ -508,10 +617,15 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                 raise CloudResearchUnavailable(
                     "This provider attempt was already reserved and cannot be replayed."
                 )
-            used = db.execute("SELECT COALESCE(SUM(amount_usd),0) FROM calls").fetchone()[0]
-            if used + amount_usd > ceiling:
+            used_units = _call_amount_units(db, "")
+            if used_units + amount_units > global_ceiling_units:
                 raise CloudResearchUnavailable(
-                    "The configured global inference-spend ceiling has been reached."
+                    "The global inference-spend ceiling has been reached; saved research remains available."
+                )
+            user_used_units = _call_amount_units(db, "WHERE workspace_id=?", (owner,))
+            if user_used_units + amount_units > user_ceiling_units:
+                raise CloudResearchUnavailable(
+                    "Your cumulative cloud research allowance has been reached; saved research remains available."
                 )
             user_tokens = db.execute(
                 "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?",
@@ -528,7 +642,7 @@ def reserve_call(session_id: str, call_id: str, amount_usd: float, token_reserva
                     call_id,
                     session_id,
                     owner,
-                    amount_usd,
+                    reserved_amount,
                     "reserved",
                     token_reservation,
                     None,
@@ -551,6 +665,8 @@ def settle_call(
 ) -> None:
     """Reconcile known usage; otherwise retain the full reservation as unknown."""
     owner = _workspace_id()
+    if estimated_cost_usd is not None:
+        _usd_units(estimated_cost_usd)
     status = "usage_estimated" if estimated_cost_usd is not None else "unknown"
     try:
         with _transaction() as db:
@@ -610,17 +726,23 @@ def mark_call_not_dispatched(session_id: str, call_id: str) -> None:
 
 
 def snapshot() -> dict[str, Any]:
-    """Return only the current principal's job and usage summary."""
+    """Return only the current principal's job, token, and spending summary."""
     owner = _workspace_id()
+    allowance = _effective_user_spend_ceiling_decimal()
+    allowance_units = _ceiling_units(allowance)
     try:
         with _connect() as db:
             own = db.execute(
                 "SELECT status,COUNT(*) AS count FROM jobs WHERE workspace_id=? GROUP BY status",
                 (owner,),
             ).fetchall()
-            used = db.execute(
-                "SELECT COALESCE(SUM(amount_usd),0) FROM calls WHERE workspace_id=?", (owner,)
-            ).fetchone()[0]
+            total_units = _call_amount_units(db, "WHERE workspace_id=?", (owner,))
+            estimated_units = _call_amount_units(
+                db, "WHERE workspace_id=? AND status='usage_estimated'", (owner,)
+            )
+            held_units = _call_amount_units(
+                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (owner,)
+            )
             unknown = db.execute(
                 "SELECT COUNT(*) FROM calls WHERE workspace_id=? AND status='unknown'", (owner,)
             ).fetchone()[0]
@@ -628,11 +750,46 @@ def snapshot() -> dict[str, Any]:
                 "SELECT COALESCE(SUM(token_reservation),0) FROM calls WHERE workspace_id=?",
                 (owner,),
             ).fetchone()[0]
+            to_usd = lambda units: round(units / USD_UNITS, 9)
             return {
                 "jobs": {row["status"]: row["count"] for row in own},
-                "user_reserved_and_estimated_usd": round(float(used), 9),
+                "allowance_usd": float(allowance),
+                "estimated_usage_usd": to_usd(estimated_units),
+                "held_usd": to_usd(held_units),
+                "reserved_and_estimated_usd": to_usd(total_units),
+                "remaining_usd": to_usd(max(0, allowance_units - total_units)),
+                # Kept for existing audit consumers; new clients use the explicit name.
+                "user_reserved_and_estimated_usd": to_usd(total_units),
                 "user_reserved_or_observed_tokens": int(tokens),
                 "unknown_provider_attempts": unknown,
+            }
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def admin_workspace_spending(
+    workspace_id: str, allowance: float | None
+) -> dict[str, float | int | None]:
+    """Admin-only aggregate for an identity resolved from a verified session."""
+    if not isinstance(workspace_id, str) or len(workspace_id) != 32:
+        raise CloudResearchUnavailable("Workspace spending identity is invalid.")
+    allowance_units = _ceiling_units(Decimal(str(allowance))) if allowance is not None else None
+    try:
+        with _connect() as db:
+            total = _call_amount_units(db, "WHERE workspace_id=?", (workspace_id,))
+            estimated = _call_amount_units(
+                db, "WHERE workspace_id=? AND status='usage_estimated'", (workspace_id,)
+            )
+            held = _call_amount_units(
+                db, "WHERE workspace_id=? AND status IN ('reserved','unknown')", (workspace_id,)
+            )
+            return {
+                "estimated_usage_usd": round(estimated / USD_UNITS, 9),
+                "held_usd": round(held / USD_UNITS, 9),
+                "remaining_usd": round(max(0, allowance_units - total) / USD_UNITS, 9)
+                if allowance_units is not None
+                else None,
+                "reserved_and_estimated_usd": round(total / USD_UNITS, 9),
             }
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
