@@ -155,3 +155,9 @@ provider call immediately; paused/stopped sessions say the instruction is
 saved if the session is resumed. Removed the separate duplicate note and
 tightened the helper/action row. No inner-padding change was retained because
 the operator confirmed that padding is being handled elsewhere.
+
+The integrated code/test head is `cfe9fe06a1c3a7104ae316bdca4f1998e4666b39`.
+On that tree, `./sigma test` and real-Chrome T29 guidance and T43.1
+strategy-selection checks passed. PR #63 is open, mergeable, and ready for
+coordinator review; no merge was performed. The next handoff-only commit
+records this update.
