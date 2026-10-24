@@ -850,6 +850,18 @@ def main() -> None:
     ):
         assert outcome_text in outcome_tex
 
+    without_conclusion = json.loads(json.dumps(evidence_export))
+    without_conclusion["research_sessions"][0]["outcome"].pop("conclusion")
+    with patch("sigma.api.export_project_view", return_value=without_conclusion):
+        normalized_without_conclusion, _ = papers._snapshot("unused")
+    saved_outcome = next(
+        source["data"]["outcome"]
+        for source in normalized_without_conclusion["sources"]
+        if source["id"] == "session:session-1"
+    )
+    assert saved_outcome == without_conclusion["research_sessions"][0]["outcome"]
+    assert "conclusion" not in saved_outcome
+
     # Cross-domain contract fixture: the paper retains the published reasoning
     # and review shape from PR #70, alongside experimental negative findings.
     fidelity_package = {
