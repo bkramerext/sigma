@@ -203,7 +203,12 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
                 ("/api/projects/proposals/agentic", inference_body),
                 (
                     "/api/projects/papers",
-                    {"path": a_path, "expected_binding": "unused", "expected_project_id": a_id},
+                    {
+                        "path": a_path,
+                        "expected_binding": "unused",
+                        "expected_project_id": a_id,
+                        "expected_snapshot_sha256": "0" * 64,
+                    },
                 ),
                 (
                     "/api/projects/text/convert",

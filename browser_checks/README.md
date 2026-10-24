@@ -254,6 +254,22 @@ calls. Review captures are `/tmp/sigma-a20-paper-preview.png` and
 `/tmp/sigma-a20-paper-mobile.png`; the downloaded PDF is
 `/tmp/sigma-a20-paper.pdf`.
 
+## T45 long-form Xenopus paper
+
+Run the Vite frontend on port 5181 and the isolated mock provider/API on port
+8015, then run:
+
+```sh
+SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 \
+  uv run --locked --with playwright python browser_checks/t45_long_paper.py
+```
+
+This real-Chrome check opens the Xenopus sample, confirms the expanded
+multi-section call ceiling, verifies streamed progress and saved-version
+metadata, and downloads the compiled PDF. The provider is deterministic and
+local; no live model or paid usage is involved. The PDF is saved at
+`/tmp/sigma-t45-xenopus.pdf` for visual inspection.
+
 ## T40 Google account and administrator controls
 
 Run the normal SIGMA UI and then run

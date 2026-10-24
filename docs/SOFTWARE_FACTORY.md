@@ -32,7 +32,7 @@ The human keeps the color windows open and forwards instructions to the correspo
 
 ## 3. Ticket and assignment contract
 
-Canonical implementation tickets live in `tickets/tN.md` (including dotted IDs such as `t17.8.md`); `TICKET_TRACKING.md` records owner, state, dependencies, and PR links. Keep existing tickets updated rather than creating duplicate tickets for small clarifications or review corrections.
+Canonical implementation tickets live in `tickets/tN.md` (including dotted IDs such as `t17.8.md`); `docs/TICKET_TRACKING.md` records owner, state, dependencies, and PR links. Keep existing tickets updated rather than creating duplicate tickets for small clarifications or review corrections.
 
 A good ticket or dispatch states:
 
@@ -195,7 +195,7 @@ See `WOLF.md` for the narrative, `WOLF_IDEAS.md` for writing ideas, `WOLF_TODO.m
 
 A new human, ChatGPT coordinator, or replacement Codex session must be able to resume from GitHub alone. **Do not rely on memory of a previous chat or on an old worker terminal.** The first action is to reconstruct the actual state, not issue new assignments.
 
-1. Read this protocol, the human–AI collaboration rules in Section 16, `README.md`, `docs/STATUS.md`, and `TICKET_TRACKING.md`. Read relevant `tickets/t*.md` in full.
+1. Read this protocol, the human–AI collaboration rules in Section 16, `README.md`, `docs/STATUS.md`, and `docs/TICKET_TRACKING.md`. Read relevant `tickets/t*.md` in full.
 2. Inspect **current GitHub state**, not just tracker prose: default branch HEAD, open PRs and their bases/heads, mergeability, latest commits, review comments, and `messages/` handoffs. Tracking files are snapshots and can lag reality.
 3. Reconstruct a worker ledger: color, coordinator domain, assigned ticket, branch/PR, status, last confirmed human dispatch, blocker, next action, and whether tests were reported or independently reproduced.
 4. Reconcile discrepancies with the human. Ask which worker windows are still active, which instructions were actually forwarded, and whether a worker has unpushed changes. Never infer live activity from an open PR.
@@ -233,7 +233,7 @@ For a ChatGPT coordinator replacement, use Section 10. A coordinator conversatio
 
 ## 12. Operational conventions and tooling
 
-**Repository:** `bkramerext/sigma`, default integration branch `main`. Tickets: `tickets/t<id>.md`; tracker: `TICKET_TRACKING.md`; worker-to-coordinator handoffs: `messages/`; implementation/test observations: `docs/STATUS.md`. The exact current filenames and commands should be verified in the checkout before execution.
+**Repository:** `bkramerext/sigma`, default integration branch `main`. Tickets: `tickets/t<id>.md`; tracker: `docs/TICKET_TRACKING.md`; worker-to-coordinator handoffs: `messages/`; implementation/test observations: `docs/STATUS.md`. The exact current filenames and commands should be verified in the checkout before execution.
 
 **Local setup and checks:** The documented starting point is `./sigma setup`, `./sigma start`, and `./sigma test`. Run focused tests for the affected subsystem, plus browser checks under `browser_checks/` where relevant. Python/Sage sandbox tests may require Docker and prepared images. Distinguish a test that was *reported* from one the reviewer actually ran. Never claim that GitHub PR review itself ran local Chrome, Docker, or provider calls.
 
@@ -265,7 +265,7 @@ At the end of an integration cycle, the coordinator should provide a concise led
 
 ## 15. Maintenance of this protocol
 
-This file is the stable operating contract; `TICKET_TRACKING.md` and current PRs hold volatile assignment state. Avoid turning this protocol into a daily status log. When practice changes, update the affected rule here, explain the rationale in the commit, and ensure worker assignments refer to the current protocol. Periodically check for contradictions with the human–AI collaboration rules in Section 16, ticket instructions, and actual observed behavior.
+This file is the stable operating contract; `docs/TICKET_TRACKING.md` and current PRs hold volatile assignment state. Avoid turning this protocol into a daily status log. When practice changes, update the affected rule here, explain the rationale in the commit, and ensure worker assignments refer to the current protocol. Periodically check for contradictions with the human–AI collaboration rules in Section 16, ticket instructions, and actual observed behavior.
 
 A future team should be able to answer without the original chat: **Who decides? Who sends? Who codes? Who reviews? Who merges? Who tests the integrated result? What is actually running? What is still unverified? What happens if a participant disappears?**
 

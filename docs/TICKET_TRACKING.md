@@ -58,7 +58,7 @@
 
 | T30 | Create Samples entries from exported projects | Done; PR #40 and Gray follow-up PR #48 merged | Green core; Gray sample follow-up |
 | T37 | Trustworthy research memory, evidence selection, and continuity | Engineering done; PR #45 merged, live-agent quality unverified | Blue · [ticket](tickets/t37.md) · [PR #45](https://github.com/bkramerext/sigma/pull/45) |
-| T45 | **HIGH:** Investigate long-form TeX paper generation under output/context limits | Proposed; investigation only | Suggested: Green · [ticket](tickets/t45.md) |
+| T45 | **HIGH:** Long-form TeX paper generation under output/context limits | Implemented; PR #68 open for final review | [ticket](../tickets/t45.md) · [PR #68](https://github.com/bkramerext/sigma/pull/68) |
 | T46 | Home and Project About dialog and product introduction | R4R · Green · [PR #73](https://github.com/bkramerext/sigma/pull/73) · [ticket](../tickets/t46.md) |
 
 ### T23.1 scope
