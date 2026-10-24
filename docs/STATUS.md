@@ -5195,6 +5195,11 @@ fixed dimensions, strategy titles share one aligned column, and Start/Cancel
 flow below the options. Human Guidance is a native keyboard-accessible
 disclosure styled as an outlined Outcome subsection and remains open by default
 to preserve visibility of the intervention form and history.
+The action is labeled **Send Guidance**. Its accessible description explains
+that it queues instructions for the selected agents' next eligible step and
+does not start a provider call on click; paused/stopped sessions describe the
+instruction as saved for resumption. The duplicated static copy below the form
+was removed and the helper/action row spacing tightened.
 
 - Real Chrome `browser_checks/t43_1_strategy_selection.py` passed at 1440px and
   390px, verifying checkbox/title alignment, left alignment, stacked actions,
@@ -5214,6 +5219,14 @@ to preserve visibility of the intervention form and history.
 
 No research provider calls were made. PR #63 remains open for coordinator
 review; no merge was performed.
+
+Integrated `origin/main` at `9305a6fa541d27dc5c2b302a48d8954b0112dd32` in
+merge commit `72b61a58ed2ffffaf6be2f7e7af30524d848a966`; resolved the shared
+status-log conflict while retaining both T43.1 and main's entries. After
+integration, `./sigma test`, the focused real-Chrome strategy-selection check
+at 1440px/390px, and the real-Chrome T29 guidance interaction check all passed.
+The wider `browser_checks/a17_research.py` attempt remains limited by its
+earlier local AI-connection-dialog scenario as described above.
 ## T44 Google Cloud provisioning runbook (2026-10-23)
 
 Added `docs/GCP-PROVISIONING-RUNBOOK.md` as an operator-executable companion

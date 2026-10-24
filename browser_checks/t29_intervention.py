@@ -93,8 +93,18 @@ with sync_playwright() as playwright:
     form.get_by_label("Guidance").fill(
         "Check whether the claimed recurrence also handles the initial boundary values."
     )
-    form.get_by_role("button", name="Send guidance", exact=True).click()
-    expect(form.get_by_role("button", name="Send guidance", exact=True)).to_be_visible()
+    send_guidance = form.get_by_role("button", name="Send Guidance", exact=True)
+    expect(send_guidance).to_have_attribute(
+        "aria-describedby", f"human-guidance-help-{session.get_attribute('data-session-id')}"
+    )
+    expect(
+        form.locator("#human-guidance-help-" + session.get_attribute("data-session-id"))
+    ).to_contain_text("Queues guidance for the selected agents’ next eligible step")
+    expect(form.locator(".human-intervention-submit small")).to_contain_text(
+        "no provider call starts now"
+    )
+    send_guidance.click()
+    expect(send_guidance).to_be_visible()
 
     session_id = session.get_attribute("data-session-id")
     accepted = page.evaluate(

@@ -505,7 +505,7 @@
 .workspace-page .human-intervention-form textarea:focus-visible,
 .workspace-page .human-intervention-form select:focus-visible,
 .workspace-page .human-intervention-form input:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
-.workspace-page .human-intervention-submit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.workspace-page .human-intervention-submit { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; gap: 4px 14px; }
 .workspace-page .human-intervention-submit small,
 .workspace-page .human-intervention-note { color: #9eacb7; font-size: 11px; }
 .workspace-page .human-intervention-note { margin: 5px 0 0; }

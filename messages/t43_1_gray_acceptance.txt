@@ -145,3 +145,13 @@ Validation:
 
 No research provider calls or live OAuth were made. PR #63 remains open; do not
 merge. The final handoff-only commit records the latest branch head.
+
+Guidance control clarification (2026-10-23)
+------------------------------------------
+Updated the same PR with the requested copy and spacing polish: the action now
+reads **Send Guidance**. The accessible helper text states that it queues
+guidance for selected agents at the next eligible step without starting a
+provider call immediately; paused/stopped sessions say the instruction is
+saved if the session is resumed. Removed the separate duplicate note and
+tightened the helper/action row. No inner-padding change was retained because
+the operator confirmed that padding is being handled elsewhere.

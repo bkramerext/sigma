@@ -272,6 +272,9 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   const canIntervene = supportsIntervention && interventionWindowOpen
     && interventionCount.filter(item => item.status !== 'rejected').length < 24
     && interventionCount.length < 32;
+  const interventionHelp = session.status === 'paused' || session.status === 'stopped'
+    ? 'Saves this guidance for the selected agents if you resume; no provider call starts now.'
+    : 'Queues guidance for the selected agents’ next eligible step; no provider call starts now.';
   async function submitIntervention(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const agentRoles = [targetInvestigator ? 'investigator' : null, targetSkeptic ? 'skeptic' : null].filter((role): role is 'investigator' | 'skeptic' => role !== null);
@@ -312,9 +315,8 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
           <label>Strategy<select value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
           <fieldset><legend>Send to</legend><label><input type="checkbox" checked={targetInvestigator} onChange={event => setTargetInvestigator(event.target.checked)}/> Investigator</label><label><input type="checkbox" checked={targetSkeptic} onChange={event => setTargetSkeptic(event.target.checked)}/> Skeptic</label></fieldset>
           <label className="human-intervention-text">Guidance<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a bounded research instruction or evidence note."/></label>
-          <div className="human-intervention-submit"><small>{interventionText.length}/1,200 · delivered at a later agent step; no call is made on submit.</small><button type="submit" className="text-view-link" disabled={interventionBusy || busy || !interventionText.trim() || (!targetInvestigator && !targetSkeptic)}>{interventionBusy ? 'Queueing…' : 'Send guidance'}</button></div>
+          <div className="human-intervention-submit"><small id={`human-guidance-help-${session.id}`}>{interventionText.length}/1,200 · {interventionHelp}</small><button type="submit" className="text-view-link" aria-describedby={`human-guidance-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim() || (!targetInvestigator && !targetSkeptic)}>{interventionBusy ? 'Queueing…' : 'Send Guidance'}</button></div>
           {interventionError && <p className="error" role="alert">{interventionError}</p>}
-          {session.status === 'paused' || session.status === 'stopped' ? <p className="human-intervention-note">Guidance is saved for delivery if you resume this session.</p> : <p className="human-intervention-note">Already-running calls keep their original prompts. Existing findings are never rewritten.</p>}
         </form>}
         {!!session.interventions?.length && <ol className="human-intervention-history">{session.interventions.slice(-8).reverse().map(item => <li key={item.id}>
           <div><strong>{item.kind.replaceAll('_', ' ')}</strong><span>{item.status.replaceAll('_', ' ')}</span></div>
