@@ -42,11 +42,10 @@ independent proof checker is involved.
 
 ## Integration dependencies and requested coordinator follow-up
 
-- **Red PR #70** is open and overlaps `research_sessions.py`, the Outcome UI,
-  reports, and their tests. Its per-strategy finding schema should be reconciled
-  with this Conclusion synthesis when integrating the branches; preserve the
-  Conclusion field and detailed reasoning/objections. No direct worker contact
-  or PR modification was made.
+- **Red PR #70** merged into `main` at `b69cedd1`; PR #72 is rebased on that
+  integration. The structured outcome fields and T47 Conclusion are retained
+  together, with a focused persistence/display integration test. No direct
+  worker contact was made.
 - **Blue PR #68** is open and changes `papers.py`, reports, API, and frontend.
   Its TeX frozen source/checkpoint path should carry `outcome.conclusion`
   alongside all underlying session evidence. No direct worker contact or PR

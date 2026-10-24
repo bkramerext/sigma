@@ -89,10 +89,11 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
         "resolved_objections": [],
         "basis_artifact_ids": [],
     }
-    session["artifacts"][0]["reasoning_steps"] = session["outcome"]["solution_review"][
+    latest_artifact = session["artifacts"][-1]
+    latest_artifact["reasoning_steps"] = session["outcome"]["solution_review"][
         "argument_steps"
     ]
-    session["artifacts"][0]["objective_review"] = {
+    latest_artifact["objective_review"] = {
         key: value
         for key, value in session["outcome"]["solution_review"].items()
         if key

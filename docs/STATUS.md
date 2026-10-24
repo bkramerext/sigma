@@ -5629,8 +5629,8 @@ Reconciled the saved Markdown Conclusion with the structured outcome fields
 merged in PR #70. The Conclusion remains first and expanded in the Outcome UI;
 T70's structured reasoning, per-step Skeptic reviews, conditional scope,
 per-strategy findings, objections, and evidence remain in the detailed Outcome
-and reports. Saving a T47 session regenerates the derived outcome without
-replacing those structured fields. Historical records retain the explicit
+and reports. Session saves preserve the structured outcome while persisting
+the Conclusion, so reloads retain both. Historical records retain the explicit
 no-saved-Conclusion fallback.
 
 Oversized Conclusions now show an explicit truncation notice and omit the
@@ -5639,4 +5639,7 @@ Verification and scope section remains present, with the no-independent-
 verification warning. No T48 claim-comparison behavior was changed.
 
 **Checks:** integration persistence/display and oversized-output tests passed;
-real Chrome and the full repository suite results are recorded with PR #72.
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including
+Ruff, formatting, Pyright, frontend typecheck, and production build. The
+real-Chrome `browser_checks/t47_conclusion.py` passed at 1440px and 375px.
+No live or paid provider calls were made.

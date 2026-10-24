@@ -2653,6 +2653,20 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
         "Conclusion cases",
         "Determine whether the stated formula holds for all n, and justify it.",
     )
+    conclusion_step = {
+        "number": 1,
+        "title": "Match the insertion bound",
+        "argument": "The insertion bound and attaining construction give the same value.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": ["artifact-a"],
+        "research_artifact_id": "artifact-a",
+        "review": {
+            "disposition": "accepted",
+            "rationale": "The cited construction attains the upper bound.",
+            "objection": "",
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
     artifact = {
         "id": "artifact-a",
         "sequence": 1,
@@ -2660,12 +2674,14 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
         "claim_or_question": "R(n) = 1 + n(n+1)/2",
         "method": "The insertion argument gives the upper bound.",
         "skeptic_response": "The argument is coherent, but no external checker was used.",
+        "reasoning_steps": [conclusion_step],
         "coordinator_decision": "stop_productive_conclusion",
         "open_obligations": [],
         "objective_review": {
             "status": "achieved",
             "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
             "argument_summary": "The insertion bound and explicit arrangement match.",
+            "argument_steps": [conclusion_step],
             "unresolved_objections": [],
             "basis_artifact_ids": ["artifact-a"],
         },
