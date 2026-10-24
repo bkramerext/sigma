@@ -4587,3 +4587,18 @@ read it, as required to make provider requests; malicious code or debugging
 instrumentation already running in the same process/account remains outside this
 protection. T17.8 is ready for a separately authorized bounded live trial; none
 was started in this preparation.
+
+## T17.8 final browser preflight (2026-10-23)
+
+Ran `browser_checks/chatgpt.py` in real Chrome using isolated local UI/fixture
+ports 5174/8004. The browser scenario uses the signed local OAuth fixture and
+its private temporary auth/project roots. It covered disconnected status,
+cancelled and declined sign-in, successful ChatGPT connection, offline and
+limited states, missing plan permission, expiry/reconnect, and account details.
+The fixture reported zero inference calls. Browser console and visible errors
+were scanned for bearer/API/OAuth fixture credential shapes and no matches were
+found. The fixture-server and Vite logs were scanned the same way and had no
+matches. Browser output contained only the passing summary. The browser script
+passed Ruff checks and formatting. Other checkouts' listeners were not stopped
+or changed; this check used separate ports and its own server processes. No
+Google Auth code was modified and no live T17.8 trial was started.
