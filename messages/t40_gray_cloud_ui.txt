@@ -1,7 +1,7 @@
 T40 coordinator handoff — R4R
 Branch: gray/t40-cloud-ui-admin
-Base: current main c44a4fe
-PR: https://github.com/bkramerext/sigma/pull/57 (open, mergeable; for coordinator review)
+Base: current main 42bfb3a
+PR: https://github.com/bkramerext/sigma/pull/57 (rebased; open and mergeable)
 
 Implemented the coordinator clarification. The user-facing fake administrator
 switch, preview middleware, preview documentation and fake-preview browser test
@@ -40,21 +40,23 @@ layout. It also verified project-header account controls, sign-out, the disabled
 Google placeholder when local auth is unavailable, and that hosted allowance is
 read-only inside the ChatGPT connection dialog rather than a Home budget card.
 
-MET — `./sigma test` passed, including focused cloud_auth and tooling tests,
+MET — After rebasing onto `42bfb3a`, `./sigma test` passed, including focused cloud_auth and tooling tests,
 backend cloud workspace/accounting tests, Ruff, format, Pyright (0 diagnostics),
 frontend typecheck and production build. The existing Starlette/httpx
 deprecation warnings remain.
 
-UNVERIFIED — A live external Google OAuth round trip on localhost. No operator
-OAuth client credentials or Google account were supplied, and this run made no
-external sign-in attempt. Browser/API fixtures exercise the route and UI; unit
-tests exercise the callback and verified-subject security behavior.
+UNVERIFIED — The operator's live external Google OAuth round trip on localhost.
+Per the coordinator decision recorded in main, this remains a post-merge
+acceptance obligation. No operator OAuth client credentials or Google account
+were supplied, and this run made no external sign-in attempt. Browser/API
+fixtures exercise the route and UI; unit tests exercise the callback and
+verified-subject security behavior.
 
-UNMET — Using the local UI to administer the hosted service. Local authorization
-records are local SQLite state. No separately authenticated HTTPS hosted admin
-service API exists in this scope, so the local UI labels its target and does
-not imply shared hosted state. To administer hosted SIGMA, sign into the hosted
-deployment itself.
+DEFERRED — Local-to-hosted administration is explicitly out of T40 scope per
+coordinator decision `42bfb3a`. Local SIGMA manages local authorization records;
+hosted administration is performed through the hosted SIGMA website. The UI
+and documentation keep these targets distinct. This is not an unmet T40
+requirement.
 
 Browser evidence used real Chrome against isolated ports because other
 checkouts owned the standard 8000/5173 ports; no other checkout was stopped or
@@ -71,5 +73,9 @@ Commands/evidence:
 - Chrome screenshots: `/tmp/sigma-t40-admin-home-{1440,390}.png`,
   `/tmp/sigma-t40-admin-dialog-{1440,390}.png`,
   `/tmp/sigma-t23.1-cloud-header-{1280,390,320}.png`.
+
+Post-rebase verification: all three focused Chrome checks above passed again;
+`./sigma test` passed again. The updated PR head is recorded in the commit/PR
+metadata after push.
 
 No paid provider calls or cloud provisioning were performed. No self-merge.

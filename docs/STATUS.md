@@ -3,7 +3,7 @@
 ## T40 local Google administrator bootstrap and account UI (2026-10-23)
 
 Implemented the clarified T40 behavior on `gray/t40-cloud-ui-admin`, based on
-`main` commit `c44a4fe`. The simulated administrator command and Vite middleware
+`main` commit `42bfb3a`. The simulated administrator command and Vite middleware
 were removed, as was the separate real-auth CLI switch. `./sigma start --nav`
 now opens the existing Home and, when the actual bootstrap email is configured
 alongside Google OAuth client credentials, automatically starts real
@@ -19,7 +19,7 @@ authorization, session, nonce, state, ID-token and CSRF checks remain active.
 The existing Home, identity pills, access-management table, staged updates and
 copper artwork credit remain in place.
 
-Validation on the rebased T40 branch:
+Validation rerun on the T40 branch rebased onto `42bfb3a`:
 
 - `./sigma test` passed, including the 13 focused cloud-auth scenarios, CLI
   option rejection/`--nav` help, automatic local auth environment propagation,
@@ -41,12 +41,12 @@ Validation on the rebased T40 branch:
 Acceptance status: MET — fake administrator mode removal, normal `--nav`
 startup, deterministic bootstrap email/subject binding and denial, backend-only
 authorization enforcement, local OAuth configuration flow, account UI, and
-responsive access-management behavior. UNVERIFIED — completing an external
-Google login with operator-owned OAuth credentials; no real OAuth credentials
-were supplied for this acceptance run. UNMET — administering the hosted service
-from the local application: local rules are explicitly local SQLite state, and
-there is no separately authenticated hosted administration API. Hosted
-administrators must sign in to the hosted SIGMA service itself.
+responsive access-management behavior. DEFERRED — administering hosted access
+from a locally running SIGMA instance is explicitly outside T40; hosted
+administrators use the hosted SIGMA website, while local administration changes
+only local authorization records. UNVERIFIED — the operator's real localhost
+Google OAuth round trip, to be completed after merge. No real OAuth credentials
+were supplied for this acceptance run.
 
 ## Lean toolbar color feedback (2026-10-23)
 
