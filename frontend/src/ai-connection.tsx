@@ -267,16 +267,20 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
   const serviceFunded = cloudFunding?.target === 'hosted';
+  const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && !cloudFunding.authorized;
   const projectHeaderLabel = serviceFunded
     ? 'ChatGPT · SIGMA service'
+    : localGoogleRequired
+      ? 'ChatGPT sign-in · Google sign-in required'
     : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
     ? 'ChatGPT connected'
     : status === 'connected' && ai.info?.mode === 'api_key'
       ? 'OpenAI API connected'
       : `ChatGPT sign-in · ${label}`;
+  const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} title={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} aria-haspopup="dialog" aria-expanded={open} aria-disabled={disabled} tabIndex={disabled ? -1 : 0} onClick={event => { if (disabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
+  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} title={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
@@ -293,8 +297,8 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
         {ai.info?.mode !== 'api_key' && <>{['disconnected', 'reauth_required', 'unauthorized', 'plan_not_permitted'].includes(ai.info?.status ?? 'disconnected') && <ConnectAction/>}{ai.info?.active_account && <div className="connection-usage-actions"><ManageUsage/><button type="button" disabled={ai.connecting || ai.transitioning} onClick={() => void ai.disconnect()}>Disconnect</button></div>}</>}
         {!!ai.info?.accounts?.length && <label>Switch account<select disabled={ai.transitioning} aria-label="Switch ChatGPT account" value={ai.info.active_account ?? ''} onChange={event => void ai.selectMode('chatgpt', event.target.value)}>{ai.info.accounts.map(account => <option key={account.id} value={account.id}>{account.label}</option>)}</select></label>}
         {ai.info?.active_account && <button type="button" disabled={ai.connecting} onClick={() => void ai.signIn({ newAccount: true })}>Connect another account</button>}
-        <button type="button" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
-        {ai.info?.mode === 'api_key' ? <button type="button" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>Use API key (advanced)</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" onClick={() => void ai.selectMode('api_key')}>Use API key · billed separately</button></details>}
+        <button type="button" className="connection-text-action" disabled={ai.checking || ai.connecting || ai.transitioning} onClick={() => void ai.refresh('manual').catch(() => {})}>{ai.checking ? 'Checking…' : 'Retry connection'}</button>
+        {ai.info?.mode === 'api_key' ? <button type="button" className="connection-text-action" onClick={() => void ai.selectMode('chatgpt')}>Use ChatGPT plan</button> : <details className="advanced-ai"><summary>API key option</summary><p>Uses OPENAI_API_KEY from this checkout's .env or server environment. API usage is billed separately from your ChatGPT plan. No enable switch is needed.</p><button type="button" className="connection-text-action" onClick={() => void ai.selectMode('api_key')}>Separately billed API Key</button></details>}
       </>}
       {ai.error && <p role="alert">{ai.error}</p>}
     </div></>, document.body)}

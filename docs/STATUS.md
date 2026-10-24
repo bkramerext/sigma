@@ -1,5 +1,66 @@
 # SIGMA status
 
+## T43 manual acceptance fixes (2026-10-23)
+
+Implemented on `gray/t43-manual-acceptance-fixes`, based on current `main`
+`bd0429e`. The signed-out Home now uses the concise approved-Gmail copy and
+the existing restrained copper/serif prompt styling; a class-name mismatch had
+previously left the heading inheriting Home's 74px hero scale. The Home Google
+pill now matches the neighboring ChatGPT pill's height, typography, border and
+surface, with no repeated “Sign in” label. Its popover reuses ChatGPT's anchored
+panel/backdrop, focus, keyboard dismissal and responsive placement.
+
+The initial toast was traced to the expected signed-out `GET /api/ai/connection`
+401 issued by `AIProvider` in hosted/local-Google-gated Home. Toast handling now
+suppresses only that endpoint's exact `Authentication required.` 401. Other
+401s and genuine request failures still surface.
+
+The blocking ChatGPT 403 came from cloud-auth middleware denying every
+`/api/ai/*` request whenever cloud authentication was enabled, including the
+launcher-established, loopback-only local Google mode. When
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is configured, `./sigma start` sets
+`SIGMA_CLOUD_AUTH_ENABLED=true`, `SIGMA_CLOUD_AUTH_LOCAL=true`, and the
+loopback origin. The checkout `.env` alone therefore does not show the full
+effective mode; shell configuration may supply the bootstrap email. Middleware
+now retains the personal-provider prohibition for hosted mode and lets an
+authenticated local Google session use the separate local ChatGPT account
+store. Project authorization, the local Google session check, provider
+account-flow checks, and hosted 403 behavior remain intact.
+
+Administrator Settings now says “Built-in administrator” and “Authorized
+users”, has separate keyboard-operable Access Management and Account usage
+tabs, and always places a labeled New action in a dedicated table row. ChatGPT
+connection controls use SIGMA's copper primary treatment and underlined Retry
+and Separately billed API Key actions.
+
+Verification:
+
+- `./sigma test` passed all lifecycle/project/research/cloud scenarios,
+  `tests/cloud_auth.py` (14 scenarios), Ruff, formatting, Pyright (zero
+  diagnostics), frontend typecheck, and production build. Existing
+  Starlette/httpx deprecation warnings remain.
+- Real Chrome `browser_checks/t40_cloud_ui.py` passed deterministic
+  signed-out/admin/member states, prompt and anchored Google popover at
+  1440px/390px, expected-vs-genuine 401 toast behavior, pill alignment,
+  admin tabs/keyboard navigation, populated and empty authorization lists,
+  Add/edit/save/Revoke, and responsive administrator layouts.
+- Real Chrome `browser_checks/t43_manual_acceptance.py` passed copper and
+  underlined action styles, API-key expansion, anchored dismissal/focus
+  restoration, and 1280px/390px/320px widths. Screenshots:
+  `/tmp/sigma-t43-signin-1440.png`, `/tmp/sigma-t43-signin-390.png`,
+  `/tmp/sigma-t40-admin-home-1440.png`, `/tmp/sigma-t40-admin-dialog-390.png`,
+  and `/tmp/sigma-t43-chatgpt-320.png`.
+- Chrome ran against an isolated Vite/API pair on 5189/8011; existing checkout
+  listeners on 5173/8000 were left untouched. Authentication states were
+  deterministic fixtures. No live Google OAuth, ChatGPT OAuth, paid provider
+  call, or cloud provisioning was used.
+
+Acceptance: **MET** — nine ticket fixes, local-versus-hosted ChatGPT
+authorization boundary, browser layout/interactions, and automated suite.
+**UNVERIFIED** — the operator's real localhost Google OAuth round trip and a
+real ChatGPT OAuth handoff; deterministic Google-session and hosted-denial
+tests cover the relevant backend paths without using live credentials.
+
 ## Local launcher and shutdown reliability (2026-10-23)
 
 Launcher recovery now discovers owner records in the private per-user SIGMA

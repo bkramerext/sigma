@@ -93,7 +93,7 @@
 
 .home-cloud-prompt, .home-cloud-denied { position: relative; z-index: 1; width: min(520px, calc(100% - 56px)); margin: 18px 0 0 clamp(26px, 5.4vw, 90px); padding: 20px 22px; border: 1px solid #9a684c; border-radius: 7px; background: linear-gradient(118deg, #090e16ec, #15120ff0); box-shadow: 0 18px 48px #0008; color: #d7d0c7; }
 .home-cloud-prompt > p, .home-cloud-denied > .cloud-auth-kicker { margin: 0 0 8px; color: #d9a77b; font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .15em; text-transform: uppercase; }
-.home-cloud-prompt h1, .home-cloud-denied h1 { margin: 0 0 10px; color: #edc39c; font: 400 clamp(24px, 3vw, 34px)/1.2 Georgia, serif; letter-spacing: 0; text-shadow: none; }
+.home-page .home-cloud-prompt h1, .home-page .home-cloud-denied h1 { margin: 0; color: #edc39c; font: 400 clamp(19px, 2vw, 23px)/1.35 Georgia, serif; letter-spacing: 0; text-shadow: none; }
 .home-cloud-prompt > span, .home-cloud-denied > p { color: #c1b9ad; font: 13px/1.65 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-cloud-denied-email { overflow-wrap: anywhere; }
 .home-cloud-denied-email strong { color: #edc39c; font-weight: 500; }
@@ -160,6 +160,9 @@ button.project-google-signin:hover:not(:disabled), button.project-google-signin:
 button.project-google-signin:disabled { border-color: #5b5148; background: #091824ed; color: #b4bdc5; cursor: not-allowed; opacity: 1; }
 .project-google-signin small { color: #aeb9c4; font: inherit; font-size: 9px; }
 .home-page .project-google-signin { position: relative; z-index: 2; }
+.home-page .home-topline .project-google-signin { min-height: 34px; padding: 7px 12px; border-color: #a9654875; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
+.home-page .home-topline .project-google-signin:hover:not(:disabled), .home-page .home-topline .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
+.home-page .home-topline .project-google-signin .connection-dot { margin-top: 0; }
 .google-account-dialog, .cloud-access-dialog { color-scheme: dark; color: #dce7f0; border: 1px solid #a96548; border-radius: 8px; background: linear-gradient(145deg, #16212c, #0b141e); box-shadow: 0 24px 65px #000b; }
 .google-account-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; }
 .google-account-dialog::backdrop, .cloud-access-dialog::backdrop { background: #000b; }
@@ -184,15 +187,17 @@ button.project-google-signin:disabled { border-color: #5b5148; background: #0918
 .admin-text-action:disabled { background: transparent; color: #929da5; opacity: .75; cursor: not-allowed; }
 .admin-target { margin: 8px 0 16px; color: #aeb9c4; font-size: 11px; }
 .admin-tabs { display: flex; gap: 18px; border-bottom: 1px solid #35404a; margin-bottom: 15px; }
-.admin-tabs [role="tab"] { min-height: 0; padding: 7px 1px 9px; border: 0; border-bottom: 2px solid #d9a66c; border-radius: 0; background: transparent; color: #f0cca0; box-shadow: none; font: 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; }
+.admin-tabs [role="tab"] { min-height: 0; padding: 7px 1px 9px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #aab9c7; box-shadow: none; font: 13px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.admin-tabs [role="tab"][aria-selected="true"] { border-bottom-color: #d9a66c; color: #f0cca0; }
+.admin-tabs [role="tab"]:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; }
 .admin-access-note { margin: 0 0 7px; color: #c0cad2; font-size: 12px; }
 .cloud-access-bootstrap { margin: 4px 0 10px; color: #aeb9c4; font-size: 11px; }
-.admin-spending-disclosure { margin: 12px 0; padding: 8px 0; border-block: 1px solid #a9654844; }
-.admin-spending-disclosure > summary { color: #e1bd94; font-size: 12px; }
-.admin-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 15px 0 7px; }
+.admin-table-heading { display: flex; align-items: center; gap: 12px; margin: 15px 0 7px; }
 .admin-table-heading h3 { color: #e5ad8f; font: 400 20px/1.25 Georgia, serif; }
-.admin-add-toggle { display: grid; place-items: center; width: 27px; min-width: 27px; height: 27px; min-height: 27px; padding: 0; border: 1px solid #805d43; border-radius: 50%; background: #101923; color: #e3b485; font: 19px/1 Inter, sans-serif; }
-.admin-add-toggle:hover { background: #342317; color: #ffe0b3; }
+.admin-new-entry-row, .admin-add-row { border-top: 1px solid #a9654844; }
+.admin-add-row th { text-align: left; }
+.admin-add-row .admin-text-action { font-size: 12px; }
+.admin-usage-panel > h3 { margin: 2px 0 12px; color: #e5ad8f; font: 400 20px/1.25 Georgia, serif; }
 .admin-table-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-color: #80503e #091521; scrollbar-width: thin; }
 .admin-grants-table, .admin-usage-table { width: 100%; border-collapse: collapse; color: #dce7f0; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; }
 .admin-grants-table { min-width: 650px; }
@@ -224,6 +229,8 @@ button.project-google-signin:disabled { border-color: #5b5148; background: #0918
   .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 78px; height: 78px; }
   .home-page .project-google-signin { gap: 4px; padding-inline: 6px; font-size: 8px; }
   .home-page .project-google-signin small { font-size: 7px; }
+  .home-page .home-topline .project-google-signin { min-height: 28px; padding: 4px 9px; gap: 7px; font-size: 10px; line-height: 1.2; align-items: flex-start; }
+  .home-page .home-topline .project-google-signin .connection-dot { margin-top: 3px; }
   .home-page .home-topline .api-connection > summary { max-width: 55vw; padding-inline: 7px; font-size: 8px; }
   .cloud-access-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); padding: 16px 13px; }
   .admin-dialog-heading h2 { font-size: 23px; }

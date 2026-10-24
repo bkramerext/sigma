@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref, type ReactNode } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -1858,7 +1858,7 @@ function Home({ initialPath, onOpen }: {
       {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Administrator Settings</a>}
       <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="cloud-home-prompt"><p>Private research workspace</p><h1>Sign in to access projects</h1><span>Your projects and research are available after an administrator authorizes your Google account.</span></section>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -2594,10 +2594,39 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
   const [open, setOpen] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
+  const disclosure = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const [error, setError] = useState('');
-  useEffect(() => { if (open && !dialog.current?.open) dialog.current?.showModal(); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = disclosure.current?.getBoundingClientRect();
+      if (!rect || !panel.current) return;
+      const panelRect = panel.current.getBoundingClientRect();
+      const below = rect.bottom + 8 + panelRect.height <= window.innerHeight - 8;
+      const right = Math.min(Math.max(8, window.innerWidth - rect.right), Math.max(8, window.innerWidth - panelRect.width - 8));
+      setPosition({ top: below ? rect.bottom + 8 : Math.max(8, rect.top - panelRect.height - 8), right });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      panel.current?.querySelector<HTMLElement>('button:not(:disabled), a[href]')?.focus();
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
+      if (event.key !== 'Tab' || !panel.current) return;
+      const items = Array.from(panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]')).filter(item => item.offsetParent !== null);
+      if (!items.length) { event.preventDefault(); panel.current.focus(); return; }
+      const first = items[0]; const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', escape);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', escape); };
+  }, [open]);
   const target = cloud?.target === 'hosted' ? 'Hosted SIGMA service' : 'Local SIGMA';
+  function close() { setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
+  function dismissBackdrop(event: ReactPointerEvent<HTMLDivElement>) { if (event.target === event.currentTarget) close(); }
   async function signOut() {
     setError('');
     try {
@@ -2608,20 +2637,21 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   }
   const description = cloud?.authenticated ? 'Open Google account settings' : cloud?.enabled ? 'Open Google sign-in' : 'Google sign-in is unavailable in this local workspace.';
   return <>
-    <button type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} disabled={!cloud?.enabled} onClick={() => setOpen(true)}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google Sign-in</span><small>{cloud?.authenticated ? 'Signed in' : cloud?.enabled ? 'Sign in' : 'Coming soon'}</small>
+    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} disabled={!cloud?.enabled} onClick={() => { setError(''); setOpen(true); }}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google sign-in</span>{(cloud?.authenticated || !cloud?.enabled) && <small>{cloud?.authenticated ? 'Signed in' : 'Coming soon'}</small>}
     </button>
-    {open && createPortal(<dialog ref={dialog} className="google-account-dialog" aria-labelledby="google-account-title" onCancel={event => { event.preventDefault(); dialog.current?.close(); setOpen(false); }} onClose={() => setOpen(false)}>
-      <p className="cloud-auth-kicker">Verified Google account</p>
-      <h2 id="google-account-title">Google Sign-in</h2>
-      <p className="google-account-target">Authorization target: <strong>{target}</strong></p>
+    {open && createPortal(<>
+      <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
+      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby="google-account-title" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>
+      <h2 id="google-account-title">Connect your Google account</h2>
+      <p className="google-account-target">{target}</p>
       {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
       {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-      {!cloud?.authenticated && <a className="cloud-text-button" href="/api/cloud-auth/login">Continue with Google</a>}
-      {cloud?.authenticated && <><button type="button" className="cloud-text-button" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="cloud-text-button" onClick={() => void signOut()}>Sign out</button></>}
+      {!cloud?.authenticated && <a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a>}
+      {cloud?.authenticated && <><button type="button" className="google-text-action" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button></>}
       {error && <p role="alert">{error}</p>}
-      <button type="button" className="cloud-text-button google-account-close" onClick={() => { dialog.current?.close(); setOpen(false); }}>Close</button>
-    </dialog>, document.body)}
+      </div>
+    </>, document.body)}
   </>;
 }
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
@@ -2640,6 +2670,7 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
   const [newRole, setNewRole] = useState<'member' | 'admin'>('member');
   const [newAllowance, setNewAllowance] = useState('');
   const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'access' | 'usage'>('access');
   useEffect(() => {
     setDrafts(Object.fromEntries(grants.map(grant => [`${grant.kind}:${grant.value}`, { role: grant.role, allowance: allowanceInput(grant.allowance_usd) }])));
   }, [grants]);
@@ -2682,14 +2713,19 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2><button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
     <p className="admin-target">{target === 'local' ? 'Local SIGMA access rules' : 'Hosted SIGMA access rules'}</p>
-    <div className="admin-tabs" role="tablist" aria-label="Administrator settings"><button type="button" role="tab" aria-selected="true" aria-controls="access-management-panel" id="access-management-tab">Access Management</button></div>
-    <section id="access-management-panel" role="tabpanel" aria-labelledby="access-management-tab" className="admin-access-panel">
+    <div className="admin-tabs" role="tablist" aria-label="Administrator settings" onKeyDown={event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 'access' : event.key === 'End' ? 'usage' : event.key === 'ArrowRight' ? (activeTab === 'access' ? 'usage' : 'access') : (activeTab === 'usage' ? 'access' : 'usage');
+      setActiveTab(next); requestAnimationFrame(() => document.getElementById(next === 'access' ? 'access-management-tab' : 'account-usage-tab')?.focus());
+    }}>
+      <button type="button" role="tab" id="access-management-tab" aria-controls="access-management-panel" aria-selected={activeTab === 'access'} tabIndex={activeTab === 'access' ? 0 : -1} onClick={() => setActiveTab('access')}>Access Management</button>
+      <button type="button" role="tab" id="account-usage-tab" aria-controls="account-usage-panel" aria-selected={activeTab === 'usage'} tabIndex={activeTab === 'usage' ? 0 : -1} onClick={() => setActiveTab('usage')}>Account usage</button>
+    </div>
+    <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
-      <p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>
-      <details className="admin-spending-disclosure"><summary>Recorded account usage</summary>
-        {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th>Email</th><th>Access</th><th>Allowance</th><th>Estimated</th><th>Held</th><th>Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
-      </details>
-      <div className="admin-table-heading"><h3>Authorizations</h3><button type="button" className="admin-add-toggle" aria-label={addOpen ? 'Hide new authorization row' : 'Add authorization'} aria-expanded={addOpen} onClick={() => setAddOpen(value => !value)}>+</button></div>
+      <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
+      <div className="admin-table-heading"><h3>Authorized users</h3></div>
       <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
@@ -2701,16 +2737,20 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
             <td>{grant.active === 1 && !isBootstrap && <button type="button" className="admin-text-action admin-revoke" disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
           </tr>;
         })}
-        {addOpen && <tr className="admin-new-entry-row">
+        {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
+        {addOpen ? <tr className="admin-new-entry-row">
           <th scope="row"><label><span className="sr-only">Entry type</span><select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label><input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></th>
           <td>{newKind === 'domain' ? <span>Member</span> : <select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
           <td><label className="admin-allowance-input"><span className="sr-only">New ChatGPT allowance</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></label><small>Blank uses the configured default</small></td>
           <td><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button></td>
-        </tr>}
-        {!ordered.length && !addOpen && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
+        </tr> : <tr className="admin-add-row"><th scope="row"><button type="button" className="admin-text-action" aria-expanded="false" onClick={() => setAddOpen(true)}>New</button></th><td/><td/><td/></tr>}
       </tbody></table></div>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p><button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save Updates</button></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
+    </section>
+    <section id="account-usage-panel" role="tabpanel" tabIndex={0} aria-labelledby="account-usage-tab" className="admin-usage-panel" hidden={activeTab !== 'usage'}>
+      <h3>Account usage</h3>
+      {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
     </section>
   </dialog>;
 }
