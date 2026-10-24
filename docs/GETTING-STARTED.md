@@ -31,7 +31,7 @@ Review the **Outcome** and its conclusion alongside detailed findings, objection
 
 ## Reports and exports
 
-Use the workspace's **Report / Export** actions to produce audit data or readable reports in the formats offered by the dialog. Research paper and PDF generation, where available, are separate bounded authoring workflows; inspect the evidence and stated limitations before treating a paper as complete. Reports communicate findings, not independent verification.
+Use the workspace's **Report / Export** actions to produce audit data or readable reports in the formats offered by the dialog. For AI-authored TeX papers, SIGMA can use staged long-form generation for large evidence snapshots, with a preflight showing provider-call ceilings and explicit confirmation. Progress, cancellation, and resumable checkpoints are available; inspect omissions, objections, and verification limits before treating the paper as complete. Reports communicate findings, not independent verification.
 
 ## Optional computational experiments
 
