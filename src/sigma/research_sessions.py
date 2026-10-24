@@ -1149,9 +1149,14 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
     elif (
         objective_review
         and objective_review.get("status") == "achieved"
-        and objective_review.get("verification_status") == "incomplete"
+        and objective_review.get("verification_status") != "convincing_unverified"
     ):
-        assessment, label = "mixed", "Mixed · candidate assessment incomplete"
+        assessment = "mixed"
+        label = (
+            "Mixed · candidate assessment incomplete"
+            if objective_review.get("verification_status") == "incomplete"
+            else "Mixed · candidate verification unassessed"
+        )
         summary = str(objective_review.get("claim") or "A candidate was reported.")
     elif objective_review and objective_review.get("status") == "achieved":
         assessment = "positive"

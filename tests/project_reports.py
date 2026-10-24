@@ -369,7 +369,7 @@ def main() -> None:
         "Verification: Convincing but unverified",
         "Solution claim: Candidate formula",
         "Claim scope: conditional",
-        "Verification status: convincing_unverified",
+        "Saved verification code: convincing_unverified",
         "Strategy Assessments",
         "Productive: The linked counterexample attempt clarified the boundary case.",
         "Claim: A < B & C",
@@ -385,7 +385,7 @@ def main() -> None:
     del legacy_data["research_sessions"][0]["outcome"]["solution_review"]["verification_status"]
     legacy_report, _ = render_report(legacy_data, "txt")
     assert isinstance(legacy_report, str)
-    assert "Verification status:" not in legacy_report
+    assert "Saved verification code:" not in legacy_report
     assert "Difficulty:" not in plain
     data["project"]["difficulty"] = "easy"
     plain_with_difficulty, _ = render_report(data, "txt")

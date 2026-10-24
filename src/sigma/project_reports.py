@@ -168,7 +168,9 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             if _items(review.get("skeptic_objections")):
                 lines.append("")
             if review.get("verification_status", "unknown") != "unknown":
-                lines.insert(-1, f"Verification status: {_value(review['verification_status'])}")
+                lines.insert(
+                    -1, f"Saved verification code: {_value(review['verification_status'])}"
+                )
             argument_steps = _rows(review.get("argument_steps"))
             if argument_steps:
                 lines += ["Reviewed reasoning", "~~~~~~~~~~~~~~~~~"]

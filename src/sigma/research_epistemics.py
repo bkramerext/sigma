@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class ArgumentAvailability(TypedDict):
-    status: str
+    status: Literal["structured", "narrative", "not_recorded"]
     label: str
 
 

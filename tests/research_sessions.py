@@ -2680,6 +2680,7 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
         "open_obligations": [],
         "objective_review": {
             "status": "achieved",
+            "verification_status": "convincing_unverified",
             "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
             "argument_summary": "The insertion bound and explicit arrangement match.",
             "argument_steps": [conclusion_step],
@@ -6332,7 +6333,7 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
                 before = deepcopy(record)
                 outcome = research_sessions._outcome(record)
                 assert outcome["verification_label"] == expected
-                if code == "incomplete":
+                if code != "convincing_unverified":
                     assert outcome["assessment"] == "mixed"
                     assert "Complete reviewed candidate answer" not in outcome["conclusion"]
                 assert expected in outcome["conclusion"]
