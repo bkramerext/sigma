@@ -44,7 +44,7 @@ provider charges: $0. Current live domain reasoning and paper quality remain
 UNVERIFIED. This is product-assessment evidence, not live alpha acceptance.
 
 After merging main `e7fa678` for documentation reconciliation, the complete
-offline suite passed again; log: `evidence/sigma-test-post-merge.log` in the
+offline suite passed again; log: `evidence/sigma-test-post-merge.txt` in the
 study directory. Browser scores remain tied to `6059d67`; the newer About
 interaction was not retroactively evaluated.
 

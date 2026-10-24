@@ -72,4 +72,4 @@ Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.m
 - [Initial browser workspace](evidence/scientific-investigation-workspace.txt), [expanded view](evidence/scientific-investigation-expanded.txt) and [stock downloaded report](evidence/scientific-investigation-report.txt).
 - [Saved continuation](evidence/scientific-investigation-continuation.txt), [continued downloaded report](evidence/scientific-investigation-continuation-report.txt), [Recent view](evidence/scientific-investigation-recent.txt).
 - [Settings](evidence/scientific-investigation-settings.txt), [limits](evidence/scientific-investigation-limits.txt), [generation setup](evidence/scientific-investigation-generation-preflight.txt), [paper setup](evidence/scientific-investigation-paper-preflight.txt).
-- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.txt).

@@ -44,7 +44,7 @@ Integration: merged main e7fa678 (T46 About) after the study; resolved only
 STATUS by preserving upstream content plus the study entry. Scored browser
 evidence remains at 6059d67; About is not retroactively assessed.
 
-Post-merge full offline suite also passed. Log: study evidence/sigma-test-post-merge.log.
+Post-merge full offline suite also passed. Log: study evidence/sigma-test-post-merge.txt.
 Final document links, 17x12 required report sections, canonical hashes,
 all continuation results and additive STATUS reconciliation checked.
 Isolated study servers stopped. No implementation delta relative to main.

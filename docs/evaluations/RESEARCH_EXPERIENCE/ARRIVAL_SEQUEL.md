@@ -72,5 +72,5 @@ Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.m
 - [Initial browser workspace](evidence/arrival-sequel-workspace.txt), [expanded view](evidence/arrival-sequel-expanded.txt) and [stock downloaded report](evidence/arrival-sequel-report.txt).
 - [Saved continuation](evidence/arrival-sequel-continuation.txt), [continued downloaded report](evidence/arrival-sequel-continuation-report.txt), [Recent view](evidence/arrival-sequel-recent.txt).
 - [Settings](evidence/arrival-sequel-settings.txt), [limits](evidence/arrival-sequel-limits.txt), [generation setup](evidence/arrival-sequel-generation-preflight.txt), [paper setup](evidence/arrival-sequel-paper-preflight.txt).
-- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.txt).
 - [Desktop screenshot](evidence/arrival-sequel-desktop.png) and [390px screenshot](evidence/arrival-sequel-mobile.png); selective fresh viewport captures after continuation. Text dumps preserve the initial stock state.

@@ -72,4 +72,4 @@ Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.m
 - [Initial browser workspace](evidence/warp-drive-physics-workspace.txt), [expanded view](evidence/warp-drive-physics-expanded.txt) and [stock downloaded report](evidence/warp-drive-physics-report.txt).
 - [Saved continuation](evidence/warp-drive-physics-continuation.txt), [continued downloaded report](evidence/warp-drive-physics-continuation-report.txt), [Recent view](evidence/warp-drive-physics-recent.txt).
 - [Settings](evidence/warp-drive-physics-settings.txt), [limits](evidence/warp-drive-physics-limits.txt), [generation setup](evidence/warp-drive-physics-generation-preflight.txt), [paper setup](evidence/warp-drive-physics-paper-preflight.txt).
-- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.txt).

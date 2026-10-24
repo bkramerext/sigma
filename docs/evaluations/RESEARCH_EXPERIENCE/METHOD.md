@@ -14,4 +14,4 @@ Final coverage: all 17 browser and manual continuation journeys completed. Nonco
 
 Review integration note: main advanced to `e7fa678` (T46 About dialog) during the study. It was merged to resolve a STATUS conflict; upstream STATUS was preserved with only this study entry prepended. All scored browser observations remain tied to `6059d67`. The newly merged About interaction was not retroactively evaluated.
 
-The full offline suite passed again after integration; [post-merge log](evidence/sigma-test-post-merge.log). Both isolated study servers were stopped. Final checks confirmed all 17 required reports/sections, document links, canonical hashes and manual continuation results.
+The full offline suite passed again after integration; [post-merge log](evidence/sigma-test-post-merge.txt). Both isolated study servers were stopped. Final checks confirmed all 17 required reports/sections, document links, canonical hashes and manual continuation results.

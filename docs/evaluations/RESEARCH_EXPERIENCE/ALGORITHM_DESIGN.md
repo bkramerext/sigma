@@ -72,5 +72,5 @@ Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.m
 - [Initial browser workspace](evidence/algorithm-design-workspace.txt), [expanded view](evidence/algorithm-design-expanded.txt) and [stock downloaded report](evidence/algorithm-design-report.txt).
 - [Saved continuation](evidence/algorithm-design-continuation.txt), [continued downloaded report](evidence/algorithm-design-continuation-report.txt), [Recent view](evidence/algorithm-design-recent.txt).
 - [Settings](evidence/algorithm-design-settings.txt), [limits](evidence/algorithm-design-limits.txt), [generation setup](evidence/algorithm-design-generation-preflight.txt), [paper setup](evidence/algorithm-design-paper-preflight.txt).
-- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.txt).
 - [Desktop screenshot](evidence/algorithm-design-desktop.png) and [390px screenshot](evidence/algorithm-design-mobile.png); selective fresh viewport captures after continuation. Text dumps preserve the initial stock state.

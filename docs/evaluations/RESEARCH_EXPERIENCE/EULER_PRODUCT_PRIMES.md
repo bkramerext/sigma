@@ -72,4 +72,4 @@ Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.m
 - [Initial browser workspace](evidence/euler-product-primes-workspace.txt), [expanded view](evidence/euler-product-primes-expanded.txt) and [stock downloaded report](evidence/euler-product-primes-report.txt).
 - [Saved continuation](evidence/euler-product-primes-continuation.txt), [continued downloaded report](evidence/euler-product-primes-continuation-report.txt), [Recent view](evidence/euler-product-primes-recent.txt).
 - [Settings](evidence/euler-product-primes-settings.txt), [limits](evidence/euler-product-primes-limits.txt), [generation setup](evidence/euler-product-primes-generation-preflight.txt), [paper setup](evidence/euler-product-primes-paper-preflight.txt).
-- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.txt).

@@ -72,4 +72,4 @@ Shared observations and proposed remedies are grouped in [SYNTHESIS](SYNTHESIS.m
 - [Initial browser workspace](evidence/jesus-cannabis-workspace.txt), [expanded view](evidence/jesus-cannabis-expanded.txt) and [stock downloaded report](evidence/jesus-cannabis-report.txt).
 - [Saved continuation](evidence/jesus-cannabis-continuation.txt), [continued downloaded report](evidence/jesus-cannabis-continuation-report.txt), [Recent view](evidence/jesus-cannabis-recent.txt).
 - [Settings](evidence/jesus-cannabis-settings.txt), [limits](evidence/jesus-cannabis-limits.txt), [generation setup](evidence/jesus-cannabis-generation-preflight.txt), [paper setup](evidence/jesus-cannabis-paper-preflight.txt).
-- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.log).
+- [Continuation ledger](evidence/continuations.json), [deep checks and unchanged-source result](evidence/deep-observations.json), [actual full offline test log](evidence/sigma-test.txt).

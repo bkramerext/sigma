@@ -111,4 +111,4 @@ These are themes for product prioritization, not seventeen new tickets. No fixes
 - [Initial browser state](evidence/nonconsecutive-subset-sums-workspace.txt), [fully expanded evidence text](evidence/nonconsecutive-subset-sums-expanded.txt), [artifact screenshot](evidence/nonconsecutive-artifact.png).
 - [Stock text report](evidence/nonconsecutive-subset-sums-report.txt), [continued text report](evidence/nonconsecutive-subset-sums-continuation-report.txt), [saved manual branch](evidence/nonconsecutive-subset-sums-continuation.txt).
 - [Desktop](evidence/nonconsecutive-subset-sums-desktop.png), [390px viewport](evidence/nonconsecutive-subset-sums-mobile.png), [deep navigation/fork observations](evidence/deep-observations.json).
-- [Paper setup only](evidence/nonconsecutive-subset-sums-paper-preflight.txt); no paper or PDF was generated. [Full offline check log](evidence/sigma-test.log).
+- [Paper setup only](evidence/nonconsecutive-subset-sums-paper-preflight.txt); no paper or PDF was generated. [Full offline check log](evidence/sigma-test.txt).

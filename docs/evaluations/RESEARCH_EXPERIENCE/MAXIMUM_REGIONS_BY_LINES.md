@@ -106,4 +106,4 @@ No implementation changes were made. Historical behavior does not imply the same
 - [Supplementary archive initial rendering](evidence/maximum-regions-archive-initial.txt), [expanded evidence](evidence/maximum-regions-archive-expanded.txt), [Conclusion screenshot](evidence/maximum-regions-archive-conclusion.png), [mobile screenshot](evidence/maximum-regions-archive-mobile.png).
 - [Downloaded historical HTML report](evidence/maximum-regions-archive-report.html), [Chrome report screenshot](evidence/maximum-regions-html.png), [HTML inspection results](evidence/deep-observations.json).
 - [Findings-fork prefill](evidence/maximum-regions-archive-fork-prefill.txt), [paper setup only](evidence/maximum-regions-archive-paper-preflight.txt).
-- [Independent arithmetic checks](evidence/independent-checks.json), [archive browser driver](evidence/scripts/archive_pass.py), [offline test results](evidence/sigma-test.log).
+- [Independent arithmetic checks](evidence/independent-checks.json), [archive browser driver](evidence/scripts/archive_pass.py), [offline test results](evidence/sigma-test.txt).
