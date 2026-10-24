@@ -26,6 +26,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
+from sigma.config_secrets import SecretConfigurationError, secret_value
+
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
@@ -108,12 +110,17 @@ def config() -> Config:
     if not enabled:
         return Config(False, None, None, None, None, None, None, None, False)
     client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip() or None
-    client_secret = os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip() or None
+    secret_error = False
+    try:
+        client_secret = secret_value("GOOGLE_OIDC_CLIENT_SECRET")
+    except SecretConfigurationError:
+        client_secret = None
+        secret_error = True
     origin = os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").strip().rstrip("/") or None
     bootstrap = os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip()
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
-    error = None
+    error = "Cloud authentication secret configuration is invalid." if secret_error else None
     if (
         not client_id
         or not client_secret

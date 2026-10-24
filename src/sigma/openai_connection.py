@@ -146,7 +146,12 @@ async def auth_context() -> dict[str, Any]:
     from sigma import cloud_workspaces
 
     if cloud_workspaces.enabled():
-        token = os.environ.get("SIGMA_CLOUD_OPENAI_API_KEY", "").strip()
+        from sigma.config_secrets import SecretConfigurationError, secret_value
+
+        try:
+            token = secret_value("SIGMA_CLOUD_OPENAI_API_KEY") or ""
+        except SecretConfigurationError:
+            token = ""
         return {
             "mode": "api_key",
             "token": token,
