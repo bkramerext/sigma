@@ -2645,6 +2645,268 @@ def test_outcome_classification():
         unsupported["assessment"] == "mixed"
         and "No supporting construction." in unsupported["caveats"]
     )
+
+
+def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
+    view = initialize_project(
+        path,
+        "Conclusion cases",
+        "Determine whether the stated formula holds for all n, and justify it.",
+    )
+    conclusion_step = {
+        "number": 1,
+        "title": "Match the insertion bound",
+        "argument": "The insertion bound and attaining construction give the same value.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": ["artifact-a"],
+        "research_artifact_id": "artifact-a",
+        "review": {
+            "disposition": "accepted",
+            "rationale": "The cited construction attains the upper bound.",
+            "objection": "",
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    artifact = {
+        "id": "artifact-a",
+        "sequence": 1,
+        "strategy_id": "strategy-a",
+        "claim_or_question": "R(n) = 1 + n(n+1)/2",
+        "method": "The insertion argument gives the upper bound.",
+        "skeptic_response": "The argument is coherent, but no external checker was used.",
+        "reasoning_steps": [conclusion_step],
+        "coordinator_decision": "stop_productive_conclusion",
+        "open_obligations": [],
+        "objective_review": {
+            "status": "achieved",
+            "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
+            "argument_summary": "The insertion bound and explicit arrangement match.",
+            "argument_steps": [conclusion_step],
+            "unresolved_objections": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    success = research_sessions._outcome(
+        {"status": "ended", "problem": view.project.problem, "artifacts": [artifact]}
+    )
+    assert "### Complete reviewed candidate answer" in success["conclusion"]
+    assert "for every n ≥ 0" in success["conclusion"]
+    assert "not independently verified" in success["conclusion"].lower()
+
+    oversized_artifact = {
+        **artifact,
+        "argument_summary": "Long supporting detail. "
+        * (research_sessions.MAX_CONCLUSION_CHARACTERS // 10),
+    }
+    oversized = research_sessions._outcome_conclusion(
+        {"status": "ended", "artifacts": [oversized_artifact]},
+        {
+            "assessment": "positive",
+            "solution_review": {
+                "status": "achieved",
+                "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
+                "argument_summary": oversized_artifact["argument_summary"],
+                "unresolved_objections": [],
+                "open_obligations": [],
+            },
+            "caveats": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    )
+    assert len(oversized) <= research_sessions.MAX_CONCLUSION_CHARACTERS
+    assert oversized.startswith("### Conclusion truncated\n\n")
+    assert "### Verification and scope" in oversized
+    assert "not independently verified" in oversized.lower()
+    assert "exceeded the display limit" in oversized
+    assert "R(n) = 1 + n(n+1)/2" not in oversized
+    assert oversized.endswith("before relying on it.")
+
+    partial_artifact = {
+        **artifact,
+        "objective_review": {
+            "status": "partial",
+            "claim": "The upper bound appears to be triangular.",
+            "argument_summary": "An attaining construction has not been established.",
+            "unresolved_objections": ["The construction is missing."],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+        "open_obligations": ["Give an arrangement attaining the bound."],
+    }
+    partial = research_sessions._outcome(
+        {"status": "ended", "problem": view.project.problem, "artifacts": [partial_artifact]}
+    )
+    assert "### Partial finding" in partial["conclusion"]
+    assert "does not establish a complete answer" in partial["conclusion"]
+    assert "The construction is missing." in partial["conclusion"]
+
+    failed = research_sessions._outcome(
+        {"status": "failed", "artifacts": [], "message": "Provider failed before saving."}
+    )
+    assert "### Failed investigation" in failed["conclusion"]
+    assert "establishes no answer" in failed["conclusion"]
+
+    unresolved = research_sessions._outcome({"status": "ended", "artifacts": []})
+    assert "### Unresolved investigation" in unresolved["conclusion"]
+    assert "No answer" in unresolved["conclusion"]
+
+    branches = [
+        {
+            "strategy_id": "strategy-a",
+            "strategy_title": "Insertion",
+            "status": "ended",
+            "artifacts": ["artifact-a"],
+        },
+        {
+            "strategy_id": "strategy-b",
+            "strategy_title": "Failed search",
+            "status": "failed",
+            "artifacts": [],
+            "reason": "No finding saved.",
+        },
+    ]
+    multi = research_sessions._outcome(
+        {
+            "status": "ended",
+            "problem": view.project.problem,
+            "strategy_runs": branches,
+            "strategy_assessments": [
+                {
+                    "strategy_id": "strategy-a",
+                    "strategy_title": "Insertion",
+                    "assessment": "contributed_to_solution",
+                },
+                {
+                    "strategy_id": "strategy-b",
+                    "strategy_title": "Failed search",
+                    "assessment": "unknown",
+                },
+            ],
+            "artifacts": [artifact],
+        }
+    )
+    assert "### Findings across strategies" in multi["conclusion"]
+    assert "Insertion — candidate finding (unverified)" in multi["conclusion"]
+    assert "Failed search — failed" in multi["conclusion"]
+    assert "has not independently verified" in multi["conclusion"].lower()
+
+    conflicting_artifact = {
+        **artifact,
+        "id": "artifact-b",
+        "sequence": 2,
+        "strategy_id": "strategy-b",
+        "objective_review": {
+            "status": "achieved",
+            "claim": "R(n) = n² for every n.",
+            "argument_summary": "A distinct candidate was reported.",
+            "basis_artifact_ids": ["artifact-b"],
+        },
+    }
+    conflict = research_sessions._outcome(
+        {
+            "status": "ended",
+            "strategy_runs": [
+                branches[0],
+                {**branches[1], "status": "ended", "artifacts": ["artifact-b"]},
+            ],
+            "artifacts": [artifact, conflicting_artifact],
+        }
+    )
+    assert "different candidate answers" in conflict["conclusion"]
+    assert "remains unresolved" in conflict["conclusion"]
+
+    # New sessions save the derived Markdown with their outcome. Historical
+    # records without this version receive an honest fallback on read.
+    persisted = {
+        "schema_version": 1,
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "status": "ended",
+        "session_number": 1,
+        "strategy_id": "strategy-a",
+        "strategy_title": "Insertion",
+        "strategy_runs": [],
+        "strategy_assessments": [],
+        "strategy_snapshot": [],
+        "problem": view.project.problem,
+        "steps": [],
+        "events": [],
+        "artifacts": [artifact],
+        "outcome_conclusion_version": 1,
+        "outcome": success,
+    }
+    research_sessions._save(view.path, persisted)
+    reloaded = research_sessions._read(view.path, persisted["id"])
+    assert reloaded["outcome"]["conclusion"] == success["conclusion"]
+    assert research_sessions._public(reloaded)["outcome"]["conclusion"] == success["conclusion"]
+    assert "outcome_conclusion_version" not in research_sessions._public(reloaded)
+    snapshot, _ = papers._snapshot(view.path)
+    session_source = next(item for item in snapshot["sources"] if item["kind"] == "session")
+    assert session_source["data"]["outcome"]["conclusion"] == success["conclusion"]
+
+    structured_step = {
+        "number": 1,
+        "title": "Count the pieces made by an inserted line",
+        "argument": "At most n−1 intersections divide the new line into at most n pieces.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": ["artifact-a"],
+        "research_artifact_id": "artifact-a",
+        "review": {
+            "disposition": "accepted",
+            "rationale": "The crossing bound implies at most n pieces.",
+            "objection": "",
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    structured_artifact = {
+        **artifact,
+        "reasoning_steps": [structured_step],
+        "objective_review": {
+            "status": "achieved",
+            "claim": "Conditional on general position, R(n) = 1 + n(n+1)/2 for every n.",
+            "claim_scope": "conditional",
+            "argument_summary": "The insertion bound and attaining construction match under the stated premise.",
+            "argument_steps": [structured_step],
+            "assumptions": ["The lines are in general position."],
+            "proof_obligations": [],
+            "unresolved_objections": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    structured_record = {
+        **persisted,
+        "id": str(uuid4()),
+        "session_number": 3,
+        "artifacts": [structured_artifact],
+        "outcome": research_sessions._outcome(
+            {
+                "status": "ended",
+                "problem": view.project.problem,
+                "artifacts": [structured_artifact],
+            }
+        ),
+    }
+    research_sessions._save(view.path, structured_record)
+    structured_reloaded = research_sessions._read(view.path, structured_record["id"])
+    structured_public = research_sessions._public(structured_reloaded)
+    structured_review = structured_public["outcome"]["solution_review"]
+    assert structured_public["outcome"]["conclusion"] == structured_record["outcome"]["conclusion"]
+    assert structured_review["claim_scope"] == "conditional"
+    assert structured_review["argument_steps"][0]["review"]["disposition"] == "accepted"
+    assert structured_review["strategy_findings"][0]["reasoning_steps"][0]["review"]["rationale"]
+    assert "Conditional on general position" in structured_public["outcome"]["conclusion"]
+
+    legacy = {
+        **persisted,
+        "id": str(uuid4()),
+        "session_number": 2,
+        "outcome": dict(persisted["outcome"]),
+    }
+    legacy.pop("outcome_conclusion_version")
+    legacy["outcome"].pop("conclusion", None)
+    research_sessions._save(view.path, legacy)
+    legacy_public = research_sessions._public(research_sessions._read(view.path, legacy["id"]))
+    assert "No Conclusion was saved" in legacy_public["outcome"]["conclusion"]
     # A positive research finding does not rewrite a later execution failure.
     positive_but_failed = research_sessions._outcome(
         {
@@ -6182,6 +6444,9 @@ def main():
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()
+        test_outcome_conclusions_are_bounded_honest_and_synthesized(
+            root / "outcome-conclusion.sigma"
+        )
         test_outcome_metrics_from_persisted_evidence(root / "outcome-metrics.sigma")
         assert research_sessions.coordinate_decision(
             "stop", "recoverable_objection", "Test the omitted boundary case", [], 1, 3, 2, 6

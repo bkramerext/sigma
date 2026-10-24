@@ -632,6 +632,11 @@
 .workspace-page .outcome-subsection-content { min-width: 0; padding: 10px 12px 12px; color: #c4d0da; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .workspace-page .outcome-subsection-content > :first-child { margin-top: 0; }
 .workspace-page .outcome-subsection-content > :last-child { margin-bottom: 0; }
+.workspace-page .outcome-conclusion-content { font-size: 13px; line-height: 1.7; }
+.workspace-page .outcome-conclusion-source { white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace-page .outcome-conclusion-content .outcome-markdown { margin: 0; }
+.workspace-page .outcome-conclusion-content .outcome-markdown > :first-child { margin-top: 0; }
+.workspace-page .outcome-conclusion-content .outcome-markdown > :last-child { margin-bottom: 0; }
 .workspace-page .outcome-subsection-content h4 { margin: 13px 0 6px; color: #ead0ae; font-size: 13px; }
 .workspace-page .outcome-subsection-content h5 { margin: 8px 0 5px; color: #d7b585; font-size: 12px; }
 .workspace-page .outcome-subsection-content p { margin: 5px 0; }
