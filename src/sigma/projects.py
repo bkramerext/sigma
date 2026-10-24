@@ -19,6 +19,8 @@ from uuid import UUID, uuid4
 
 from sigma.model_catalog import EFFORTS, legacy_model, validate_pair, validate_stored
 
+MAX_STRATEGY_APPROACH = 50_000
+
 
 class ProjectError(ValueError):
     """An invalid request or a project that cannot safely be used."""
@@ -315,7 +317,7 @@ def _decode(raw: Any) -> Project:
             UUID(item["id"])
             seen.add(item["id"])
             _text(item["title"], "Strategy title", 200)
-            _text(item["approach"], "Hypothesis / approach", 10000)
+            _text(item["approach"], "Hypothesis / approach", MAX_STRATEGY_APPROACH)
             if item["author_kind"] != "human":
                 raise ProjectError("Only human-authored strategies are supported")
             _timestamp(item["created_at"])
@@ -424,8 +426,8 @@ def _decode(raw: Any) -> Project:
             for field, limit in (
                 ("previous_title", 200),
                 ("title", 200),
-                ("previous_approach", 10000),
-                ("approach", 10000),
+                ("previous_approach", MAX_STRATEGY_APPROACH),
+                ("approach", MAX_STRATEGY_APPROACH),
             ):
                 _text(change[field], field, limit)
             previous_edit = edits.get(strategy_id)
@@ -740,7 +742,7 @@ def create_strategy(
 ) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
-    approach = _text(approach, "Hypothesis / approach", 10000)
+    approach = _text(approach, "Hypothesis / approach", MAX_STRATEGY_APPROACH)
 
     if not isinstance(summary, str) or len(summary) > 300 or "\n" in summary or "\r" in summary:
         raise ProjectError("Summary must be one line, at most 300 characters")
@@ -848,7 +850,7 @@ def edit_strategy(
 ) -> ProjectView:
     """Update name/description while preserving identity and earlier text in history."""
     title = _text(title, "Strategy name", 200)
-    approach = _text(approach, "Strategy description", 10000)
+    approach = _text(approach, "Strategy description", MAX_STRATEGY_APPROACH)
 
     def edit(project: Project) -> Project:
         strategy = next((s for s in project.strategies if s.id == strategy_id), None)

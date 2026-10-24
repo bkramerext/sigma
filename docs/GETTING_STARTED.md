@@ -21,6 +21,8 @@ The project workspace organizes your question, **research sessions**, and **stra
 
 A **strategy** is a bounded research approach, not an attempt to solve the entire project in one step. Use **New** to write one, or **Generate** to request an AI proposal. Review the proposed approach before saving it. Strategies persist across sessions; a failed investigation does not erase the strategy or its evidence. You can revise, disable, remove from the active pool, or fork strategies where the UI offers those actions.
 
+Generated strategies identify a promising direction, the reasoning behind it, and an initial test with local success and failure criteria. Generation normally uses two model calls for an initial proposal and independent review; the project's model-call setting is a ceiling, not a target. The 50,000-character approach limit is a storage bound, not a generation target. Detailed evidence gathering and rigorous investigation belong in research sessions.
+
 ## Connect AI and investigate
 
 Select **Connect AI** to continue with ChatGPT. Eligible usage depends on your account and plan limits. You may explicitly choose **API-key billing** instead; it is separately billed, and SIGMA never silently switches between the two modes. Manual project and strategy editing works without AI.

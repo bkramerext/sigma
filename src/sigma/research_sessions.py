@@ -6089,6 +6089,69 @@ def _prior_session_findings(project_path: Any, current_session_id: Any) -> list[
     return _prior_session_findings_index(project_path, current_session_id)[0]
 
 
+def strategy_generation_findings(
+    project_path: str, query: str, *, max_findings: int = 6, max_bytes: int = 8_000
+) -> list[dict[str, Any]]:
+    """Return a small, relevant, attributed index from terminal research sessions."""
+    if not isinstance(project_path, str) or not isinstance(query, str):
+        return []
+    query_terms = set(re.findall(r"[a-z0-9]{3,}", query.casefold()))
+    ranked: list[tuple[int, int, int, dict[str, Any]]] = []
+    order = 0
+    for session in _all(project_path):
+        if session.get("status") in {"queued", "running"}:
+            continue
+        artifacts = session.get("artifacts")
+        if not isinstance(artifacts, list):
+            continue
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                continue
+            skeptic = artifact.get("skeptic_output")
+            skeptic = skeptic if isinstance(skeptic, dict) else {}
+            objective = artifact.get("objective_review")
+            objective = objective if isinstance(objective, dict) else {}
+            raw_notes: list[str] = []
+            for source, keys in (
+                (artifact, ("objections", "open_obligations")),
+                (objective, ("unresolved_objections",)),
+                (skeptic, ("proof_obligations",)),
+            ):
+                for key in keys:
+                    notes = source.get(key)
+                    if isinstance(notes, list):
+                        raw_notes.extend(note for note in notes if isinstance(note, str))
+            finding = {
+                "id": artifact.get("id"),
+                "session_id": session.get("id"),
+                "session_number": session.get("session_number"),
+                "strategy_id": artifact.get("strategy_id"),
+                "strategy_title": session.get("strategy_title"),
+                "claim_or_question": _bounded_note(artifact.get("claim_or_question"), 900),
+                "method": _bounded_note(artifact.get("method"), 600),
+                "evidence_status": _bounded_note(artifact.get("evidence_status"), 300),
+                "objections": _bounded_notes(artifact.get("objections"), 3, 250),
+                "open_obligations": _bounded_notes(artifact.get("open_obligations"), 4, 250),
+                "limitations": _bounded_notes(list(dict.fromkeys(raw_notes)), 4, 250),
+                "coordinator_decision": artifact.get("coordinator_decision"),
+                "next_question": _bounded_note(artifact.get("next_question"), 350),
+            }
+            searchable = " ".join(str(value) for value in finding.values())
+            score = len(query_terms & set(re.findall(r"[a-z0-9]{3,}", searchable.casefold())))
+            if score:
+                ranked.append((score, int(_artifact_is_critical(artifact)), order, finding))
+            order += 1
+    ranked.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    selected: list[dict[str, Any]] = []
+    for _, _, _, finding in ranked:
+        compact = {key: value for key, value in finding.items() if value not in (None, "", [], {})}
+        trial = [*selected, compact]
+        if len(trial) > max_findings or _json_bytes(trial) > max_bytes:
+            continue
+        selected = trial
+    return selected
+
+
 def _prior_session_findings_index(
     project_path: Any,
     current_session_id: Any,

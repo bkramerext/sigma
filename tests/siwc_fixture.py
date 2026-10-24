@@ -233,5 +233,5 @@ class Fixture:
             return httpx.Response(
                 200, headers={"content-type": "text/event-stream"}, content=content
             )
-        assert payload["max_output_tokens"] == 25000 and isinstance(payload["input"], str)
+        assert payload["max_output_tokens"] == 8000 and isinstance(payload["input"], str)
         return httpx.Response(200, json=self.events()[-1]["response"])
