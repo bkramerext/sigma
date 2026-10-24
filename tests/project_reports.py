@@ -38,6 +38,7 @@ def fixture() -> dict:
                 "status": "ended",
                 "outcome": {
                     "assessment": "mixed",
+                    "conclusion": "### Partial finding\n\nThe candidate remains unverified.\n\n### Scope\n\nNo independent verification.",
                     "provisional": False,
                     "metrics": {
                         "operational": [
@@ -316,6 +317,8 @@ def main() -> None:
         "Research type: Mathematics",
         "Research problem: Can we prove 50%? A & B; x_1 < x_2.",
         "Session #3",
+        "### Partial finding",
+        "The candidate remains unverified.",
         "Execution status: ended",
         "Outcome:",
         "Outcome metrics",
@@ -366,6 +369,7 @@ def main() -> None:
     assert '<h2 class="report-heading">Research sessions</h2>' in html_report
     assert '<article class="report-session">' in html_report
     assert '<h3 class="report-record-heading">Session #3</h3>' in html_report
+    assert "The candidate remains unverified." in html_report
     assert '<h4 class="report-subheading">Strategy Assessments</h4>' in html_report
     assert html_report.index("Session #3</h3>") < html_report.index("Strategy Assessments</h4>")
     assert html_report.index("Strategy Assessments</h4>") < html_report.index(

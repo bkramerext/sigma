@@ -2,7 +2,7 @@
 
 **Ticket:** T46, Home and Project About dialog  
 **Branch:** `green/t46-about-dialog`  
-**Base:** `main` at `25fa630` (merged into PR branch to preserve shared history)
+**Base:** `main` at `6059d67` (merged into PR branch to preserve shared history)
 **Verification:** full suite and real-Chrome checks passed after the final mobile-layout adjustment; those changes are included in the latest PR head.
 **PR:** [#73](https://github.com/bkramerext/sigma/pull/73), open against `main`. Do not merge.
 
@@ -43,6 +43,6 @@ Visual acceptance screenshots are available locally at:
 No outstanding dependencies or conflicts, and no requests for other workers. I
 did not contact or coordinate with any other Codex worker.
 
-Main had advanced with PRs #68 and #70 after the original PR base. I preserved
-main's updated T45 tracker row, retained the T46 PR #73 row, and auto-merged the
-UI code; the only content conflict was in the tracker file.
+Main advanced through PRs #68, #70, and #72 after the original PR base. I
+preserved main's T45 and T47 tracker rows, retained the T46 PR #73 row, and
+auto-merged the UI code; the only content conflict was in the tracker file.
