@@ -12,7 +12,7 @@ The human-facing reports are one directory above. This directory preserves raw o
 - `maximum-regions-archive-*`: supplementary original historical provider record rendered in current UI, separate from the empty stock sample. The only relocation is its saved `project_path`; no argument enrichment. HTML is a downloaded research report, not an AI-authored paper.
 - `independent-checks.json`: evaluator arithmetic outside SIGMA. Its source explicitly states this boundary.
 - `SOURCE_CHECKS.md`: external evaluator source-access attempts and limits.
-- `sigma-test.log`: complete actual successful offline test run, including scenarios, Ruff, format, Pyright, frontend typecheck/build.
+- `sigma-test.log`: complete actual successful offline test run on evaluated app `6059d67`, including scenarios, Ruff, format, Pyright, frontend typecheck/build. `sigma-test-post-merge.log` records the second full passing run after merging main `e7fa678` for review integration; it does not expand the scored browser coverage.
 - PNGs: selective new viewport captures, not stitched representations of every screen. Mobile emulation is not physical-device testing. Initial full-page captures were intentionally replaced to avoid bulky transient artifacts; initial text dumps remain.
 
 ## Reproduction

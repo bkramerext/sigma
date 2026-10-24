@@ -13,3 +13,5 @@ Evidence is preserved incrementally under `evidence/`; text dumps record visible
 Final coverage: all 17 browser and manual continuation journeys completed. Nonconsecutive fixtures and the separately imported unchanged historical Maximum Regions record received deeper assessment. [SYNTHESIS](SYNTHESIS.md) is the final assessment; [evidence index](evidence/README.md) documents reproduction and failed automation pilots. Full offline tests passed. No live provider work or paper authoring occurred.
 
 Review integration note: main advanced to `e7fa678` (T46 About dialog) during the study. It was merged to resolve a STATUS conflict; upstream STATUS was preserved with only this study entry prepended. All scored browser observations remain tied to `6059d67`. The newly merged About interaction was not retroactively evaluated.
+
+The full offline suite passed again after integration; [post-merge log](evidence/sigma-test-post-merge.log). Both isolated study servers were stopped. Final checks confirmed all 17 required reports/sections, document links, canonical hashes and manual continuation results.

@@ -43,6 +43,11 @@ provisioning or worker communication occurred. Study provider calls: 0; study
 provider charges: $0. Current live domain reasoning and paper quality remain
 UNVERIFIED. This is product-assessment evidence, not live alpha acceptance.
 
+After merging main `e7fa678` for documentation reconciliation, the complete
+offline suite passed again; log: `evidence/sigma-test-post-merge.log` in the
+study directory. Browser scores remain tied to `6059d67`; the newer About
+interaction was not retroactively evaluated.
+
 ## T46 Home and Project About dialog (2026-10-24)
 
 Added one shared About action and modal dialog to both Home and Project headers.
