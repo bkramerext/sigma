@@ -6579,7 +6579,37 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         assert (path / "research-sessions" / f"{ended['id']}.json").read_bytes() == original_bytes
 
 
+def test_outcome_includes_derived_execution_provenance() -> None:
+    record = {
+        "id": "saved-session",
+        "status": "ended",
+        "artifacts": [
+            {
+                "id": "saved-finding",
+                "investigator_output": {
+                    "python_execution": {
+                        "id": "saved-execution",
+                        "status": "timeout",
+                        "source": "print('unobserved')",
+                        "stderr": "Timed out",
+                    }
+                },
+            }
+        ],
+        "steps": [],
+    }
+    original = deepcopy(record)
+    outcome = research_sessions._outcome(record)
+    provenance = outcome["execution_provenance"]
+    assert provenance["completed_count"] == 0
+    assert provenance["records"][0]["id"] == "saved-execution"
+    assert provenance["records"][0]["statuses"] == ["timeout"]
+    assert provenance["records"][0]["artifact_ids"] == ["saved-finding"]
+    assert record == original
+
+
 def main():
+    test_outcome_includes_derived_execution_provenance()
     test_epistemic_presentation_is_conservative_and_read_only()
     test_saved_followup_question_selection()
     test_request_audit_truncation_tokens_and_reconciliation()
