@@ -39,6 +39,7 @@ def main() -> None:
     assert source["completed_without_recorded_io_count"] == 1
     for fmt in ("txt", "html", "tex"):
         report, _ = render_report(data, fmt)
+        assert isinstance(report, str)
         warning = "completed-status execution record(s) lack saved source or output"
         assert warning in report
         assert report.index(warning) < report.index("MODEL CLAIM NOT INDEPENDENTLY VALIDATED")
@@ -55,6 +56,7 @@ def main() -> None:
     assert set(conflicted["records"][0]["statuses"]) == {"completed", "failed"}
     for fmt in ("txt", "html", "tex"):
         report, _ = render_report(data, fmt)
+        assert isinstance(report, str)
         assert "status completed / failed" in report
     execution = session["artifacts"][0]["investigator_output"]["python_execution"]
     session["steps"] = []
