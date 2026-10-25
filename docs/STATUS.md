@@ -4305,12 +4305,12 @@ available for less regular notation and displays its warnings plus a clear
 statement that formatting is not verification.
 
 Research session projection now gives a concise safe next step for manual pause,
-an interrupted dispatched call, restart without a recorded in-flight request,
-project/account/model guards, context/storage limits, cost limits, and ended
-call/duration limits. The notice sits above the Outcome narrative in both reader
-modes. Ambiguous provider calls require a usage/billing check; a resumed session
-does not replay an interrupted attempt. Existing computation provenance stays
-above the agent-authored Conclusion.
+failure, an interrupted dispatched call, restart without a recorded in-flight
+request, project/account/model guards, context/storage limits, cost limits, and
+ended call/duration limits. The notice sits above the Outcome narrative in both
+reader modes. Ambiguous provider calls require a usage/billing check; a resumed
+session does not replay an interrupted attempt. Existing computation provenance
+stays above the agent-authored Conclusion.
 
 Real Chrome on the archived RH-style session verified legible KaTeX in both
 default Simple and Advanced views, exact saved-source access, the copper control,

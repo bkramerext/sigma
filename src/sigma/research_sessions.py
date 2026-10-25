@@ -2677,12 +2677,18 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
         }
     }
     message = str(record.get("message", "")).lower()
-    show_next_step = record.get("status") in {"paused", "stopped"} or (
+    show_next_step = record.get("status") in {"paused", "stopped", "failed"} or (
         record.get("status") == "ended"
         and any(word in message for word in ("limit", "duration", "cost", "budget"))
     )
     if show_next_step:
-        if any(
+        if record.get("status") == "failed":
+            result["next_step_guidance"] = (
+                "Review the saved activity and confirm provider usage or billing before continuing. "
+                "If more research is needed, start a new session with settings and spending limits "
+                "you approve; do not assume another attempt is free or safe."
+            )
+        elif any(
             step.get("status") == "interrupted"
             for step in record.get("steps", [])
             if isinstance(step, dict)

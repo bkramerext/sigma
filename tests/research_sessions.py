@@ -330,9 +330,16 @@ def test_request_audit_truncation_tokens_and_reconciliation():
         "Resume when you are ready"
         in research_sessions._public(paused_fixture)["next_step_guidance"]
     )
+    paused_fixture["status"] = "failed"
+    paused_fixture["message"] = "Provider returned an ambiguous failure after dispatch."
+    failed_guidance = research_sessions._public(paused_fixture)["next_step_guidance"]
+    assert "confirm provider usage or billing" in failed_guidance
+    assert "start a new session" in failed_guidance
+    assert "another attempt is free or safe" in failed_guidance
     paused_fixture["message"] = (
         "The conservative estimated cost reserve for another call exceeds the session limit; no additional call was made."
     )
+    paused_fixture["status"] = "paused"
     assert "only if you approve" in research_sessions._public(paused_fixture)["next_step_guidance"]
     paused_fixture["status"] = "ended"
     paused_fixture["message"] = (
