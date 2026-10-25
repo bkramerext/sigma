@@ -41,6 +41,8 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 
 **VM creation checkpoint (2026-10-25):** Operator confirmed pre-create configuration for `sigma-gce-01`: `e2-standard-2` (2 vCPU, 8 GiB), Ubuntu 24.04 LTS amd64, 100 GB standard boot disk, existing 30 GB `sigma-state` with Keep disk, `sigma-vpc`/`sigma-us-west1`, static IPv4 `136.66.128.82`, IAP-only network tag, `sigma-runtime` with cloud-platform scope, OS Login, shielded settings, deletion protection and labels. VM creation authorized in operator workflow; **creation and running state not yet verified**. This machine type deviates from earlier `e2-standard-4` plan for cost control.
 
+**Live VM status (2026-10-25):** Operator reports `sigma-gce-01` appears with green running status in VM instances and external IPv4 `136.66.128.82`. Attached disk identity/deletion rule, VM detailed settings, and IAP SSH remain to be verified.
+
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
 
 ## Contents
