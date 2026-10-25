@@ -30,6 +30,7 @@ from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
+from sigma.research_epistemics import argument_availability, verification_label
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
@@ -1050,6 +1051,8 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
         "",
         "### Verification and scope",
         "",
+        f"Verification: {verification_label(review)}.",
+        "",
         "This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.",
     ]
     conclusion = "\n".join(lines).strip()
@@ -1135,12 +1138,26 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
         and objective_review.get("status") == "achieved"
         and not objective_review.get("argument_steps")
     ):
-        assessment, label = "mixed", "Mixed · substantive argument not captured"
-        summary = (
-            "A solution candidate was recorded, but this session has no structured, step-by-step "
-            "argument in its outcome. Inspect the preserved research artifacts; the candidate "
-            "cannot be assessed as a complete argument from this record."
+        availability = argument_availability(objective_review, artifacts)
+        assessment = "mixed"
+        label = (
+            "Mixed · unstructured argument, unassessed"
+            if availability["status"] == "narrative"
+            else "Mixed · argument not recorded"
         )
+        summary = f"A solution candidate was recorded. {availability['label']}"
+    elif (
+        objective_review
+        and objective_review.get("status") == "achieved"
+        and objective_review.get("verification_status") != "convincing_unverified"
+    ):
+        assessment = "mixed"
+        label = (
+            "Mixed · candidate assessment incomplete"
+            if objective_review.get("verification_status") == "incomplete"
+            else "Mixed · candidate verification unassessed"
+        )
+        summary = str(objective_review.get("claim") or "A candidate was reported.")
     elif objective_review and objective_review.get("status") == "achieved":
         assessment = "positive"
         label = "Positive · solution candidate (unverified)"
@@ -1172,11 +1189,22 @@ def _outcome_without_metrics(record: dict[str, Any]) -> dict[str, Any]:
             "argument_steps"
         ):
             caveats.append(
-                "Historical or incomplete outcome record: no structured argument steps were preserved; agent agreement is not verification."
+                "Historical or incomplete outcome record: no structured argument steps were preserved. "
+                + argument_availability(objective_review, artifacts)["label"]
+                + " Agent agreement is not verification."
+            )
+        elif (
+            objective_review.get("status") == "achieved"
+            and objective_review.get("verification_status") == "convincing_unverified"
+        ):
+            caveats.append(
+                "The argument is a convincing but unverified candidate; no formal proof checker or independent external verification was used."
             )
         elif objective_review.get("status") == "achieved":
             caveats.append(
-                "The argument is a convincing but unverified candidate; no formal proof checker or independent external verification was used."
+                "A candidate was reported; verification: "
+                + verification_label(objective_review)
+                + ". Agent agreement is not independent verification."
             )
         else:
             caveats.append("The saved argument remains incomplete; no solution is claimed.")
@@ -1751,16 +1779,7 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
         contribution_value = "— (no saved findings)"
 
     solution_review = outcome.get("solution_review")
-    verification = (
-        solution_review.get("verification_status") if isinstance(solution_review, dict) else None
-    )
-    verification_labels = {
-        "convincing_unverified": "Convincing, unverified",
-        "incomplete": "Incomplete",
-        "verified": "Verified",
-        "unknown": "Unknown",
-    }
-    verification_value = verification_labels.get(str(verification), "Not assessed")
+    verification_value = verification_label(solution_review)
     classification = str(outcome.get("label") or outcome.get("assessment") or "Unknown")
     research_artifact_bytes = None
     project_path_value = record.get("project_path")
@@ -1865,7 +1884,11 @@ def _outcome_metrics(record: dict[str, Any], outcome: dict[str, Any]) -> dict[st
 
 
 def _outcome(record: dict[str, Any]) -> dict[str, Any]:
-    return _outcome_without_metrics(record)
+    outcome = _outcome_without_metrics(record)
+    review = outcome.get("solution_review")
+    outcome["verification_label"] = verification_label(review)
+    outcome["argument_availability"] = argument_availability(review, record.get("artifacts", []))
+    return outcome
 
 
 def _strategy_assessments(record: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2523,6 +2546,46 @@ def _all(path: str) -> list[dict[str, Any]]:
     return records
 
 
+def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
+    """Read durable records without recovery, directory creation, or provider work.
+
+    Current understanding must not pause/restart a worker merely to read its
+    history. Unreadable/foreign records are counted, never silently presented as
+    absent evidence or followed into another project.
+    """
+    view = inspect_project(path)
+    directory = Path(view.path) / "research-sessions"
+    if directory.is_symlink():
+        raise ProjectError("Research session directory must not be a symbolic link")
+    if not directory.exists():
+        return [], 0
+    if not directory.is_dir():
+        raise ProjectError("Research session history is not a directory")
+    records: list[dict[str, Any]] = []
+    unavailable = 0
+    for file in sorted(directory.glob("*.json")):
+        if file.name == "limits.json":
+            continue
+        try:
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_RECORD:
+                unavailable += 1
+                continue
+            raw = json.loads(file.read_text(encoding="utf-8"))
+            if (
+                not isinstance(raw, dict)
+                or raw.get("id") != file.stem
+                or raw.get("project_id") != view.project.id
+                or raw.get("project_path") != view.path
+            ):
+                unavailable += 1
+                continue
+            UUID(file.stem)
+            records.append(raw)
+        except (OSError, ValueError):
+            unavailable += 1
+    return records, unavailable
+
+
 def _public(record: dict[str, Any]) -> dict[str, Any]:
     result = {
         k: v
@@ -2572,7 +2635,8 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
     else:
         outcome["conclusion"] = (
             "### Historical session\n\n"
-            "No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below."
+            "No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.\n\n"
+            + outcome["argument_availability"]["label"]
         )
     outcome["metrics"] = _outcome_metrics(record, outcome)
     result["outcome"] = outcome

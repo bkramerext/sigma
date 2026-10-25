@@ -1,5 +1,90 @@
 # SIGMA status
 
+## Blue Increment 2: read-only current understanding (2026-10-24)
+
+Implemented on `blue_session` under `messages/blue_out_2.md` plus the standing
+export supplement `blue_out_3.md`. The permanent human instruction is recorded
+in [Blue operating protocol](BLUE_OPERATING_PROTOCOL.md); after each reported
+iteration Blue polls the clean branch every 30 seconds with fast-forward-only
+synchronization. No live/provider work or self-merge is authorized.
+
+Added a typed current-understanding service/API and one foldable section before
+session history. It shows latest saved reviews by strategy, recorded changes and
+resolutions, open/unreconciled work and qualified next questions. Current does
+not mean semantically proven or project solved. Source controls expand and focus
+the exact owning session/artifact; header controls were not expanded. Existing
+Conclusion logic, T48, fork prefill and deterministic report content are unchanged.
+
+Dispositions require exact scoped obligation IDs, a rationale and available
+unambiguous evidence; missing/foreign/future sources do not resolve work. Step
+sources additionally require completed same-session timestamped provenance.
+Legacy narrative notices remain unreconciled rather than silently becoming
+proof or a mandatory rerun. Old mistakes, failed branches and raw records remain
+intact. Unmatched source IDs are counted as uncertainty. The standalone state
+read never invokes worker recovery, provider dispatch or session-file writes.
+
+The unaltered Maximum Regions archive actually contains ten structured
+obligation reviews. Four map to identified declarations with usable evidence;
+they are reported as resolved/unverified. Its final separate stale completion
+note remains unreconciled and is not proposed as another required run.
+Nonconsecutive preserves the guessed-rule counterexample, later explanation
+repair and still-open recurrence/density work; all five sessions remain clearly
+deterministic archived evidence, not new live research.
+
+Actual exports were pushed immediately in commit `322cf55`, under
+[Increment 2 exports](evaluations/increment_2/exports/README.md): three complete
+Project Audits and actual text/HTML/TeX reports. Final browser audit downloads
+and actual current-state API responses are also retained. Audit content matches
+the baseline; original source bytes stayed unchanged. No native Markdown report
+export exists, so none was fabricated or relabeled. Markdown-valued Conclusions
+remain inside complete JSON exports.
+
+Actual validation: focused state scenarios, standalone Pyright/typecheck, and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, format, Pyright, frontend typecheck and production build. Real Chrome
+156.0.8078.47 exercised both continuity projects and the session-free stock copy,
+exact source navigation, stable reload/IDs, actual audit downloads and 1440px,
+390px and 320px document fit. No page errors, inference requests or source-byte
+changes. [Evidence and complete logs](evaluations/increment_2/README.md) distinguish
+original provider archives, deterministic history and synthetic schema regressions.
+Provider calls/charges: 0/$0. Live research, agent uptake, independent correctness
+and AI paper quality remain N/O. Next product work waits for the coordinator's
+next numbered assignment after the review response.
+
+## Blue Increment 1: confidence and argument-state integrity (2026-10-24)
+
+Implemented on `blue_session` under `messages/blue_out_1.md`; initiative record:
+[Researcher-centered SIGMA](RESEARCHER_CENTERED_SIGMA.md). Shared typed Python
+presentation now supplies faithful verification labels to Outcome, UI source and
+rendered modes, Status, Metrics, detailed review, new Conclusions and deterministic
+text/HTML/TeX reports. `incomplete` is never mapped to convincing; legacy `verified`
+is explicitly a report, not independent checking by SIGMA. Unknown/missing values
+remain unknown/not recorded. Positive structured candidates require the recorded
+agent-reviewed `convincing_unverified` state. Raw machine codes and saved text stay
+intact; reports distinguish the saved code from the current presentation and do
+not trust stale cached metric labels.
+
+Historical Maximum Regions retains its original unstructured argument and is
+shown as mixed/unassessed with saved narrative available, rather than saying no
+substantive argument was captured. No proof steps or historical answer were
+fabricated. A stored Conclusion remains intact; its current verification label
+is shown alongside it. No T48 logic, obligation reconciliation or broader UX
+redesign is included.
+
+Actual validation: focused status/archive and report regressions passed, standalone
+frontend typecheck and Pyright passed, and `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios, lint,
+formatting, Pyright, typecheck and production build. Real Chrome 156.0.8078.47
+checked original historical Maximum Regions, explicit verification-declaration
+variants and all five deterministic Nonconsecutive sessions at 1440px and 390px,
+including Conclusion/Outcome source and rendered modes, details and Metrics.
+No overflow, JavaScript errors or inference requests; original source and copied
+archive record hashes remained unchanged. Durable screenshots, observation ledger,
+reproduction and test outputs: [Increment 1 evidence](evaluations/INCREMENT_1/README.md).
+No paid/live provider calls, fresh sandbox experiment or independent checker ran.
+Live research and AI-authored paper quality remain unverified. Waiting for the
+coordinator's next numbered outgoing message after review.
+
 ## T46 Home and Project About dialog (2026-10-24)
 
 Added one shared About action and modal dialog to both Home and Project headers.

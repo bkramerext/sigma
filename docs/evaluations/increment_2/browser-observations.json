@@ -1,0 +1,105 @@
+{
+  "app_revision": "537893b10bcc7bae70b3eafeca21fab8b909feb3",
+  "browser": "156.0.8078.47",
+  "projects": [
+    {
+      "project": "maximum-regions-archived",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320
+        }
+      ],
+      "navigation": [
+        {
+          "control": "Inspect finding:",
+          "focused_artifact": "research-artifact-91e96112-27ce-412e-841f-5cbf67cbba75-a832588d-9da7-4ceb-b3ff-9451a9922ff5"
+        },
+        {
+          "control": "Inspect earlier evidence:",
+          "focused_artifact": "research-artifact-91e96112-27ce-412e-841f-5cbf67cbba75-2a734507-ad3f-4d5b-b00b-80b0e1624717"
+        }
+      ],
+      "current_finding_ids": [
+        "finding:9018b1fe-83a9-4027-a755-8f997b4f46b5:91e96112-27ce-412e-841f-5cbf67cbba75:a832588d-9da7-4ceb-b3ff-9451a9922ff5"
+      ]
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320
+        }
+      ],
+      "navigation": [
+        {
+          "control": "Inspect finding:",
+          "focused_artifact": "research-artifact-6c552b3c-44e4-4b57-8b93-e5a645d057d1-5e15b337-adf1-483c-8ba6-7cd2de5f500b"
+        },
+        {
+          "control": "Inspect earlier evidence:",
+          "focused_artifact": "research-artifact-f7301d22-fd90-4675-95cd-17b006262ef9-02ca743b-d66f-41c0-8692-34579ea5adfa"
+        }
+      ],
+      "current_finding_ids": [
+        "finding:1e8625bf-12fd-4148-8db9-8878895466fd:6c552b3c-44e4-4b57-8b93-e5a645d057d1:5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "finding:1e8625bf-12fd-4148-8db9-8878895466fd:1aabbfc0-e642-4581-a96f-2e33ac17ee19:ccc1045f-479d-4018-b8ed-42a60b94e567",
+        "finding:1e8625bf-12fd-4148-8db9-8878895466fd:7c70ca6e-3fb2-4cda-b75a-72702ee10d97:516c2288-3458-40b2-9e02-87a918c35a3a"
+      ]
+    },
+    {
+      "project": "maximum-regions-by-lines",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        },
+        {
+          "width": 320,
+          "scrollWidth": 320
+        }
+      ],
+      "navigation": [],
+      "current_finding_ids": []
+    }
+  ],
+  "source_file_hashes": {
+    "maximum-regions-archived.sigma/project.json": "88d661b4d699597f4e87a23dbde4f045e13954a50510d84531d8bc49dc441aa4",
+    "maximum-regions-archived.sigma/research-sessions/91e96112-27ce-412e-841f-5cbf67cbba75.json": "dcf436454c2fad0cca1d97ca3202ec17c99c9333458798e11490fd97d651a3b4",
+    "nonconsecutive-subset-sums.sigma/.write.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "nonconsecutive-subset-sums.sigma/project.json": "913e6e0ede6d3311a9b68e878f445988c2673fff95e1389c638f03c0236dc4d0",
+    "nonconsecutive-subset-sums.sigma/project.v5.json": "e509777de5c81e75ec011c5d00858a54e698b0447b0bf9e0a3abbde6797ba255",
+    "nonconsecutive-subset-sums.sigma/research-sessions/.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "nonconsecutive-subset-sums.sigma/research-sessions/6c552b3c-44e4-4b57-8b93-e5a645d057d1.json": "98a23d6d23c35c6527a81b21d2793fee47951ae79c3c119c6e867a33068300af",
+    "nonconsecutive-subset-sums.sigma/research-sessions/7c70ca6e-3fb2-4cda-b75a-72702ee10d97.json": "81911bf25f414aa9da0836b8485cb6d1db4cedb8b37932b511fbaf8edaf00bf0",
+    "nonconsecutive-subset-sums.sigma/research-sessions/1aabbfc0-e642-4581-a96f-2e33ac17ee19.json": "7759267efe2c6ec3e8e23bbf8d6f18736eca879480f5bb70ab6a5f5cb9483555",
+    "nonconsecutive-subset-sums.sigma/research-sessions/f7301d22-fd90-4675-95cd-17b006262ef9.json": "1ec918831f1dfc231003d19e1d23b3ebe47be1a9cd00f07efc98764d36558c6b",
+    "nonconsecutive-subset-sums.sigma/research-sessions/1a9a0c44-48ae-49e7-8bea-0e8d47297f9d.json": "14ad27e77fd6c3ff68d5bf5ad302dda0d6c7ae5acb82559f069bcb28493c7ced",
+    "maximum-regions-by-lines.sigma/.write.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "maximum-regions-by-lines.sigma/project.json": "8f17fbac52b170a30251fb491d17e006d84499ad95a6fc90777e83c5bd79e31b"
+  },
+  "source_bytes_unchanged": true,
+  "page_errors": [],
+  "inference_requests": []
+}

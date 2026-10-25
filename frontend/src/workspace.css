@@ -297,3 +297,25 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
+
+/* Current understanding is a compact reading entry point, not new header controls. */
+.current-understanding { margin: 0 0 1rem; padding: 0.8rem; }
+.current-understanding > summary { color: var(--workspace-copper, #e4b57c); cursor: pointer; }
+.current-understanding > summary small { margin-left: 0.6rem; font-weight: normal; }
+.current-understanding-scope { margin: 0.7rem 0; }
+.current-understanding-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.2rem; }
+.current-understanding-columns section { min-width: 0; overflow-wrap: anywhere; }
+.current-understanding-columns h3 { font-size: 1rem; color: var(--workspace-copper, #e4b57c); }
+.current-understanding-columns h4 { font-size: 0.95rem; }
+.current-understanding ol, .current-understanding ul { padding-left: 1.2rem; }
+.current-understanding li { margin-bottom: 0.9rem; }
+.current-understanding li p { margin: 0.4rem 0; }
+.current-understanding .text-view-link { white-space: normal; text-align: left; }
+.current-understanding-limits { margin-top: 0.8rem; }
+.research-artifacts li:focus { outline: 1px solid var(--workspace-copper, #e4b57c); outline-offset: 4px; }
+@media (max-width: 900px) { .current-understanding-columns { grid-template-columns: 1fr; gap: 0.4rem; } }
+
+.workspace-page .current-understanding button.text-view-link { padding: 2px 0; min-height: 32px; border: 0; background: transparent; box-shadow: none; color: var(--workspace-copper); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.workspace-page .current-understanding button.text-view-link:hover { color: #ffe2b9; }
+.workspace-page .current-understanding button.text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+@media (max-width: 600px) { .workspace-page .current-understanding button.text-view-link { min-height: 44px; } }
