@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "assignment": "Round 2 Increment 20",
+  "source_project_id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
+  "copied_project_id": "352facff-06fd-4a70-847f-4e85b527d15b",
+  "copied_project_title": "Nonconsecutive Subset Sums Modulo 3 v2",
+  "application_commit": "ffb008f96a3ad2374e4fcc2eec82a2f9deea7e80",
+  "export_source": "GET /api/projects/export via real Chrome against local deterministic browser fixture",
+  "export_file": "nonconsecutive-subset-sums-chrome-copy.json",
+  "export_sha256": "4fb205ae432735bf0724876becf81c9e1570125610d489c639c3d65712dbf98c",
+  "export_bytes": 241467,
+  "research_session_ids": [
+    "1a9a0c44-48ae-49e7-8bea-0e8d47297f9d",
+    "1aabbfc0-e642-4581-a96f-2e33ac17ee19",
+    "f7301d22-fd90-4675-95cd-17b006262ef9",
+    "6c552b3c-44e4-4b57-8b93-e5a645d057d1",
+    "7c70ca6e-3fb2-4cda-b75a-72702ee10d97"
+  ],
+  "actual_activity": [
+    "Opened the shipped Nonconsecutive Subset Sums sample as an independent editable copy in real Chrome.",
+    "Inspected all five saved Outcomes, artifact evidence, report export, and desktop/mobile rendering.",
+    "Exported the actual working copy through SIGMA's project export API; retained the exact response bytes."
+  ],
+  "omissions_and_limits": [
+    "No new research session or agentic run was started.",
+    "The five included sessions are the original deterministic mixed/unresolved stock fixtures, not live-provider research.",
+    "No paid inference, live provider call, cloud deployment, or production environment was used.",
+    "The exported project has no agentic runs."
+  ],
+  "browser_artifacts": [
+    "nonconsecutive-subset-sums-desktop.png",
+    "nonconsecutive-subset-sums-mobile.png"
+  ],
+  "publishing_commit": "691530f"
+}
