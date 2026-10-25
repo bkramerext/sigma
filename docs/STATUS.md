@@ -216,7 +216,9 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
   ./sigma test` passed all steps. No live or paid provider calls were made.
 - Project header: About matches Home's compact style in normal and hover states.
   The desktop 3×2 pills are grouped by column: Difficulty/About,
-  Model/Thinking, and Google/ChatGPT; narrow layout stays responsive.
+  Model/Thinking, and Google/ChatGPT. The group now sits closer to the upper
+  right with half-sized grid gaps; real Chrome confirmed the position and
+  grouping. Narrow layout stays responsive.
 - Real-Chrome checks now cover direct long-form start without a browser prompt,
   failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
   About placement/style. `browser_checks/t45_long_paper.py` and
