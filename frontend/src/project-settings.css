@@ -52,8 +52,8 @@
 .project-settings-dialog a { color: #e4b87f; }
 /* Status uses existing header/empty sky space without moving Home's hero. */
 .home-page .home-topline { position: relative; }
-.home-page .home-topline { justify-content: flex-end; align-items: flex-start; gap: 12px; padding-top: 18px; margin-right: calc(-1 * clamp(13px, 2.7vw, 45px)); }
-.home-page .home-topline > .api-connection { position: relative; top: 0; right: auto; width: auto; margin: 0; }
+.home-page .home-topline { justify-content: flex-end; align-items: flex-start; gap: 12px; padding-top: 12px; margin-right: calc(-1 * (clamp(26px, 5.4vw, 90px) - 12px)); }
+.home-page .home-topline .api-connection { position: relative; top: 0; right: auto; width: max-content; max-width: 240px; margin: 0; }
 @media (max-width: 700px) {
  .project-settings-dialog { padding: 22px; }
  .workspace-page .project-name-line { order: -2; }
