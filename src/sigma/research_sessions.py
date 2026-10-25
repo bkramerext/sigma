@@ -3175,12 +3175,18 @@ def _saved_followup_questions(
         reverse=True,
     )
     for session in ordered:
-        # A paused, interrupted, manually stopped or failed investigation is
-        # not automatically an endorsement of its latest proposed question.
-        if session.get("status") not in {"ended", "completed"}:
-            continue
         artifacts = session.get("artifacts")
         if not isinstance(artifacts, list):
+            continue
+        # A later interrupted run may contain important negative evidence, but
+        # is not a completed approval of any suggestion. Do not fall back to
+        # an older question for the same strategy as though it never occurred.
+        if session.get("status") not in {"ended", "completed"}:
+            for artifact in artifacts:
+                if isinstance(artifact, dict):
+                    strategy_id = artifact.get("strategy_id", session.get("strategy_id"))
+                    if strategy_id in selected:
+                        seen.add(strategy_id)
             continue
         for artifact in reversed(artifacts):
             if not isinstance(artifact, dict):
