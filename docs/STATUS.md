@@ -29,8 +29,9 @@ Validation passed: `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
 Chrome matrix); `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
 scenarios, Ruff, formatting, Pyright, frontend typecheck and production build);
 Ruff check/format for the browser acceptance script; `python3 -m py_compile
-browser_checks/t91_packaged_compose.py`; and `git diff --check`. Assignment elapsed time was approximately 15 minutes (08:57–09:12 PDT,
-2026-10-25). Commit SHA and PR are added when published.
+browser_checks/t91_packaged_compose.py`; and `git diff --check`. Assignment elapsed time was approximately 16 minutes (08:57–09:13 PDT,
+2026-10-25). Implementation commit `5c519ba0be92604e4507cd29ae90497c1924b7ab`;
+[PR #113](https://github.com/bkramerext/sigma/pull/113).
 
 ## T41 — Sponsored cloud inference verification (2026-10-23)
 
