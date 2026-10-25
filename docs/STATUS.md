@@ -3250,3 +3250,46 @@ rather than dropping lineage. Dense/repetitive reading surfaces and relevance
 selection remain product weaknesses documented in the assessment. No stock
 sample or historical source project was changed. Permanent clean-tree mailbox
 polling resumes after the report is pushed; no self-merge.
+
+## Blue Increment 4 — real computational research feedback (2026-10-24)
+
+Assignment: `messages/blue_out_5.md`; engine implementation `d9b1b19`, annotation-only
+static-check correction `fb919af`; on `blue_session`, not merged. Added optional
+strict computational feedback bound to supplied execution ID/status/output hash,
+citation and the actual next question. Failed/missing computation, stderr, or
+missing/invalid citation/hash cannot support a structured counterexample/result.
+Legacy/unstructured claims remain unverified. New continuation contexts pool exact
+repeated text losslessly; new Conclusions aggregate repeated uptake prose. Full
+approved sources/history remain unchanged. No frontend changes this increment.
+
+Actual SIGMA orchestration with offline HTTP provider transport ran Python and
+Sage in the existing local Docker images: nine sessions, 28 captured role requests,
+ten execution-attempt records (seven completed, one failed, one actual 15-second
+timeout, one uncertain interrupted reservation). Explicit changed-source retry
+follows backend death/recovery; incorrect output hash fails closed. Separate
+withheld controls have no computations/citations. Source-hashed actual subset
+DP disproves an evaluator-authored six-step candidate at `n=0` (`a6=8`, prediction
+9); actual graph enumeration refutes an immediate-reverse-edge cycle guard with
+a three-vertex cycle. Next dispatched questions contain observed witnesses and
+lead to actual discriminating computations. Independent mask/topological-order
+oracles validate finite outputs; Sage exact polynomial counts match Python.
+Global recurrence/limit and general dynamic-algorithm proofs/bounds remain open.
+
+All 28 exported call inputs match captured actual HTTP bodies/hashes. Existing
+nine subset sessions compare equal before/after. Actual API audits/native TXT,
+HTML, TeX reports, execution JSON and downloaded observation artifacts are in
+`docs/evaluations/increment_4/exports/`. Earlier Sage serialization failure is
+retained separately as a failed computation, not disproof. No live provider calls
+or charges; provider accounting inputs are synthetic. Exact-text expansion
+preserves all selected source coverage while saving 14.6% in the paired context
+serialization comparison; main subset Conclusion falls from a deterministic
+legacy-render baseline of 7,416 to 2,904 characters. Neither comparison is a new
+provider run or an archive rewrite.
+
+Focused feedback/continuation/session checks and final `./sigma test` pass.
+Real installed Chrome inspected existing execution source/output navigation and
+reload at 1440/390/320px for six cases: 18 checks, no page errors or horizontal
+overflow. No Sage installation, cloud provisioning, live research, worker
+coordination or self-merge. Unscripted reasoning, general proof/discovery quality,
+PDF/AI papers and native Markdown reports are not claimed. Return to permanent
+clean-tree 30-second fetch/fast-forward-only polling after pushing `blue_in_4`.

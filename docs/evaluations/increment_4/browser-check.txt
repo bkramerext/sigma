@@ -1,0 +1,1 @@
+PASS existing execution source/output navigation and reload at 1440/390/320px; no page errors; 0 new sessions/calls. Overflow observations are recorded separately.

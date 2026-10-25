@@ -1,0 +1,450 @@
+{
+  "scope": "Read-only ledger of this harness\u2019s isolated development and final copies. No live provider calls in any run. Final acceptance data is explicitly scoped; earlier tests are not counted as successful coverage. Two separate actual runtime diagnostics precede these sessions.",
+  "copies": [
+    {
+      "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-4grvs6_m",
+      "scope": "nonfinal development/test attempt; retained locally, excluded from final acceptance counts",
+      "captured_offline_provider_requests": 26,
+      "projects": [
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-4grvs6_m/projects/nonconsecutive-subset-sums.sigma",
+          "sessions": [
+            {
+              "id": "af3ccd2f-bdfb-4640-86a3-16acc901f905",
+              "status": "ended",
+              "mode": "error"
+            },
+            {
+              "id": "4ef58abb-0e5a-42e5-94df-149f09b91496",
+              "status": "ended",
+              "mode": "timeout"
+            },
+            {
+              "id": "27067995-364a-4a2a-9ba0-1a4bfb0d6603",
+              "status": "ended",
+              "mode": "withheld"
+            },
+            {
+              "id": "f6cb0d86-c9c7-4e04-ad12-1a2a286cf0a9",
+              "status": "ended",
+              "mode": "restart"
+            },
+            {
+              "id": "30f69f2e-31e2-4b1d-b44a-c7229161046d",
+              "status": "ended",
+              "mode": "sage"
+            },
+            {
+              "id": "65726eae-5aa0-4f6e-8797-801f2fec041b",
+              "status": "ended",
+              "mode": "actual"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "89bfd9c0-5b96-457a-85a4-a27925fe24bb",
+              "status": "completed",
+              "runtime": "sagemath"
+            },
+            {
+              "id": "32e579a0-98d7-4d02-93ed-15fa2ed292c7",
+              "status": "failed",
+              "runtime": "python"
+            },
+            {
+              "id": "ec2d372b-d7e6-47c4-a9f2-40d6e26f175b",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "47f7f17b-2361-4238-935c-9c5d9f465755",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "6b94a4df-18b7-473c-b35a-9008913f708d",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "535de02c-9899-4eb1-9c29-89f74638fbec",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "8b71972d-540e-42e4-9e4e-5289a64c251a",
+              "status": "timeout",
+              "runtime": "python"
+            }
+          ]
+        },
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-4grvs6_m/projects/algorithm-design.sigma",
+          "sessions": [
+            {
+              "id": "af9be3f0-e117-49d8-b11d-d8d9e061a1a8",
+              "status": "ended",
+              "mode": "withheld"
+            },
+            {
+              "id": "b660b419-6f4e-4795-bef5-0410c615fbaf",
+              "status": "ended",
+              "mode": "actual"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "f63c68d2-d540-4e69-80b9-d039c4aae935",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "ebc51c20-3f01-4552-9818-cbe85e2443e5",
+              "status": "completed",
+              "runtime": "python"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-923ug66s",
+      "scope": "nonfinal development/test attempt; retained locally, excluded from final acceptance counts",
+      "captured_offline_provider_requests": 28,
+      "projects": [
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-923ug66s/projects/nonconsecutive-subset-sums.sigma",
+          "sessions": [
+            {
+              "id": "f08ab308-e1fe-48cc-9b18-6634e6037a56",
+              "status": "ended",
+              "mode": "timeout"
+            },
+            {
+              "id": "1bf5404b-f7d3-47cd-b467-7d2423eac5b6",
+              "status": "ended",
+              "mode": "sage"
+            },
+            {
+              "id": "b4adb356-0e64-4641-a8ab-fd17a8996ced",
+              "status": "ended",
+              "mode": "error"
+            },
+            {
+              "id": "514d4ce9-906a-462f-a563-af280e0d31d2",
+              "status": "ended",
+              "mode": "restart"
+            },
+            {
+              "id": "713f1735-3201-4bcb-b29e-d9bcb344c5c5",
+              "status": "ended",
+              "mode": "withheld"
+            },
+            {
+              "id": "11211cd2-6688-4e6e-b516-232d7ffceacf",
+              "status": "failed",
+              "mode": "invalid_feedback"
+            },
+            {
+              "id": "e3db4142-764b-4c1a-b203-c5c51fcc6c3d",
+              "status": "ended",
+              "mode": "actual"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "ef43582b-e77e-4237-9155-dd6b10c2208d",
+              "status": "running",
+              "runtime": "python"
+            },
+            {
+              "id": "82c8a396-064e-4333-a4e1-5e27af8671e8",
+              "status": "completed",
+              "runtime": "sagemath"
+            },
+            {
+              "id": "a313d084-8f9d-4081-8c65-dcb53c7e9d1d",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "443737db-651d-454d-a254-cfe7a266f311",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "73abbb74-aeaf-4243-bd33-43a04eeef3d3",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "e67052c5-d639-4628-b0b3-ad400c7fdf26",
+              "status": "failed",
+              "runtime": "python"
+            },
+            {
+              "id": "3e6968c7-46ba-4ab6-88c6-5df201d45144",
+              "status": "timeout",
+              "runtime": "python"
+            },
+            {
+              "id": "43065bc9-e61e-41f3-8231-f684f630856f",
+              "status": "completed",
+              "runtime": "python"
+            }
+          ]
+        },
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-923ug66s/projects/algorithm-design.sigma",
+          "sessions": [
+            {
+              "id": "b3bc4864-53fb-48bb-a848-ba63c157bc85",
+              "status": "ended",
+              "mode": "actual"
+            },
+            {
+              "id": "b6626bb7-d15e-4c24-8bdd-e64074f1bb84",
+              "status": "ended",
+              "mode": "withheld"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "49f3039e-21e0-41f2-9038-41ca6c353682",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "5f5c83af-bccc-48a4-92d1-48bcf4b6ce2d",
+              "status": "completed",
+              "runtime": "python"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-clam1asy",
+      "scope": "nonfinal development/test attempt; retained locally, excluded from final acceptance counts",
+      "captured_offline_provider_requests": 0,
+      "projects": []
+    },
+    {
+      "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg",
+      "scope": "final evaluated run",
+      "captured_offline_provider_requests": 28,
+      "projects": [
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg/projects/nonconsecutive-subset-sums.sigma",
+          "sessions": [
+            {
+              "id": "dbd49c0a-2318-4b53-bcb7-b1ec0f7c7a97",
+              "status": "ended",
+              "mode": "error"
+            },
+            {
+              "id": "affc2221-f821-4abe-8ab1-d74224dbc614",
+              "status": "ended",
+              "mode": "withheld"
+            },
+            {
+              "id": "753c3c51-e57a-4c43-93c5-1df66b6f0e63",
+              "status": "ended",
+              "mode": "actual"
+            },
+            {
+              "id": "a2809a29-2622-40d8-b667-517b43a58e20",
+              "status": "ended",
+              "mode": "restart"
+            },
+            {
+              "id": "6095289e-599d-4765-856a-dc745b1380db",
+              "status": "ended",
+              "mode": "sage"
+            },
+            {
+              "id": "e4bcb378-e61c-4d9c-b5c5-88f7d93b7d2d",
+              "status": "failed",
+              "mode": "invalid_feedback"
+            },
+            {
+              "id": "7cf01b4b-d70f-4fd5-94c9-872c3fd89ef3",
+              "status": "ended",
+              "mode": "timeout"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "395258c2-b14d-4924-8772-1acd14fd4712",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "d5548044-eb28-42d3-a13b-40e107bd142d",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "ab99f337-1937-4b87-8eeb-ca197bfc7a5f",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "191bd679-b984-458d-9296-7fce4afaceac",
+              "status": "failed",
+              "runtime": "python"
+            },
+            {
+              "id": "b8d79e50-8012-4a75-902e-f426615dc447",
+              "status": "completed",
+              "runtime": "sagemath"
+            },
+            {
+              "id": "085cca15-817d-4457-88e2-07f26aefd503",
+              "status": "timeout",
+              "runtime": "python"
+            },
+            {
+              "id": "2e2dc817-09d8-4660-998e-191346920525",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "b0f28411-c478-4beb-9fcf-18d71bf48392",
+              "status": "running",
+              "runtime": "python"
+            }
+          ]
+        },
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg/projects/algorithm-design.sigma",
+          "sessions": [
+            {
+              "id": "ad6ce991-3451-4698-b2ef-64a6b34f3cf2",
+              "status": "ended",
+              "mode": "actual"
+            },
+            {
+              "id": "4e48ec17-0565-4c82-9929-3272347c70e7",
+              "status": "ended",
+              "mode": "withheld"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "c39b412b-abee-4f7d-bc03-10f6925b49f2",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "748a03be-b45e-410d-b51c-3cc46dcfc9d2",
+              "status": "completed",
+              "runtime": "python"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-pfjzkdg0",
+      "scope": "nonfinal development/test attempt; retained locally, excluded from final acceptance counts",
+      "captured_offline_provider_requests": 23,
+      "projects": [
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-pfjzkdg0/projects/nonconsecutive-subset-sums.sigma",
+          "sessions": [
+            {
+              "id": "95dbcfad-f2da-4e58-ac6c-657964f89f2b",
+              "status": "ended",
+              "mode": "error"
+            },
+            {
+              "id": "3fdc499a-a712-4e36-8bc3-4b4b5844016b",
+              "status": "running",
+              "mode": "restart"
+            },
+            {
+              "id": "510ff934-c21d-4e9f-af54-20b78c516ed2",
+              "status": "ended",
+              "mode": "actual"
+            },
+            {
+              "id": "20f605b8-9026-4d89-9ff4-6d7ad8dc8eb5",
+              "status": "ended",
+              "mode": "withheld"
+            },
+            {
+              "id": "c7975e70-6ceb-4d7f-adbe-49d6d08643b1",
+              "status": "ended",
+              "mode": "timeout"
+            },
+            {
+              "id": "d4c157cc-9e3d-4500-873c-5191658ccba2",
+              "status": "ended",
+              "mode": "sage"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "6bc28ae6-bce2-477e-b731-e2b31e966c61",
+              "status": "running",
+              "runtime": "python"
+            },
+            {
+              "id": "71977ab5-21c7-4815-af42-612f9e91d2e3",
+              "status": "failed",
+              "runtime": "python"
+            },
+            {
+              "id": "8adcaea0-9930-491d-84ab-0294530ed172",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "cdf42f77-ad27-4142-a356-431c25754e68",
+              "status": "failed",
+              "runtime": "sagemath"
+            },
+            {
+              "id": "185842f9-fe7f-4b94-af0e-ce8692ea5730",
+              "status": "timeout",
+              "runtime": "python"
+            },
+            {
+              "id": "3448400a-faae-474a-8db7-2f5acf8c69f1",
+              "status": "completed",
+              "runtime": "python"
+            }
+          ]
+        },
+        {
+          "retained_project": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-pfjzkdg0/projects/algorithm-design.sigma",
+          "sessions": [
+            {
+              "id": "6f093d1f-0ebf-410e-b910-9014c86a29a0",
+              "status": "ended",
+              "mode": "withheld"
+            },
+            {
+              "id": "5ef5b2bd-ac79-4c77-a36e-4022ad1d498c",
+              "status": "ended",
+              "mode": "actual"
+            }
+          ],
+          "execution_records": [
+            {
+              "id": "f23de856-4d4a-4092-998c-0302827695bc",
+              "status": "completed",
+              "runtime": "python"
+            },
+            {
+              "id": "6e3588b1-700c-4841-ada1-926bc7304615",
+              "status": "completed",
+              "runtime": "python"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
