@@ -44,6 +44,17 @@ with sync_playwright() as playwright:
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
     expect(dialog).to_be_visible()
     expect(dialog).to_contain_text("593 provider calls")
+    expect(dialog).to_contain_text(
+        "SIGMA uses the project's complete research history to prepare a paper, including supporting evidence, unsuccessful approaches, contradictions, and unresolved questions."
+    )
+    expect(dialog).to_contain_text(
+        "It distinguishes established findings from conjectures and identifies gaps rather than inventing missing proof steps."
+    )
+    expect(dialog).to_contain_text(
+        "The resulting paper is AI-generated and has not been independently verified. Readers should examine its evidence and limitations before relying on its conclusions."
+    )
+    expect(dialog).to_contain_text("Selected model:")
+    expect(dialog).to_contain_text("Generation bounds:")
     long_form = dialog.get_by_role(
         "checkbox", name="Use expanded multi-section authoring for a more detailed paper"
     )
