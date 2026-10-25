@@ -109,6 +109,9 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     page.route("**/api/**", api_fixture)
     page.goto(UI_URL)
+    credits = page.locator(".home-art-credit > span")
+    expect(credits.nth(0)).to_have_text("Brian Kramer &")
+    expect(credits.nth(1)).to_have_text("OpenAI Models")
     desktop_edges = page.locator(".home-projects").evaluate(
         "el => ({top: el.getBoundingClientRect().top, left: el.getBoundingClientRect().left})"
     )
