@@ -36,7 +36,10 @@ and the final `./sigma test` passed all scenarios, Ruff check/format, Pyright
 (0 diagnostics), frontend typecheck and production build. Actual rootless GCE,
 hosted OAuth/browser, provider-backed generation, and restart acceptance remain
 dependent on Brian's host verification and separate owner authorization for
-any live provider usage.
+any live provider usage. Implementation commit `4e8111e22a27f4bb5a9319578ebdd30bc5b5941f`
+was submitted in [PR #157](https://github.com/bkramerext/sigma/pull/157); no
+merge was performed. Elapsed preparation time through PR creation was about
+15 minutes.
 
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
