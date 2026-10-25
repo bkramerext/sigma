@@ -12,6 +12,8 @@ from urllib.parse import quote
 from playwright.sync_api import expect, sync_playwright
 
 REPO = Path(__file__).resolve().parents[1]
+SCREENSHOT_DIR = Path(os.environ.get("SIGMA_OUTCOME_SCREENSHOT_DIR", "/tmp"))
+SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 ARCHIVE = (
     REPO
     / "docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
@@ -232,6 +234,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
                 expect(outcome).to_contain_text("The intersection bound yields at most n pieces.")
+                page.screenshot(
+                    path=str(SCREENSHOT_DIR / "sigma-increment13-advanced-desktop.png"),
+                    full_page=True,
+                )
 
             page.reload()
             first_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
@@ -256,6 +262,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 conclusion = row.locator("details.outcome-conclusion")
                 expect(conclusion).to_be_visible()
                 assert conclusion.get_attribute("open") is not None
+            page.screenshot(
+                path=str(SCREENSHOT_DIR / "sigma-increment13-advanced-mobile.png"),
+                full_page=True,
+            )
             # Switch to Simple Outcome and verify the same provenance is above the narrative.
             settings = page.get_by_role("button", name="Project settings", exact=True)
             settings.click()
@@ -286,6 +296,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "scroll: document.documentElement.scrollWidth})"
                 )
                 assert overflow["scroll"] <= overflow["width"], overflow
+                page.screenshot(
+                    path=str(SCREENSHOT_DIR / f"sigma-increment13-simple-{width}.png"),
+                    full_page=True,
+                )
 
             # Adversarial, no-provider record: one saved timeout must never count as success.
             inspected = sessions[0]
@@ -313,6 +327,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(prelude).to_contain_text("offline-timeout")
             expect(prelude).to_contain_text("timeout")
             expect(saved_row.locator(".outcome-simple")).to_be_visible()
+            page.screenshot(
+                path=str(SCREENSHOT_DIR / "sigma-increment13-timeout-mobile.png"),
+                full_page=True,
+            )
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
             browser.close()
