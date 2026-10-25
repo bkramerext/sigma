@@ -1,0 +1,35 @@
+GRAY — T133 preparation handoff
+
+State: R4R for preparation; hosted acceptance is still BLOCKED.
+Branch: gray/t133-cloud-acceptance
+Base: origin/main at 583f946ca9a495c44dbef6950dc1d07db1eaf2ac
+Tested implementation commit: cb4d178 (suite and packaged Chrome run on this tree)
+Ticket: tickets/t133.md
+
+Work completed
+
+- Audited existing desktop acceptance in T91, T100, T45, T17.8, `saved_paper_library.py`, report/text/paper services, and the cloud workspace tests. The saved-paper Chrome check already performs actual fixture-backed TeX/PDF UI downloads and opens inline PDF; avoided a duplicate E2E suite.
+- Extended the existing T91 packaged real-Chrome workflow to toggle a saved Outcome between plain and rendered Markdown, then download Project Audit, text, and HTML from the UI and validate project identity.
+- Kept T91's deterministic Tectonic paper fixture and added run-directory cleanup for its recovery archive.
+- Made `deploy/validate-local.sh` accept Docker Compose CLI plugin or standalone Compose and use Buildx where available for its pinned `linux/amd64` images. The harness removes its temporary restore volumes after stack shutdown.
+- Added the repeatable hosted checklist and requirement evidence boundaries at `docs/evaluations/t133/README.md`; updated `tickets/t133.md` and `docs/STATUS.md`.
+
+Checks actually run
+
+- `./sigma setup` — passed.
+- `./sigma test` — passed all offline scenarios, Ruff, format, Pyright (0 diagnostics), frontend typecheck, and production build. First attempt before setup stopped at missing frontend `tsc`; the setup-installed dependencies resolved it and the full rerun passed.
+- `bash -n deploy/validate-local.sh` — passed.
+- `uv run --locked --no-sync ruff check browser_checks/t91_packaged_compose.py` — passed.
+- `uv run --locked --no-sync ruff format --check browser_checks/t91_packaged_compose.py` — passed after formatting.
+- `deploy/validate-local.sh` — passed on the final run. It built and ran packaged Compose on Colima and real desktop Chrome. T91 verified sample copy, project/strategy save and reopen, five saved sessions, rendered Outcome, all three report downloads, real Tectonic PDF compilation, authenticated TeX/PDF retrieval, malformed TeX rejection, backend recreation, fresh-volume restore, persisted hashes, and user B isolation. The outer local smoke also passed backend restart and container recreation checks. The restore volume and Compose stack were cleaned up.
+- `git diff --check` — passed.
+
+The packaged Chrome run used disposable simulated subjects only. It did not exchange Google OAuth credentials, use real accounts, contact inference providers, generate a provider-authored paper, or incur provider cost. It is local packaged evidence, not hosted acceptance.
+
+Hosted gaps
+
+- T127/T129/T131/T132 remain blockers per assignment. No hosted URL/release SHA, real OAuth, two real authorized identities, hosted service/disk restart, or production persistence was tested.
+- The hosted checklist is ready, but its matrix remains BLOCKED pending those dependencies.
+- Hosted AI paper generation needs explicit provider/budget authorization if no already-prepared authorized test paper is available. No paid calls were made.
+
+No UI implementation was changed. No screenshots or user data were added. Elapsed preparation time was approximately 35 minutes.

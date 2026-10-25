@@ -1,5 +1,38 @@
 # SIGMA status
 
+## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
+
+Audited current desktop acceptance before adding coverage. T91 already runs
+real Chrome against packaged Compose with two simulated identities and covers
+project/strategy edits, saved sessions and evidence, report export, compiled
+TeX/PDF, backend recreation, fresh-volume restore and workspace isolation. T100
+covers persistent-disk browser reload and backend restart; T45 and
+`browser_checks/saved_paper_library.py` cover the paper dialog, TeX/PDF UI
+downloads, and inline PDF; service tests cover report formats, text rendering,
+paper integrity and cloud workspace boundaries. Added the missing explicit
+rendered Outcome assertion and packaged-UI downloads for Project Audit, text,
+and HTML in T91. Its recovery fixture now stores its archive under the temporary
+run directory. Added support for standalone Compose and Buildx to
+`deploy/validate-local.sh`, so the packaged acceptance works with Homebrew
+Compose on Apple Silicon; temporary recovery volumes are removed after stack
+shutdown. The hosted repeatable checklist is
+[T133 acceptance preparation](evaluations/t133/README.md).
+
+Validation: after `./sigma setup`, `./sigma test` passed all offline scenarios,
+Ruff, format, Pyright (0 diagnostics), frontend typecheck and production build.
+`deploy/validate-local.sh` passed: packaged images built, real Chrome verified
+project/strategy save and reopen, 5 saved sessions, rendered Outcome, all three
+report downloads, real Tectonic compilation, authenticated PDF and TeX hashes,
+malformed TeX rejection, backend restart, fresh-volume restore, data hashes and
+user isolation. No Google OAuth exchange or inference/provider call occurred.
+The full run used fixture identities and is local packaged evidence only.
+
+Hosted acceptance remains **BLOCKED** by T127/T129/T131/T132. No live host,
+Google identities, OAuth, or paid paper generation was exercised. A real hosted
+paper generation needs explicit provider/budget authorization if no prepared
+paper is available. Elapsed preparation time: approximately 35 minutes.
+
+
 ## T129 GCE application deployment (2026-10-25)
 
 Implementation commit `513a207f20198eab089fed0915637f1eead1efcd` is on

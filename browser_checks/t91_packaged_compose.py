@@ -251,6 +251,7 @@ def main() -> None:
         sync_playwright() as playwright,
     ):
         browser = playwright.chromium.launch(executable_path=CHROME, headless=True)
+        _context_a = _context_b = None
         try:
 
             def new_user_page(user: dict[str, str]):
@@ -381,6 +382,18 @@ def main() -> None:
                 disclosure.click()
             expect(first.locator(".session-outcome-inline")).to_be_visible()
             expect(first.locator(".session-outcome-inline")).to_contain_text("Mixed")
+            outcome = first.locator(".session-outcome")
+            expect(outcome).to_be_visible()
+            outcome_markdown = outcome.locator(".outcome-heading .sigma-render-toggle")
+            expect(outcome_markdown).to_be_visible()
+            if outcome_markdown.get_attribute("aria-pressed") != "true":
+                outcome_markdown.click()
+            expect(outcome_markdown).to_have_attribute("aria-pressed", "true")
+            expect(outcome.locator(".outcome-simple .outcome-markdown")).to_contain_text(
+                "tentative recurrence"
+            )
+            outcome_markdown.click()
+            expect(outcome_markdown).to_have_attribute("aria-pressed", "false")
             session_id = first.get_attribute("data-session-id")
             detail_response = api_get(
                 user_a, f"/api/projects/research-sessions/{session_id}", path=path
@@ -390,20 +403,29 @@ def main() -> None:
             assert detail.get("outcome") and detail.get("artifacts"), (
                 "saved research fixture absent"
             )
-            # Use the actual packaged UI's Export dialog and browser download.
-            page_a.get_by_role("button", name="Export project", exact=True).click()
-            dialog = page_a.get_by_role("dialog", name="Export Project")
-            dialog.get_by_label("HTML report").check()
-            with page_a.expect_download() as downloaded:
-                dialog.get_by_role("button", name="Download", exact=True).click()
-            report_file = Path(temporary) / "sigma-t91-report.html"
-            downloaded.value.save_as(report_file)
-            report = report_file.read_text(encoding="utf-8")
-            assert "T91 Packaged Chrome Copy" in report
-            assert "Open proof obligations" in report
-            assert "Verification status" in report
-            report_digest = hashlib.sha256(report_file.read_bytes()).hexdigest()
-            expect(dialog).to_be_hidden()
+            # Use the actual packaged UI's Export dialog and verify each
+            # downloadable report representation, not only the HTML route.
+            report_digest = ""
+            for label, extension in (
+                ("Project Audit", "json"),
+                ("Text file", "txt"),
+                ("HTML report", "html"),
+            ):
+                page_a.get_by_role("button", name="Export project", exact=True).click()
+                dialog = page_a.get_by_role("dialog", name="Export Project")
+                dialog.get_by_label(label).check()
+                with page_a.expect_download() as downloaded:
+                    dialog.get_by_role("button", name="Download", exact=True).click()
+                report_file = Path(temporary) / f"sigma-t91-report.{extension}"
+                downloaded.value.save_as(report_file)
+                report_bytes = report_file.read_bytes()
+                assert b"T91 Packaged Chrome Copy" in report_bytes
+                if extension == "html":
+                    report = report_bytes.decode("utf-8")
+                    assert "Open proof obligations" in report
+                    assert "Verification status" in report
+                    report_digest = hashlib.sha256(report_bytes).hexdigest()
+                expect(dialog).to_be_hidden()
             papers_response = api_get(user_a, "/api/projects/papers", path=path)
             assert papers_response.status_code == 200, papers_response.text
             papers_response.json()["papers"]
@@ -451,7 +473,7 @@ def main() -> None:
                 "PASS — explicit Tectonic failure; no paper files appeared"
             )
             MATRIX["saved sessions, outcomes, and report download"] = (
-                "PASS (5 saved sessions; Mixed outcome, cited research artifact, and HTML report downloaded)"
+                "PASS (5 saved sessions; rendered Outcome, cited research artifact, and Project Audit/text/HTML reports downloaded)"
             )
 
             # Confirm B has its own Recent list and cannot retrieve A's path,
@@ -570,8 +592,8 @@ def main() -> None:
             ).stdout.splitlines()
             assert len(volumes) == 1, f"expected one source state volume, got {volumes}"
             source_volume = volumes[0]
-            backup_dir = Path(tempfile.mkdtemp(prefix="sigma-t91-recovery-"))
-            backup_dir.chmod(0o700)
+            backup_dir = Path(temporary) / "recovery"
+            backup_dir.mkdir(mode=0o700)
             archive = backup_dir / "state.tar"
             compose("stop", "backend")
             backup_volume(source_volume, archive)
@@ -673,6 +695,9 @@ def main() -> None:
                 "PASS — invalid tar extraction returned nonzero; only verified owner checks marked restore PASS"
             )
         finally:
+            for context in (_context_a, _context_b):
+                if context is not None:
+                    context.unroute_all(behavior="ignoreErrors")
             browser.close()
 
     print(json.dumps(MATRIX, ensure_ascii=False, indent=2))
