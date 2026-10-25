@@ -4,7 +4,6 @@
 **PR:** [#150](https://github.com/bkramerext/sigma/pull/150) — R4R  
 **Branch:** `blue/increment-22-issue-146` → `main`  
 **Starting main:** `19e5bd7`; reconciled current main `8c3741a` without conflicts  
-**Final SHA:** `3fc249de22361e41925bcccdd4c8537a35ef1058`
 
 ## Prepared comparison
 
