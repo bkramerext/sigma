@@ -33,6 +33,8 @@ def dry_run() -> dict:
     frozen = dict(planned, status="FROZEN", freeze_approved=True,
                   user_approved=True, model_provider="offline-fixture",
                   model_exact_version="offline-only", per_arm_token_cap=200,
+                  per_arm_input_token_cap=100, per_arm_output_token_cap=100,
+                  per_call_input_token_cap=100, per_call_output_token_cap=100,
                   per_arm_model_call_cap=2, per_arm_tool_call_cap=0,
                   per_arm_wall_seconds=60, per_arm_usd_cap=0,
                   total_usd_cap=0)
@@ -51,7 +53,8 @@ def dry_run() -> dict:
                           replicate=pair["replicate"], arm_code=arm,
                           packet_sha256=digest, model_provider="offline-fixture",
                           model_exact_version="offline-only",
-                          total_tokens=0, model_calls=0, tool_calls=0,
+                          total_tokens=0, input_tokens=0, output_tokens=0,
+                          call_usage=[], model_calls=0, tool_calls=0,
                           elapsed_seconds=0, cost_usd=0,
                           transcript_sha256=hashlib.sha256(transcript).hexdigest(),
                           tool_audit_sha256=hashlib.sha256(b"[]").hexdigest(),
@@ -76,6 +79,11 @@ def dry_run() -> dict:
     must_reject(lambda m, r: r[0].update(packet_sha256="other-packet"))
     must_reject(lambda m, r: r[0].update(model_calls=3))
     must_reject(lambda m, r: r[0].update(total_tokens=201))
+    must_reject(lambda m, r: r[0].update(input_tokens=101, total_tokens=101))
+    must_reject(lambda m, r: r[0].update(output_tokens=101, total_tokens=101))
+    must_reject(lambda m, r: r[0].update(input_tokens=1))
+    must_reject(lambda m, r: r[0].update(call_usage=[{"input_tokens": 101, "output_tokens": 0}],
+                                          model_calls=1, input_tokens=101, total_tokens=101))
     must_reject(lambda m, r: r[0].update(cost_usd=0.01))
     must_reject(lambda m, r: r[0].update(transcript_sha256=""))
     must_reject(lambda m, r: r[0].update(scorer_saw_arm_identity=True))
