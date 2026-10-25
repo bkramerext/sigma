@@ -247,7 +247,7 @@ def compact_dispatch_packet(packet: dict[str, Any]) -> dict[str, Any]:
 
     counts: Counter[str] = Counter()
 
-    def count(value):
+    def count(value: Any) -> None:
         if isinstance(value, str) and len(value) >= 120:
             counts[value] += 1
         elif isinstance(value, dict):
@@ -264,7 +264,7 @@ def compact_dispatch_packet(packet: dict[str, Any]) -> dict[str, Any]:
         value: f"T{index + 1}" for index, (value, copies) in enumerate(counts.items()) if copies > 1
     }
 
-    def encode(value):
+    def encode(value: Any) -> Any:
         if isinstance(value, str) and value in names:
             return {"$sigma_text": names[value]}
         if isinstance(value, dict):
@@ -273,7 +273,7 @@ def compact_dispatch_packet(packet: dict[str, Any]) -> dict[str, Any]:
             return [encode(child) for child in value]
         return value
 
-    encoded = encode(packet)
+    encoded: dict[str, Any] = encode(packet)
     encoded["dispatch_text_pool"] = {name: value for value, name in names.items()}
     encoded["dispatch_encoding"] = "exact-text-pool-v1"
     # Alias path overhead can exceed the savings for small packets. Keep the
@@ -289,7 +289,7 @@ def expand_dispatch_packet(packet: dict[str, Any]) -> dict[str, Any]:
         return packet
     texts = packet.get("dispatch_text_pool", {})
 
-    def decode(value):
+    def decode(value: Any) -> Any:
         if isinstance(value, dict) and set(value) == {"$sigma_text"}:
             name = value["$sigma_text"]
             if name not in texts or not isinstance(texts[name], str):
