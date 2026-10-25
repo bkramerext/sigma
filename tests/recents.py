@@ -1,11 +1,13 @@
 """Sample catalog copies, recent-project behavior, collision safety, and API/CLI access."""
 
+import fcntl
 import json
 import os
 import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -106,6 +108,48 @@ def check(root: Path, base: Path) -> None:
     assert last_copy.project.id != edited.project.id
 
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
+    from sigma import research_sessions
+
+    running_project = created[-1]
+    idle_project = created[-2]
+    idle_history = Path(idle_project.path) / "research-sessions"
+    assert not idle_history.exists()
+    assert not research_sessions.has_active_session(idle_project.path)
+    assert not idle_history.exists()
+
+    running_directory = Path(running_project.path) / "research-sessions"
+    running_directory.mkdir()
+    running_id = str(uuid4())
+    running_record = {
+        "id": running_id,
+        "project_id": running_project.project.id,
+        "project_path": running_project.path,
+        "status": "running",
+        "created_at": "2026-10-25T00:00:00Z",
+    }
+    session_file = running_directory / f"{running_id}.json"
+    session_file.write_text(json.dumps(running_record))
+    worker_lock = running_directory / f"{running_id}.worker.lock"
+    with worker_lock.open("a") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        assert research_sessions.has_active_session(running_project.path)
+        active_recent = {item["id"]: item for item in recent_projects()["projects"]}
+        assert active_recent[running_project.project.id]["research_running"] is True
+        with TestClient(app) as api:
+            active_api = {
+                item["id"]: item for item in api.get("/api/projects/recent").json()["projects"]
+            }
+            assert active_api[running_project.project.id]["research_running"] is True
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    running_record["status"] = "completed"
+    session_file.write_text(json.dumps(running_record))
+    assert not research_sessions.has_active_session(running_project.path)
+    completed_recent = {item["id"]: item for item in recent_projects()["projects"]}
+    assert completed_recent[running_project.project.id]["research_running"] is False
+    running_record["status"] = "paused"
+    session_file.write_text(json.dumps(running_record))
+    assert not research_sessions.has_active_session(running_project.path)
+
     actual = recent_projects()["projects"]
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])

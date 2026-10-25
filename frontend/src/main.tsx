@@ -2261,7 +2261,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; available: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; error: string | null };
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -2276,7 +2276,34 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
     setProjects(data.projects); setLoading(false);
   }, []);
-  useEffect(() => { const controller = new AbortController(); void load(controller.signal).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } }); return () => controller.abort(); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    let requestPending = false;
+    const refresh = async () => {
+      if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
+      requestPending = true;
+      try {
+        await load(controller.signal);
+        setError('');
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setProjects(current => current.map(entry => ({ ...entry, research_running: false })));
+          setError(errorMessage(error));
+          setLoading(false);
+        }
+      } finally {
+        requestPending = false;
+      }
+    };
+    const interval = window.setInterval(() => void refresh(), 3000);
+    document.addEventListener('visibilitychange', refresh);
+    void refresh();
+    return () => {
+      controller.abort();
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [load]);
   async function open(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
     try { onOpen(await post<ProjectView>('open', { path: entry.path })); }
@@ -2307,7 +2334,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
           <div className="recent-title-row">
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}</button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : `${strategyCount(entry.strategy_count)} · ${difficultyDescription(entry.difficulty)}`}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
           <span title={entry.path}>{entry.path}</span>
           {confirmRemoveId === entry.id && <div className="recent-remove-actions"><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Recent Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
         </div>

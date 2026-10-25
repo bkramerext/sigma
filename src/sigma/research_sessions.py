@@ -2815,6 +2815,23 @@ def list_sessions(path: str) -> list[dict[str, Any]]:
     return [_public(_recover(item)) for item in _all(path)]
 
 
+def has_active_session(path: str) -> bool:
+    """Return whether a project has a queued or running research session.
+
+    Recovery is part of the status read: an abandoned local ``running`` record
+    becomes paused before Home reports it, while a live worker's lock preserves
+    its active state.
+    """
+    records, _unavailable = read_session_snapshot(path)
+    for record in records:
+        try:
+            if _recover(record).get("status") in {"queued", "running"}:
+                return True
+        except (KeyError, OSError, TypeError, ValueError):
+            continue
+    return False
+
+
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
     if not cloud_workspaces.enabled():

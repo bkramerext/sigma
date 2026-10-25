@@ -1,5 +1,25 @@
 # SIGMA status
 
+## T92: Home Recent Projects Running status (2026-10-25)
+
+Home Recent Projects now derives each project's `research_running` flag from its
+persisted queued/running research-session records and the backend worker lock.
+Abandoned local running records recover to paused before the status is reported;
+paused, stopped, completed and failed sessions do not show Running. The Home UI
+shows the green label inline between strategy count and difficulty and refreshes
+the backend state every three seconds while visible, including on return to a
+visible tab. If a refresh fails, it clears the indicator until status can be
+read again.
+
+Focused `tests/recents.py` checks active, completed, and paused state through the
+service and Home API. Real Chrome `browser_checks/recents.py` checks the idle and
+active metadata text, periodic updates, reload persistence, removal, green
+styling and layout at 1280px, 390px, and 320px. The full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite passed, including
+Ruff, format, Pyright, frontend typecheck and production build. Browser-check
+Ruff and format, a standalone frontend typecheck, and `git diff --check` passed.
+No provider calls or cloud changes were made.
+
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.

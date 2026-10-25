@@ -11,6 +11,7 @@ SOURCE = Path("samples/nonconsecutive-subset-sums/project.json")
 original = SOURCE.read_bytes()
 UI_ORIGIN = os.environ.get("SIGMA_RECENTS_UI_ORIGIN", "http://127.0.0.1:5173").rstrip("/")
 API_ORIGIN = os.environ.get("SIGMA_RECENTS_API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
+running_project_ids: set[str] = set()
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -25,7 +26,14 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
-        route.fulfill(response=route.fetch(url=route.request.url.replace(UI_ORIGIN, API_ORIGIN)))
+        response = route.fetch(url=route.request.url.replace(UI_ORIGIN, API_ORIGIN))
+        if route.request.url.split("?", 1)[0] == f"{UI_ORIGIN}/api/projects/recent":
+            data = response.json()
+            for entry in data["projects"]:
+                entry["research_running"] = entry["id"] in running_project_ids
+            route.fulfill(response=response, body=json.dumps(data))
+            return
+        route.fulfill(response=response)
 
     page.route("**/api/**", forward)
     page.goto("http://127.0.0.1:5173/")
@@ -41,8 +49,13 @@ with sync_playwright() as playwright:
     open_dialog.get_by_role("heading", name="Open Project", exact=True).evaluate(
         "h => { const cancel = h.nextElementSibling; if (!cancel || !cancel.matches('button.entry-cancel') || cancel.getBoundingClientRect().left < h.getBoundingClientRect().right) throw new Error('Cancel must flow immediately after the Open Project title'); }"
     )
-    assert open_cancel.bounding_box()["y"] < open_dialog.get_by_role("button", name="Open Project", exact=True).bounding_box()["y"]
-    expect(open_dialog.locator(".entry-dialog-actions").get_by_role("button", name="Cancel")).to_have_count(0)
+    assert (
+        open_cancel.bounding_box()["y"]
+        < open_dialog.get_by_role("button", name="Open Project", exact=True).bounding_box()["y"]
+    )
+    expect(
+        open_dialog.locator(".entry-dialog-actions").get_by_role("button", name="Cancel")
+    ).to_have_count(0)
     open_cancel.click()
     expect(open_dialog).to_have_count(0)
     samples_tab = page.get_by_role("tab", name="Samples", exact=True)
@@ -67,7 +80,11 @@ with sync_playwright() as playwright:
     ).to_have_text("1 strategy · Easy difficulty")
     sample_title_box = samples_panel.locator(".sample-open strong").first.bounding_box()
     sample_meta_box = samples_panel.locator(".sample-open small span").first.bounding_box()
-    assert sample_title_box and sample_meta_box and abs(sample_title_box["x"] - sample_meta_box["x"]) < 1
+    assert (
+        sample_title_box
+        and sample_meta_box
+        and abs(sample_title_box["x"] - sample_meta_box["x"]) < 1
+    )
     sample_type = samples_panel.locator(".sample-open strong").first.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
@@ -168,17 +185,32 @@ with sync_playwright() as playwright:
         "button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True
     )
     expect(first_copy).to_be_visible()
-    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
+    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(recent_meta).to_contain_text("strategies · ")
     expect(recent_meta).to_contain_text("Difficulty")
+    idle_metadata = recent_meta.inner_text()
+    assert idle_metadata.count(" · ") == 1 and "Running" not in idle_metadata, idle_metadata
     assert "Mathematics" not in recent_meta.inner_text()
     recent_title_box = first_copy.bounding_box()
     recent_meta_box = recent_meta.bounding_box()
-    assert recent_title_box and recent_meta_box and abs(recent_title_box["x"] - recent_meta_box["x"]) < 1
+    assert (
+        recent_title_box
+        and recent_meta_box
+        and abs(recent_title_box["x"] - recent_meta_box["x"]) < 1
+    )
     recent_meta_style = recent_meta.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
     assert sample_meta_style == recent_meta_style
+    running_project_ids.add(json.loads(Path(path, "project.json").read_text())["id"])
+    expect(recent_meta).to_contain_text(" · Running · ", timeout=10000)
+    running_label = recent_meta.locator(".recent-running")
+    assert running_label.evaluate("e => getComputedStyle(e).color") == "rgb(143, 189, 154)"
+    for width, height in ((390, 844), (320, 700)):
+        page.set_viewport_size({"width": width, "height": height})
+        expect(running_label).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.set_viewport_size({"width": 1280, "height": 720})
     recent_groups = recent_panel.locator(".recent-type-group")
     recent_labels = recent_groups.locator("summary > span").all_text_contents()
     assert recent_labels == sorted(recent_labels, key=str.casefold), recent_labels
@@ -208,6 +240,13 @@ with sync_playwright() as playwright:
     expect(recent_tab).to_have_attribute("aria-selected", "true")
     page.reload()
     expect(recent_tab).to_have_attribute("aria-selected", "true")
+    first_copy = recent_panel.get_by_role(
+        "button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True
+    )
+    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
+    expect(recent_meta).to_contain_text(" · Running · ")
+    running_project_ids.clear()
+    expect(recent_meta).to_have_text(idle_metadata, timeout=10000)
     samples_tab.hover()
     expect(page.get_by_role("tooltip")).to_have_text(
         "Show sample projects. Click again to collapse or expand all."

@@ -147,6 +147,7 @@
 .home-page .home-recents .recent-type-group > summary small { display: block; margin: 0; color: #aeb9c4; font-size: 11px; }
 .home-page .home-recents .recent-type-group > summary:focus-visible { outline: 2px solid #d6a36f; outline-offset: -2px; border-radius: 4px; }
 .home-page .home-recents .recent-type-group > ul { margin: 0 0 0 20px; padding: 0; }
+.home-page .home-recents .recent-running { color: #8fbd9a; }
 @media (max-width: 400px) {
   .home-page .catalog-tabs { width: 100%; }
   .home-page .catalog-tabs button { flex: 1; padding-inline: 8px; }
