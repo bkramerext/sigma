@@ -355,6 +355,7 @@ def test_computation_provenance_precedes_authored_claims() -> None:
     # No saved execution must be stated before the author's confident prose.
     for output_format in ("txt", "html", "tex"):
         report, _ = render_report(data, output_format)
+        assert isinstance(report, str)
         assert "No persisted Python/SageMath execution records" in report
         assert report.index("No persisted Python/SageMath execution records") < report.index(
             "The agent claims we measured an effect."
@@ -391,6 +392,7 @@ def test_computation_provenance_precedes_authored_claims() -> None:
     assert completed["source_recorded"] and completed["output_recorded"]
     for output_format in ("txt", "html", "tex"):
         report, _ = render_report(data, output_format)
+        assert isinstance(report, str)
         assert report.index("Recorded computation provenance") < report.index(
             "The agent claims we measured an effect."
         )
