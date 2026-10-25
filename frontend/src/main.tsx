@@ -94,6 +94,29 @@ type ExecutionProvenance = { records: { id: string; runtime: string; statuses: s
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+
+function pausedSessionNextAction(session: ResearchSession): string {
+  const details = [session.current_action, session.message, ...session.steps.slice(-2).flatMap(step => [step.failure_kind, step.interruption_reason]), ...(session.strategy_runs ?? []).map(run => run.reason ?? '')].join(' ').toLowerCase();
+  if (details.includes('backend restart') || details.includes('interrupted') || details.includes('provider call')) {
+    return 'SIGMA will not retry an interrupted provider call automatically. Review recent activity and your provider usage, then resume when you are ready; continuing may dispatch a new call.';
+  }
+  if (details.includes('context') || details.includes('storage limit')) {
+    return 'Review the context or storage limit details below. Reduce the material or make room first, then resume if the session allows it.';
+  }
+  if (details.includes('cost') || details.includes('billing')) {
+    return 'Review the cost limit and AI billing connection before resuming. Do not resume until the expected account and limit are clear.';
+  }
+  if (details.includes('model') || details.includes('connection') || details.includes('identity') || details.includes('account')) {
+    return 'Restore the model and AI connection or billing identity described below before resuming.';
+  }
+  if (details.includes('project or strategy changed') || details.includes('strategy is disabled')) {
+    return 'Review the project and strategy state described below, make any required changes, then resume.';
+  }
+  if (details.includes('paused by user')) {
+    return 'You paused this session. Resume when ready. A provider request already sent may still consume allowance.';
+  }
+  return 'Review the recorded reason and current action below. If the cause is resolved, resume when ready; SIGMA will report any resume guard that still applies.';
+}
 type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
 type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
 type CurrentQuestion = { id: string; text: string; status: string; actionable: boolean; sources: EvidencePointer[]; narrative_resolution_sources: EvidencePointer[]; note: string; dispositions: { source: EvidencePointer; valid: boolean; rationale: string }[] };
@@ -958,6 +981,18 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
                   {['completed', 'ended', 'stopped', 'failed'].includes(item.status) && confirmRemoveId === item.id && <div className="session-remove-actions"><div className="research-stop-confirm" role="group" aria-label={`Confirm remove Session ${item.session_number}`}><p>Remove Session #{item.session_number} and its saved research record and artifacts? The strategy and other sessions will remain.</p><div className="session-remove-confirm-actions"><button type="button" className="text-view-link destructive-action" title={`Confirm removal of Session ${item.session_number}`} disabled={busy} onClick={() => void removeSession(item)}>Confirm</button><button type="button" className="text-view-link" title={`Keep Session ${item.session_number}`} disabled={busy} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
                 </div></div>
                 <span className={`session-status session-${item.status}`} aria-label={`Lifecycle status: ${item.status}`}><i aria-hidden="true"/>{item.status}</span>
+                {item.status === 'paused' && <div className="paused-session-clarity" aria-label={`Paused session ${item.session_number} explanation`}>
+                  <strong>Why this session is paused</strong>
+                  <p>{item.message || 'No pause explanation was recorded by the backend.'}</p>
+                  {!!item.current_action && <p><span>Current action:</span> {currentAction}</p>}
+                  {(() => {
+                    const failed = [...item.steps].reverse().find(step => step.failure_kind || step.interruption_reason);
+                    const branchReason = item.strategy_runs?.find(run => run.reason)?.reason;
+                    const typedReason = failed?.failure_kind || failed?.interruption_reason || branchReason;
+                    return typedReason ? <p><span>Recorded reason:</span> {typedReason}</p> : null;
+                  })()}
+                  <p><span>Next action:</span> {pausedSessionNextAction(item)}</p>
+                </div>}
                 <small className={`session-strategy-name session-outcome-inline outcome-${item.outcome.assessment}`}><span>{item.outcome.label}{item.outcome.provisional ? ' · provisional' : ''}</span></small>
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
               </div>

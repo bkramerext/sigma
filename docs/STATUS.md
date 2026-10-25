@@ -1,5 +1,21 @@
 # SIGMA status
 
+## Green #95 — paused-session clarity (2026-10-25)
+
+Paused research sessions now explain the saved backend message, current action,
+and an available typed failure/interruption reason in the session heading. The
+next-step guidance distinguishes interrupted provider calls, context/storage,
+cost/billing, model/connection, project/strategy guards, and manual pause. It
+does not promise automatic recovery; interrupted calls are explicitly not
+retried automatically, and resume errors remain visible.
+
+`npm --prefix frontend run typecheck` passed. The real-Google-Chrome check
+`uv run --with playwright python browser_checks/t95_paused_session.py` passed
+desktop and 390px checks, browser close/reopen persistence, and a guarded resume
+error; opening/viewing a paused session issued no session-start request. It uses
+a saved session fixture and an intercepted resume-guard response, with no
+provider calls. Full `./sigma test` is scheduled after #125 as requested.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored

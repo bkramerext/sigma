@@ -477,6 +477,10 @@
 .workspace-page .session-status i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; border: 1px solid #849db1; }
 .workspace-page .session-queued i, .workspace-page .session-running i { border-color: #49adcf; box-shadow: 0 0 5px #49adcf; }
 .workspace-page .session-paused i { border-color: #d59b41; box-shadow: 0 0 5px #d59b41; }
+.workspace-page .paused-session-clarity { min-width: 0; margin: 7px 0 5px; padding: 9px 11px; border-left: 3px solid #d59b41; border-radius: 3px; background: #d59b4112; color: #dce5ec; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.workspace-page .paused-session-clarity strong { color: #f0cfaa; font-size: 13px; }
+.workspace-page .paused-session-clarity p { margin: 3px 0 0; }
+.workspace-page .paused-session-clarity p span { color: #b9c6d0; font-weight: 600; }
 .workspace-page .session-completed i { border-color: #75b18c; box-shadow: 0 0 5px #75b18c; }
 .workspace-page .session-stopped i, .workspace-page .session-failed i { border-color: #d38578; box-shadow: 0 0 5px #d38578; }
 .workspace-page .session-row-content { min-width: 0; padding: 0 0 0 16px; border-left: 1px solid #243441; color: #c4d0da; line-height: 1.6; }
