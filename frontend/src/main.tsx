@@ -98,21 +98,24 @@ type ResearchSession = { approved_continuations?: Record<string, { parent_strate
 function pausedSessionGuidance(session: ResearchSession): { cause: string; next: string } {
   const action = session.current_action.toLowerCase();
   const message = session.message.trim();
-  if (/context|token limit/.test(action) || /context (?:size|bound|limit)|exceeded the context/i.test(message))
+  const typedReason = [...session.steps].reverse().find(step => step.failure_kind || step.interruption_reason);
+  const recordedReason = [message, typedReason?.failure_kind, typedReason?.interruption_reason].filter(Boolean).join(' · ');
+  const evidence = `${action} ${recordedReason}`;
+  if (/context|token limit/.test(evidence))
     return { cause: 'This session paused because its required context exceeded the available context limit. Saved research is preserved.', next: 'Review the saved evidence and context limits before resuming. Resume will remain subject to the backend context guard.' };
-  if (/duration|wall.clock/.test(action) || /duration limit|wall.clock limit/i.test(message))
+  if (/duration|wall.clock/.test(evidence))
     return { cause: 'This session reached its configured elapsed-time limit. Saved research is preserved.', next: 'Adjust the project time limit if appropriate, then resume the session.' };
-  if (/cost|budget/.test(action) || /cost limit|budget exhausted|billing limit/i.test(message))
+  if (/cost|budget/.test(evidence))
     return { cause: 'This session reached a configured cost or call budget limit. Saved research is preserved.', next: 'Review the project limits and usage before resuming.' };
-  if (/model|connection/.test(action) || /model is no longer available|connection|billing identity changed/i.test(message))
+  if (/model|connection|billing identity/.test(evidence))
     return { cause: 'The selected model or AI connection changed while this session was paused. Saved research is preserved.', next: 'Check the AI connection and selected model before resuming.' };
-  if (/project|strategy/.test(action) || /project or strategy changed/i.test(message))
+  if (/project|strategy/.test(evidence))
     return { cause: 'The project or one of its strategies changed while this session was paused. Saved research is preserved.', next: 'Review the current project and strategy before resuming.' };
-  if (/restart|interrupted/.test(action) || /backend restart|interrupted/i.test(message))
+  if (/restart|interrupted/.test(evidence))
     return { cause: 'The session was interrupted when its backend work stopped. Saved research is preserved.', next: 'Resume when you are ready; a previously dispatched provider request may already have used allowance.' };
-  if (/paused by user|paused by you/i.test(message))
-    return { cause: message, next: 'Resume when you are ready. A previously dispatched provider request may still consume allowance.' };
-  if (message) return { cause: message, next: 'Review the pause details above, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
+  if (/paused by user|paused by you/i.test(recordedReason))
+    return { cause: recordedReason, next: 'Resume when you are ready. A previously dispatched provider request may still consume allowance.' };
+  if (recordedReason) return { cause: recordedReason, next: 'Review the pause details above, then resume when the project and AI connection are ready. Backend safeguards still apply.' };
   return { cause: 'The session is paused. No additional reason was recorded.', next: 'Review the session and AI connection before resuming. Backend safeguards still apply.' };
 }
 type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
