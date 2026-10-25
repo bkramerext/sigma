@@ -6409,8 +6409,6 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
     assert archive.read_bytes() == archive_bytes
 
 
-
-
 def test_saved_followup_question_selection():
     """A newer terminal outcome must block stale or unprovided follow-ups."""
     def session(number, strategy_id, decision="stop_budget_exhausted",
@@ -6485,7 +6483,8 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         role = payload["text"]["format"]["name"]
         seen.append((phase, role, context))
         if phase == "later":
-            later_dispatched.set()
+            if context["strategy"]["id"] == strategy.id:
+                later_dispatched.set()
             await asyncio.Event().wait()
         if role == "research_investigator":
             return httpx.Response(200, json=provider_response(investigation(1)))
