@@ -1809,6 +1809,7 @@ function AboutArchitecture() {
     session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
     orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
+    investigatorFollowup: 'A later Investigator turn can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
     tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
     workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
     skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
@@ -1961,9 +1962,9 @@ function AboutArchitecture() {
           })}
         </div>
       </div>
-      <div className="about-flow-connector"><span>Selected strategies are investigated through sessions</span><i aria-hidden="true"/></div>
+      <div className="about-flow-connector about-strategy-parallel-note"><span>Several selected directions can advance side by side</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
-        <div className="about-session-heading">{card('session', 'Research Session', 'Coordinates bounded investigations')}</div>
+        <div className="about-session-heading">{card('session', 'Research Session', 'Brings specialist agent turns together')}</div>
         <div className="about-agent-cycle-preview">
           <span className="about-agent-role">Investigator<small>AI agent</small></span>
           <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -1972,31 +1973,38 @@ function AboutArchitecture() {
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">A coordinated research and review cycle</h4>
-            <p className="about-multi-agent-intro">SIGMA brings distinct AI agents into a research session through multiple agent turns. An Investigator develops ideas and tests them; a Skeptic challenges the reasoning and examines the evidence. Further turns can build on that exchange, with each contribution preserved in the session record.</p>
-            <div className="about-orchestration">{card('orchestration', 'Session Orchestration', 'Creates bounded agent tasks')}</div>
-            <div className="about-inner-connector"><span>Choose a direction and bounded task</span><i aria-hidden="true"/></div>
-            <div className="about-selected-strategies">Selected strategies <span>One or more directions may be investigated in a session</span></div>
-            <div className="about-inner-connector"><span>Starts an Investigator agent for the selected work</span><i aria-hidden="true"/></div>
-            <section className="about-agent-instantiation" aria-label="Separate AI agents in a research cycle">
-              <h5>Multiple agent turns, distinct roles</h5>
-              <div className="about-agent-instance-flow">
-                {card('investigator', 'Investigator Agent', 'Develops ideas, reasoning and experiments', 'blue')}
-                <div className="about-agent-handoff"><span>Next agent turn</span><svg viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
-                {card('skeptic', 'Skeptic Agent', 'Challenges assumptions and examines evidence', 'blue')}
+            <h4 id="about-session-detail-heading">Different minds take turns on the same hard question</h4>
+            <p className="about-multi-agent-intro">SIGMA brings specialist AI agents into the research. Investigators develop ideas and test possibilities. Skeptics challenge assumptions and probe the evidence. Investigators return with the critique in view, and the exchange can continue. Each turn adds another perspective while the work stays together in the research session.</p>
+            <section className="about-agent-instantiation" aria-label="Different AI agents contribute successive research turns">
+              <h5>One investigation. Multiple agent turns.</h5>
+              <div className="about-agent-turns">
+                <div className="about-agent-turn">
+                  <span className="about-turn-number">01 · INVESTIGATE</span>
+                  {card('investigator', 'Investigator', 'Develops an approach and tests ideas', 'blue')}
+                  <span className="about-turn-detail">Explores the direction</span>
+                </div>
+                <span className="about-turn-arrow" aria-hidden="true">→</span>
+                <div className="about-agent-turn">
+                  <span className="about-turn-number">02 · CHALLENGE</span>
+                  {card('skeptic', 'Skeptic', 'Questions assumptions and probes evidence', 'blue')}
+                  <span className="about-turn-detail">Finds gaps and next questions</span>
+                </div>
+                <div className="about-agent-return">
+                  <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-turn-return-metal" x1="1" x2="0"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M510 3 V27 H170 V72 M162 62 L170 72 L178 62" fill="none" stroke="url(#about-turn-return-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span>The Skeptic's critique feeds the next Investigator turn</span>
+                  <b aria-hidden="true">↓</b>
+                </div>
+                <div className="about-agent-turn about-agent-turn--return">
+                  <span className="about-turn-number">03 · BUILD ON IT</span>
+                  {card('investigatorFollowup', 'Investigator', 'Takes up the critique and continues', 'blue')}
+                  <span className="about-turn-detail">Carries the research forward</span>
+                </div>
               </div>
-              <p className="about-agent-instantiation-note">The Skeptic is a separate agent call with a review role, not a formal proof verifier.</p>
-              <div className="about-tools-row"><span>The Investigator can draw on tools such as SciPy and SageMath to explore ideas and test patterns.</span>{card('tools', 'Research Tools', 'Explore ideas and test patterns')}</div>
+              <div className="about-agent-turn-more"><span aria-hidden="true">···</span> More Investigator and Skeptic turns can follow as the research develops</div>
+              <p className="about-agent-instantiation-note">Investigator turns can draw on tools such as SciPy and SageMath. Every turn and its research stay with the session for complete recoverability and auditing.</p>
             </section>
-            <div className="about-inner-connector"><span>Both agent steps become reviewable session evidence</span><i aria-hidden="true"/></div>
-            <div className="about-working-evidence">{card('workingEvidence', 'Working Research Evidence', 'Shared context, traceable sources')}</div>
-            <div className="about-inner-connector"><span>Critique + next question</span><i aria-hidden="true"/></div>
-            <div className="about-coordinator">{card('decision', 'Coordinator Decision', 'Continue, revise or stop')}</div>
-            <div className="about-cycle-return">
-              <span className="about-cycle-return-icon" aria-hidden="true">↻</span>
-              <span>If research continues, SIGMA starts a new Investigator and Skeptic cycle using the updated evidence.</span>
-            </div>
-            <p className="about-multiple-strategies-note">A session can investigate multiple selected strategies. Each follows bounded investigation and review; relevant evidence may inform another strategy.</p>
+            <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
+            <p className="about-multiple-strategies-note">A project can explore several strategies. Each gives agents another direction to investigate, and the saved findings remain available for later work.</p>
           </div>
         </div>
       </div>

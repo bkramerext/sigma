@@ -5646,3 +5646,17 @@ calculations.
 The session explanation now frames the Investigator and Skeptic as distinct
 roles in multiple agent turns, with later turns building on their exchange and
 each contribution preserved in the session record.
+
+The About architecture has been recast as a conceptual agent exchange rather
+than a session-engine flowchart. It shows Investigator → Skeptic → a later
+Investigator turn, with a clear return arrow from the critique into the next
+turn. The surrounding project view shows several strategy directions that can
+advance side by side. Session coordination is described as SIGMA's role, not as
+a third AI agent. The portfolio runner permits up to three overlapping model
+calls and schedules eligible branches in waves under one shared call budget.
+
+Each agent turn and its research are described as staying with the session for
+complete recoverability and auditing.
+
+**Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
+320px, including touch help at 390px. Frontend TypeScript typecheck passed.
