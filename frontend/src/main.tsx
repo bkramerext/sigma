@@ -1465,6 +1465,21 @@ function SettingsGearIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 1.72l-.08.54a2 2 0 0 1-1 1.44l-.47.27a2 2 0 0 1-1.74 0l-.44-.22a2 2 0 0 0-2.72.73l-.22.38a2 2 0 0 0 .73 2.73l.44.25a2 2 0 0 1 1 1.73v.54a2 2 0 0 1-1 1.73l-.44.25a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.72.73l.44-.22a2 2 0 0 1 1.74 0l.47.27a2 2 0 0 1 1 1.44l.08.54a2 2 0 0 0 2 1.72h.44a2 2 0 0 0 2-1.72l.08-.54a2 2 0 0 1 1-1.44l.47-.27a2 2 0 0 1 1.74 0l.44.22a2 2 0 0 0 2.72-.73l.22-.38a2 2 0 0 0-.73-2.73l-.44-.25a2 2 0 0 1-1-1.73v-.54a2 2 0 0 1 1-1.73l.44-.25a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.72-.73l-.44.22a2 2 0 0 1-1.74 0l-.47-.27a2 2 0 0 1-1-1.44l-.08-.54A2 2 0 0 0 12.22 2z"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
+const NEW_PROJECT_VALUES_KEY = 'sigma.newProjectValues';
+function savedNewProjectValues(): Settings | null {
+  try {
+    const raw = window.localStorage.getItem(NEW_PROJECT_VALUES_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<Settings>;
+    if (typeof value.title !== 'string' || typeof value.problem !== 'string' ||
+        typeof value.investigation_type !== 'string' || typeof value.ai_model !== 'string' ||
+        typeof value.reasoning_effort !== 'string' ||
+        !(value.difficulty === null || value.difficulty === 'easy' || value.difficulty === 'medium' || value.difficulty === 'hard') ||
+        typeof value.show_advanced_outcome_details !== 'boolean') return null;
+    return value as Settings;
+  } catch { return null; }
+}
+
 function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
   contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
@@ -1486,10 +1501,16 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const editorForm = useRef<HTMLFormElement>(null);
   const editorArea = useRef<HTMLDivElement>(null);
   const [markdownPortalTarget, setMarkdownPortalTarget] = useState<HTMLElement | null>(null);
+  const [copyPortalTarget, setCopyPortalTarget] = useState<HTMLElement | null>(null);
+  const [copied, setCopied] = useState(false);
+  const renderedContent = useRef<HTMLDivElement>(null);
+  const copyTimer = useRef<number | null>(null);
   const handledEditSignal = useRef(0);
   useLayoutEffect(() => {
     setMarkdownPortalTarget(markdownSlotId ? document.getElementById(markdownSlotId) : null);
+    setCopyPortalTarget(markdownSlotId ? document.getElementById(`${markdownSlotId}-copy`) : null);
   }, [markdownSlotId, modeDisabled, combinedEditMode, editSignal]);
+  useEffect(() => () => { if (copyTimer.current !== null) window.clearTimeout(copyTimer.current); }, []);
   useEffect(() => {
     const controller = new AbortController();
     setData(null); setError(''); setEditing(false);
@@ -1509,6 +1530,18 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   }
   const version = data?.[format];
   const current = version?.current ?? false;
+  async function copyText() {
+    if (!version || !current || editing) return;
+    const text = selected === 'rendered'
+      ? (renderedContent.current?.innerText ?? version.body).replace(/\n{3,}/g, '\n\n').trim()
+      : version.body;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1600);
+    } catch (cause) { reportRequestFailure(`Could not copy ${name}: ${errorMessage(cause)}`); }
+  }
   function beginBodyEdit(fromRendered = false, alreadyInMode = false) {
     if (!version?.current || busy || (modeDisabled && !alreadyInMode) || (!alreadyInMode && onEnterMode && !onEnterMode())) return;
     setDraft(version.body); onCombinedDraftChange?.(version.body); setEditingFromRendered(fromRendered);
@@ -1577,6 +1610,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
   </span>;
+  const copyControl = <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={!current || editing || busy || combinedEditMode} onClick={() => void copyText()}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="m8 12 3 3 10-10"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
   const viewActions = <>
     {!markdownSlotId && markdownControl}
 
@@ -1590,6 +1624,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
     {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
+    {copyPortalTarget && createPortal(copyControl, copyPortalTarget)}
     {scope === 'project' && exportOpen && <ProjectExportDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && !hideProjectHeading && <h2 className="investigation-heading">Project</h2>}
@@ -1598,7 +1633,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : MAX_STRATEGY_APPROACH} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
     </form> : current && version ? selected === 'rendered'
-      ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
+      ? <div ref={renderedContent} className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
@@ -1641,7 +1676,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
     </form> : <><h3 className="current-project">{view.project.title}</h3>
       <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip-disabled disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
-      </button> </>}
+      </button><span id="project-markdown-slot-copy" className="project-copy-slot"/> </>}
   </div>;
 }
 
@@ -2235,7 +2270,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -2298,6 +2333,9 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
         difficulty: values.difficulty,
       };
       const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
+      if (!initial) {
+        try { window.localStorage.setItem(NEW_PROJECT_VALUES_KEY, JSON.stringify(values)); } catch { /* Project creation must not depend on browser storage availability. */ }
+      }
       if (initial) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');
@@ -2644,7 +2682,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
       <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and description: ${shownTitle}`} data-tooltip-disabled disabled={modeDisabled}
-        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
+        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/>
       {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}

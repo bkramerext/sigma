@@ -291,9 +291,11 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* Compact Home project navigation. The artwork is independent of this column. */
 .home-page .home-projects {
-  width: min(520px, calc(100% - 56px));
-  margin-left: clamp(26px, 5.4vw, 90px);
-  position: relative;
+  --home-project-edge: clamp(13px, 2.7vw, 45px);
+  width: min(520px, calc(100% - 2 * var(--home-project-edge)));
+  position: absolute;
+  top: var(--home-project-edge);
+  left: var(--home-project-edge);
   z-index: 1;
 }
 .home-page .home-projects-heading {
@@ -353,6 +355,13 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-projects .home-recents .recent-title-row { gap: 4px 10px; }
 
 @media (max-width: 700px) {
+  .home-page .home-projects {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: min(520px, calc(100% - 2 * var(--home-project-edge)));
+    margin: var(--home-project-edge) 0 0 var(--home-project-edge);
+  }
   .home-page .home-projects-heading { gap: 6px 13px; }
 }
 /* Public hosted Demo: use the same dark, copper SIGMA palette as the project workspace. */

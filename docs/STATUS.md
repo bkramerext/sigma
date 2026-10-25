@@ -1,5 +1,26 @@
 # SIGMA status
 
+## Home and text-copy polish follow-up (2026-10-25)
+
+Home Projects now starts at matching top and left offsets, with each edge half
+the previous desktop margin. Narrow mobile keeps the Projects list below the
+wrapping account pills while matching its top and left margins. New Project
+remembers the complete last successfully created form values in browser-local
+storage; failed attempts do not replace them. Project description and strategy
+approach rows have adjacent copy controls. They copy plain text in either
+display mode, and show a temporary checkmark that remains clickable for another
+copy.
+
+Real Chrome checks cover desktop/mobile Home placement, create success and
+reopen persistence, copy repetition for both text areas, and Markdown-to-plain
+clipboard output. `browser_checks/project_create_contract.py` and
+`browser_checks/t47_conclusion.py` passed. Screenshots:
+`/tmp/sigma-home-projects-desktop.png`, `/tmp/sigma-home-projects-mobile.png`,
+`/tmp/sigma-copy-buttons-desktop.png`, and
+`/tmp/sigma-copy-buttons-mobile.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test`, frontend typecheck/build, and `git diff --check` passed. No paid
+provider calls or cloud changes.
+
 ## T93 mathematical formatting showcase and project creation regression (2026-10-25)
 
 Rebased the T93 work on current `main` (`f3bae10`, including the README update).

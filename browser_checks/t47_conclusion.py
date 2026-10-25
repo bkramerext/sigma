@@ -200,6 +200,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 executable_path=CHROME, headless=True, args=["--disable-web-security"]
             )
             page = browser.new_page(viewport={"width": 1440, "height": 1000})
+            page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=ui_url)
             errors: list[str] = []
             starts: list[str] = []
             page.on("pageerror", lambda error: errors.append(str(error)))
@@ -256,6 +257,15 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
             project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
             expect(project_markdown).to_be_visible()
+            project_copy = page.locator("#project-markdown-slot-copy .text-copy-button")
+            expect(project_copy).to_be_enabled()
+            page.locator(".project-pane-title-line").screenshot(path="/tmp/sigma-copy-buttons-desktop.png")
+            project_copy.click()
+            expect(project_copy).to_have_accessible_name("Copied research problem to clipboard")
+            assert page.evaluate("navigator.clipboard.readText()") == project["problem"]
+            # The confirmation checkmark does not disable the button; a second click copies again.
+            project_copy.click()
+            assert page.evaluate("navigator.clipboard.readText()") == project["problem"]
             project_markdown.click()
             project_status = page.locator("#project-markdown-slot .text-view-format-status")
             expect(project_status).to_be_visible()
@@ -269,17 +279,41 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             expect(project_status).to_be_visible()
             page.screenshot(path="/tmp/sigma-project-markdown-formatting-mobile.png")
+            page.locator(".project-pane-title-line").screenshot(path="/tmp/sigma-copy-buttons-mobile.png")
             page.set_viewport_size({"width": 1440, "height": 1000})
+            project_copy_response = {
+                "scope": "project",
+                "strategy_id": None,
+                "source_format": "plain",
+                "source_digest": hashlib.sha256(project["problem"].encode("utf-8")).hexdigest(),
+                "plain": {"body": project["problem"], "current": True},
+                "markdown": {
+                    "body": "## Fixture\n\nThis **description** has regular text.",
+                    "current": True,
+                },
+            }
             pending_text_routes.pop(0).fulfill(
-                status=503,
+                status=200,
                 content_type="application/json",
-                body='{"error":"Mock provider unavailable"}',
+                body=json.dumps(project_copy_response),
             )
-            expect(page.locator(".project-intro .error")).to_contain_text(
-                "Mock provider unavailable"
-            )
+            expect(page.locator(".project-intro .rendered-text")).to_contain_text("This description has regular text.")
+            project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
+            expect(project_markdown).to_have_attribute("aria-pressed", "true")
+            project_copy.click()
+            expect(project_copy).to_have_accessible_name("Copied research problem to clipboard")
+            copied_rendered_text = page.evaluate("navigator.clipboard.readText()")
+            assert copied_rendered_text == "Fixture\n\nThis description has regular text.", repr(copied_rendered_text)
+            assert "**" not in copied_rendered_text
             strategy_markdown = page.locator(".strategy-markdown-slot .sigma-render-toggle").first
             expect(strategy_markdown).to_be_visible()
+            strategy_copy = page.locator(".strategy-copy-slot .text-copy-button").first
+            expect(strategy_copy).to_be_enabled()
+            strategy_copy.click()
+            expect(strategy_copy).to_have_accessible_name("Copied strategy approach to clipboard")
+            assert page.evaluate("navigator.clipboard.readText()") == project["strategies"][0]["approach"]
+            strategy_copy.click()
+            assert page.evaluate("navigator.clipboard.readText()") == project["strategies"][0]["approach"]
             strategy_markdown.click()
             strategy_status = page.locator(".strategy-markdown-slot .text-view-format-status").first
             expect(strategy_status).to_be_visible()

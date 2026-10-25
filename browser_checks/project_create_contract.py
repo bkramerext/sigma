@@ -65,11 +65,35 @@ def api_fixture(route):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
     elif path == "/api/projects/create":
         create_payloads.append(json.loads(route.request.post_data or "{}"))
-        route.fulfill(
-            status=422,
-            content_type="application/json",
-            body=json.dumps({"error": "Captured request; no project was created."}),
-        )
+        if len(create_payloads) == 1:
+            route.fulfill(
+                status=422,
+                content_type="application/json",
+                body=json.dumps({"error": "Captured request; no project was created."}),
+            )
+        else:
+            request = create_payloads[-1]
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({
+                    "path": "/tmp/sigma-project-create-contract/create-contract.sigma",
+                    "project": {
+                        "id": "create-contract",
+                        "title": request["title"],
+                        "problem": request["problem"],
+                        "schema_version": 1,
+                        "ai_model": request["ai_model"],
+                        "reasoning_effort": request["reasoning_effort"],
+                        "difficulty": request["difficulty"],
+                        "show_advanced_outcome_details": False,
+                        "investigation_type": request["investigation_type"],
+                        "events": [],
+                        "strategies": [],
+                        "active_order": [],
+                    },
+                }),
+            )
     else:
         route.fulfill(status=200, content_type="application/json", body="{}")
 
@@ -85,6 +109,19 @@ with sync_playwright() as playwright:
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     page.route("**/api/**", api_fixture)
     page.goto(UI_URL)
+    desktop_edges = page.locator(".home-projects").evaluate(
+        "el => ({top: el.getBoundingClientRect().top, left: el.getBoundingClientRect().left})"
+    )
+    assert abs(desktop_edges["top"] - desktop_edges["left"]) < 1, desktop_edges
+    page.screenshot(path="/tmp/sigma-home-projects-desktop.png")
+    page.set_viewport_size({"width": 390, "height": 844})
+    mobile_edges = page.locator(".home-projects").evaluate(
+        "el => ({top: getComputedStyle(el).marginTop, left: getComputedStyle(el).marginLeft, width: el.getBoundingClientRect().width})"
+    )
+    assert mobile_edges["top"] == mobile_edges["left"], mobile_edges
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.screenshot(path="/tmp/sigma-home-projects-mobile.png")
+    page.set_viewport_size({"width": 1280, "height": 900})
     page.get_by_role("button", name="New", exact=True).click()
     dialog = page.get_by_role("dialog", name="New Project")
     expect(dialog).to_be_visible()
@@ -107,6 +144,29 @@ with sync_playwright() as playwright:
         "difficulty",
     }, payload
     assert "show_advanced_outcome_details" not in payload, payload
+    dialog.get_by_role("combobox", name="Research category").click()
+    dialog.get_by_role("option", name="Mathematics").click()
+    dialog.get_by_label("Difficulty").select_option("hard")
+    create.click()
+    page.wait_for_function(
+        "JSON.parse(localStorage.getItem('sigma.newProjectValues') || '{}').title === 'Create Contract Regression'"
+    )
+    saved = page.evaluate("JSON.parse(localStorage.getItem('sigma.newProjectValues'))")
+    assert saved["investigation_type"] == "mathematical", saved
+    assert saved["difficulty"] == "hard", saved
+    assert saved["problem"] == "Check the project creation API contract.", saved
+    # Reload Home and verify the last successfully created values initialize the next form.
+    page.goto(UI_URL)
+    page.get_by_role("button", name="New", exact=True).click()
+    dialog = page.get_by_role("dialog", name="New Project")
+    expect(dialog.get_by_label("Project name")).to_have_value("Create Contract Regression")
+    expect(dialog.get_by_label("Research problem")).to_have_value(
+        "Check the project creation API contract."
+    )
+    expect(dialog.get_by_role("combobox", name="Research category")).to_contain_text(
+        "Mathematics"
+    )
+    expect(dialog.get_by_label("Difficulty")).to_have_value("hard")
     browser.close()
 
 print("PASS real Chrome project creation sends only fields accepted by the create API.")
