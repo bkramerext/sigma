@@ -11,14 +11,15 @@ coverage is substantial and should be run before the hosted pass:
 | Strategy edits; session and Outcome; saved artifacts | T91 packaged workflow and `browser_checks/t17_8_saved_session.py` | T91 reads deterministic sample research; T17.8 projects archived saved records |
 | Outcome Markdown rendering | `browser_checks/t17_8_saved_session.py`; added explicit rendered Outcome assertion to T91 | Does not call hosted text-conversion or model services |
 | Project Audit, text, and HTML report downloads | T91 exercises all three through the real packaged UI; report unit/API coverage is in `tests/` | Local packaged app only |
-| TeX/PDF creation, validation, and persistence | T91 compiles deterministic TeX with packaged Tectonic, parses the PDF, checks authenticated retrieval and hashes across backend restart/restore; `tests/papers.py` covers paper service behavior | It seeds a deterministic paper; it does not call a hosted paper-generation provider |
+| TeX/PDF creation, validation, and persistence | T91 compiles deterministic TeX with packaged Tectonic, parses the PDF, checks authenticated retrieval and hashes across backend restart/restore; `browser_checks/saved_paper_library.py` checks actual UI TeX/PDF download events and inline PDF with a fixture-authored paper; `browser_checks/t45_long_paper.py` covers the long-paper dialog and inline PDF; `tests/papers.py` covers paper service behavior | The saved-paper Chrome check uses a deterministic local fixture, not the hosted paper-generation provider |
 | Saved state through reload, backend restart, restore | T91 checks UI reload/reopen, backend container recreation and fresh-volume restore; T100 checks persistent-disk browser reload and backend process restart | Local fixtures and storage, not GCE disk/systemd recovery |
 
 Do not add another browser suite for these already-covered paths. The T91
 packaged browser regression now explicitly checks the Outcome Markdown toggle
-and downloads Project Audit, text, and HTML reports from the UI. Focused paper
-dialog/download links and artifact persistence are also covered by T45 and
-T91.2. See [the status record](../../STATUS.md) and
+and downloads Project Audit, text, and HTML reports from the UI. Actual TeX/PDF
+download events are already covered by `saved_paper_library.py` with a
+fixture-authored paper; T45 covers the long-form dialog and inline PDF, and
+T91.2 covers artifact persistence. See [the status record](../../STATUS.md) and
 [the desktop cloud operating steps](../../OPERATION_RUNBOOK.md).
 
 ## Repeatable hosted acceptance procedure

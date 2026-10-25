@@ -6,8 +6,9 @@ Audited current desktop acceptance before adding coverage. T91 already runs
 real Chrome against packaged Compose with two simulated identities and covers
 project/strategy edits, saved sessions and evidence, report export, compiled
 TeX/PDF, backend recreation, fresh-volume restore and workspace isolation. T100
-covers persistent-disk browser reload and backend restart; T45 covers paper
-dialog/download links; service tests cover report formats, text rendering,
+covers persistent-disk browser reload and backend restart; T45 and
+`browser_checks/saved_paper_library.py` cover the paper dialog, TeX/PDF UI
+downloads, and inline PDF; service tests cover report formats, text rendering,
 paper integrity and cloud workspace boundaries. Added the missing explicit
 rendered Outcome assertion and packaged-UI downloads for Project Audit, text,
 and HTML in T91. Its recovery fixture now stores its archive under the temporary

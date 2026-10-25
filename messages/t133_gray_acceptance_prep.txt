@@ -8,7 +8,7 @@ Ticket: tickets/t133.md
 
 Work completed
 
-- Audited existing desktop acceptance in T91, T100, T45, T17.8, report/text/paper services, and the cloud workspace tests. Avoided a duplicate E2E suite.
+- Audited existing desktop acceptance in T91, T100, T45, T17.8, `saved_paper_library.py`, report/text/paper services, and the cloud workspace tests. The saved-paper Chrome check already performs actual fixture-backed TeX/PDF UI downloads and opens inline PDF; avoided a duplicate E2E suite.
 - Extended the existing T91 packaged real-Chrome workflow to toggle a saved Outcome between plain and rendered Markdown, then download Project Audit, text, and HTML from the UI and validate project identity.
 - Kept T91's deterministic Tectonic paper fixture and added run-directory cleanup for its recovery archive.
 - Made `deploy/validate-local.sh` accept Docker Compose CLI plugin or standalone Compose and use Buildx where available for its pinned `linux/amd64` images. The harness removes its temporary restore volumes after stack shutdown.
