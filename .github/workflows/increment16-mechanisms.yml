@@ -1,0 +1,26 @@
+name: Increment 16 mechanism evidence
+on:
+  push:
+    branches:
+      - coordinator/research-increment-16
+  workflow_dispatch:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python scripts/increment16_mechanisms.py --output /tmp/increment16.json
+          python - <<'PY'
+          import json
+          result = json.load(open('/tmp/increment16.json'))
+          assert result['evidence_transfer_improves_research_quality'] == 'UNDETERMINED'
+          assert result['counterexample_independently_recomputed']['residual'] == -1
+          assert result['new_model_calls'] == 0
+          print('Mechanism checks and evidence limitations passed')
+          PY
