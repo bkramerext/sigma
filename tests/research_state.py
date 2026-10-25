@@ -213,7 +213,8 @@ def test_relations_are_explicit_and_bounded_to_sources():
     explicit = build_current_understanding("project", [record])
     assert explicit["findings"][0]["status"] == "refuted_reported"
     assert explicit["changes"][0]["kind"] == "refutes"
-    assert explicit["changes"][0]["earlier"]["artifact_id"] == "upper"
+    earlier = explicit["changes"][0]["earlier"]
+    assert earlier is not None and earlier["artifact_id"] == "upper"
     assert "not independent verification" in explicit["changes"][0]["caution"]
     unrelated["finding_relations"][0]["source_session_id"] = "foreign-session"
     assert (

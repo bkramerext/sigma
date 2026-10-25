@@ -2559,6 +2559,8 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
         raise ProjectError("Research session directory must not be a symbolic link")
     if not directory.exists():
         return [], 0
+    if not directory.is_dir():
+        raise ProjectError("Research session history is not a directory")
     records: list[dict[str, Any]] = []
     unavailable = 0
     for file in sorted(directory.glob("*.json")):

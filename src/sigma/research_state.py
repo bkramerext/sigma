@@ -432,7 +432,7 @@ def build_current_understanding(
                     changes.append(
                         {
                             "kind": f"obligation_{state}",
-                            "text": item["text"],
+                            "text": _text(disposition.get("rationale")),
                             "source": source,
                             "earlier": item["sources"][0],
                             "caution": "Explicit evidence-linked disposition, reported and unverified; not an independently proved result.",
