@@ -8,7 +8,7 @@ import json
 import random
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "docs/evaluations/increment14/tasks.json"
 EXPECTED = {"E1", "S1", "C1", "P1", "M1", "M2"}
 DOMAINS = {"experimental_design", "source_criticism", "constrained_engineering", "scenario_reasoning", "formal_mathematics"}
