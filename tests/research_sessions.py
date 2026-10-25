@@ -6586,6 +6586,9 @@ def test_outcome_includes_derived_execution_provenance() -> None:
         "artifacts": [
             {
                 "id": "saved-finding",
+                "coordinator_decision": "continue",
+                "claim_or_question": "Unverified model proposal",
+                "skeptic_response": "No successful computation was observed.",
                 "investigator_output": {
                     "python_execution": {
                         "id": "saved-execution",
