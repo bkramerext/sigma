@@ -293,9 +293,13 @@ def main() -> None:
                 assert google_box["x"] >= 0 and chatgpt_box["x"] >= 0, (width, google_box, chatgpt_box)
                 assert google_box["x"] + google_box["width"] <= width, (width, google_box)
                 assert chatgpt_box["x"] + chatgpt_box["width"] <= width, (width, chatgpt_box)
-                assert chatgpt_box["x"] - (google_box["x"] + google_box["width"]) >= 8, (
+                assert chatgpt_box["y"] - (google_box["y"] + google_box["height"]) >= 7, (
                     width, google_box, chatgpt_box
                 )
+                assert abs(
+                    (chatgpt_box["x"] + chatgpt_box["width"])
+                    - (google_box["x"] + google_box["width"])
+                ) <= 1, (width, google_box, chatgpt_box)
                 assert projects_box["y"] >= max(
                     google_box["y"] + google_box["height"],
                     chatgpt_box["y"] + chatgpt_box["height"],
@@ -304,6 +308,22 @@ def main() -> None:
                 if admin_link.count():
                     admin_box = admin_link.bounding_box()
                     assert admin_box
+                    expect(admin_link).to_have_text("Admin")
+                    about_box = page.locator(".home-about-button").bounding_box()
+                    assert about_box and admin_box["y"] >= about_box["y"] + about_box["height"] + 7, (
+                        width, about_box, admin_box
+                    )
+                    admin_style = admin_link.evaluate(
+                        "e => { const s = getComputedStyle(e); return [s.padding, s.minHeight, s.borderRadius]; }"
+                    )
+                    google_admin_style = google_home.evaluate(
+                        "e => { const s = getComputedStyle(e); return [s.padding, s.minHeight, s.borderRadius]; }"
+                    )
+                    assert admin_style == google_admin_style, (
+                        width,
+                        admin_style,
+                        google_admin_style,
+                    )
                     for pill_box in (google_box, chatgpt_box):
                         overlaps = (
                             admin_box["x"] < pill_box["x"] + pill_box["width"]

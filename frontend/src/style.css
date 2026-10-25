@@ -234,10 +234,8 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-atmosphere { z-index: -1; }
 @media (max-width: 700px) {
  .home-page .home-topline { font-size: 9px; letter-spacing: .08em; }
- .home-page .home-topline { height: auto; min-height: 70px; display: grid; grid-template-columns: minmax(0, 1fr) 44px; grid-template-areas: "google about" "status status"; align-items: start; justify-content: initial; gap: 8px 12px; padding: 0; }
- .home-page .home-topline > .project-google-signin { grid-area: google; justify-self: start; }
- .home-page .home-topline > .about-action { grid-area: about; justify-self: end; }
- .home-page .home-topline .api-connection.api-connection { grid-area: status; top: 0; justify-self: end; min-width: 0; width: max-content; max-width: 100%; margin-left: 0; }
+ .home-page .home-topline { height: auto; min-height: 70px; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px 12px; padding: 0; }
+ .home-page .home-auth-pills > .api-connection.api-connection { top: 0; justify-self: end; min-width: 0; width: max-content; max-width: min(240px, calc(100vw - 32px)); margin-left: 0; }
  .home-page .home-topline .api-connection > summary { max-width: 100%; white-space: normal; }
  .home-page .home-topline .api-connection > summary [role="status"] { min-width: 0; white-space: normal; }
  .home-page .home-slogan { width: min(84vw, 320px); top: -32px; }

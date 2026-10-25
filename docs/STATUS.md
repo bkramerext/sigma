@@ -1,5 +1,29 @@
 # SIGMA status
 
+## Red About/header integration on main (2026-10-24)
+
+Integrated Red's About and header changes on a separate branch rebased onto
+`origin/main` at `0a7b92e` (Green PR #76). Preserved the Simple/Advanced Outcome
+modes, project Preferences, Research settings, Blue's research-state updates,
+and the Markdown icon fix. Home now stacks Google and ChatGPT status pills, with
+About and the compact Admin pill stacked alongside them; the groups use matching
+spacing and responsive wrapping. The About dialog retains its plain-language
+feature descriptions and metallic copper/blue multi-agent diagram with hover,
+keyboard-focus, and touch descriptions. Its lower-right build label uses the
+first seven characters of the build commit. Google sign-in starts the existing
+OAuth route directly from the header pill.
+
+Verification on the final worktree: `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios, Ruff,
+formatting, Pyright, frontend typecheck, and production build. Real Chrome T40
+passed administrator and Home header checks at 1440, 800, 700, 600, 520, 390,
+and 360px, including matching Admin/Google pill geometry, vertical spacing,
+viewport fit, and no overlap with Projects. T43.1 passed at desktop and mobile,
+including About content, build hash, diagram hover/focus/touch behavior, and
+layout. T23 passed direct sign-in route, duplicate-request behavior, signed-in
+controls, sign-out, and responsive project header. No external OAuth handoff or
+paid provider calls were made.
+
 ## PR #76 integration with main (2026-10-24)
 
 Merged `origin/main` at `81384dd` into `green/outcome-hierarchy` without
