@@ -5623,3 +5623,15 @@ and no narrow dialog overflow. Frontend typecheck passed. Plain `./sigma test`
 still encounters the inherited bootstrap-email tooling fixture mismatch;
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps,
 including Ruff, Pyright, typecheck, and production build.
+
+The large curved return arrow beneath Coordinator Decision has been removed.
+It is now a compact blue feedback callout with a cycle icon and a clear note
+that continued research starts a new Investigator/Skeptic cycle using updated
+evidence.
+
+**Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
+320px, including touch help at 390px. `./sigma test` passed through the
+research, computation, report, paper, strategy, and CLI scenarios, then stopped
+at `tests/tooling.py` because the inherited bootstrap-email fixture expected a
+different launcher cleanup path. The earlier recorded workaround is to run
+with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset.

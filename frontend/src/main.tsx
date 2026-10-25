@@ -1993,8 +1993,8 @@ function AboutArchitecture() {
             <div className="about-inner-connector"><span>Critique + next question</span><i aria-hidden="true"/></div>
             <div className="about-coordinator">{card('decision', 'Coordinator Decision', 'Continue, revise or stop')}</div>
             <div className="about-cycle-return">
-              <svg viewBox="0 0 400 44" aria-hidden="true" focusable="false"><defs><linearGradient id="about-feedback-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient><marker id="about-feedback-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#acd9fa" strokeWidth="1.4"/></marker></defs><path d="M375 3 C375 38 25 38 25 3" fill="none" stroke="url(#about-feedback-metal)" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#about-feedback-arrow)"/></svg>
-              <span>If continued, SIGMA starts a new Investigator and Skeptic cycle with the updated evidence.</span>
+              <span className="about-cycle-return-icon" aria-hidden="true">↻</span>
+              <span>If research continues, SIGMA starts a new Investigator and Skeptic cycle using the updated evidence.</span>
             </div>
             <p className="about-multiple-strategies-note">A session can investigate multiple selected strategies. Each follows bounded investigation and review; relevant evidence may inform another strategy.</p>
           </div>
