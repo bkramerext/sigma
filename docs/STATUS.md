@@ -6,21 +6,31 @@ The signed-out Google identity pill now starts the existing OAuth endpoint
 directly. It reports missing setup through the existing request notification,
 guards repeated activation while redirecting, and keeps the account popover
 for authenticated users. Narrow Home headers wrap long connection status text.
+The administrator settings action now clears the first status-pill row at
+tablet widths, leaving the controls separated.
 The LaTeX wordmark hover target is 56×38px, centered with even clearance around
-the mark.
+the mark. The Home header also opens an About dialog with the plain language
+introduction, feature descriptions, and a responsive architecture diagram.
+Diagram descriptions appear on hover, keyboard focus, and touch tap; they stay
+in the dialog's scroll flow so they do not cover other boxes or controls.
+Copper marks the research structure and Home's metallic blue palette marks the
+Investigator and Skeptic roles. Copy distinguishes strategies from answers,
+avoids claims of automatic cross-strategy synthesis, qualifies SageMath as
+unverified, and marks generated papers as experimental.
 
 **Verification:** Real Chrome `browser_checks/t23_1_google_signin.py` passed at
 1280, 390 and 320px, including TeX hover bounds. Real Chrome
-`browser_checks/t43_1_manual_acceptance.py` passed for setup feedback and
-responsive status pills. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma
-test` passed, including Ruff, Pyright, frontend typecheck and production build.
-Plain `./sigma test` stopped in `tests/tooling.py` because the inherited
-`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` changes that test's expected launcher
-cleanup path. `browser_checks/t40_cloud_ui.py` reached an existing narrow-width
-assertion that the administrator settings link sits above Projects; at 390px
-its measured box was 308×756px and overlapped the Projects section. The About
-dialog and Conclusion markup referenced in earlier requests are absent from
-this branch, so their copy and toggle cannot be updated here.
+`browser_checks/t43_1_manual_acceptance.py` passed in Chrome at 1440px and
+390px and a touch-enabled 390px context. It checked each diagram tooltip on
+hover, keyboard focus and tap, no clipping or overlap, dismissal, and focus
+return. Screenshots: `/tmp/sigma-about-diagram-1440.png`,
+`/tmp/sigma-about-diagram-390.png`, `/tmp/sigma-about-tooltip-1440.png`, and
+`/tmp/sigma-about-tooltip-390.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed, including Ruff, Pyright, frontend typecheck and
+production build.
+`browser_checks/t40_cloud_ui.py` passed across desktop, tablet and mobile
+widths, including authenticated and signed-out controls. Conclusion markup
+from the earlier toggle screenshot remains absent from this branch.
 
 ## Session Outcome Markdown toggle visibility (2026-10-24)
 

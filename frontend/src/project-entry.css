@@ -26,10 +26,86 @@
 .home-page .entry-dialog-actions button { padding: 12px 16px; font-size: 13px; border: 1px solid #dbb080; }
 .home-page .entry-dialog-actions .entry-cancel { background: transparent; border-color: transparent; color: #c2ced9; box-shadow: none; font-weight: 500; }
 .home-page .entry-dialog-actions .entry-cancel:hover { background: transparent; color: #f0c992; text-decoration: underline; }
+.home-page .about-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.home-page .about-dialog .entry-dialog-header { position: sticky; top: -28px; z-index: 1; background: #07111e; }
+.home-page .about-dialog-content { color: #c4ced8; font: 13px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-dialog-content .about-intro { margin: 0 0 8px; color: #e7c8a1; font-size: 15px; line-height: 1.55; }
+.home-page .about-dialog-content .about-terms { margin: 0 0 24px; color: #aebbc7; font-size: 12px; }
+.home-page .about-dialog-content > h3 { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #795d3d; color: #edc38d; font: 400 20px/1.3 Georgia, serif; }
+.home-page .about-feature { margin: 0; padding: 11px 0; border-bottom: 1px solid #35404a; }
+.home-page .about-feature h4 { margin: 0 0 4px; color: #e3b485; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-feature p { margin: 0; color: #c4ced8; font: inherit; }
+.home-page .about-architecture { margin-top: 26px; padding-top: 20px; border-top: 1px solid #795d3d; }
+.home-page .about-architecture > h3 { margin: 0 0 16px; color: #edc38d; font: 400 clamp(19px, 3vw, 23px)/1.3 Georgia, serif; }
+.home-page .about-research-flow { display: grid; justify-items: center; width: 100%; }
+.home-page .about-flow-project, .home-page .about-flow-evidence { display: flex; justify-content: center; width: 100%; }
+.home-page .about-diagram-node-wrap { display: grid; justify-items: stretch; min-width: 0; width: 100%; }
+.home-page .about-flow-project .about-diagram-node-wrap { max-width: 390px; }
+.home-page .about-flow-evidence .about-diagram-node-wrap { max-width: 460px; }
+.home-page .about-diagram-node {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  width: 100%; min-width: 0; min-height: 62px; padding: 11px 34px 11px 14px;
+  border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; text-align: center;
+  background: linear-gradient(145deg, #231b17 0%, #111820 52%, #0a121b 100%);
+  box-shadow: inset 0 1px 0 #f6c98d26, inset 0 -1px 0 #0008, 0 7px 18px #0005;
+  text-shadow: 0 1px 8px #000a; cursor: help;
+  transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease, transform 140ms ease;
+}
+.home-page .about-diagram-node:focus-visible, .home-page .about-diagram-node[aria-expanded="true"] {
+  border-color: #e0ad74; box-shadow: inset 0 1px 0 #ffe0ab70, 0 0 0 1px #c78b5740, 0 9px 24px #0008; filter: brightness(1.12); transform: translateY(-1px);
+}
+.home-page .about-diagram-node:not(:disabled):hover { border-color: #e0ad74; color: #fff2e9; background: var(--copper-gradient); box-shadow: inset 0 1px 0 #ffe0ab70, 0 0 0 1px #c78b5740, 0 9px 24px #0008; text-shadow: 0 1px 5px #24120d; filter: brightness(1.05); transform: translateY(-1px); }
+.home-page .about-diagram-node:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.home-page .about-diagram-node-title { color: #f0c999; font: 600 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-diagram-node-subtitle { color: #b9c2cc; font: 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-diagram-node-hint { position: absolute; top: 7px; right: 8px; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid #c68d5d99; border-radius: 50%; color: #e6bb8b; font: 600 10px/1 Georgia, serif; }
+.home-page .about-flow-project .about-diagram-node { max-width: 390px; }
+.home-page .about-flow-evidence .about-diagram-node { max-width: 460px; }
+.home-page .about-flow-connector { display: grid; justify-items: center; gap: 5px; padding: 9px 0; color: #d4b18d; text-align: center; font: 500 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .025em; }
+.home-page .about-flow-connector i { position: relative; display: block; width: 1px; height: 17px; background: linear-gradient(180deg, #e1b77f, #926146 72%, #57402e); box-shadow: 0 0 6px #d79d604a; }
+.home-page .about-flow-connector i::after { position: absolute; bottom: -1px; left: -3px; width: 6px; height: 6px; border-right: 1px solid #d4a372; border-bottom: 1px solid #d4a372; content: ''; transform: rotate(45deg); }
+.home-page .about-strategy-group { width: 100%; padding: 12px; border: 1px solid #805b3e; border-radius: 8px; background: linear-gradient(135deg, #251c17, #111820 48%, #0b121a); box-shadow: inset 0 1px 0 #f5c88920, 0 8px 22px #0005; }
+.home-page .about-strategy-group::before { display: block; margin: 0 0 9px; color: #d6ae83; content: 'PROJECT STRATEGIES'; font: 600 9px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .13em; text-align: center; }
+.home-page .about-strategy-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.home-page .about-strategy-cards .about-diagram-node { min-height: 58px; padding-inline: 8px; }
+.home-page .about-session-frame { width: 100%; padding: 12px; border: 1px solid #8a6846; border-radius: 9px; background: radial-gradient(ellipse at 50% 5%, #a965481c, transparent 65%), linear-gradient(150deg, #171c20, #0b121a 72%); box-shadow: inset 0 1px 0 #e3bd8c22, 0 12px 28px #0007; }
+.home-page .about-session-heading .about-diagram-node { min-height: 54px; }
+.home-page .about-agent-cycle { margin-top: 12px; padding: 12px 10px 3px; border-top: 1px solid #8a68465c; }
+.home-page .about-agent-pair { display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); align-items: center; gap: 10px; }
+.home-page .about-diagram-node--blue { border-color: #4c83a8; color: #d8ecfb; background: radial-gradient(ellipse at 50% 0%, #75b7ef18, transparent 75%), linear-gradient(145deg, #142b3d, #0d1b29 55%, #09131e); box-shadow: inset 0 1px 0 #d5edff35, inset 0 -1px 0 #0009, 0 7px 20px #0006, 0 0 18px #397aaa14; }
+.home-page .about-diagram-node--blue .about-diagram-node-title { color: #acd9fa; }
+.home-page .about-diagram-node--blue .about-diagram-node-hint { border-color: #70add499; color: #a8d9fa; }
+.home-page .about-diagram-node--blue:focus-visible, .home-page .about-diagram-node--blue[aria-expanded="true"] { border-color: #9fd4fa; box-shadow: inset 0 1px 0 #effaff75, 0 0 0 1px #71b7eb4a, 0 9px 25px #0009, 0 0 18px #4b98cf32; }
+.home-page .about-diagram-node--blue:not(:disabled):hover { border-color: #9fd4fa; color: #f2f9ff; background: linear-gradient(120deg, #194e72, #367cac 45%, #245c83 76%, #123b59); box-shadow: inset 0 1px 0 #effaff75, 0 0 0 1px #71b7eb4a, 0 9px 25px #0009, 0 0 18px #4b98cf42; text-shadow: 0 1px 5px #06111b; }
+.home-page .about-agent-forward { display: grid; justify-items: center; gap: 2px; color: #9fd4fa; text-align: center; text-shadow: 0 0 10px #71b7eb70; }
+.home-page .about-agent-forward span { color: #9ab5c8; font: 500 9px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .04em; }
+.home-page .about-agent-forward::after { content: '›'; font: 300 30px/.8 Georgia, serif; }
+.home-page .about-review-loop { display: block; width: min(100%, 400px); height: 36px; margin: 3px auto -2px; overflow: visible; }
+.home-page .about-cycle-caption { margin: 0; color: #9eb6c8; font: 10px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; text-align: center; }
+.home-page .about-architecture-caption { margin: 13px 0 0; padding: 11px 13px; border-left: 2px solid #568fb8; color: #d1e1ed; background: linear-gradient(100deg, #183148a8, #0b121a40); font: 12px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-diagram-tooltip { position: relative; justify-self: center; width: min(100%, 320px); margin: 8px 0 0; padding: 10px 12px; border: 1px solid #b47a52; border-radius: 7px; color: #f1e3d3; background: linear-gradient(145deg, #2a201a, #101821 72%); box-shadow: inset 0 1px 0 #ffe0ab48, 0 7px 18px #0007, 0 0 14px #b8643c1c; font: 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-shadow: 0 1px 4px #0008; animation: about-tip-enter 110ms ease-out both; }
+.home-page .about-diagram-tooltip::before { position: absolute; top: -5px; left: calc(50% - 5px); width: 8px; height: 8px; border-top: 1px solid #b47a52; border-left: 1px solid #b47a52; background: #251d18; content: ''; transform: rotate(45deg); }
+.home-page .about-diagram-tooltip[data-tone="blue"] { border-color: #75b7ef; color: #e3edf5; background: linear-gradient(145deg, #142b3d, #09131e 72%); box-shadow: inset 0 1px 0 #e4f5ff38, 0 7px 18px #0008, 0 0 16px #4b98cf20; }
+.home-page .about-diagram-tooltip[data-tone="blue"]::before { border-color: #75b7ef; background: #12283a; }
+@keyframes about-tip-enter { from { transform: translateY(-2px); } to { transform: translateY(0); } }
+.home-page .about-architecture-caption { text-shadow: 0 1px 5px #0008; }
+@media (max-width: 560px) {
+  .home-page .about-strategy-cards { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .home-page .about-strategy-cards .about-diagram-node { min-height: 52px; }
+  .home-page .about-agent-pair { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .home-page .about-agent-forward { gap: 0; }
+  .home-page .about-agent-forward::after { content: '↓'; font-size: 21px; }
+  .home-page .about-session-frame, .home-page .about-strategy-group { padding: 10px; }
+  .home-page .about-architecture-caption { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-page .about-diagram-node { transition: none; }
+}
 .home-page .project-entry-dialog button:disabled { box-shadow: none; cursor: not-allowed; border-color: #56606a; }
 @media (max-width: 700px) {
   .home-page .home-entry-actions { flex-direction: column; gap: 12px; }
   .home-page .home-entry-actions button { min-height: 48px; }
   .home-page .project-entry-dialog { padding: 22px; }
   .home-page .project-entry-dialog .entry-dialog-header { margin: -22px -22px 16px; padding: 16px 22px 12px; }
+  .home-page .about-dialog .entry-dialog-header { top: -22px; }
 }
