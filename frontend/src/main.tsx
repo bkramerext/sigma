@@ -133,10 +133,6 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
   return lines.join('\n');
 }
 
-function researchConclusionMarkdown(session: ResearchSession): string {
-  return session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
-}
-
 function containsMathNotation(text: string): boolean {
   return /\\\[|\\\(|\$\$?[^$\n]+\$/.test(text)
     || /[\p{Script=Greek}A-Za-z][\p{L}\p{N}]*(?:\([^()\s]+\))?\s*[\^_]\s*\{?[+\-]?[\p{L}\p{N}]+\}?/u.test(text)
@@ -348,7 +344,11 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     `${session.outcome.conclusion || ''}\n${session.outcome.summary || ''}`,
   );
   const [outcomeMarkdown, setOutcomeMarkdown] = useState(startsWithRenderedMath);
-  const [conclusionMarkdown, setConclusionMarkdown] = useState(startsWithRenderedMath);
+  const [conclusionMarkdown, setConclusionMarkdown] = useState(false);
+  const [convertedConclusion, setConvertedConclusion] = useState<string | null>(null);
+  const [conclusionRendering, setConclusionRendering] = useState(false);
+  const [conclusionFormatError, setConclusionFormatError] = useState('');
+  const conclusionConversionAbort = useRef<AbortController | null>(null);
   const [reasoningMarkdown, setReasoningMarkdown] = useState(false);
   const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
@@ -361,6 +361,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   useEffect(() => {
     setActivityExpanded(session.status === 'queued' || session.status === 'running');
   }, [session.status]);
+  useEffect(() => () => conclusionConversionAbort.current?.abort(), []);
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
   const approvedPackets = Object.values(session.approved_continuations ?? {});
@@ -417,8 +418,69 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       reportRequestFailure(errorMessage(cause));
     } finally { setInterventionBusy(false); }
   }
+  async function toggleConclusionMarkdown() {
+    if (conclusionMarkdown) {
+      setConclusionMarkdown(false);
+      return;
+    }
+    if (convertedConclusion !== null) {
+      setConclusionMarkdown(true);
+      return;
+    }
+    const source = session.outcome.conclusion;
+    if (!source || conclusionRendering) return;
+    const controller = new AbortController();
+    conclusionConversionAbort.current = controller;
+    setConclusionRendering(true);
+    setConclusionFormatError('');
+    let finishProviderRequest = () => {};
+    try {
+      const settingsResponse = await fetch(
+        `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
+        { signal: controller.signal },
+      );
+      const settings = await settingsResponse.json();
+      if (!settingsResponse.ok || !settings.available) {
+        throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+      }
+      finishProviderRequest = beginProviderRequest('text-conversion');
+      const sourceDigest = await sha256Text(source);
+      const converted = await post<{ body: string; warnings: string[]; source_digest: string }>(
+        'text/convert',
+        {
+          path,
+          scope: 'research-conclusion',
+          session_id: session.id,
+          target: 'markdown',
+          expected_digest: sourceDigest,
+          expected_binding: settings.binding,
+        },
+        controller.signal,
+      );
+      if (converted.source_digest !== sourceDigest) {
+        throw new Error('The saved Conclusion changed during formatting. Reopen the session and retry.');
+      }
+      setConvertedConclusion(converted.body);
+      setConclusionMarkdown(true);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        const message = errorMessage(cause);
+        setConclusionFormatError(message);
+        reportRequestFailure(message);
+      }
+    } finally {
+      finishProviderRequest();
+      if (conclusionConversionAbort.current === controller) {
+        conclusionConversionAbort.current = null;
+        setConclusionRendering(false);
+      }
+    }
+  }
   const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
-  const conclusionFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} aria-pressed={conclusionMarkdown} data-tooltip={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} title={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} onClick={() => setConclusionMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
+  const conclusionToggleLabel = conclusionMarkdown
+    ? 'Show saved Conclusion'
+    : convertedConclusion !== null ? 'Render Conclusion as Markdown' : 'Format Conclusion with AI';
+  const conclusionFormatToggle = <button type="button" className={`sigma-render-toggle${conclusionMarkdown ? ' sigma-render-active' : ''}${conclusionRendering ? ' sigma-render-pending' : ''}`} aria-label={conclusionToggleLabel} aria-pressed={conclusionMarkdown} aria-busy={conclusionRendering} data-tooltip={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} title={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} disabled={conclusionRendering} onClick={() => void toggleConclusionMarkdown()}>{conclusionRendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const reasoningFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} aria-pressed={reasoningMarkdown} data-tooltip={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} title={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} onClick={() => setReasoningMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
@@ -442,9 +504,10 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
           <div className="outcome-subsection-content outcome-conclusion-content">
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
-            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}</div>}
+            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span role="status">Formatting with AI…</span>}</div>}
+            {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
             {session.outcome.conclusion && conclusionMarkdown
-              ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={researchConclusionMarkdown(session)}/></Suspense></div>
+              ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={convertedConclusion ?? session.outcome.conclusion}/></Suspense></div>
               : !session.outcome.conclusion && outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
                 : <div className="outcome-conclusion-source">{resultText}</div>}
             {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
@@ -911,6 +974,10 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
   return data;
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+async function sha256Text(value: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 function formatDuration(totalSeconds: number) {

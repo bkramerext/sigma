@@ -619,8 +619,8 @@
 .workspace-page .outcome-heading-title .markdown-logo path { fill: currentColor; }
 .workspace-page .outcome-conclusion-actions { display: flex; align-items: center; margin: 0 0 4px; }
 .workspace-page .outcome-conclusion-actions > .sigma-render-toggle { display: inline-flex; flex: 0 0 28px; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; min-width: 28px; height: 28px; min-height: 28px; margin: 0; padding: 0; appearance: none; border: 0; border-radius: 0; background: transparent; color: #aab4ba; box-shadow: none; cursor: pointer; }
-.workspace-page .outcome-conclusion-actions > .sigma-render-toggle:hover:not(:disabled),
-.workspace-page .outcome-conclusion-actions > .sigma-render-toggle[aria-pressed="true"] { border: 0; background: transparent; color: #f1c58d; box-shadow: none; }
+.workspace-page .outcome-conclusion-actions > .sigma-render-toggle[aria-pressed="true"] { color: #f1c58d; }
+.workspace-page .outcome-conclusion-actions > .sigma-render-toggle:hover:not(:disabled) { border: 0; background: transparent; box-shadow: none; }
 .workspace-page .outcome-conclusion-actions > .sigma-render-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 .workspace-page .outcome-conclusion-actions .markdown-logo { display: block; flex: 0 0 24px; width: 24px; height: 20px; color: inherit; }
 .workspace-page .outcome-conclusion-actions .markdown-logo path { fill: currentColor; }

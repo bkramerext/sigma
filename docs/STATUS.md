@@ -30,6 +30,20 @@ Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
 full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
 calls or cloud changes.
 
+The next Chrome inspection exposed a separate issue: the pressed copper icon
+could accompany raw formula characters because the Conclusion was only passed
+through the local Markdown/KaTeX parser. It now uses the same AI formatting
+endpoint and preservation instructions as project text, with an explicit
+user click. The source digest is checked before and after conversion; formatted
+Markdown stays in the view state and the saved session archive is never edited.
+The button stays gray in plain mode even under hover and turns copper when the
+formatted result is displayed. An offline API regression checks display-math
+and layout instructions plus byte-identical saved history. Real Chrome with a
+mocked conversion checked the RH-style source, formatted line breaks and three
+display equations at 1440, 375 and 320 px; screenshots are in `/tmp/sigma-conclusion-ai-desktop.png`,
+`/tmp/sigma-conclusion-ai-375.png` and `/tmp/sigma-conclusion-ai-320.png`. No
+provider calls or cloud changes.
+
 ## Project header About pill placement (2026-10-25)
 
 The project header uses the labeled About pill in the left column beside Google
