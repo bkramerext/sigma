@@ -1,0 +1,22 @@
+[Unit]
+Description=SIGMA production Compose stack
+Requires=docker.service sigma-sandbox.service srv-sigma\x2dstate.mount
+After=docker.service sigma-sandbox.service srv-sigma\x2dstate.mount
+RequiresMountsFor=/srv/sigma-state
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/sigma/current
+Environment=SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env
+Environment=SIGMA_STATE_DISK_MOUNT=/srv/sigma-state
+ExecStartPre=/usr/bin/python3 /usr/local/libexec/sigma/gce_preflight.py --repository /opt/sigma/current
+ExecStart=/opt/sigma/current/deploy/start-gce.sh
+ExecStop=/usr/bin/docker compose --project-name sigma --env-file /etc/sigma/deploy.env -f /opt/sigma/current/deploy/compose.yaml -f /opt/sigma/current/deploy/compose.gce.yaml stop
+TimeoutStartSec=0
+TimeoutStopSec=90
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

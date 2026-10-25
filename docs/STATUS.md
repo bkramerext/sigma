@@ -33,6 +33,48 @@ browser_checks/t91_packaged_compose.py`; and `git diff --check`. Assignment elap
 2026-10-25). Implementation commit `5c519ba0be92604e4507cd29ae90497c1924b7ab`;
 [PR #113](https://github.com/bkramerext/sigma/pull/113).
 
+Post-merge verification after Red PR #111: fetched `origin/main` at
+`37637153c4daf0aa652b63a40cef5bf1f5b642ec` and merged it into T91.2. The only
+conflict was `docs/STATUS.md`; both acceptance entries were preserved, with no
+code conflicts. `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
+./deploy/validate-local.sh` passed again, including packaged Chrome, real
+Tectonic, malformed TeX, backend recreation, fresh-volume restore and isolation.
+The rerun PDF SHA-256 was
+`057c293aade96f34d9990e1697257da0f6da406990bb0b47e8397fb8451bd06c`; report
+SHA-256 was `fb08945053785e85e8f882517aaa98e2a0f582013f625f041dc9988b77f2ce29`.
+The requested bare `./sigma test` stopped at existing `tests/tooling.py` cleanup
+because `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is set in this shell;
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+including merged `tests/gce_host.py`, Ruff, formatting, Pyright, frontend
+typecheck and production build. No provider calls, OAuth, or GCP resources were
+used.
+
+## T98 production host readiness pre-cloud (2026-10-25)
+
+Added a pinned Ubuntu 24.04 amd64 host installer for Docker Engine/Compose v2
+and the dedicated rootless `sigma-sandbox` daemon, a rootless-only runner image
+builder, systemd startup ordering/restart units, and a read-only `PASS`/`FAIL`/
+`BLOCKED` production host preflight. The preflight validates the protected
+non-secret environment file, secret-file metadata without reading values, disk
+mount/ownership and sandbox denial, daemon/socket mode, runner images, Compose
+health dependencies, and guarded startup configuration. The runtime proof now
+checks that Python and Sage runners cannot access host state or the daemon
+socket, in addition to host secrets and network. Production rootless checks
+remain mandatory; no Docker Desktop override was used for production acceptance.
+
+The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite passed,
+including host, deployment, cloud, sponsored inference, storage, user-isolation,
+backup/restore, and Recent relocation coverage. Ruff check/format, Pyright,
+frontend typecheck/build, and `git diff --check` passed. On this macOS
+workstation the preflight reported `BLOCKED` for Ubuntu/Linux-only checks, the
+installer exited `2` before package changes, and `python -m
+sigma.cloud_runtime_check` without the dev override refused the selected
+non-rootless daemon. Ubuntu 24.04 installation, `systemd-analyze`, actual
+rootless daemon/socket permissions, image builds, disk mount, and runtime escape
+probes still require an Ubuntu 24.04 amd64 Linux host. No GCP resources, DNS,
+OAuth, Secret Manager, credentials, or paid inference were used. See
+`messages/t98_red_host_readiness.txt` for rerun commands and commit details.
+
 ## T41 — Sponsored cloud inference verification (2026-10-23)
 
 Added deterministic sponsored-inference API coverage through the production

@@ -47,3 +47,24 @@ production build. Total assignment elapsed time was approximately 16 minutes
 (about 08:57–09:13 PDT, 2026-10-25). Commit and PR identifiers are reported in
 [PR #113](https://github.com/bkramerext/sigma/pull/113), commit
 `5c519ba0be92604e4507cd29ae90497c1924b7ab`, and the final response.
+
+## Post-merge verification after Red PR #111
+
+Fetched `origin/main` at `37637153c4daf0aa652b63a40cef5bf1f5b642ec` and merged it
+into the T91.2 branch. `docs/STATUS.md` was the only conflict; both the T91.2
+acceptance record and Red's T98 host-readiness record were retained. No code
+conflicts occurred.
+
+- `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config ./deploy/validate-local.sh` —
+  PASS after merge, including packaged Chrome, real Tectonic, malformed TeX,
+  backend recreation, fresh-volume restore, and post-restore isolation. The
+  rerun PDF SHA-256 was
+  `057c293aade96f34d9990e1697257da0f6da406990bb0b47e8397fb8451bd06c`; restored
+  report SHA-256 was
+  `fb08945053785e85e8f882517aaa98e2a0f582013f625f041dc9988b77f2ce29`.
+- Bare `./sigma test` stopped at the pre-existing UI cleanup mock in
+  `tests/tooling.py`, because this shell has `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`
+  set. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` then passed all
+  scenarios, including the newly merged `tests/gce_host.py`, Ruff, formatting,
+  Pyright, frontend typecheck and production build.
+- No paid calls, OAuth exchange, or cloud resources were used.
