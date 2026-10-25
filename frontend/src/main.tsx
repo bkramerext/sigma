@@ -1973,16 +1973,16 @@ function AboutArchitecture() {
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
             <h4 id="about-session-detail-heading">A coordinated research and review cycle</h4>
-            <p className="about-multi-agent-intro">SIGMA starts an Investigator agent for the selected task, then starts a separate Skeptic agent to review that work and evidence. Each agent contributes its own step to the session record. A critique can lead SIGMA to start another Investigator and Skeptic cycle.</p>
+            <p className="about-multi-agent-intro">SIGMA brings distinct AI agents into a research session through multiple agent turns. An Investigator develops ideas and tests them; a Skeptic challenges the reasoning and examines the evidence. Further turns can build on that exchange, with each contribution preserved in the session record.</p>
             <div className="about-orchestration">{card('orchestration', 'Session Orchestration', 'Creates bounded agent tasks')}</div>
             <div className="about-inner-connector"><span>Choose a direction and bounded task</span><i aria-hidden="true"/></div>
             <div className="about-selected-strategies">Selected strategies <span>One or more directions may be investigated in a session</span></div>
             <div className="about-inner-connector"><span>Starts an Investigator agent for the selected work</span><i aria-hidden="true"/></div>
             <section className="about-agent-instantiation" aria-label="Separate AI agents in a research cycle">
-              <h5>Two separate AI agents, one after the other</h5>
+              <h5>Multiple agent turns, distinct roles</h5>
               <div className="about-agent-instance-flow">
                 {card('investigator', 'Investigator Agent', 'Develops ideas, reasoning and experiments', 'blue')}
-                <div className="about-agent-handoff"><span>Starts a separate Skeptic agent</span><svg viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+                <div className="about-agent-handoff"><span>Next agent turn</span><svg viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
                 {card('skeptic', 'Skeptic Agent', 'Challenges assumptions and examines evidence', 'blue')}
               </div>
               <p className="about-agent-instantiation-note">The Skeptic is a separate agent call with a review role, not a formal proof verifier.</p>

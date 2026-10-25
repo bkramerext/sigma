@@ -5642,3 +5642,7 @@ calculations.
 
 **Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
 320px, with touch help at 390px. Frontend TypeScript typecheck passed.
+
+The session explanation now frames the Investigator and Skeptic as distinct
+roles in multiple agent turns, with later turns building on their exchange and
+each contribution preserved in the session record.
