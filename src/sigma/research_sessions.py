@@ -2129,9 +2129,12 @@ SKEPTIC_GUIDANCE = (
     "treat prior_session_failures as mathematical evidence; they describe operationally failed "
     "provider attempts only. Check whether the current Investigator action changes in response "
     "to a cited failure, and distinguish that recovery from progress on the theorem. "
-    "require a complete argument to be rewritten in every cycle. Earlier artifact evidence "
-    "can satisfy a requirement omitted or shortened later; cite the supporting cycle for each "
-    "proof obligation. Identify whether each objection is material and recoverable, a decisive "
+    "review the current claim against earlier steps actually supplied in this call. Do not demand "
+    "a complete rewrite when a cited saved step still supports the same assumptions and scope; "
+    "cite its exact artifact ID and supporting cycle for each reused proof obligation. If that "
+    "step is absent, incomplete, outside the approved scope, or invalidated by an objection, "
+    "leave the obligation open and request only the missing derivation. Preserve all unresolved "
+    "obligations and objections. Identify whether each objection is material and recoverable, a decisive "
     "counterexample, or merely a request for clearer exposition. For supplied obligation_ledger "
     "entries, use obligation_reviews for at most twelve material items. Cite the exact obligation_id "
     "and only supplied basis_artifact_ids. Classify as unresolved, addressed, superseded, retracted, "
@@ -3749,6 +3752,29 @@ async def _call(
             for item in context.get("obligation_ledger", [])
             if isinstance(item, dict) and isinstance(item.get("obligation_id"), str)
         }
+        closure_sources = {
+            item["id"]: item
+            for group in ("prior_artifacts", "prior_session_findings")
+            for item in context.get(group, [])
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        closure_sources.update(
+            {
+                item["artifact_id"]: item
+                for item in context.get("other_strategy_evidence", [])
+                if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
+            }
+        )
+        if isinstance(packet, dict):
+            closure_sources.update(
+                {
+                    item["artifact_id"]: item["artifact"]
+                    for item in packet.get("sources", [])
+                    if isinstance(item, dict)
+                    and isinstance(item.get("artifact_id"), str)
+                    and isinstance(item.get("artifact"), dict)
+                }
+            )
         reviewed_obligations: set[str] = set()
         for review in validated["obligation_reviews"]:
             obligation_id = review["obligation_id"]
@@ -3777,6 +3803,19 @@ async def _call(
             ):
                 raise ProjectError(
                     "A resolved obligation disposition requires a supplied evidence source"
+                )
+            if (
+                review["status"] == "addressed"
+                and not review["basis_step_ids"]
+                and not any(
+                    isinstance(source := closure_sources.get(artifact_id), dict)
+                    and not source.get("extract_truncated_fields")
+                    and not source.get("retracted_by_artifact_ids")
+                    for artifact_id in review["basis_artifact_ids"]
+                )
+            ):
+                raise ProjectError(
+                    "An addressed obligation needs a complete, unretracted supplied artifact or the current Investigator step"
                 )
     else:
         supplied_failures = set(context.get("prior_session_failure_attempt_ids", []))
@@ -4628,6 +4667,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
             "objective_review",
             "reasoning_steps",
             "obligation_dispositions",
+            "retracted_by_artifact_ids",
         )
         if key in source
     }
@@ -7067,6 +7107,8 @@ def _prior_session_findings_index(
                 "strategy_id": artifact.get("strategy_id"),
                 "strategy_title": session.get("strategy_title"),
             }
+            if artifact.get("retracted_by_artifact_ids"):
+                finding["retracted_by_artifact_ids"] = list(artifact["retracted_by_artifact_ids"])
             finding["extract_truncated_fields"] = [
                 key
                 for key, limit in (
@@ -7077,6 +7119,40 @@ def _prior_session_findings_index(
                 )
                 if isinstance(artifact.get(key), str) and len(artifact[key].strip()) > limit
             ]
+            saved_steps = artifact.get("reasoning_steps")
+            if isinstance(saved_steps, list) and saved_steps:
+                finding["reasoning_steps"] = []
+                if len(saved_steps) > 4:
+                    finding["extract_truncated_fields"].append("reasoning_steps")
+                for step in saved_steps[:4]:
+                    if not isinstance(step, dict):
+                        finding["extract_truncated_fields"].append("reasoning_steps")
+                        continue
+                    argument = step.get("argument")
+                    review = step.get("review")
+                    compact_step = {
+                        key: step.get(key)
+                        for key in ("number", "title", "epistemic_status", "basis_artifact_ids")
+                        if key in step
+                    }
+                    if isinstance(argument, str):
+                        compact_step["argument"] = _bounded_note(argument, 1200)
+                        if len(argument.strip()) > 1200:
+                            finding["extract_truncated_fields"].append("reasoning_steps")
+                    if isinstance(review, dict):
+                        compact_step["review"] = {
+                            key: _bounded_note(review[key], 500)
+                            if isinstance(review.get(key), str)
+                            else review.get(key)
+                            for key in ("disposition", "rationale", "objection")
+                            if key in review
+                        }
+                        if any(
+                            isinstance(review.get(key), str) and len(review[key].strip()) > 500
+                            for key in ("rationale", "objection")
+                        ):
+                            finding["extract_truncated_fields"].append("reasoning_steps")
+                    finding["reasoning_steps"].append(compact_step)
             for key, count, limit in (
                 ("assumptions", 6, 250),
                 ("objections", 4, 350),
