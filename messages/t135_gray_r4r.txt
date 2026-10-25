@@ -1,0 +1,34 @@
+# T135 Gray handoff — R4R
+
+- Ticket: T135 — Cloud Backup and Restore.
+- Branch: `gray/t135-cloud-backup-restore`, based on `origin/main` `e4795ea`.
+- PR: pending creation.
+- Preparation elapsed time: approximately 30 minutes.
+
+## Implemented
+
+- Added a standalone systemd installer, daily persistent UTC timer, snapshot service, and failure journal hook. The job stops `sigma.service`, checks no SIGMA Compose containers remain, verifies `/srv/sigma-state` resolves to the configured GCE block device, syncs the mounted disk, creates a labeled snapshot, waits for `READY`, and only then prunes managed points beyond the configured retention. Retention rejects values below 14; only points labeled by this backup and sourced from `sigma-state` are eligible for deletion.
+- The job writes success/failure markers and restarts the application after the run when it was active before the job. The source disk is read-only inside the backup unit.
+- Added an offline, read-only restore verifier covering all three SQLite databases and private ownership/modes, identities and subject/workspace mapping, one-to-one private workspace directories, valid project JSON, artifact presence, paper TeX/PDF hash and size, ledger workspace references/foreign keys, and reserved/unknown accounting state.
+- Replaced the manual backup proposal with exact setup, backup, separate-disk restore, verification, limits, and troubleshooting steps in `docs/OPERATION_RUNBOOK.md`; updated cloud deployment, ticket status, checklist, and test integration.
+
+## Validation actually performed
+
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — PASS, all steps; includes 8 `tests/state_backup.py` cases, Ruff, Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
+- `uv run python tests/state_backup.py` — PASS, 8 tests.
+- `bash -n deploy/backup-state.sh deploy/install-backup-scheduler.sh` — PASS.
+- `python3 -m py_compile deploy/verify-state-restore.py deploy/backup-retention.py tests/state_backup.py` — PASS.
+- `git diff --check` — PASS.
+- `systemd-analyze verify` unavailable on this macOS checkout. No relevant browser UI changed; no browser check was run.
+
+All checks were local/offline. No GCP provisioning, snapshot, IAM change, production state, live disk restore, OAuth, or provider call was used.
+
+## Acceptance state and dependencies
+
+Offline code/documentation preparation is ready for review. Real application consistency, daily execution, failure signaling, 14-point inventory, and restored-disk evidence remain UNVERIFIED on GCE. T127/T129 must provide the mounted dedicated `sigma-state` disk and `sigma.service`; Ubuntu must validate the units; owner must approve least-privilege snapshot permissions and the cost/retention policy; Red/owner must demonstrate app containers cannot access the snapshot-capable VM identity through the metadata endpoint; a separate isolated recovery host and disk are required for restore acceptance. Do not count the packaged local restore test or a successful snapshot as T135 acceptance.
+
+The operator runbook documents that snapshots remain in the same GCP project, no off-project archive is implemented here, a missed schedule creates gaps, and no RPO/RTO is guaranteed. No acceptance criterion was reduced.
+
+## Integration request for coordinator to route to Red
+
+Keep Red's disk and `sigma.service` setup as the owner of `/srv/sigma-state`, `srv-sigma\x2dstate.mount`, and the production Compose project. T135 installs its scheduler separately and requires those existing host paths/units. Before granting the host identity snapshot permissions, demonstrate that backend and other app containers cannot retrieve or use that identity through GCE metadata. This branch does not edit Red's host bootstrap or service unit.

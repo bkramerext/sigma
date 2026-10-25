@@ -118,6 +118,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/cloud_research_sponsored_api.py"],
             [*python, "python", "tests/deployment_package.py"],
             [*python, "python", "tests/gce_host.py"],
+            [*python, "python", "tests/state_backup.py"],
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_registry.py"],
             [*python, "python", "tests/ui_orphans.py"],

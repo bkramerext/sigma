@@ -1,5 +1,42 @@
 # SIGMA status
 
+## T135 backup and restore preparation (2026-10-25)
+
+On branch `gray/t135-cloud-backup-restore` based on `origin/main` at
+`e4795ea`, implemented an application-consistent daily GCE state-disk snapshot
+service and persistent UTC timer. The service stops `sigma.service`, confirms
+no SIGMA Compose containers remain, verifies the mounted filesystem resolves
+to the configured GCE block device, syncs the mounted disk, waits for a new
+snapshot to become `READY`, and only then applies retention (minimum 14 ready
+recovery points). It writes success/failure markers, leaves failures visible
+through systemd/journald, and restarts the app if it was active before the job.
+`./sigma test` now runs eight offline backup/restore tests.
+
+The read-only restore checker validates integrity and required tables for auth,
+workspace-mapping and accounting SQLite files; saved identity/workspace mapping;
+private SQLite/workspace ownership and modes; one-to-one workspace directories;
+project JSON; artifact presence; and saved
+paper TeX/PDF size and SHA-256. It checks ledger workspace references and
+foreign keys, and reports reserved/unknown calls without rewriting state.
+Exact host setup, backup, separate-disk restore, verification and troubleshooting
+steps are in [Operations Runbook](OPERATION_RUNBOOK.md#5-daily-state-disk-backup).
+
+Validation passed: `uv run python tests/state_backup.py` (8 tests), shell
+syntax for both backup scripts, Python compilation, Ruff check/format, Pyright
+(0 diagnostics), frontend typecheck/build, `git diff --check`, and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all steps passed).
+This macOS checkout does not include `systemd-analyze`; unit validation on
+Ubuntu remains pending. No GCP command, resource, IAM change, snapshot, live
+restore, or production data was touched. No browser UI changed, so no browser
+check was applicable.
+
+Hosted acceptance remains blocked on T127/T129 disk and service availability,
+owner-approved least-privilege snapshot IAM, proof that app containers cannot
+access the snapshot-capable GCE identity through metadata, and a separate
+isolated recovery host/disk. Snapshot scheduling and successful creation alone
+do not establish recoverability. Preparation took approximately 30 minutes;
+commit and PR details are recorded in the handoff.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored
