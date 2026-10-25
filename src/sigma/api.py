@@ -281,6 +281,7 @@ class ResearchLimitsRequest(OpenRequest):
     session_duration_minutes: int = Field(ge=1, le=research_sessions.MAX_SESSION_DURATION_MINUTES)
     output_tokens_per_call: int = Field(ge=256, le=16384)
     maximum_estimated_cost_usd: float | None = Field(default=None, ge=0.01, le=100)
+    maximum_input_tokens_per_session: int | None = Field(default=None, ge=4096, le=1_000_000)
 
 
 class PaperGenerateRequest(OpenRequest):
@@ -415,6 +416,7 @@ def research_limits_update(body: ResearchLimitsRequest):
             "session_duration_minutes": body.session_duration_minutes,
             "output_tokens_per_call": body.output_tokens_per_call,
             "maximum_estimated_cost_usd": body.maximum_estimated_cost_usd,
+            "maximum_input_tokens_per_session": body.maximum_input_tokens_per_session,
         },
     )
 

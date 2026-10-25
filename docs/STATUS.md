@@ -4540,3 +4540,41 @@ and reproducible machine outputs/hashes are retained in
 readiness and retrospective checks passed. The full `./sigma test` passed after
 installing locked frontend dependencies. No provider calls or cost occurred;
 no comparative result is claimed.
+
+## Round 2 Increment 22 — cumulative collaboration trial preparation (2026-10-25)
+
+Prepared one custom, independently enumerable two-machine scheduling case for
+issue #146. The exact checker finds the proposed 13-unit schedule feasible but
+suboptimal; enumeration over 2,016 eligible machine/order cases finds a
+10-unit optimum, also supported by the M1-only D/F/G lower bound. The complete
+task, checker result, frozen baseline prompts, scoring rubric, caps and execution
+procedure are retained in [Increment 22](evaluations/increment_22/).
+
+Implemented a persisted, fail-closed pre-dispatch ledger shared by SIGMA and
+the baseline adapter. It reserves serialized request bytes plus 8,192 input
+tokens, output ceiling and conservative cost before dispatch; unknown or
+in-flight calls hold their full reservations and block further calls. The real
+SIGMA request-path regression test inspects reserved request IDs/bytes and
+settlement. Provider `max_output_tokens` clipping is retained as a partial
+incomplete result with usage; it is not scored as incorrect and is not retried.
+Ruff I001 and RUF007 in the checker were corrected. Offline checks only; no
+provider inference or spend occurred. 1,024 output tokens may be tight for high
+reasoning because reasoning uses the same output budget; this cannot be
+empirically settled without owner authorization.
+
+The owner authorization request is still open: confirm the exact OpenAI API
+model/configuration and API-key billing, 200,000 reserved input / 4,096 output
+tokens per arm, four calls, 15 minutes per arm / 45 minutes overall, $0.55
+local per-arm ceiling, and configure/verify the $1.10 provider project spend
+limit. Await explicit trial authorization. No Increment 23 work or Cloud
+changes were undertaken.
+
+Final verification for this preparation SHA: `./sigma test` passed all lifecycle,
+research, storage, API, Cloud-regression, Ruff, format, Pyright, frontend
+typecheck, and production-build steps. `git diff --check` and the frozen SHA-256
+manifest validation passed. The optional existing Chrome settings fixture check
+did not initialize its expected API-key fixture state: the browser opened with
+the stored “ChatGPT sign-in · Google sign-in required” state and failed its
+initial `Checking AI…` assertion. No browser-triggered provider request was
+made; this check result is retained as an environment/fixture mismatch, not a
+product conclusion.

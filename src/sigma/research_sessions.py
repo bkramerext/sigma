@@ -30,6 +30,14 @@ from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
+from sigma.research_budget import (
+    BudgetExceeded,
+    cancel_before_dispatch,
+    mark_unknown,
+    new_ledger,
+    reserve_before_dispatch,
+    settle_after_response,
+)
 from sigma.research_epistemics import (
     argument_availability,
     execution_provenance,
@@ -72,13 +80,14 @@ DEFAULT_LIMITS = {
     "session_duration_minutes": 60,
     "output_tokens_per_call": 12000,
     "maximum_estimated_cost_usd": None,
+    "maximum_input_tokens_per_session": None,
 }
 TOKEN_PRICES_PER_MILLION = {
     # OpenAI published Standard pricing, short context, checked 2026-10-23:
     # https://developers.openai.com/api/docs/pricing
-    "gpt-6.1-sol": {"input": 2.0, "cached_input": 0.1, "output": 10.0},
-    "gpt-6-luna": {"input": 0.1, "cached_input": 0.01, "output": 0.5},
-    "gpt-6-astra": {"input": 10.0, "cached_input": 1.0, "output": 50.0},
+    "gpt-6.1-sol": {"input": 2.0, "cache_write": 2.5, "cached_input": 0.1, "output": 10.0},
+    "gpt-6-luna": {"input": 0.1, "cache_write": 0.125, "cached_input": 0.01, "output": 0.5},
+    "gpt-6-astra": {"input": 10.0, "cache_write": 12.5, "cached_input": 1.0, "output": 50.0},
 }
 _tasks: dict[str, asyncio.Task] = {}
 _control: dict[str, asyncio.Event] = {}
@@ -90,6 +99,15 @@ _python_gate = threading.Lock()
 
 class ResearchContextLimitError(ProjectError):
     """Mandatory research evidence cannot fit before a provider dispatch."""
+
+
+class IncompleteResearchResponse(ProjectError):
+    """Provider returned a clipped response that must remain an incomplete result."""
+
+    def __init__(self, message: str, *, partial_text: str, usage: dict[str, int | None] | None):
+        super().__init__(message)
+        self.partial_text = partial_text
+        self.usage = usage
 
 
 class HumanGuidanceReview(BaseModel):
@@ -619,7 +637,7 @@ def get_limits(path: str) -> dict[str, Any]:
         raw = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ProjectError("Research limits are unreadable") from exc
-    if not isinstance(raw, dict) or set(raw) != set(DEFAULT_LIMITS):
+    if not isinstance(raw, dict) or not set(raw) <= set(DEFAULT_LIMITS):
         raise ProjectError("Research limits are invalid")
     try:
         limits = _validate_limits(raw)
@@ -655,7 +673,8 @@ def _validate_previous_limits(raw: dict[str, Any]) -> dict[str, Any]:
         raise ProjectError("Research limits are invalid")
     if raw["model_calls"] < 2 * raw["research_rounds"]:
         raise ProjectError("Research limits are invalid")
-    return dict(raw)
+    result = dict(raw)
+    return result
 
 
 def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -675,7 +694,8 @@ def _validate_legacy_limits(raw: dict[str, Any]) -> dict[str, Any]:
         type(cost) not in {int, float} or not math.isfinite(cost) or not 0 <= cost <= 10000
     ):
         raise ProjectError("Research limits are invalid")
-    return dict(raw)
+    result = dict(raw)
+    return result
 
 
 def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
@@ -702,6 +722,13 @@ def _validate_limits(raw: dict[str, Any]) -> dict[str, Any]:
         raise ProjectError("Maximum estimated session cost must be USD $0.01–$100.00 or unlimited")
     if cost is not None:
         result["maximum_estimated_cost_usd"] = round(float(cost), 2)
+    input_limit = result.get("maximum_input_tokens_per_session")
+    if input_limit is not None and (
+        type(input_limit) is not int or not 4096 <= input_limit <= 1_000_000
+    ):
+        raise ProjectError("Maximum input tokens per session must be 4,096–1,000,000 or unlimited")
+    if input_limit is not None and cost is None:
+        raise ProjectError("An input-token limit requires a maximum estimated session cost")
     if result["model_calls"] < 2 * result["research_rounds"]:
         raise ProjectError(
             "Maximum agent calls must be at least twice the Skeptic iterations so each iteration can include Investigator and Skeptic"
@@ -2354,13 +2381,16 @@ def _assert_safe_role_request(payload: dict[str, Any], credential_token: str | N
         )
 
 
+def _serialized_role_request(payload: dict[str, Any]) -> bytes:
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
 def _role_input_audit(
     record: dict[str, Any], role: str, context: dict[str, Any], credential_token: str | None
 ) -> dict[str, Any]:
     payload = _role_request_payload(record, role, context)
     _assert_safe_role_request(payload, credential_token)
-    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    encoded = serialized.encode("utf-8")
+    encoded = _serialized_role_request(payload)
     return {
         "version": 1,
         "kind": "exact_provider_request_body",
@@ -2368,6 +2398,7 @@ def _role_input_audit(
         "headers_included": False,
         "encoding": "zlib+base64-json",
         "request_body_sha256": hashlib.sha256(encoded).hexdigest(),
+        "request_body_bytes": len(encoded),
         "request_body_compressed": base64.b64encode(zlib.compress(encoded, 9)).decode("ascii"),
     }
 
@@ -2452,7 +2483,7 @@ def _potential_truncation_fields(role: str, output: dict[str, Any]) -> list[str]
 def _refresh_token_accounting(record: dict[str, Any]) -> None:
     """Aggregate call usage without presenting missing usage as a zero total."""
     steps = [step for step in record.get("steps", []) if isinstance(step, dict)]
-    completed = [step for step in steps if step.get("status") == "completed"]
+    completed = [step for step in steps if step.get("status") in {"completed", "incomplete"}]
     known = [
         step["token_usage"]
         for step in completed
@@ -2461,7 +2492,7 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
         and type(step["token_usage"].get("output_tokens")) is int
     ]
     incomplete_steps = any(
-        step.get("status") != "completed"
+        step.get("status") not in {"completed", "incomplete"}
         or not isinstance(step.get("token_usage"), dict)
         or type(step["token_usage"].get("input_tokens")) is not int
         or type(step["token_usage"].get("output_tokens")) is not int
@@ -2481,32 +2512,53 @@ def _refresh_token_accounting(record: dict[str, Any]) -> None:
     )
 
 
+def _settle_request_budget(
+    record: dict[str, Any],
+    step: dict[str, Any],
+    usage: dict[str, int | None] | None,
+) -> str | None:
+    ledger = record.get("hard_budget_ledger")
+    audit = step.get("provider_input_audit")
+    reservation = audit.get("budget_reservation") if isinstance(audit, dict) else None
+    if not isinstance(ledger, dict) or not isinstance(reservation, dict):
+        return None
+    call_id = str(step.get("id", ""))
+    input_tokens = usage.get("input_tokens") if usage else None
+    output_tokens = usage.get("output_tokens") if usage else None
+    reserved_total = int(reservation["input_token_bound"]) + int(
+        reservation["output_token_reservation"]
+    )
+    if type(input_tokens) is int and type(output_tokens) is int:
+        try:
+            settle_after_response(
+                ledger,
+                call_id=call_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        except BudgetExceeded as exc:
+            step["hard_budget_status"] = "usage_exceeded_reservation"
+            return str(exc)
+        record["tokens_reserved"] = max(0, int(record.get("tokens_reserved", 0)) - reserved_total)
+        step["hard_budget_status"] = "settled"
+        return None
+    mark_unknown(ledger, call_id=call_id)
+    step["hard_budget_status"] = "unknown_usage_reserved"
+    return "Provider usage is unavailable; the full request and output reservation remains held."
+
+
 def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) -> float | None:
     prices = TOKEN_PRICES_PER_MILLION.get(record["model"])
     if prices is None:
         return None
-    schema_model = Investigator if role == "investigator" else Skeptic
-    payload = {
-        "model": record["model"],
-        "store": False,
-        "max_output_tokens": record.get("output_token_limit", 4000),
-        "reasoning": {"effort": record["reasoning_effort"]},
-        "instructions": _role_instructions(role, context),
-        "input": json.dumps(context, ensure_ascii=False),
-        "text": {
-            "format": {
-                "type": "json_schema",
-                "name": f"research_{role}",
-                "strict": True,
-                "schema": _research_schema(schema_model),
-            }
-        },
-    }
-    input_byte_bound = len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) + 8192
+    payload = _role_request_payload(record, role, context)
+    input_byte_bound = len(_serialized_role_request(payload)) + 8192
     output_tokens = record.get("output_token_limit", 4000)
-    # A byte cannot encode more UTF-8 tokens than bytes. Treat every possible
-    # input byte as an uncached token and reserve the complete output ceiling.
-    return (input_byte_bound * prices["input"] + output_tokens * prices["output"]) / 1_000_000
+    # Budget at the highest configured Standard input rate and full output cap.
+    return (
+        input_byte_bound * max(prices["input"], prices["cache_write"])
+        + output_tokens * prices["output"]
+    ) / 1_000_000
 
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -3502,6 +3554,27 @@ async def start_session(
                 raise ProjectError(
                     "Cloud research requires the server API credential, a configured per-session cost limit, and a model with a reviewed price."
                 )
+            if limits.get("maximum_input_tokens_per_session") is not None and (
+                credential["mode"] != "api_key"
+                or limits.get("maximum_estimated_cost_usd") is None
+                or config["model"] not in TOKEN_PRICES_PER_MILLION
+            ):
+                raise ProjectError(
+                    "A cumulative input-token ceiling requires API-key billing, a maximum estimated session cost, and a model with a reviewed price."
+                )
+            price = TOKEN_PRICES_PER_MILLION.get(config["model"])
+            hard_budget_ledger = (
+                new_ledger(
+                    call_limit=limits["model_calls"],
+                    input_token_limit=limits["maximum_input_tokens_per_session"],
+                    output_tokens_per_call=limits["output_tokens_per_call"],
+                    cost_limit_usd=float(limits.get("maximum_estimated_cost_usd") or 0.0),
+                    input_price_per_million=max(price["input"], price["cache_write"]),
+                    output_price_per_million=price["output"],
+                )
+                if limits.get("maximum_input_tokens_per_session") is not None and price is not None
+                else None
+            )
             session_number = _allocate_session_number(view.path, records)
             record = {
                 "schema_version": 1,
@@ -3573,6 +3646,8 @@ async def start_session(
                 "output_token_limit": limits["output_tokens_per_call"],
                 "total_token_limit": limits["model_calls"]
                 * (MAX_AGENT_CONTEXT_BYTES + 65_536 + limits["output_tokens_per_call"]),
+                "maximum_input_tokens_per_session": limits.get("maximum_input_tokens_per_session"),
+                "hard_budget_ledger": hard_budget_ledger,
                 "tokens_used": None,
                 "token_usage_status": "pending",
                 "tokens_reserved": 0,
@@ -3970,7 +4045,10 @@ async def _call(
     payload = _role_request_payload(record, role, context)
     _assert_safe_role_request(payload, credential.get("token"))
     _assert_saved_role_input_matches(record, role, payload, step_id)
-    headers = {"Authorization": "Bearer " + credential["token"]}
+    headers = {
+        "Authorization": "Bearer " + credential["token"],
+        "Content-Type": "application/json",
+    }
     if credential["mode"] == "chatgpt":
         headers["Accept"] = "text/event-stream"
     timeout_seconds = min(
@@ -3983,7 +4061,10 @@ async def _call(
             timeout=timeout_seconds, follow_redirects=False, trust_env=False
         ) as client,
         client.stream(
-            "POST", "https://api.openai.com/v1/responses", headers=headers, json=payload
+            "POST",
+            "https://api.openai.com/v1/responses",
+            headers=headers,
+            content=_serialized_role_request(payload),
         ) as response,
     ):
         collected = bytearray()
@@ -4008,7 +4089,27 @@ async def _call(
                 raw = json.loads(body)
             except ValueError as exc:
                 raise ProjectError("Research provider returned malformed output") from exc
-        if not isinstance(raw, dict) or raw.get("status") != "completed":
+        if not isinstance(raw, dict):
+            raise ProjectError("Research provider did not complete its research response")
+        if raw.get("status") == "incomplete":
+            details = raw.get("incomplete_details")
+            if isinstance(details, dict) and details.get("reason") == "max_output_tokens":
+                texts = [
+                    content["text"]
+                    for item in raw.get("output", [])
+                    if isinstance(item, dict)
+                    for content in item.get("content", [])
+                    if isinstance(content, dict)
+                    and content.get("type") == "output_text"
+                    and isinstance(content.get("text"), str)
+                ]
+                raise IncompleteResearchResponse(
+                    "Provider clipped the response at the configured output-token limit.",
+                    partial_text="\n".join(texts),
+                    usage=_usage(raw),
+                )
+            raise ProjectError("Research provider did not complete its research response")
+        if raw.get("status") != "completed":
             raise ProjectError("Research provider did not complete its research response")
         if any(
             item.get("type") == "refusal"
@@ -6565,12 +6666,41 @@ async def _portfolio_role_call(
                 branch["current_action"] = "Budget exhausted"
                 _save(path, record)
                 return False
+            step_id = str(uuid4())
+            request_audit = _role_input_audit(record, role, context, credential.get("token"))
+            hard_ledger = record.get("hard_budget_ledger")
             reserve = None
             token_reserve = (
                 len(json.dumps(context, ensure_ascii=False).encode("utf-8"))
                 + 65_536
                 + int(record.get("output_token_limit", 4000))
             )
+            if isinstance(hard_ledger, dict):
+                try:
+                    budget_reservation = reserve_before_dispatch(
+                        hard_ledger,
+                        call_id=step_id,
+                        request_body=_serialized_role_request(
+                            _role_request_payload(record, role, context)
+                        ),
+                    )
+                except BudgetExceeded as exc:
+                    branch["status"] = "ended"
+                    branch["reason"] = str(exc)
+                    branch["current_action"] = "Budget limit"
+                    record["status"] = "ended"
+                    record["message"] = str(exc)
+                    record["updated_at"] = _now()
+                    _event(record, "call.not_dispatched", str(exc), role)
+                    _save(path, record)
+                    return False
+                request_audit["budget_reservation"] = budget_reservation
+                token_reserve = (
+                    budget_reservation["input_token_bound"]
+                    + budget_reservation["output_token_reservation"]
+                )
+                reserve = float(budget_reservation["cost_bound_usd"])
+                record["tokens_reserved"] = int(record.get("tokens_reserved", 0)) + token_reserve
             if cloud_workspaces.enabled() and (
                 int(record.get("tokens_used") or 0)
                 + int(record.get("tokens_reserved", 0))
@@ -6588,7 +6718,8 @@ async def _portfolio_role_call(
                 record.get("mode") == "api_key"
                 and record.get("maximum_estimated_cost_usd") is not None
             ):
-                reserve = _reserve_cost(record, context, role)
+                if not isinstance(hard_ledger, dict):
+                    reserve = _reserve_cost(record, context, role)
                 current_cost = record.get("estimated_cost_usd")
                 reserved_cost = float(record.get("estimated_cost_reserved_usd", 0.0))
                 if (
@@ -6597,6 +6728,11 @@ async def _portfolio_role_call(
                     or not isinstance(current_cost, (int, float))
                     or current_cost + reserved_cost + reserve > record["maximum_estimated_cost_usd"]
                 ):
+                    if isinstance(hard_ledger, dict):
+                        cancel_before_dispatch(hard_ledger, call_id=step_id)
+                        record["tokens_reserved"] = max(
+                            0, int(record.get("tokens_reserved", 0)) - token_reserve
+                        )
                     branch["status"] = "ended"
                     branch["reason"] = (
                         "A conservative cost reserve prevented another provider call."
@@ -6605,13 +6741,12 @@ async def _portfolio_role_call(
                     _save(path, record)
                     return False
                 record["estimated_cost_reserved_usd"] = reserved_cost + reserve
-            request_audit = _role_input_audit(record, role, context, credential.get("token"))
             record["calls_used"] += 1
             branch["calls_used"] += 1
             branch["status"] = "running"
             branch["current_action"] = role.title()
             branch["cycle"] = cycle
-            record["current_step"] = str(uuid4())
+            record["current_step"] = step_id
             record["current_steps"] = [
                 item["id"] for item in record.get("steps", []) if item.get("status") == "running"
             ] + [record["current_step"]]
@@ -6704,6 +6839,11 @@ async def _portfolio_role_call(
                             0.0,
                             float(record.get("estimated_cost_reserved_usd", 0.0)) - float(reserve),
                         )
+                    if isinstance(hard_ledger, dict):
+                        cancel_before_dispatch(hard_ledger, call_id=step_id)
+                        record["tokens_reserved"] = max(
+                            0, int(record.get("tokens_reserved", 0)) - token_reserve
+                        )
                     step.update(
                         {
                             "status": "failed",
@@ -6737,8 +6877,86 @@ async def _portfolio_role_call(
         except asyncio.CancelledError:
             if cloud_workspaces.enabled():
                 cloud_research.mark_call_unknown(session_id, step_id)
+            async with state_lock:
+                interrupted = _read(path, session_id)
+                if isinstance(interrupted.get("hard_budget_ledger"), dict):
+                    mark_unknown(interrupted["hard_budget_ledger"], call_id=step_id)
+                interrupted_step = next(
+                    item for item in interrupted["steps"] if item["id"] == step_id
+                )
+                interrupted_step["hard_budget_status"] = "unknown_in_flight_reserved"
+                interrupted_step["token_usage_status"] = "unavailable"
+                if isinstance(interrupted_step.get("provider_input_audit"), dict):
+                    interrupted_step["provider_input_audit"]["status"] = (
+                        "call_interrupted_dispatch_unknown"
+                    )
+                _save(path, interrupted)
             raise
         except Exception as exc:
+            if isinstance(exc, IncompleteResearchResponse):
+                async with state_lock:
+                    record = _read(path, session_id)
+                    branch = next(
+                        item
+                        for item in record["strategy_runs"]
+                        if item["strategy_id"] == strategy_id
+                    )
+                    step = next(item for item in record["steps"] if item["id"] == step_id)
+                    step.update(
+                        {
+                            "status": "incomplete",
+                            "finished_at": _now(),
+                            "partial_output": exc.partial_text,
+                            "incomplete_reason": "max_output_tokens",
+                            "token_usage": exc.usage,
+                            "token_usage_status": "reported"
+                            if isinstance(exc.usage, dict)
+                            and type(exc.usage.get("input_tokens")) is int
+                            and type(exc.usage.get("output_tokens")) is int
+                            else "unavailable",
+                        }
+                    )
+                    if isinstance(step.get("provider_input_audit"), dict):
+                        step["provider_input_audit"]["status"] = "provider_response_incomplete"
+                    budget_error = _settle_request_budget(record, step, exc.usage)
+                    if budget_error:
+                        step["hard_budget_error"] = budget_error
+                    if step.get("cost_reserve") is not None:
+                        record["estimated_cost_reserved_usd"] = max(
+                            0.0,
+                            float(record.get("estimated_cost_reserved_usd", 0.0))
+                            - float(step["cost_reserve"]),
+                        )
+                    estimate = (
+                        _estimate_cost(record["model"], exc.usage)
+                        if isinstance(exc.usage, dict)
+                        else None
+                    )
+                    if estimate is None:
+                        record["cost_status"] = "unavailable"
+                        record["estimated_cost_usd"] = None
+                    elif record.get("cost_status") == "available":
+                        record["estimated_cost_usd"] = round(
+                            float(record.get("estimated_cost_usd", 0.0)) + estimate, 9
+                        )
+                    branch["status"] = "ended"
+                    branch["current_action"] = "Incomplete · output limit"
+                    branch["reason"] = str(exc)
+                    record["status"] = "ended"
+                    record["current_action"] = "Incomplete · output limit"
+                    record["terminal_reason"] = "Provider response clipped at max_output_tokens."
+                    record["message"] = (
+                        "The provider response was clipped at the output-token limit. "
+                        "Partial output and usage were preserved; the run is incomplete and was not retried."
+                    )
+                    record["current_step"] = None
+                    record["current_steps"] = [
+                        item["id"] for item in record["steps"] if item.get("status") == "running"
+                    ]
+                    _refresh_token_accounting(record)
+                    _event(record, "call.incomplete", record["message"], role)
+                    _save(path, record)
+                return False
             if isinstance(exc, ProjectError) and _is_guard_failure(str(exc)):
                 raise
             async with state_lock:
@@ -6747,6 +6965,8 @@ async def _portfolio_role_call(
                     item for item in record["strategy_runs"] if item["strategy_id"] == strategy_id
                 )
                 step = next(item for item in record["steps"] if item["id"] == step_id)
+                if isinstance(record.get("hard_budget_ledger"), dict):
+                    mark_unknown(record["hard_budget_ledger"], call_id=step_id)
                 if cloud_workspaces.enabled():
                     cloud_research.mark_call_unknown(session_id, step_id)
                     step["attempt_status"] = "unknown"
@@ -6850,6 +7070,12 @@ async def _portfolio_role_call(
             audit = step.get("provider_input_audit")
             if isinstance(audit, dict):
                 audit["status"] = "provider_response_received"
+            budget_error = _settle_request_budget(record, step, usage)
+            if budget_error:
+                step["hard_budget_error"] = budget_error
+                record["status"] = "ended"
+                record["terminal_reason"] = "Hard request budget could not be settled."
+                record["message"] = budget_error
             _refresh_token_accounting(record)
             if record.get("mode") == "api_key":
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
@@ -7191,9 +7417,16 @@ async def _portfolio_worker(session_id: str, path: str) -> None:
                     for branch in runs
                     if branch["status"] == "failed"
                 ]
+                incomplete_branches = [
+                    branch
+                    for branch in runs
+                    if branch.get("current_action") == "Incomplete · output limit"
+                ]
                 record["message"] = (
                     "; ".join(failures)
                     if record["status"] == "failed"
+                    else "One or more provider responses were clipped; saved partial output and usage are incomplete. No clipped call was retried."
+                    if incomplete_branches
                     else "All strategy branches finished or the shared call budget was exhausted."
                 )
                 record["updated_at"] = _now()
@@ -8001,6 +8234,12 @@ async def _worker(session_id: str, path: str) -> None:
             audit = step.get("provider_input_audit")
             if isinstance(audit, dict):
                 audit["status"] = "provider_response_received"
+            budget_error = _settle_request_budget(record, step, usage)
+            if budget_error:
+                step["hard_budget_error"] = budget_error
+                record["status"] = "ended"
+                record["terminal_reason"] = "Hard request budget could not be settled."
+                record["message"] = budget_error
             _refresh_token_accounting(record)
             if record.get("mode") == "api_key":
                 estimate = _estimate_cost(record["model"], usage) if usage is not None else None
@@ -8267,6 +8506,9 @@ async def _worker(session_id: str, path: str) -> None:
                 step for step in record.get("steps", []) if step.get("status") == "running"
             ]
             for step in running_steps:
+                if isinstance(record.get("hard_budget_ledger"), dict):
+                    mark_unknown(record["hard_budget_ledger"], call_id=step["id"])
+                    step["hard_budget_status"] = "unknown_in_flight_reserved"
                 step["status"] = "interrupted"
                 step["token_usage_status"] = "unavailable"
                 if isinstance(step.get("provider_input_audit"), dict):

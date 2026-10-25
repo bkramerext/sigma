@@ -2250,6 +2250,53 @@ async def test_malformed_output_and_restart(path: Path):
     assert failed["status"] == "failed" and failed["artifacts"] == []
     assert failed["steps"][0]["status"] == "failed" and failed["calls_used"] == 1
 
+    clipped_path = path.parent / "clipped-output.sigma"
+    clipped_view, clipped_strategy, clipped_credential, clipped_config = await setup(clipped_path)
+
+    async def clipped(request):
+        return httpx.Response(
+            200,
+            json={
+                "status": "incomplete",
+                "incomplete_details": {"reason": "max_output_tokens"},
+                "usage": {"input_tokens": 120, "output_tokens": 700},
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "partial JSON fragment"}],
+                    }
+                ],
+            },
+        )
+
+    with (
+        patch.object(
+            research_sessions, "auth_context", new=AsyncMock(return_value=clipped_credential)
+        ),
+        patch.object(
+            research_sessions, "configuration", new=AsyncMock(return_value=clipped_config)
+        ),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(clipped), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(clipped_path),
+            clipped_strategy.id,
+            str(uuid4()),
+            clipped_view.project.id,
+            clipped_credential["identity"],
+        )
+        incomplete = await wait_for(clipped_path, started["id"])
+    assert incomplete["status"] == "ended" and incomplete["artifacts"] == []
+    assert incomplete["steps"][0]["status"] == "incomplete"
+    assert incomplete["steps"][0]["partial_output"] == "partial JSON fragment"
+    assert incomplete["steps"][0]["token_usage"]["output_tokens"] == 700
+    assert incomplete["calls_used"] == 1 and "incomplete" in incomplete["message"].lower()
+
     retained_path = path.parent / "assessment-error.sigma"
     retained_view, retained_strategy, retained_credential, retained_config = await setup(
         retained_path
@@ -2438,7 +2485,8 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
         "model_calls": 2,
         "session_duration_minutes": 10,
         "output_tokens_per_call": 700,
-        "maximum_estimated_cost_usd": 0.1,
+        "maximum_estimated_cost_usd": 0.55,
+        "maximum_input_tokens_per_session": 200_000,
     }
     assert research_sessions.save_limits(str(path), limits) == limits
     outputs = [investigation(1), skeptic(1)]
@@ -2467,9 +2515,15 @@ async def test_limits_snapshot_and_usage_cost(path: Path):
 
     assert finished["call_limit"] == 2 and finished["cycle_limit"] == 1
     assert finished["duration_limit_minutes"] == 10 and finished["output_token_limit"] == 700
-    assert finished["maximum_estimated_cost_usd"] == 0.1
+    assert finished["maximum_estimated_cost_usd"] == 0.55
     assert finished["cost_status"] == "available" and finished["estimated_cost_usd"] > 0
     assert all(step["token_usage"]["input_tokens"] == 120 for step in finished["steps"])
+    for step in finished["steps"]:
+        reservation = step["provider_input_audit"]["budget_reservation"]
+        assert reservation["request_body_bytes"] > 0
+        assert reservation["input_token_bound"] == reservation["request_body_bytes"] + 8192
+        assert reservation["status"] == "reserved"
+    assert all(item["status"] == "settled" for item in finished["hard_budget_ledger"]["calls"])
     operational_metrics = {
         item["label"]: item["value"] for item in finished["outcome"]["metrics"]["operational"]
     }

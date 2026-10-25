@@ -1,0 +1,22 @@
+[
+  {
+    "turn": 1,
+    "phase": "initial investigation",
+    "instruction": "Assess the proposed schedule's feasibility and optimality. Work from the job data. Give a candidate schedule or a reasoned partial result, an argument for any lower bound, assumptions, and one specific test that could refute your current view. Set at most one of python_code or sage_code only if a local computation would materially help."
+  },
+  {
+    "turn": 2,
+    "phase": "explicit self-critique",
+    "instruction": "Act as a skeptical reviewer of your turn-1 note. Try to find a precedence, eligibility, overlap, makespan, or lower-bound error. Examine alternative machine orders. State the strongest specific objection you can justify, whether it invalidates your prior claim, and the discriminating check you recommend. Do not defend a claim just because you wrote it. Set python_code and sage_code to null."
+  },
+  {
+    "turn": 3,
+    "phase": "revision",
+    "instruction": "Revise your investigation in response to your turn-2 critique. Explicitly adopt, reject, or leave unresolved each substantive objection. Give a concrete schedule and lower-bound argument if justified; distinguish verified calculations from general reasoning. Set at most one of python_code or sage_code only if one additional local computation is materially useful."
+  },
+  {
+    "turn": 4,
+    "phase": "final self-critique and report",
+    "instruction": "Make a final adversarial pass over your turn-3 revision. Check for a missed schedule, hidden eligibility/precedence issue, or unsupported optimality claim. Return the strongest defensible conclusion, the specific critique and how it changed or confirmed your work, evidence used, remaining uncertainty, and whether any earlier result should be withdrawn. Set python_code and sage_code to null."
+  }
+]

@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 TASK = Path(__file__).with_name("task.json")
 
 
@@ -24,16 +23,8 @@ def verify_schedule(task: dict[str, Any], by_machine: dict[str, list[tuple[str, 
             seen.add(job_id)
             previous_end = end
     assert seen == set(jobs)
-    starts = {
-        job_id: start
-        for sequence in by_machine.values()
-        for job_id, start, _ in sequence
-    }
-    ends = {
-        job_id: end
-        for sequence in by_machine.values()
-        for job_id, _, end in sequence
-    }
+    starts = {job_id: start for sequence in by_machine.values() for job_id, start, _ in sequence}
+    ends = {job_id: end for sequence in by_machine.values() for job_id, _, end in sequence}
     for job_id, job in jobs.items():
         assert all(ends[parent] <= starts[job_id] for parent in job["predecessors"])
     return max(ends.values(), default=0)
@@ -47,7 +38,7 @@ def earliest_finish(
     for job_id, job in jobs.items():
         edges[job_id].update(job["predecessors"])
     for order in machine_orders.values():
-        for left, right in zip(order, order[1:]):
+        for left, right in itertools.pairwise(order):
             edges[right].add(left)
 
     indegree = {job_id: len(parents) for job_id, parents in edges.items()}
