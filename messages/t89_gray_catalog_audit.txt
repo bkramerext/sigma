@@ -1,0 +1,40 @@
+GRAY → Coordinator: T89 catalog audit ready for review
+
+Branch: gray/t89-stock-catalog-audit
+Base: main at 7a2f445
+
+Deliverable: docs/evaluations/t89-stock-sample-catalog.md inventories all 17
+samples and gives KEEP / REVISE / CONSOLIDATE recommendations with a concrete
+proposed after-state. It distinguishes the five deterministic subset-sum
+fixtures from live research and excludes the historical Maximum Regions export
+from stock history. RH remains the flagship. No sample was retired, merged, or
+substantially rewritten. Owner decisions are explicit in the audit.
+
+Safe change: constrained-binary-strings had no difficulty value. Its basic
+recurrence exercise is clearly Easy. Its sample JSON is now schema 8 with
+difficulty=easy; project UUID, title, problem, strategies, and events are
+unchanged. `tests/recents.py` pins 17 catalog entries and checks the new
+metadata through sample loading/copy. The existing copy-independence check
+continues to verify source immutability.
+
+Checks:
+- `uv run --locked --no-sync python tests/recents.py` — PASS
+- `uv run --locked --no-sync python tests/test_sample_copies.py` — PASS, 9 tests
+- `uv run --locked --no-sync python tests/make_sample.py` — PASS
+- `uv run --locked --no-sync python tests/example_math.py` — PASS
+- `./sigma test` — FAIL at tests/tooling.py:177; mocked stop_servers call count
+  is zero. Reproduced by running the same test in a detached worktree at
+  unchanged origin/main 7a2f445. No UI/tooling code or test was changed.
+- Every command after tests/tooling.py in the suite was run individually and
+  passed, including cloud/storage/deployment checks, Ruff, Pyright, frontend
+  typecheck and production build.
+- PR #74 reports real Chrome checks across all 17 samples at desktop and
+  mobile-emulated viewports. This increment did not repeat that browser study.
+- No provider calls. `git diff --check` passed.
+
+No live inference or fake outcomes were used.
+Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.
+
+Review focus: confirm whether the proposed warp-drive consolidation and first-
+step scaffolding directions match the owner's educational intent. They are
+proposals only and require approval before implementation.
