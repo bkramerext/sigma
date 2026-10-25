@@ -1,5 +1,31 @@
 # SIGMA status
 
+## T98 production host readiness pre-cloud (2026-10-25)
+
+Added a pinned Ubuntu 24.04 amd64 host installer for Docker Engine/Compose v2
+and the dedicated rootless `sigma-sandbox` daemon, a rootless-only runner image
+builder, systemd startup ordering/restart units, and a read-only `PASS`/`FAIL`/
+`BLOCKED` production host preflight. The preflight validates the protected
+non-secret environment file, secret-file metadata without reading values, disk
+mount/ownership and sandbox denial, daemon/socket mode, runner images, Compose
+health dependencies, and guarded startup configuration. The runtime proof now
+checks that Python and Sage runners cannot access host state or the daemon
+socket, in addition to host secrets and network. Production rootless checks
+remain mandatory; no Docker Desktop override was used for production acceptance.
+
+The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite passed,
+including host, deployment, cloud, sponsored inference, storage, user-isolation,
+backup/restore, and Recent relocation coverage. Ruff check/format, Pyright,
+frontend typecheck/build, and `git diff --check` passed. On this macOS
+workstation the preflight reported `BLOCKED` for Ubuntu/Linux-only checks, the
+installer exited `2` before package changes, and `python -m
+sigma.cloud_runtime_check` without the dev override refused the selected
+non-rootless daemon. Ubuntu 24.04 installation, `systemd-analyze`, actual
+rootless daemon/socket permissions, image builds, disk mount, and runtime escape
+probes still require an Ubuntu 24.04 amd64 Linux host. No GCP resources, DNS,
+OAuth, Secret Manager, credentials, or paid inference were used. See
+`messages/t98_red_host_readiness.txt` for rerun commands and commit details.
+
 ## T41 — Sponsored cloud inference verification (2026-10-23)
 
 Added deterministic sponsored-inference API coverage through the production
