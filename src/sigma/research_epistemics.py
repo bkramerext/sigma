@@ -86,7 +86,7 @@ def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
             unidentified += 1
             return
         stored_runtime = value.get("runtime")
-        if stored_runtime in {"python", "sagemath"}:
+        if isinstance(stored_runtime, str) and stored_runtime in {"python", "sagemath"}:
             runtime = stored_runtime
         key = (runtime, execution_id)
         row = rows.setdefault(
