@@ -6675,7 +6675,7 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
         ),
     )
     for index, (mode, question, approach, assumption, followup) in enumerate(cases):
-        root = path / f"domain-{index}"
+        root = path / f"domain-{index}.sigma"
         view = initialize_project(
             root, f"Cross-domain case {index}", question, research_mode=mode
         )
