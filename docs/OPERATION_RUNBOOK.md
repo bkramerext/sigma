@@ -15,7 +15,7 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 | DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Registered; A record target not yet confirmed |
 | Zone and VM | `us-west1-b`; planned `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-4` | Provisioning pending |
 | Disk | `sigma-state` 30 GB `pd-balanced`, zonal `us-west1-b`, blank, Google-managed encryption, no backups; boot disk planned 100 GiB `pd-standard` | Operator reports created 2026-10-25; verify table and retained attachment later |
-| Network | Planned `sigma-vpc`, subnet `sigma-us-west1`, proposed `10.42.0.0/24`, static IP name `sigma-web-ip` | CIDR and resource creation pending |
+| Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | VPC/subnet and reserved IP operator-verified, Oct 25; IP attachment pending |
 | VM identity and access | Planned `sigma-runtime` service account, secret-scoped access; IAP SSH with OS Login | Creation and live IAM verification pending |
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; production project association unverified |
 | Billing / alert | Trial/billing link and $300 project budget | Not yet verified |
@@ -44,6 +44,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 **T127 cost adjustment (2026-10-25):** State disk initial 200 GiB rejected for cost; 30 GiB subsequently recommended before creation (approximately $17/month less than 200 GiB), pending confirmation. The existing provisioning examples mentioning 200 GiB are superseded for this resource and require reconciliation before use.
 
 - 2026-10-25: Operator completed creation of `sigma-state` as 30 GB zonal balanced disk in `us-west1-b`, selected No backups, Google-managed encryption and no consistency group. Disk-table verification and non-auto-delete attachment pending.
+
+- 2026-10-25: Operator verified reserved regional Premium external IPv4 `sigma-web-ip` = `136.66.128.82`; not yet assigned to VM. DuckDNS A-record update pending.
 
 ## Before any operation
 
