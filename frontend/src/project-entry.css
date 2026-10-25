@@ -49,6 +49,9 @@
 :is(.home-page, .workspace-page) .about-disclosure > summary:hover { color: #ffe0b5; background: #a9654814; }
 :is(.home-page, .workspace-page) .about-disclosure > summary:focus-visible { outline: 2px solid #edbc77; outline-offset: 2px; border-radius: 5px; }
 :is(.home-page, .workspace-page) .about-disclosure-content { padding: 0 14px 14px; }
+:is(.home-page, .workspace-page) .about-source-disclosure .about-disclosure-content p { margin: 0 0 6px; }
+:is(.home-page, .workspace-page) .about-source-disclosure .about-disclosure-content p:last-child { margin-bottom: 0; }
+:is(.home-page, .workspace-page) .about-source-disclosure a { color: #edc38d; text-underline-offset: 3px; overflow-wrap: anywhere; }
 :is(.home-page, .workspace-page) .about-disclosure-content > .about-terms { margin-bottom: 2px; }
 :is(.home-page, .workspace-page) .about-disclosure-content > .about-feature:first-child { border-top: 1px solid #35404a; }
 :is(.home-page, .workspace-page) .about-architecture { margin: 0 0 13px; }
