@@ -4332,6 +4332,34 @@ fixture), and the T100 persistent-disk configuration (this run uses Compose's
 default local storage). T99 inference is also skipped; no provider calls were
 made. This is local acceptance, not live OAuth or cloud-deployment evidence.
 
+## Increment 22 / issue #146 — offline preparation (2026-10-25)
+
+Read the complete issue #146 and started from fresh `main` (`19e5bd7`) on
+`blue/increment-22-issue-146`. The preparation record is
+[`increment_22/preparation.md`](evaluations/increment_22/preparation.md).
+It proposes one custom finite scheduling problem and a strong four-call
+self-critique baseline against the actual two-cycle, four-call SIGMA session.
+No stock task is reused. This remains an exploratory single-case comparison,
+not a longitudinal or general-superiority claim.
+
+The candidate run is OpenAI API-key billing, `gpt-6.1-sol`, high reasoning,
+standard tier, with no tools/search/retries/fallback; four calls per arm, 1,024
+output tokens per call, 12,000 input / 16,096 total usage tokens per arm, 15
+minutes per arm, $0.55 estimated-cost reserve per arm and a proposed $1.25
+provider-side hard total spend cap. Official standard rates checked 2026-10-25
+are $2/M input and $10/M output tokens. These are proposals, not authorization.
+The trial is **not ready to execute**: current SIGMA derives a much larger
+token limit from context size, and its local cost control is an estimated
+reservation rather than a provider-invoice hard cap. Demonstrate a cumulative
+token guard and confirm provider-side spend enforcement before any call.
+
+`./sigma test` **passed** on this base, including all backend research checks,
+Ruff, format, Pyright (0 diagnostics), frontend typecheck and production build.
+Only deterministic/offline fixtures ran; there were zero provider calls, zero
+spend, no real-browser exercise, and no project/session export. The live trial
+and its exports are therefore outstanding. No Cloud files or Increment 23
+work were touched.
+
 ## Issue 118 — harden within-session blind comparison (2026-10-25)
 
 Revised the T114 proposal after adversarial review. The active design uses three
