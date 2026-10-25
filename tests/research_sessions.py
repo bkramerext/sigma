@@ -6546,6 +6546,7 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
                 "question": "Researcher-approved, narrower follow-up",
                 "parent_strategy_id": strategy.id,
                 "sources": [],
+                "rejected_sources": [],
                 "packet_digest": "offline-test-only",
             }
         }
