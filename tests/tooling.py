@@ -71,6 +71,56 @@ def check_start_cli() -> None:
     assert "identifiable local SIGMA UI servers" in output.getvalue()
 
 
+def check_command_help() -> None:
+    for argv in (
+        ["sigma", "-h", "create"],
+        ["sigma", "create", "-h"],
+        ["sigma", "create", "--help"],
+    ):
+        output = StringIO()
+        with patch("sys.argv", argv), redirect_stdout(output):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                assert exc.code == 0
+            else:
+                raise AssertionError(f"{argv} did not exit")
+        help_text = output.getvalue()
+        assert "Create a project in the configured projects root" in help_text
+        assert "--title TITLE         Set title (required)" in help_text
+        assert "(default: medium)" in help_text
+        assert "Example:" in help_text and "SIGMA_PROJECTS_ROOT" in help_text
+
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "-h"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("top-level -h did not exit")
+    top_help = output.getvalue()
+    assert "SIGMA projects and repository maintenance" in top_help
+    assert "Use `sigma -h COMMAND`" in top_help
+    assert "SIGMA_PROJECTS_ROOT selects the root" not in top_help
+
+    # Every registered command has the same detailed-help structure.
+    from sigma.cli import COMMAND_DETAILS
+
+    for command in COMMAND_DETAILS:
+        output = StringIO()
+        with patch("sys.argv", ["sigma", "-h", command]), redirect_stdout(output):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                assert exc.code == 0
+            else:
+                raise AssertionError(f"help for {command} did not exit")
+        help_text = output.getvalue()
+        assert "Example:" in help_text, command
+        assert "Notes:" in help_text, command
+
+
 def check_ui() -> None:
     # Process lifecycle/ownership is exercised separately with real processes.
 
@@ -319,6 +369,7 @@ def main() -> None:
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
         check_start_cli()
+        check_command_help()
         check_ui()
         check_local_google_startup()
         check_local_google_setup_warning()
