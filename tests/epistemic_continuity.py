@@ -750,7 +750,7 @@ async def invalid_source_project(
         )
         rejected = await wait_for(path, started["id"])
     assert rejected["status"] == "failed" and not rejected["artifacts"]
-    assert "complete, unretracted" in rejected["message"], rejected["message"]
+    assert "An addressed obligation needs" in rejected["message"], rejected["message"]
     assert source_file.read_bytes() == source_bytes
     audit = export_project_view(str(path))
     assert any(
