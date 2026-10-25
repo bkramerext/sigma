@@ -57,33 +57,194 @@ Verify public HTTPS, `/api` routing and application health with the documented p
 5. Run preflight; start via `sudo systemctl start sigma.service`; verify auth, existing users, project/session persistence, bounded research, exports and HTTPS.
 6. If verification fails, use rollback below. Record SHA, downtime, tests and outcome.
 
-## 5. Backup (consistent recovery point)
+## 5. Daily state-disk backup
 
-**Policy proposal:** daily recoverable state-disk snapshots, with **at least 14 retained daily points**, plus separate protected encrypted backup copies where configured. Scheduling/retention is not proof of recovery. Confirm approved retention and access policies before automation.
+The installed `sigma-backup.timer` runs at 10:17 UTC daily with `Persistent=true`
+(about 02:17 or 03:17 in Oregon, depending on daylight saving time).
+`sigma-backup.service` stops `sigma.service`, verifies that no SIGMA Compose
+container remains running, snapshots the attached `sigma-state` disk, waits for
+the snapshot to report `READY`, and only then prunes managed snapshots beyond
+the configured retention (minimum 14). It restarts the app if it was active
+before the run. A failed job is visible as a failed systemd unit, a critical
+journal entry, and `/var/lib/sigma-backup/last-failure`; inspect all three.
 
-1. Notify active users and prevent new research; wait for or account for in-flight tasks.
-2. Stop SIGMA with `sudo systemctl stop sigma.service` and verify application writers are stopped. Stop/disable any separate write workers as appropriate.
-3. Confirm the exact `sigma-state` disk and mounted `/srv/sigma-state/auth` tree; preserve **together** user workspace trees, auth/subject mappings, session/outcome/artifacts and accounting SQLite databases.
-4. Snapshot the disk from an authorized operator terminal, replacing `PROJECT_ID` only after confirmation:
+Before enabling the timer, obtain owner approval for snapshot IAM, cost and
+retention. The VM identity needs only the snapshot and disk inspection actions
+needed by the script; verify that app containers cannot use those credentials
+through the GCE metadata server. If that isolation cannot be demonstrated,
+do not enable the timer. Each run takes the hosted app offline while SIGMA is
+stopped; announce the daily maintenance window before enabling the timer. The
+backup service uses the host's GCE credentials;
+it does not put a key in the repository or state disk.
 
-```sh
-gcloud compute disks snapshot sigma-state --project=PROJECT_ID \
-  --zone=us-west1-b --snapshot-names="sigma-state-$(date -u +%Y%m%dT%H%M%SZ)"
-```
+1. Confirm the live project, zone, attached source disk, `/srv/sigma-state`
+   mount, `sigma.service`, and host identity. Do not proceed on an unmounted
+   state disk or a boot-disk fallback.
+2. Create `/etc/sigma/backup.env` from the reviewed
+   [`backup.env.example`](../deploy/backup.env.example). Set the approved
+   project ID, zone, disk name and retention (14 or greater); install it
+   `root:root` mode `0600`. It contains no credentials.
 
-5. If configured, create the separate encrypted archive in private Cloud Storage using the exact approved procedure in [Cloud Deployment](CLOUD_DEPLOYMENT.md#backup-restart-update-and-rollback). Check snapshot completion, restricted IAM and recovery-point metadata; never expose credentials or unencrypted backups.
-6. Restart with `sudo systemctl start sigma.service` and verify health, disk mount and saved workspace access. Record recovery-point ID and timestamp.
+   ```sh
+   sudo install -o root -g root -m 0600 \
+     /opt/sigma/current/deploy/backup.env.example /etc/sigma/backup.env
+   sudoedit /etc/sigma/backup.env
+   sudo stat -c '%U:%G %a %n' /etc/sigma/backup.env
+   ```
+3. Review `deploy/install-backup-scheduler.sh` and install from the reviewed
+   release checkout:
 
-**Do not** take a live snapshot of changing SQLite and workspace files and describe it as application-consistent.
+   ```sh
+   sudo /opt/sigma/current/deploy/install-backup-scheduler.sh
+   sudo systemctl status sigma-backup.timer --no-pager
+   sudo systemctl list-timers sigma-backup.timer --no-pager
+   ```
+
+4. After owner approval, run the first real backup and wait for completion:
+
+   ```sh
+   sudo systemctl start sigma-backup.service
+   sudo systemctl status sigma-backup.service --no-pager
+   sudo cat /var/lib/sigma-backup/last-success
+   sudo gcloud compute snapshots list --project=APPROVED_PROJECT \
+     --filter='labels.sigma-daily-backup=true AND status=READY' \
+     --format='table(name,creationTimestamp,sourceDisk,labels)'
+   ```
+
+   Check that the named recovery point has the expected `sigma-state` source,
+   the `sigma-daily-backup=true` and `sigma-source-disk=sigma-state` labels,
+   and `READY` status. The systemd success status and a snapshot existing alone
+   do not prove that a restore works. Do not manually delete a recovery point
+   to fix a failed run.
+5. Confirm the service came back if it was active before the backup. Check
+   `sudo systemctl status sigma.service`, state mount, public health and a
+   saved workspace. Record UTC timestamp, snapshot ID, source disk and release
+   SHA using the completion template.
+6. Inspect scheduling and failures:
+
+   ```sh
+   sudo systemctl list-timers sigma-backup.timer --all --no-pager
+   sudo systemctl status sigma-backup.service --no-pager
+   sudo journalctl -u sigma-backup.service -u sigma-backup-failure.service -n 100 --no-pager
+   sudo cat /var/lib/sigma-backup/last-success
+   sudo test ! -e /var/lib/sigma-backup/last-failure
+   ```
+
+**Troubleshooting:**
+
+- `sigma-backup.service` is `failed`: read
+  `journalctl -u sigma-backup.service -u sigma-backup-failure.service`; check
+  `/var/lib/sigma-backup/last-failure`. Resolve the stated cause, verify app
+  health and mount, then explicitly rerun `sudo systemctl start
+  sigma-backup.service`. A retry is not automatic evidence; record its result.
+- Timer has no next run: check
+  `systemctl status sigma-backup.timer` and `systemctl list-timers --all`; run
+  `sudo systemctl daemon-reload` only after reviewing installed unit contents,
+  then `sudo systemctl restart sigma-backup.timer`.
+- Backup rejects the mount or still-running containers: do not bypass the
+  guard. Confirm the actual `sigma-state` disk is mounted at
+  `/srv/sigma-state`, `sigma.service` is stopped, and no SIGMA Compose project
+  containers remain. Escalate any independent writer.
+- GCE reports permission denied, quota, or snapshot failure: the app is
+  restarted by the service exit handler if it was previously active, and no
+  managed snapshot is pruned before the new point reaches `READY`. Verify the
+  approved project/zone/disk and least-privilege IAM with the owner; do not
+  grant project-wide Editor/Owner or put a service-account key on the VM.
+- `last-success` is stale or `last-failure` exists: treat the backup as
+  overdue/failed until a new run completes and a `READY` snapshot is confirmed.
+  `OnFailure` writes a critical local journal record; no external alert channel
+  is configured by this change, so the operator must monitor systemd/journal
+  status through the approved host monitoring process.
+- Service failed to restart after backup: keep the recovery point; inspect
+  `sigma.service` logs, mount and preflight. Do not launch production Compose
+  manually or run the backup repeatedly against an unhealthy stack.
+
+**Consistency boundary:** the app is unavailable while stopped; the snapshot
+includes the whole dedicated disk, keeping auth identities, subject/workspace
+mappings, each workspace and its projects/sessions/research artifacts, and the
+cloud-research usage ledger at the same quiesced point. No independent writer
+may touch these files during the operation. Interrupted provider work may have
+an unknown external charge; its reserved/unknown accounting state is preserved
+and must not be replayed or cleared.
+
+**Recovery limits:** snapshots are in the same GCP project and use the project's
+snapshot access controls. They do not protect against loss, suspension or
+compromise of that project or its privileged IAM. This change does not create
+an off-project archive. A failed/missed schedule can create a recovery gap;
+daily scheduling targets at most roughly 24 hours of data loss but provides no
+RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
 ## 6. Restore drill (non-production) / disaster recovery
 
-1. Choose a named recovery-point snapshot; record original disk identity and SHA/version compatibility. **Never restore over the production disk as a first test.**
-2. Create a **new separate disk** from that snapshot in the matching approved zone, mount only on an isolated recovery/test host or dedicated mount location, and verify its UUID/permissions.
-3. Start a private compatible SIGMA stack (no public access and no outbound billable provider requests); verify SQLite integrity, Google identity mapping, two distinct user workspaces, saved research/session artifacts, TeX/PDF outputs and accounting ledger consistency.
-4. Document any migration or version mismatch, restore duration, missing artifacts and confirmed recoverable timestamp. Clean up test resources only after evidence is retained.
-5. For a production incident, explicitly authorize outage and cutover, stop writers, preserve the damaged disk for investigation, attach the *verified restored* disk, check UUID/fstab and permissions, preflight, start service, validate identity/isolation, then reopen traffic.
-6. Declare any irrecoverable interval or uncertain in-flight provider calls; never silently reconstruct or zero spending reservations.
+1. Choose a named snapshot whose status is `READY`; record its creation time,
+   source disk, project, snapshot name and release SHA. Confirm the test host is
+   isolated and has no public ingress or provider credentials. **Never restore
+   over the production disk as a first test.**
+2. Create a new disk from the snapshot in the same zone and attach it only to
+   the isolated recovery host. Example (after verifying every value against
+   live GCP):
+
+   ```sh
+   gcloud compute disks create sigma-state-restore-YYYYMMDD \
+     --project=APPROVED_PROJECT --zone=APPROVED_ZONE \
+     --source-snapshot=READY_SNAPSHOT --type=pd-balanced
+   gcloud compute instances attach-disk sigma-recovery-01 \
+     --project=APPROVED_PROJECT --zone=APPROVED_ZONE \
+     --disk=sigma-state-restore-YYYYMMDD --device-name=sigma-state-restore
+   ```
+
+   Do not attach the test disk to the production VM. On the recovery host,
+   identify the new device using `lsblk -f`, `blkid`, and its GCE device name;
+   never format it. Mount it read-only:
+
+   ```sh
+   sudo mkdir -p /mnt/sigma-restore
+   sudo mount -o ro,noload,nosuid,nodev,noexec \
+     /dev/disk/by-id/google-sigma-state-restore-YYYYMMDD /mnt/sigma-restore
+   findmnt /mnt/sigma-restore
+   ```
+
+3. Run the packaged offline verifier against the mounted filesystem root. The
+   verifier opens each SQLite database read-only and checks integrity/tables,
+   identity-to-workspace mapping, one-to-one workspace directories, saved
+   project and research artifact counts, and accounting references and
+   reserved/unknown calls. For a two-user acceptance point:
+
+   ```sh
+   sudo python3 /opt/sigma/current/deploy/verify-state-restore.py \
+     /mnt/sigma-restore --min-workspaces 2 --min-projects 1 \
+     --min-artifacts 1 --min-papers 1
+   ```
+
+   Require every `PASS` and the final `PASS`; any `FAIL` blocks acceptance.
+   Review project records and expected paper `.tex`/`.pdf`, session evidence,
+   and ledger state against the known test identities using authorized,
+   redacted evidence. The verifier does not start SIGMA, contact OAuth/provider
+   services, repair files, or prove the browser/API on GCE. If compatibility
+   testing is required, use a separately approved isolated test stack on a
+   writable disposable clone with public ingress and external provider calls
+   blocked; do not point it at production.
+4. Record start/end UTC time, snapshot ID and creation time, new disk/device/UUID,
+   release SHA, exact command, every verifier result, missing items and elapsed
+   restore time. Preserve sanitized evidence before removing the temporary disk.
+   Keep the snapshot until evidence is reviewed; separately authorize cleanup.
+5. Production cutover is a distinct owner-approved incident action: stop all
+   writers, preserve the damaged disk for investigation, detach it without
+   deleting it, attach the verified restored disk, confirm UUID/fstab/mount and
+   ownership, run host preflight, start `sigma.service`, and verify identity,
+   isolation, saved artifacts and accounting before reopening traffic.
+6. Declare the last recoverable timestamp and any data-loss interval. Treat
+   interrupted provider calls as potentially charged; preserve unknown
+   reservations and never reconstruct/zero the ledger to make totals look clean.
+   After retaining reviewable evidence, unmount the clone before detaching it;
+   delete the recovery disk only after separate owner approval:
+
+   ```sh
+   sudo umount /mnt/sigma-restore
+   gcloud compute instances detach-disk sigma-recovery-01 \
+     --project=APPROVED_PROJECT --zone=APPROVED_ZONE \
+     --disk=sigma-state-restore-YYYYMMDD
+   ```
 
 ## 7. Rollback code (not data)
 
