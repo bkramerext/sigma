@@ -1,7 +1,7 @@
 # T135 Gray handoff — R4R
 
 - Ticket: T135 — Cloud Backup and Restore.
-- Branch: `gray/t135-cloud-backup-restore`, based on `origin/main` `e4795ea`.
+- Branch: `gray/t135-cloud-backup-restore`, based on `origin/main` `ffb008f`.
 - PR: pending creation.
 - Preparation elapsed time: approximately 30 minutes.
 

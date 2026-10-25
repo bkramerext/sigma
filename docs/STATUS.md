@@ -3,7 +3,7 @@
 ## T135 backup and restore preparation (2026-10-25)
 
 On branch `gray/t135-cloud-backup-restore` based on `origin/main` at
-`e4795ea`, implemented an application-consistent daily GCE state-disk snapshot
+`ffb008f`, implemented an application-consistent daily GCE state-disk snapshot
 service and persistent UTC timer. The service stops `sigma.service`, confirms
 no SIGMA Compose containers remain, verifies the mounted filesystem resolves
 to the configured GCE block device, syncs the mounted disk, waits for a new
