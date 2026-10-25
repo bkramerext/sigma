@@ -31,6 +31,7 @@ from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
 from sigma.research_epistemics import argument_availability, verification_label
+from sigma.research_feedback import ComputationFeedback, validate_feedback
 from sigma.research_tools import capability_guidance, execution_capabilities
 
 CALL_LIMIT = 6
@@ -177,6 +178,7 @@ class ObligationReview(BaseModel):
 
 
 class Skeptic(BaseModel):
+    computation_feedback: ComputationFeedback | None = None
     model_config = ConfigDict(extra="forbid", strict=True)
     assessment: str = Field(pattern="^(continue|revise|stop)$")
     stop_reason: str = Field(
@@ -1085,11 +1087,34 @@ def _outcome_conclusion(record: dict[str, Any], outcome: dict[str, Any]) -> str:
                 lines += [
                     f"- Rejected transfer {rejection['artifact_id']}: {rejection['rationale']}"
                 ]
-        for step in record.get("steps", []):
-            for review in (step.get("output") or {}).get("continuation_reviews", []):
-                lines += [
-                    f"- {step.get('role')}, call {step.get('call_number')}, source {review['artifact_id']}: {review['uptake']} (reported). {review['rationale']} Next test: {review['next_test']}"
-                ]
+        if record.get("research_context_version", 1) >= 2:
+            latest_reviews = {}
+            for step in record.get("steps", []):
+                if step.get("status") != "completed":
+                    continue
+                for review in (step.get("output") or {}).get("continuation_reviews", []):
+                    latest_reviews[(step.get("role"), review["artifact_id"])] = review
+            counts = {}
+            plans = []
+            for (role, _), review in latest_reviews.items():
+                key = f"{role}: {review['uptake']}"
+                counts[key] = counts.get(key, 0) + 1
+                if review["uptake"] == "changed_plan" and review["next_test"] not in plans:
+                    plans.append(review["next_test"])
+            lines += [
+                "Latest per-source role reports: "
+                + "; ".join(f"{key} ({count})" for key, count in sorted(counts.items()))
+            ]
+            lines += [f"- Reported next test: {plan}" for plan in plans]
+            lines += [
+                "Full per-call rationales and previous dispositions remain in the detailed Outcome/session audit. No inherited duty is automatically resolved."
+            ]
+        else:
+            for step in record.get("steps", []):
+                for review in (step.get("output") or {}).get("continuation_reviews", []):
+                    lines += [
+                        f"- {step.get('role')}, call {step.get('call_number')}, source {review['artifact_id']}: {review['uptake']} (reported). {review['rationale']} Next test: {review['next_test']}"
+                    ]
     conclusion = "\n".join(lines).strip()
     if len(conclusion) > MAX_CONCLUSION_CHARACTERS:
         conclusion = (
@@ -2254,6 +2279,7 @@ def _role_instructions(role: str, context: dict[str, Any]) -> str:
         + guidance
         + " "
         + " For approved_continuation, inspect every selected source and return continuation_reviews exactly once per artifact_id. Use treatment negative_constraint for saved local refutations, unverified_input or method_to_test for other sources; no prior assertion is a certified premise. 'changed_plan' requires a concrete next_test and rationale; this is self-reported, not independently verified. A local counterexample blocks reuse of that candidate as established, not the project. Do not defer or reject a recorded counterexample; a revised candidate must state the changed scope. Distinguish stale/resolved duties, finite checks and conjectures. Never infer proof from prior agreement. "
+        + " Repeated approved source prose may use {$sigma_text: Tn}; resolve it through approved_continuation.dispatch_text_pool. Aliases preserve exact text and uncertainty, not verification. For an explicit computational inference, Skeptic computation_feedback must bind the supplied execution ID, actual status and SHA-256 of exact displayed stdout/stderr, with a computation citation. A failed computation supports only inconclusive feedback. Finite agreement is bounded_support, never a general theorem. For revise/continue, next_question must equal the feedback next_test. Use null when making no structured computational assertion. "
         + HUMAN_INTERVENTION_GUIDANCE
         + " "
         + capability_guidance(context.get("execution_tools", []))
@@ -3194,6 +3220,7 @@ async def start_session(
                 "idempotency_key": idempotency_key,
                 "status": "queued",
                 "outcome_conclusion_version": 1,
+                "research_context_version": 2,
                 "created_at": _now(),
                 "updated_at": _now(),
                 "started_at": _now(),
@@ -3669,6 +3696,13 @@ async def _call(
             "Research reasoning cited an artifact not supplied in this call's context"
         )
     if role == "skeptic":
+        validate_feedback(
+            validated.get("computation_feedback"),
+            validated["computational_citations"],
+            _computation_citation_targets(context),
+            next_question=validated["next_question"],
+            assessment=validated["assessment"],
+        )
         supplied = {
             (item.get("strategy_id"), item.get("artifact_id"))
             for item in context.get("other_strategy_evidence", [])
@@ -4016,7 +4050,13 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         else:
             context["investigator_output"] = pending
     if packet:
-        context["approved_continuation"] = packet
+        from sigma.continuations import compact_dispatch_packet
+
+        context["approved_continuation"] = (
+            compact_dispatch_packet(packet)
+            if record.get("research_context_version", 1) >= 2
+            else packet
+        )
         context["context_manifest"]["sources"].append(
             {
                 "category": "approved_continuation",

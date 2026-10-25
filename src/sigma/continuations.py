@@ -234,3 +234,77 @@ def approved_packets(
                 )
         result[strategy.id] = record
     return result
+
+
+def compact_dispatch_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    """Lossless exact-text interning, never semantic selection or truncation.
+
+    Full approved artifacts remain in the session. Only identical long strings
+    repeated in the dispatched packet use aliases. Every source/status/objection
+    remains reconstructable; an alias is not a verified assertion.
+    """
+    from collections import Counter
+
+    counts: Counter[str] = Counter()
+
+    def count(value):
+        if isinstance(value, str) and len(value) >= 120:
+            counts[value] += 1
+        elif isinstance(value, dict):
+            if "$sigma_text" in value or "dispatch_text_pool" in value:
+                raise ProjectError("Reserved text-pool key in approved evidence; inspect source")
+            for child in value.values():
+                count(child)
+        elif isinstance(value, list):
+            for child in value:
+                count(child)
+
+    count(packet)
+    names = {
+        value: f"T{index + 1}" for index, (value, copies) in enumerate(counts.items()) if copies > 1
+    }
+
+    def encode(value):
+        if isinstance(value, str) and value in names:
+            return {"$sigma_text": names[value]}
+        if isinstance(value, dict):
+            return {key: encode(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [encode(child) for child in value]
+        return value
+
+    encoded = encode(packet)
+    encoded["dispatch_text_pool"] = {name: value for value, name in names.items()}
+    encoded["dispatch_encoding"] = "exact-text-pool-v1"
+    # Alias path overhead can exceed the savings for small packets. Keep the
+    # original unchanged rather than spending more context on an optimization.
+    if len(json.dumps(encoded, ensure_ascii=False)) >= len(json.dumps(packet, ensure_ascii=False)):
+        return packet
+    return encoded
+
+
+def expand_dispatch_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    """For inspection/tests: reconstruct the exact immutable approved packet."""
+    if packet.get("dispatch_encoding") != "exact-text-pool-v1":
+        return packet
+    texts = packet.get("dispatch_text_pool", {})
+
+    def decode(value):
+        if isinstance(value, dict) and set(value) == {"$sigma_text"}:
+            name = value["$sigma_text"]
+            if name not in texts or not isinstance(texts[name], str):
+                raise ProjectError("Continuation text reference is unavailable")
+            return texts[name]
+        if isinstance(value, dict):
+            return {key: decode(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [decode(child) for child in value]
+        return value
+
+    return decode(
+        {
+            key: value
+            for key, value in packet.items()
+            if key not in {"dispatch_encoding", "dispatch_text_pool"}
+        }
+    )
