@@ -4,16 +4,17 @@ No program from the provider is evaluated on the host. Oracles are independent.
 
 import hashlib
 import json
+import os
 from collections import Counter
 from copy import deepcopy
 from itertools import combinations, permutations
 from pathlib import Path
 
-from sigma.continuations import expand_dispatch_packet
+from sigma.continuations import compact_dispatch_packet, expand_dispatch_packet
 from sigma.research_sessions import _outcome_conclusion
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "docs/evaluations/increment_4"
+OUT = Path(os.environ.get("SIGMA_COMPUTATION_OUTPUT_DIR", ROOT / "docs/evaluations/increment_4"))
 EXP = OUT / "exports"
 m = json.loads((EXP / "MANIFEST.json").read_text())
 captures = [
@@ -99,6 +100,16 @@ for project in m["projects"]:
         if run["mode"] == "withheld":
             assert saved == [] and all(r["observed_execution_id"] is None for r in calls)
         for execution in saved:
+            if OUT.name == "increment_5":
+                origin = execution.get("agent")
+                assert origin and origin["role"] == "investigator", execution
+                assert origin["model"] == session["model"]
+                assert any(
+                    step["id"] == origin["step_id"]
+                    and step["role"] == "investigator"
+                    and step["strategy_id"] == run["strategy_id"]
+                    for step in session["steps"]
+                ), execution
             assert (
                 hashlib.sha256(execution["source"].encode()).hexdigest()
                 == execution["source_sha256"]
@@ -166,18 +177,22 @@ for project in m["projects"]:
                 expanded = expand_dispatch_packet(packet)
                 assert expanded == session["approved_continuations"][step["strategy_id"]]
                 baseline = deepcopy(context)
-                baseline["approved_continuation"] = expanded
+                if OUT.name == "increment_5":
+                    assert packet == expanded and "dispatch_text_pool" not in packet
+                    baseline["approved_continuation"] = compact_dispatch_packet(packet)
+                else:
+                    baseline["approved_continuation"] = expanded
                 profiles.append(
                     {
                         "session_id": session["id"],
                         "step_id": step["id"],
                         "actual_dispatch_bytes": len(body["input"].encode()),
-                        "exact_expanded_baseline_bytes": len(
+                        "paired_alternative_encoding_bytes": len(
                             json.dumps(baseline, ensure_ascii=False).encode()
                         ),
                         "selected_source_ids": [s["artifact_id"] for s in packet["sources"]],
                         "full_source_coverage": True,
-                        "measurement": "Actual dispatched encoding vs deterministic exact-expansion baseline of same context; baseline is NOT a separate provider call.",
+                        "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call.",
                     }
                 )
             feedback = (step.get("output") or {}).get("computation_feedback")
@@ -263,7 +278,7 @@ result = {
 (OUT / "context-budget.json").write_text(
     json.dumps(
         {
-            "scope": "Paired deterministic encoding/render baseline; actual dispatched calls and actual new Conclusions on the other side. Exact text expansion and all selected sources verified. No semantic source selection or truncation.",
+            "scope": "Paired deterministic encoding/render baseline; actual dispatched calls and actual new Conclusions on the other side. Increment 5 dispatches full literal text; compact pooling is an untested hypothetical alternative. Exact reconstruction and all selected sources verified. No semantic source selection or truncation.",
             "contexts": profiles,
             "summaries": [
                 {

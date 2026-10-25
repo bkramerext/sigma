@@ -3949,8 +3949,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         ),
         "prior_session_artifact_ids": prior_session_artifact_ids,
         "prior_session_findings_omitted": record.get("prior_session_findings_omitted", 0),
-        "prior_session_findings_omitted_source_ids": record.get(
-            "prior_session_findings_omitted_source_ids", []
+        "prior_session_findings_omitted_source_ids": (
+            [] if packet else record.get("prior_session_findings_omitted_source_ids", [])
         ),
         "prior_session_failures": prior_session_failures,
         "prior_session_failures_omitted": prior_session_failures_omitted,
@@ -4004,7 +4004,11 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     manifest["omitted_prior_session_findings"] = {
         "count": context["prior_session_findings_omitted"],
         "source_ids": context["prior_session_findings_omitted_source_ids"],
-        "reason": "lower priority than selected material findings or the fixed prior-session count/byte bound",
+        "reason": (
+            "unapproved optional prior sources are not transferred into this approved continuation; saved session history retains their IDs"
+            if packet
+            else "lower priority than selected material findings or the fixed prior-session count/byte bound"
+        ),
     }
     manifest["omitted_prior_session_obligations"] = {
         "count": relevant_omission_count,
@@ -4070,8 +4074,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
 
         context["approved_continuation"] = (
             compact_dispatch_packet(packet)
-            if record.get("research_context_version", 1) >= 2
-            and EXPERIMENTAL_EXACT_TEXT_POOL
+            if record.get("research_context_version", 1) >= 2 and EXPERIMENTAL_EXACT_TEXT_POOL
             else packet
         )
         context["context_manifest"]["sources"].append(
@@ -5182,6 +5185,7 @@ def _portfolio_context(
     context["other_strategy_evidence"] = [
         {
             "artifact_id": artifact["id"],
+            "approval_status": "peer_work_not_researcher_approved_transfer",
             "sequence": artifact["sequence"],
             "strategy_id": artifact["strategy_id"],
             "source_session_id": artifact.get("session_id"),
@@ -5247,7 +5251,12 @@ def _portfolio_context(
             if isinstance(item, dict)
         }
         context["peer_handoffs"] = [
-            {**item, "retracted": item.get("handoff_id") in withdrawn} for item in handoffs
+            {
+                **item,
+                "retracted": item.get("handoff_id") in withdrawn,
+                "approval_status": "agent_handoff_not_researcher_approved_transfer",
+            }
+            for item in handoffs
         ]
         handoff_group = _manifest_source_group(
             "peer_handoff",

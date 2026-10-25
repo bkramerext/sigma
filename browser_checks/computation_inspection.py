@@ -10,12 +10,13 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "docs/evaluations/increment_4"
+OUT = Path(os.environ.get("SIGMA_COMPUTATION_OUTPUT_DIR", ROOT / "docs/evaluations/increment_4"))
 manifest = json.loads((OUT / "exports/MANIFEST.json").read_text())
 scratch = Path(tempfile.mkdtemp(prefix="sigma-continuation-inspection-"))
 
@@ -95,6 +96,7 @@ ui = subprocess.Popen(
     stderr=subprocess.STDOUT,
 )
 observations = []
+checked_projects = set()
 try:
     ready(api_url + "/openapi.json", api)
     ready(ui_url, ui)
@@ -116,6 +118,24 @@ try:
                 )
             ),
         )
+        # Set both isolated project copies to Simple through the UI. The later
+        # subset change must not change the graph project's saved preference.
+        for project in manifest["projects"]:
+            page.goto(ui_url + "/")
+            page.get_by_role("button", name="Open", exact=True).click()
+            setup = page.get_by_role("dialog", name="Open Project")
+            setup.get_by_label("Project directory").fill(project["path"])
+            setup.get_by_role("button", name="Open Project", exact=True).click()
+            page.locator(".sessions-pane li[data-session-id]").first.wait_for()
+            if page.locator(".outcome-advanced").count():
+                page.get_by_role("button", name="Project settings", exact=True).click()
+                settings_dialog = page.get_by_role("dialog", name="Settings")
+                settings_dialog.get_by_role("tab", name="Preferences").click()
+                settings_dialog.get_by_role(
+                    "checkbox", name="Show advanced Outcome details"
+                ).uncheck()
+                settings_dialog.get_by_role("button", name="Save", exact=True).click()
+            expect(page.locator(".outcome-advanced")).to_have_count(0)
         for run in manifest["runs"]:
             if run["mode"] not in {"actual", "error", "timeout", "sage", "restart"}:
                 continue
@@ -127,6 +147,51 @@ try:
             dialog.get_by_label("Project directory").fill(project["path"])
             dialog.get_by_role("button", name="Open Project", exact=True).click()
             page.locator(".current-understanding").wait_for()
+            row = page.locator(f'[data-session-id="{run["session_id"]}"]')
+            row.wait_for()
+            first_project_open = project["project_id"] not in checked_projects
+            if first_project_open:
+                if run["scenario"] == "subset":
+                    old_audit = json.loads((OUT / "exports/subset.before.audit.json").read_text())
+                    old_id = old_audit["research_sessions"][0]["id"]
+                    historical = page.locator(f'[data-session-id="{old_id}"]')
+                    if (
+                        historical.locator(".session-row-disclosure").get_attribute("aria-expanded")
+                        != "true"
+                    ):
+                        historical.locator(".session-row-disclosure").click()
+                    expect(historical.locator(".outcome-simple")).to_contain_text(
+                        "Historical session summary"
+                    )
+                    assert (
+                        "No Conclusion was saved"
+                        not in historical.locator(".outcome-simple").inner_text()
+                    )
+                checked_projects.add(project["project_id"])
+            if row.locator(".session-row-disclosure").get_attribute("aria-expanded") != "true":
+                row.locator(".session-row-disclosure").click()
+            if first_project_open:
+                expect(row.locator(".outcome-simple")).to_be_visible()
+            if row.locator(".outcome-simple").count():
+                simple = row.locator(".outcome-simple")
+                assert simple.is_visible()
+                assert "Verification:" in simple.inner_text()
+                assert (
+                    simple.locator(".outcome-summary-kicker").text_content().strip() == "Conclusion"
+                )
+                assert len(simple.locator(".outcome-summary-text > p").first.inner_text()) <= 902
+                assert row.locator(".continuation-evidence").count() == 0
+                settings = page.get_by_role("button", name="Project settings", exact=True)
+                settings.click()
+                preferences = page.get_by_role("dialog", name="Settings")
+                preferences.get_by_role("tab", name="Preferences").click()
+                preferences.get_by_role("checkbox", name="Show advanced Outcome details").check()
+                preferences.get_by_role("button", name="Save", exact=True).click()
+                expect(row.locator(".outcome-advanced")).to_be_visible()
+                if run["scenario"] == "subset":
+                    expect(historical.locator(".outcome-conclusion")).to_contain_text(
+                        "Historical session summary"
+                    )
             for width in [1440, 390, 320]:
                 page.set_viewport_size({"width": width, "height": 1000 if width == 1440 else 844})
                 page.reload()
@@ -135,6 +200,43 @@ try:
                 toggle = row.locator(".session-row-disclosure")
                 if toggle.get_attribute("aria-expanded") != "true":
                     toggle.click()
+                assert row.locator(".outcome-advanced").is_visible()
+                assert row.locator(".outcome-conclusion").is_visible()
+                assert row.locator(".sigma-render-toggle .markdown-logo").first.is_visible()
+                inherited = row.locator(".continuation-evidence")
+                if inherited.count():
+                    assert inherited.get_attribute("open") is None
+                    inherited.locator(":scope > summary").click()
+                    assert inherited.get_by_role(
+                        "button", name="Approved source", exact=False
+                    ).first.is_visible()
+                    if width == 1440:
+                        after_audit = json.loads(
+                            (
+                                OUT
+                                / "exports"
+                                / (
+                                    "subset.after.audit.json"
+                                    if run["scenario"] == "subset"
+                                    else "algorithm.after.audit.json"
+                                )
+                            ).read_text()
+                        )
+                        saved_session = next(
+                            item
+                            for item in after_audit["research_sessions"]
+                            if item["id"] == run["session_id"]
+                        )
+                        first_packet = next(iter(saved_session["approved_continuations"].values()))
+                        source_session_id = first_packet["sources"][0]["source"]["session_id"]
+                        inherited.get_by_role(
+                            "button", name="Approved source", exact=False
+                        ).first.click()
+                        expect(
+                            page.locator(
+                                f'[data-session-id="{source_session_id}"] .session-row-disclosure'
+                            )
+                        ).to_have_attribute("aria-expanded", "true")
                 evidence = row.locator(".outcome-evidence-subsection")
                 if evidence.get_attribute("open") is None:
                     evidence.locator(":scope > summary").click()
@@ -155,6 +257,28 @@ try:
                     "node => node.scrollIntoView({block: 'start'})"
                 )
                 page.screenshot(path=str(OUT / f"{slug}-execution-{width}.png"))
+                if slug == "subset-actual" and width == 1440:
+                    conclusion = row.locator(".outcome-conclusion")
+                    conclusion.get_by_role("button", name="Render Conclusion as Markdown").click()
+                    expect(conclusion.locator(".outcome-markdown h3").first).to_contain_text(
+                        "Partial finding"
+                    )
+                if slug == "subset-actual" and width in {390, 320}:
+                    page.get_by_role("button", name="Project settings", exact=True).click()
+                    settings_dialog = page.get_by_role("dialog", name="Settings")
+                    expect(settings_dialog).to_be_visible()
+                    bounds = settings_dialog.bounding_box()
+                    assert (
+                        bounds and bounds["x"] >= -1 and bounds["x"] + bounds["width"] <= width + 1
+                    ), bounds
+                    settings_dialog.get_by_role("tab", name="Preferences").click()
+                    expect(
+                        settings_dialog.get_by_role(
+                            "checkbox", name="Show advanced Outcome details"
+                        )
+                    ).to_be_checked()
+                    page.screenshot(path=str(OUT / f"settings-preferences-{width}.png"))
+                    settings_dialog.get_by_role("button", name="Cancel", exact=True).click()
                 observations.append(
                     {
                         "case": slug,
@@ -169,8 +293,19 @@ try:
                     }
                 )
         assert not errors, errors
-
         browser.close()
+    for project in manifest["projects"]:
+        prefix = "subset" if project["slug"] == "nonconsecutive-subset-sums" else "algorithm"
+        with urlopen(
+            api_url + "/api/projects/export?" + urlencode({"path": project["path"]}),
+            timeout=25,
+        ) as response:
+            final_raw = response.read()
+        final_audit = json.loads(final_raw)
+        prior_audit = json.loads((OUT / "exports" / f"{prefix}.after.audit.json").read_text())
+        assert final_audit["research_sessions"] == prior_audit["research_sessions"]
+        assert final_audit["project"]["show_advanced_outcome_details"] is True
+        (OUT / "exports" / f"{prefix}.browser-final.audit.json").write_bytes(final_raw)
     (OUT / "inspection-observations.json").write_text(
         json.dumps(
             {

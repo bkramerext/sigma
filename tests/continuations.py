@@ -129,28 +129,42 @@ def main():
         assert packet["question"] == new.approach
         # Real context builder receives cross-strategy originals and exact IDs.
         dispatch_record = {
-                "id": "context-test",
-                "project_path": path,
-                "project_id": view.project.id,
-                "strategy_id": new.id,
-                "strategy_title": new.title,
-                "strategy_text": new.approach,
-                "problem": view.project.problem,
-                "current_question": new.approach,
-                "artifacts": [],
-                "steps": [],
-                "prior_session_findings": [
-                    {"id": "unselected-parent-artifact", "strategy_id": parent.id, "claim_or_question": "This was only available, not approved."},
-                    {"id": "own-previous-artifact", "strategy_id": new.id, "claim_or_question": "Own prior attempt remains available."},
-                ],
-                "prior_session_failures": [],
-                "approved_continuations": packets,
-                "research_context_version": 2,
-            }
+            "id": "context-test",
+            "project_path": path,
+            "project_id": view.project.id,
+            "strategy_id": new.id,
+            "strategy_title": new.title,
+            "strategy_text": new.approach,
+            "problem": view.project.problem,
+            "current_question": new.approach,
+            "artifacts": [],
+            "steps": [],
+            "prior_session_findings": [
+                {
+                    "id": "unselected-parent-artifact",
+                    "strategy_id": parent.id,
+                    "claim_or_question": "This was only available, not approved.",
+                },
+                {
+                    "id": "own-previous-artifact",
+                    "strategy_id": new.id,
+                    "claim_or_question": "Own prior attempt remains available.",
+                },
+            ],
+            "prior_session_failures": [],
+            "prior_session_findings_omitted": 1,
+            "prior_session_findings_omitted_source_ids": ["unselected-parent-omitted-artifact"],
+            "approved_continuations": packets,
+            "research_context_version": 2,
+        }
         context = _agent_context(dispatch_record, "investigator", 1)
         assert context["approved_continuation"] == packet
-        assert set(context["prior_session_artifact_ids"]) == set(mandatory + [gap, "own-previous-artifact"])
+        assert set(context["prior_session_artifact_ids"]) == set(
+            mandatory + [gap, "own-previous-artifact"]
+        )
         assert "unselected-parent-artifact" not in json.dumps(context)
+        assert "unselected-parent-omitted-artifact" not in json.dumps(context)
+        assert context["context_manifest"]["omitted_prior_session_findings"]["count"] == 1
         with patch.object(engine, "EXPERIMENTAL_EXACT_TEXT_POOL", True):
             pooled_context = _agent_context(dispatch_record, "investigator", 1)
         assert pooled_context["approved_continuation"] != packet

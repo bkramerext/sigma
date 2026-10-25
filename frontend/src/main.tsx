@@ -136,6 +136,15 @@ function researchConclusionMarkdown(session: ResearchSession): string {
   return session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
 }
 
+function simpleOutcomeLead(session: ResearchSession): { text: string; shortened: boolean } {
+  const saved = (session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.').trim();
+  const firstSection = session.outcome.conclusion ? saved.split(/\n(?=#{2,6}\s)/, 2)[0] : saved;
+  const lead = firstSection.replace(/^#{2,6}\s+[^\n]+\n+/, '').trim() || session.outcome.summary || saved;
+  if (lead.length <= 900) return { text: lead, shortened: firstSection.length < saved.length };
+  const boundary = lead.lastIndexOf(' ', 900);
+  return { text: `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`, shortened: true };
+}
+
 function researchReasoningMarkdown(session: ResearchSession): string {
   const review = session.outcome.solution_review;
   if (!review) return 'No structured reasoning or proof review was saved for this session.';
@@ -346,6 +355,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const historicalSummary = !session.outcome.conclusion && !['queued', 'running', 'paused'].includes(session.status);
   const resultLabel = session.outcome.conclusion ? 'Conclusion' : historicalSummary ? 'Historical session summary' : 'Session summary';
   const resultText = session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
+  const simpleResult = simpleOutcomeLead(session);
   const verificationLabel = review?.verification_status === 'verified' ? 'Verified in the session record' : review?.verification_status === 'convincing_unverified' ? 'Convincing but unverified' : review?.verification_status === 'incomplete' ? 'Evidence incomplete' : 'Not independently verified';
   const qualificationItems = [...new Set([...(session.outcome.caveats ?? []), ...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? [])])];
   const metricSources = session.outcome.metrics?.sources;
@@ -393,7 +403,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
-          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={session.outcome.conclusion || researchOutcomeMarkdown(session)}/></Suspense></div> : <p>{resultText}</p>}
+          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult.text}</p>}><RenderedMarkdown body={simpleResult.text}/></Suspense></div> : <p>{simpleResult.text}</p>}
+          {simpleResult.shortened && <small>Opening excerpt from the saved {session.outcome.conclusion ? 'Conclusion' : 'summary'}; the full text is in Advanced Outcome.</small>}
           {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
           <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
         </div>
