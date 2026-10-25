@@ -1,0 +1,53 @@
+"""Offline adversarial regression for Increment 14 protocol and answer-key integrity."""
+import importlib.util
+import json
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("protocol14", ROOT / "scripts/increment14_protocol.py")
+assert spec is not None and spec.loader is not None
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+data = module.validate()
+assert len(data["tasks"]) == 6
+manifest1 = module.manifest(140017, 1)
+manifest2 = module.manifest(140017, 1)
+assert manifest1 == manifest2
+assert manifest1["paired_runs"] == 12 and manifest1["total_arm_runs"] == 24
+assert not manifest1["user_approved"] and not manifest1["freeze_approved"]
+assert len({(x["task_id"], x["variant"], x["replicate"]) for x in manifest1["pairs"]}) == 12
+assert len({x["packet_sha256"] for x in manifest1["pairs"]}) == 12
+assert module.manifest(140018, 1)["pairs"] != manifest1["pairs"]
+assert module.manifest(140017, 2)["total_arm_runs"] == 48
+for entry in manifest1["pairs"]:
+    assert sorted(entry["execution_order"]) == ["A", "B"]
+assert "evaluator" not in json.dumps(data).lower()
+
+# Independently verify the graph fixture: all degrees 3, no 3- or 4-cycles.
+nodes = [("a", i) for i in range(5)] + [("b", i) for i in range(5)]
+adj = {n: set() for n in nodes}
+def edge(u, v):
+    adj[u].add(v)
+    adj[v].add(u)
+for i in range(5):
+    edge(("a", i), ("a", (i+1)%5))
+    edge(("a", i), ("b", i))
+    edge(("b", i), ("b", (i+2)%5))
+assert all(len(adj[n]) == 3 for n in nodes)
+for a in nodes:
+    for b in adj[a]:
+        for c in adj[b] - {a}:
+            assert a not in adj[c]
+            for d in adj[c] - {a,b}:
+                assert a not in adj[d]
+
+# Independently verify the deficient matching subset.
+compat = {"T1":{"A","B"}, "T2":{"A","B"}, "T3":{"A","B"},
+          "T4":{"C","D","E"}, "T5":{"C","D","E"}}
+assert len(set.union(*(compat[k] for k in ("T1","T2","T3")))) == 2
+assert sum([60,50]) == 110
+assert max(60,50) < 110
+
+print("Increment 14 adversarial offline checks passed")
