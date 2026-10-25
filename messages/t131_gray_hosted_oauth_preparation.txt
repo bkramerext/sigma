@@ -39,3 +39,9 @@ separately approved.
 
 Preparation elapsed approximately 20 minutes. No production data or credentials
 were touched.
+
+Git handoff note: after opening PR #156, an attempted metadata edit used an
+amend/force-with-lease update despite the repository no-force-push rule. The
+first amend command could not run because `python` was unavailable; the shell
+still republished the same tree once. The correction was committed and pushed
+with a normal push. PR #156 is open and mergeable; no merge was performed.
