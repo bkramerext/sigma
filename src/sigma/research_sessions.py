@@ -2676,6 +2676,77 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
             "outcome_conclusion_version",
         }
     }
+    message = str(record.get("message", "")).lower()
+    show_next_step = record.get("status") in {"paused", "stopped", "failed"} or (
+        record.get("status") == "ended"
+        and any(word in message for word in ("limit", "duration", "cost", "budget"))
+    )
+    if show_next_step:
+        if record.get("status") == "failed":
+            result["next_step_guidance"] = (
+                "Review the saved activity and confirm provider usage or billing before continuing. "
+                "If more research is needed, start a new session with settings and spending limits "
+                "you approve; do not assume another attempt is free or safe."
+            )
+        elif any(
+            step.get("status") == "interrupted"
+            for step in record.get("steps", [])
+            if isinstance(step, dict)
+        ):
+            result["next_step_guidance"] = (
+                "Inspect the interrupted attempt and check provider usage or billing first. "
+                "If you resume, SIGMA continues with new work and does not replay that attempt."
+            )
+        elif "backend restarted" in message:
+            result["next_step_guidance"] = (
+                "Review the saved call statuses. No provider request was recorded in flight; "
+                "resume when you are ready for new provider work."
+            )
+        elif "paused by user" in message:
+            result["next_step_guidance"] = (
+                "Resume when you are ready for new provider work. Check usage or billing for any "
+                "request that was already dispatched."
+            )
+        elif "project or strategy changed" in message:
+            result["next_step_guidance"] = (
+                "Review the project and enable the session's saved strategies again if needed; "
+                "then resume. No new call was made after this guard detected the change."
+            )
+        elif "account or billing identity changed" in message:
+            result["next_step_guidance"] = (
+                "Restore the intended AI account and billing identity, then resume. No new call "
+                "was made after this check detected the change."
+            )
+        elif "model" in message and ("available" in message or "selected" in message):
+            result["next_step_guidance"] = (
+                "Check the selected model and provider configuration. If they cannot be restored, "
+                "start a new session with reviewed settings; saved notes remain available."
+            )
+        elif "context" in message or "storage" in message:
+            result["next_step_guidance"] = (
+                "Review the saved notes and the context or storage limit named above. Resolve that "
+                "limit before resuming; existing records were retained."
+            )
+        elif "duration" in message or "time limit" in message:
+            result["next_step_guidance"] = (
+                "Review the saved notes. If more research is needed, start a new session with a "
+                "duration limit you have reviewed; existing notes remain available."
+            )
+        elif "call limit" in message or "budget exhausted" in message or "call budget" in message:
+            result["next_step_guidance"] = (
+                "Review recorded calls and findings. For more research, start a new session with "
+                "a call limit and provider spend you have reviewed and approved."
+            )
+        elif "cost" in message or "limit" in message or "budget" in message:
+            result["next_step_guidance"] = (
+                "Review recorded calls and the cost estimate. Change a spending limit only if you "
+                "approve the additional provider work, then resume."
+            )
+        else:
+            result["next_step_guidance"] = (
+                "Review the saved session activity and provider usage before resuming. Resuming "
+                "may start new provider work and can consume allowance or incur charges."
+            )
     if isinstance(record.get("steps"), list):
         result["steps"] = [dict(step) for step in record["steps"] if isinstance(step, dict)]
         for step in result["steps"]:
@@ -2745,9 +2816,6 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
             return record
         record["status"] = "paused"
         record["updated_at"] = _now()
-        record["message"] = (
-            "Backend restarted before the session completed. In-flight provider calls are interrupted and will not be retried automatically."
-        )
         for step in record.get("steps", []):
             if step.get("status") == "running":
                 if (
@@ -2784,6 +2852,14 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
                 step["attempt_status"] = "unknown"
                 step["finished_at"] = _now()
                 _record_guidance_interruption(record, step, "interrupted")
+        interrupted_on_restart = any(
+            step.get("interruption_reason") == "backend_restart" for step in record.get("steps", [])
+        )
+        record["message"] = (
+            "Backend restarted before the session completed. At least one dispatched provider call has unknown completion or billing status and will not be retried automatically."
+            if interrupted_on_restart
+            else "Backend restarted before the session completed. No provider request was recorded in flight."
+        )
         record["current_step"] = None
         record["current_steps"] = []
         for branch in record.get("strategy_runs", []):
@@ -2813,6 +2889,41 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
 
 def list_sessions(path: str) -> list[dict[str, Any]]:
     return [_public(_recover(item)) for item in _all(path)]
+
+
+def has_active_session(path: str) -> bool:
+    """Read-only Home status: never restart a worker or rewrite research history.
+
+    A persisted running state without an active worker is stale after a crash.
+    An advisory worker lock identifies live local jobs. Cloud queued jobs are
+    durable and remain eligible for dispatch after reconnect.
+    """
+    records, _unavailable = read_session_snapshot(path)
+    directory = Path(project_path(path)) / "research-sessions"
+    for record in records:
+        status = record.get("status")
+        if status not in {"queued", "running"}:
+            continue
+        task = _tasks.get(record["id"])
+        if task is not None and not task.done():
+            return True
+        if status == "queued" and cloud_workspaces.enabled():
+            return True
+        lock_path = directory / f"{record['id']}.worker.lock"
+        try:
+            fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            continue
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+    return False
 
 
 async def ensure_queued_workers(path: str) -> None:

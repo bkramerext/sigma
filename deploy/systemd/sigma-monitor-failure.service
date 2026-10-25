@@ -1,0 +1,6 @@
+[Unit]
+Description=Record SIGMA monitoring failure in the system journal
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p daemon.crit -t sigma-monitor "SIGMA host monitoring failed; inspect sigma-monitor.service journal for per-check diagnostics"

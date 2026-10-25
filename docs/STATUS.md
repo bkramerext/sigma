@@ -100,6 +100,80 @@ authenticated route; the older plain-text route remains available. Real Chrome
 collapsed/expanded layout and action visibility, metadata/remove alignment,
 mobile layout, and confirmed deletion checks against a fresh local fixture.
 
+## T136 monitoring and recovery preparation (2026-10-25)
+
+On branch `gray/t136-cloud-ops-recovery`, based on current `main` at
+`690fff6`, added an independent read-only 15-minute systemd host monitor and
+installer without changing Red's host/application units. It requires the exact
+`/srv/sigma-state` mount and verifies the mounted block device resolves to
+`google-sigma-state` before reading capacity. It detects low free space/inodes,
+failed dependencies and unhealthy Compose containers, backup failure/staleness,
+missing last-success READY snapshots, and fewer than 14 managed READY points.
+Failures include safe actionable details in the local journal and a critical
+journal event; no remote alert path is configured. Added a guarded release
+rollback helper requiring explicit verified-backup and schema-compatibility
+assertions; it changes only `SIGMA_RELEASE`, keeps volumes/state untouched, and
+restarts the prior release when candidate preflight/start/health checks fail.
+
+Updated the operator runbook with install/diagnosis, reboot validation,
+reservation semantics, rollback requirements, failure limitations and live
+acceptance gaps. T136 status remains **offline preparation only**. The hosted
+reboot/restart test, actual disk thresholds and identity, production monitoring
+timer, external alerting, 14-point snapshot inventory, HTTPS/app checks and
+compatible code rollback have not been exercised. No GCP resources, snapshots,
+IAM, production state or live services were touched. No browser check applies to
+this infrastructure-only change.
+
+Validation: `./sigma test` passed all offline scenarios, Ruff, format, Pyright
+(0 diagnostics), frontend typecheck and build. The focused monitor suite passed
+8 cases during that full run and passed 9 cases in the final focused rerun;
+shell syntax and `git diff --check` passed. `systemd-analyze` is unavailable on
+this macOS host, so unit verification is pending on Ubuntu/GCE. Starlette/httpx
+deprecation warnings are pre-existing. Actual hosted acceptance must still
+verify monitor installation, READY retention, reboot recovery, auth/workspace/
+artifact/accounting continuity, rollback compatibility and approved alert
+routing. Coordinator handoff and dependencies are in the linked T136 message
+file and PR.
+
+## T135 backup and restore preparation (2026-10-25)
+
+On branch `gray/t135-cloud-backup-restore` based on `origin/main` at
+`ffb008f`, implemented an application-consistent daily GCE state-disk snapshot
+service and persistent UTC timer. The service stops `sigma.service`, confirms
+no SIGMA Compose containers remain, verifies the mounted filesystem resolves
+to the configured GCE block device, syncs the mounted disk, waits for a new
+snapshot to become `READY`, and only then applies retention (minimum 14 ready
+recovery points). It writes success/failure markers, leaves failures visible
+through systemd/journald, and restarts the app if it was active before the job.
+`./sigma test` now runs eight offline backup/restore tests.
+
+The read-only restore checker validates integrity and required tables for auth,
+workspace-mapping and accounting SQLite files; saved identity/workspace mapping;
+private SQLite/workspace ownership and modes; one-to-one workspace directories;
+project JSON; artifact presence; and saved
+paper TeX/PDF size and SHA-256. It checks ledger workspace references and
+foreign keys, and reports reserved/unknown calls without rewriting state.
+Exact host setup, backup, separate-disk restore, verification and troubleshooting
+steps are in [Operations Runbook](OPERATION_RUNBOOK.md#5-daily-state-disk-backup).
+
+Validation passed: `uv run python tests/state_backup.py` (8 tests), shell
+syntax for both backup scripts, Python compilation, Ruff check/format, Pyright
+(0 diagnostics), frontend typecheck/build, `git diff --check`, and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all steps passed).
+This macOS checkout does not include `systemd-analyze`; unit validation on
+Ubuntu remains pending. No GCP command, resource, IAM change, snapshot, live
+restore, or production data was touched. No browser UI changed, so no browser
+check was applicable.
+
+Hosted acceptance remains blocked on T127/T129 disk and service availability,
+owner-approved least-privilege snapshot IAM, proof that app containers cannot
+access the snapshot-capable GCE identity through metadata, and a separate
+isolated recovery host/disk. Snapshot scheduling and successful creation alone
+do not establish recoverability. Preparation took approximately 30 minutes;
+commit and PR details are recorded in the handoff.
+Review PR: [#142](https://github.com/bkramerext/sigma/pull/142); implementation
+commit at handoff: `ac1a59422ecf104791cd77f8b2ad0cabc2750412`.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored
@@ -245,6 +319,83 @@ Elapsed worker time was approximately 40 minutes through PR-ready handoff.
 The focused change is on `blue/increment-18-hosted-research`; see
 [`messages/i18_blue_r4r.md`](../messages/i18_blue_r4r.md) for exact commands,
 scope and outstanding acceptance.
+
+## Issue 117 — Release safety and test reliability (2026-10-25)
+
+Fixed the Ubuntu host-installer test hazard by extracting the non-mutative
+Ubuntu 24.04 identity guard into `deploy/gce_host_guard.sh`. Regression tests
+exercise quoted and unquoted Ubuntu IDs, Debian and Fedora, and statically
+verify the installer guard precedes package and filesystem operations. No test
+invokes the installer. The separate preflight exit-code report was traced to
+the test asserting `BLOCKED`/2 on a matching Ubuntu host with failed service
+checks; a controlled Ubuntu fixture confirms those results correctly report
+`FAIL`/1, while a Debian fixture reports `BLOCKED`/2.
+
+The recurring mocked `stop_servers` failure reproduced with the shell's
+exported `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` and passed when it was unset. The
+UI lifecycle test now clears that value and the paired OAuth settings in its
+test context. `sigma test` now runs all approved offline checks after ordinary
+failures, prints a complete failed-step summary, returns nonzero, skips the
+offline artifact writer and frontend build after an earlier failure, and
+rejects commands outside the known check set. `setup` remains fail-fast.
+
+Expanded Ruff lint to `deploy/`, `browser_checks/`, `scripts/`, and
+`docs/evaluations/`; it found and fixed import ordering, an unused import, a
+credential-prefix check, a keyword-built dictionary, and non-executable
+shebangs (13 findings in the audited paths). Format checks now include
+deployment and support scripts: 105 files passed at the initial audit. After
+syncing current main, the gate also covers the new Increment 17 audit script
+and current-main readiness script; 107 files now pass. The audit found 20
+files that
+Ruff would reformat across the broader support paths; the six offline
+evaluation/support scripts are formatted, while 13 legacy browser checks and
+one evaluation exporter remain lint-gated without bulk formatting churn. CI is
+pinned to Ubuntu 24.04 and runs host-safety and environment isolation checks
+before the full suite.
+
+After the initial branch was created, main advanced through PR #122 to
+`cf7dcb024996b95a0913c75438c6d17c4c065299`, then through PR #112 to
+`f5388d8`, and through PRs #123/#126 to `f73a749`. All four updates were merged into the T117 branch, preserving Green's
+frontend changes. The PR #122 deterministic CLI-level BLOCKED test remains
+alongside the Ubuntu FAIL/1 fixture. CI run #431 exposed that the newly merged
+Increment 17 audit script had an invalid shebang for its non-executable mode
+and needed Ruff formatting. Removed the stale shebang and formatted that file;
+its direct offline invocation reported the expected quality-gate result and
+zero new paid calls. CI also caught an executable bit on current-main
+`scripts/increment15_readiness.py` without a shebang. Removed that bit because
+the workflow invokes it with Python. Both were narrow quality-gate fixes with
+no logic changes. The synchronized branch full local suite passed, including
+Ruff over 107 files, Pyright, frontend typecheck and production build. Ubuntu Actions run #443 passed on final code head `48be67f`, including the
+focused safety/lifecycle checks and full repository verification. Elapsed time
+through final CI completion was approximately 45 minutes. Actual Ubuntu package
+installation, systemd setup, rootless Docker, and installer execution remain
+unverified and were not attempted.
+
+Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
+scenarios, expanded Ruff lint, Ruff format, Pyright, frontend typecheck and
+production build); `tests/gce_host.py` (10 tests); `tests/tooling.py` with and
+without the inherited bootstrap variable; and `git diff --check`. The full
+suite's 24 synthetic Increment 15 records had zero model calls/cost. No
+provider calls, GCP resources, installer execution, or real-browser checks
+occurred. T117 changed no product UI; Green's main-branch UI changes remain
+present. The merge sync also took current main versions of two overlapping
+protocol scripts; those are outside the T117 diff and stay separate from the
+postponed stock-session implementation. Ubuntu host/systemd/rootless-Docker
+behavior remains limited to safe fixtures; Ubuntu CI validates regressions without running the installer or
+requiring root.
+
+Final T117 integration (2026-10-25): fetched main at `6686e6f`, which includes
+coordinator PR #132 (`a366038`) and subsequent main PR #130. Both fixture lint
+corrections are present from main: import ordering in
+`browser_checks/t47_conclusion.py` and the merged sample/recent route condition
+in `browser_checks/project_create_contract.py`; neither was reimplemented in
+T117. The current-main merge is commit `f5b5a61`. After the merge,
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff
+lint/format across 107 files, Pyright, frontend typecheck/build, and all
+scenarios. Direct `tests/gce_host.py` passed 10 tests; `tests/tooling.py`
+passed with a synthetic inherited bootstrap value and with it unset. No
+installer or infrastructure work was run. Ubuntu Actions run #461 passed on
+code head `5efdf3f` with focused host/lifecycle checks and full verification.
 
 ## Issue 114 first increment (2026-10-25)
 
@@ -4328,3 +4479,110 @@ check occurred. No project was modified or exercised, so no project export was
 created. The newcomer summary above is retained; the concurrent Green
 PR #108 also edits `STATUS.md`, so integration must preserve that summary and
 this issue record.
+
+## Round 2 Increment 19 — readable Outcomes and actionable pauses (2026-10-25)
+
+Reviewed current `main`, Green PR #97, and merged PR #108 before editing. The
+KaTeX renderer and explicit AI text-conversion path were already present on
+`main`; PR #97 remains open against an older base. Increment 19 extends the
+existing renderer for conservative bare math tokens in historical mixed prose,
+translating recognized Greek letters, operators, compact powers/subscripts, and
+simple slash fractions into KaTeX syntax only in the display projection. Code,
+links, HTML, and long underscore identifiers are left as authored prose. It
+does not rewrite saved conclusions. Simple and
+Advanced Outcome start typeset when a conclusion contains recognizable math;
+the original source remains available by toggle. Explicit AI formatting remains
+available for less regular notation and displays its warnings plus a clear
+statement that formatting is not verification.
+
+Research session projection now gives a concise safe next step for manual pause,
+failure, an interrupted dispatched call, restart without a recorded in-flight
+request, project/account/model guards, context/storage limits, cost limits, and
+ended call/duration limits. The notice sits above the Outcome narrative in both
+reader modes. Ambiguous provider calls require a usage/billing check; a resumed
+session does not replay an interrupted attempt. Existing computation provenance
+stays above the agent-authored Conclusion.
+
+Real Chrome on the archived RH-style session verified legible KaTeX in both
+default Simple and Advanced views, exact saved-source access, the copper control,
+paused cause/next action and Resume visibility, evidence ordering, and mobile
+layout. The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite,
+frontend typecheck/build, Ruff, Pyright, and `git diff --check` passed. No live
+provider request or resume action occurred. The browser used an in-memory view
+fixture; the only preserved project export is the byte-identical historical
+T17.8 SIGMA export, with fixture changes explicitly excluded in its manifest.
+
+Mathematical display is a reading aid, not a proof or verification. The
+normalizer is intentionally token-based and conservative; unusual notation can
+still use the existing explicit AI formatting path or the exact saved-source
+view. PR #97 and issues #93/#95 remain open pending coordinator review and
+acceptance; this entry does not close them.
+
+## Round 2 Increment 20 — newcomer and sample credibility review (2026-10-25)
+
+Blue reviewed the newcomer surfaces and the curated 17-sample catalog against
+the T89 audit, preserving research scope and avoiding overlap with Green's open
+T95 UI branch. The canonical sample IDs remain intact and RH remains the
+flagship.
+The sample review found no content basis for unilateral removal, consolidation,
+or substantial rewriting. It added the omitted primary 2022 RDB7 dataset citation
+to the catalysis sample without changing its problem or scope. The review
+records a per-sample credibility assessment, cross-surface wording gaps, owner
+decisions, verification, and limitations in
+[the Increment 20 review](evaluations/increment_20/domain-credibility-review.md).
+
+Real Chrome opened the existing Nonconsecutive Subset Sums sample as an
+independent copy and inspected all five mixed/unresolved saved fixture sessions,
+their evidence and report, plus desktop and mobile layouts. The Current
+Understanding and historical-session summary visibly mark the records as
+deterministic fixtures. A separate human proof note remains outside this sample
+history and is not presented as a SIGMA result. The exact project export and
+capture manifest are retained in
+[Increment 20 exports](evaluations/increment_20/exports/manifest.json). No new
+session, provider inference, or cloud operation occurred. `./sigma test` passed
+after locked frontend dependencies were installed, including lint, format,
+Pyright, typecheck, and production build. The established `about.py` browser
+check still expects the obsolete accessible label “About SIGMA”; a direct Chrome
+check using the current “About” label exposed the expanded copy's “Different
+minds” wording and absolute recoverability promise.
+
+Increment 20 first-user acceptance remains **open**: Getting Started does not
+define Project, Session, and Outcome clearly or disclose that both research
+roles use the same underlying model; About's “Different minds” wording conflicts
+with the README; and sample cards omit the problem description already supplied
+by the sample catalog API. PR #135 intentionally retains title plus
+strategy/difficulty metadata on Samples, so the coordinator must decide after
+that review whether its presentation satisfies newcomer selection. Gray/Green
+own the About/documentation implementation. The proposed warp-drive
+pathway/consolidation remains an owner decision; both sample identities remain
+preserved pending that decision.
+
+## Round 2 Increment 21 — matched-budget evaluation readiness audit (2026-10-25)
+
+Audited the T114 Revision 2 design, merged T118 protocol implementation (PR
+#123), six task packets, agent allowlist, normalizer, record auditor, offline
+pair generator and readiness gate. The protocol remains proposed, unfrozen,
+unexecuted and unauthorized; the task/answer set still needs independent
+curation, the real SIGMA and strong single-role adapters are not tested, model
+input isolation and independent grading are not established, and actual
+matched settings/cost enforcement are not verified. The current SIGMA-to-common
+artifact projection can omit citations, computation feedback, objections and
+open obligations. The audit now requires schedule-position records matching
+the randomized manifest, but cannot authenticate them against an actual runner.
+These fairness and schedule issues require pre-freeze resolution. The existing design is
+within-session only (`n=6` task clusters), not evidence about persistence or
+superiority.
+
+A zero-cost adversarial probe showed the generic auditor accepted a six-pair
+manifest where the protocol requires 36. The version-3 default audit now checks
+the full six-task × two-variant × three-repeat matrix, task/packet/protocol/
+agent/audit/key/scoring hashes, assignment and declared schedule positions, and
+fixed caps before accepting records. Its unit fixture opts into partial-
+manifest mode explicitly; 23 synthetic manifest/record mutations
+are rejected by the offline dry run. The remaining live gates are documented
+in [the Increment 21 readiness audit](evaluations/increment_21/readiness-audit.md)
+and reproducible machine outputs/hashes are retained in
+[evidence](evaluations/increment_21/evidence/). Focused protocol/audit/dry-run,
+readiness and retrospective checks passed. The full `./sigma test` passed after
+installing locked frontend dependencies. No provider calls or cost occurred;
+no comparative result is claimed.

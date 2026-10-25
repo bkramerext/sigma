@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily SIGMA state disk recovery point
+
+[Timer]
+OnCalendar=*-*-* 10:17:00 UTC
+Persistent=true
+RandomizedDelaySec=10m
+Unit=sigma-backup.service
+
+[Install]
+WantedBy=timers.target

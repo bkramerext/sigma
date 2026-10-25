@@ -341,42 +341,36 @@ never substitute its rootful daemon for the GCE acceptance.
   workspaces, sessions, artifacts and spend reservations remain on the disk.
   Existing T22 recovery treats an interrupted provider attempt as unknown and
   holds its reservation; do not delete or manually edit the ledger after a restart.
-- **Application-consistent backup:** Notify users; stop the stack so no SQLite
-  transaction or project write is in flight. Create a regional standard
-  snapshot of `sigma-state` and a separately encrypted tar copy in a private
-  single-region Cloud Storage bucket with uniform bucket-level access and
-  public access prevention. Keep at least 14 daily recovery points, track actual
-  changed/compressed bytes, and test restore to a new disk before retaining
-  production data. Then start the stack and confirm health/auth/workspace and
-  research budget endpoints. The 100 GiB snapshot and 50 GiB GCS estimate above
-  are budgeting caps/assumptions, not retention guarantees.
-- **Proposed manual backup sequence** (all cloud commands require operator
-  approval; variables must be verified):
-
-  ```sh
-  docker compose --env-file /etc/sigma/deploy.env \
-    -f deploy/compose.yaml -f deploy/compose.gce.yaml stop
-  gcloud compute disks snapshot sigma-state --project=PROJECT_ID \
-    --zone=us-west1-b --snapshot-names="sigma-state-$(date -u +%Y%m%dT%H%M%SZ)"
-  tar --one-file-system --numeric-owner -C /srv/sigma-state -czf - . \
-    | gpg --encrypt --recipient APPROVED_BACKUP_PUBLIC_KEY \
-      --output /tmp/sigma-state-backup.tgz.gpg
-  gcloud storage cp /tmp/sigma-state-backup.tgz.gpg gs://APPROVED_PRIVATE_BUCKET/recovery/
-  rm -f /tmp/sigma-state-backup.tgz.gpg
-  sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
-    SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
-    /opt/sigma/current/deploy/start-gce.sh
-  ```
-
-  Use a RAM-backed or otherwise encrypted temporary directory if disk data
-  classification requires it; encrypt the exported archive with an approved
-  key before upload, and do not put that key on the VM. The state disk snapshot
-  provides Google's at-rest encryption but is in the same Google Cloud project.
-  Protect backups with separate IAM and test restore by attaching a cloned disk,
-  restoring ownership/mode, starting a private test stack, and verifying two
-  owners remain isolated before any production recovery. Cloud Storage lifecycle
-  expiration and snapshot deletion are destructive and must be separately
-  approved.
+- **Application-consistent daily backup:** T135 adds
+  `deploy/backup-state.sh`, `deploy/install-backup-scheduler.sh`, and a
+  persistent daily `sigma-backup.timer`. The service stops `sigma.service`,
+  confirms no SIGMA Compose container is running, snapshots the mounted
+  `sigma-state` source, waits for `READY`, and retains at least 14 managed
+  points before restarting the app. Failure is exposed by systemd status,
+  journal output, and a failure marker. Enable only after owner approval of
+  billing, IAM and metadata-credential isolation; the host identity needs
+  narrowly scoped snapshot permissions, and app containers must not obtain
+  those permissions through the instance metadata endpoint.
+- **Restore evidence:** Snapshot existence is not recoverability evidence.
+  Use the separate-disk, read-only verification procedure and offline checker
+  in [Operations Runbook: Restore drill](OPERATION_RUNBOOK.md#6-restore-drill-non-production--disaster-recovery).
+  The checker validates all three SQLite stores, persisted identity and
+  workspace mapping, mapped workspace directories, project/artifact presence,
+  and accounting ledger references. Actual GCE restore and retention acceptance
+  remains blocked until a provisioned disk, owner-approved IAM and isolated
+  recovery host are available. The snapshot estimate is a budget assumption,
+  not evidence of retention or recovery.
+- **Host monitoring and rollback preparation (T136):**
+  `deploy/install-host-monitor.sh` installs a separate 15-minute read-only
+  systemd monitor without changing Red's host/app units. It checks mount,
+  capacity/inodes, Compose health, backup marker age/failure and managed READY
+  snapshot count; failures are actionable in the local journal. This does not
+  configure external paging. `deploy/rollback-gce-release.sh` switches only
+  the release SHA after explicit backup/schema-compatible operator assertions,
+  local image checks and preflight; it preserves named volumes and attempts to
+  restore the prior release on failure. Reboot, real alert delivery, compatible
+  rollback and state verification still require the live GCE deployment and
+  owner-authorized operational evidence.
 - **Update:** Review the diff and image digests; retain current tagged images.
   Set `SIGMA_RELEASE` to the candidate commit, build backend/frontend, rebuild
   sandbox images if their source/dependencies changed, run local checks, take a

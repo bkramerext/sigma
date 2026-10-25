@@ -93,7 +93,7 @@ type StrategyFinding = { strategy_id: string; strategy_title: string; status: st
 type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; next_step_guidance?: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 
 function stoppedSessionGuidance(session: ResearchSession): { cause: string; next: string } {
   const action = session.current_action.toLowerCase();
@@ -369,12 +369,14 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
 }) {
+  const savedConclusionHasMath = containsMathNotation(session.outcome.conclusion || '');
   const startsWithRenderedMath = containsMathNotation(
     `${session.outcome.conclusion || ''}\n${session.outcome.summary || ''}`,
   );
   const [outcomeMarkdown, setOutcomeMarkdown] = useState(startsWithRenderedMath);
-  const [conclusionMarkdown, setConclusionMarkdown] = useState(false);
+  const [conclusionMarkdown, setConclusionMarkdown] = useState(savedConclusionHasMath);
   const [convertedConclusion, setConvertedConclusion] = useState<string | null>(null);
+  const [conclusionFormatWarnings, setConclusionFormatWarnings] = useState<string[]>([]);
   const [conclusionRendering, setConclusionRendering] = useState(false);
   const [conclusionFormatError, setConclusionFormatError] = useState('');
   const [advancedOutcomeEnableError, setAdvancedOutcomeEnableError] = useState('');
@@ -404,7 +406,11 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const historicalSummary = !session.outcome.conclusion && !['queued', 'running', 'paused'].includes(session.status);
   const resultLabel = session.outcome.conclusion ? 'Conclusion' : historicalSummary ? 'Historical session summary' : 'Session summary';
   const resultText = session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
-  const simpleResult = simpleOutcomeLead(session);
+  const simpleDisplaySession = convertedConclusion !== null && outcomeMarkdown
+    ? { ...session, outcome: { ...session.outcome, conclusion: convertedConclusion } }
+    : session;
+  const simpleResult = simpleOutcomeLead(simpleDisplaySession);
+  const simpleOutcomeMarkdown = outcomeMarkdown;
   const verificationLabel = review?.verification_status === 'verified' ? 'Verified in the session record' : review?.verification_status === 'convincing_unverified' ? 'Convincing but unverified' : review?.verification_status === 'incomplete' ? 'Evidence incomplete' : 'Not independently verified';
   const qualificationItems = [...new Set([...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? []), ...(session.outcome.caveats ?? [])])];
   const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
@@ -458,10 +464,17 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   async function toggleConclusionMarkdown() {
     if (conclusionMarkdown) {
       setConclusionMarkdown(false);
+      setOutcomeMarkdown(false);
       return;
     }
     if (convertedConclusion !== null) {
       setConclusionMarkdown(true);
+      setOutcomeMarkdown(true);
+      return;
+    }
+    if (savedConclusionHasMath) {
+      setConclusionMarkdown(true);
+      setOutcomeMarkdown(true);
       return;
     }
     const source = session.outcome.conclusion;
@@ -498,7 +511,9 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
         throw new Error('The saved Conclusion changed during formatting. Reopen the session and retry.');
       }
       setConvertedConclusion(converted.body);
+      setConclusionFormatWarnings(converted.warnings ?? []);
       setConclusionMarkdown(true);
+      setOutcomeMarkdown(true);
     } catch (cause) {
       if (!controller.signal.aborted) {
         const message = errorMessage(cause);
@@ -516,7 +531,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const conclusionToggleLabel = conclusionMarkdown
     ? 'Show saved Conclusion'
-    : convertedConclusion !== null ? 'Render Conclusion as Markdown' : 'Format Conclusion with AI';
+    : convertedConclusion !== null || savedConclusionHasMath ? 'Render Conclusion as Markdown' : 'Format Conclusion with AI';
   const conclusionFormatToggle = <button type="button" className={`sigma-render-toggle${conclusionMarkdown ? ' sigma-render-active' : ''}${conclusionRendering ? ' sigma-render-pending' : ''}`} aria-label={conclusionToggleLabel} aria-pressed={conclusionMarkdown} aria-busy={conclusionRendering} data-tooltip={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} title={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} disabled={conclusionRendering} onClick={() => void toggleConclusionMarkdown()}>{conclusionRendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const reasoningFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} aria-pressed={reasoningMarkdown} data-tooltip={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} title={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} onClick={() => setReasoningMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
@@ -527,9 +542,13 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {provenancePrelude}
+      {((session.status === 'paused' || session.status === 'stopped' || session.status === 'failed') || !!session.next_step_guidance) && <aside className="research-pause-guidance" aria-label="Session next steps"><strong>{session.status === 'paused' ? 'Session paused' : session.status === 'stopped' ? 'Session stopped' : session.status === 'failed' ? 'Session failed' : 'Session ended'}</strong>{!!session.message && <p>{session.message}</p>}<p>{session.next_step_guidance || 'Review saved activity and provider usage before resuming. Resuming may start new provider work and can consume allowance or incur charges.'}</p></aside>}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
-          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
+          {simpleOutcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
+          {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</div>}
+          {convertedConclusion !== null && outcomeMarkdown && <div className="outcome-conclusion-format-note"><p>AI formatted this reading view; the saved Conclusion is unchanged. Compare the saved text before relying on changed notation. Formatting does not verify the mathematics.</p>{!!conclusionFormatWarnings.length && <ul>{conclusionFormatWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
+          {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
           <p className="advanced-outcome-hint">Want more detail? Turn on <button type="button" className="advanced-outcome-link" disabled={enablingAdvancedOutcome} onClick={async () => {
             setEnablingAdvancedOutcome(true); setAdvancedOutcomeEnableError('');
             try { await onEnableAdvancedOutcome(); }
@@ -548,6 +567,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           <div className="outcome-subsection-content outcome-conclusion-content">
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
             {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</div>}
+            {convertedConclusion !== null && conclusionMarkdown && <div className="outcome-conclusion-format-note"><p>AI formatted this reading view; the saved Conclusion is unchanged. Compare the saved text before relying on changed notation. Formatting does not verify the mathematics.</p>{!!conclusionFormatWarnings.length && <ul>{conclusionFormatWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
             {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
             {session.outcome.conclusion && conclusionMarkdown
               ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={convertedConclusion ?? session.outcome.conclusion}/></Suspense></div>
@@ -608,7 +628,6 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             <div className="outcome-label-value"><dt>Research result</dt><dd>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</dd></div>
             <div className="outcome-label-value"><dt>Verification</dt><dd>{review?.verification_status && review.verification_status !== 'unknown' ? review.verification_status === 'verified' ? 'Verified (session record)' : 'Convincing but unverified' : 'Not independently verified'}</dd></div>
             <p className="outcome-integrity-note">A completed session or successful computation does not establish a mathematical proof.</p>
-            {!!session.message && <p className="research-session-message">{session.message}</p>}
             {!!session.strategy_runs && session.strategy_runs.length > 1 && <section className="research-strategy-activity" aria-label="Strategy activity"><h4>Strategy activity</h4><ul>{session.strategy_runs.map(branch => <li key={branch.strategy_id} className={`strategy-run-${branch.status}`}><p><strong>{branch.strategy_title}</strong> · {branch.status} · {branch.current_action}</p><p>Cycle {branch.cycle} · {branch.calls_used} calls · {branch.artifacts.length} saved findings</p>{!!branch.current_question && <p><strong>Current question:</strong> {branch.current_question}</p>}{!!branch.reason && <p><strong>Coordinator rationale:</strong> {branch.reason}</p>}</li>)}</ul></section>}
             {!!session.steps.filter(step => ['failed', 'interrupted', 'running'].includes(step.status)).length && <section className="outcome-provider-attempts" aria-label="Incomplete provider attempts"><h4>Incomplete or failed attempts</h4><ul>{session.steps.filter(step => ['failed', 'interrupted', 'running'].includes(step.status)).map(step => <li key={step.id}><strong>{step.status} · {step.role}</strong><span>Cycle {step.cycle}, call {step.call_number}{step.provider_http_status ? ` · HTTP ${step.provider_http_status}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}</span>{step.interruption_reason && <p>{step.interruption_reason}</p>}{step.status === 'interrupted' && <p>The provider may have completed or charged usage; SIGMA did not repeat this ambiguous attempt automatically.</p>}</li>)}</ul></section>}
             {lastStep && ['running', 'interrupted', 'failed'].includes(lastStep.status) && !session.steps.some(step => ['failed', 'interrupted', 'running'].includes(step.status)) && <section className="research-incomplete-step" aria-label="Current or incomplete step"><strong>{lastStep.status === 'running' ? 'In progress' : 'Incomplete step'} · {lastStep.role}</strong><p>Cycle {lastStep.cycle}, call {lastStep.call_number}. This attempt is not a completed research artifact.</p></section>}
@@ -2442,7 +2461,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   </dialog>;
 }
 
-type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; running: boolean; difficulty: ProjectDifficulty | null; available: boolean; error: string | null };
+type RecentProject = { id: string; path: string; title: string; investigation_type: string | null; strategy_count: number | null; difficulty: ProjectDifficulty | null; research_running: boolean; available: boolean; error: string | null };
 type SampleProject = { id: string; title: string; problem: string; investigation_type: ResearchMode; difficulty: ProjectDifficulty | null; strategy_count: number };
 const strategyCount = (count: number) => `${count} ${count === 1 ? 'strategy' : 'strategies'}`;
 function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
@@ -2459,23 +2478,32 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    let refreshing = false;
-    const refresh = () => {
-      if (refreshing || controller.signal.aborted || document.visibilityState !== 'visible') return;
-      refreshing = true;
-      void load(controller.signal).catch(error => {
-        if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); }
-      }).finally(() => { refreshing = false; });
+    let requestPending = false;
+    const refresh = async () => {
+      if (controller.signal.aborted || document.visibilityState !== 'visible' || requestPending) return;
+      requestPending = true;
+      try {
+        await load(controller.signal);
+        if (!controller.signal.aborted) setError('');
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setProjects(current => current.map(entry => ({ ...entry, research_running: false })));
+          setError(errorMessage(error));
+          setLoading(false);
+        }
+      } finally {
+        requestPending = false;
+      }
     };
-    refresh();
-    const interval = window.setInterval(refresh, 2000);
+    const interval = window.setInterval(() => void refresh(), 2000);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
+    void refresh();
     return () => {
+      controller.abort();
       window.clearInterval(interval);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
-      controller.abort();
     };
   }, [load]);
   async function open(entry: RecentProject) {
@@ -2508,7 +2536,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
           <div className="recent-title-row">
             <button className="recent-open" disabled={!entry.available || !!opening} onClick={() => void open(entry)}>{index === 0 || entry.path === window.localStorage.getItem('sigma.currentProject') ? <strong className={`${index === 0 ? 'is-most-recent-project' : ''} ${entry.path === window.localStorage.getItem('sigma.currentProject') ? 'is-current-project' : ''}`.trim()}>{entry.title}</strong> : entry.title}</button>
           </div>
-          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : `${strategyCount(entry.strategy_count)} · ${difficultyDescription(entry.difficulty)}${entry.running ? ' · Running' : ''}`}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : current)}>Remove</button></div>
+          <div className="recent-meta-row"><small><span>{entry.strategy_count === null ? difficultyDescription(entry.difficulty) : <>{strategyCount(entry.strategy_count)} · {entry.research_running && <><span className="recent-running">Running</span> · </>}{difficultyDescription(entry.difficulty)}</>}</span></small><button className="recent-forget" disabled={!!opening} aria-label={`Remove ${entry.title} from Recent Projects`} aria-expanded={confirmRemoveId === entry.id} title="Remove from Recent Projects; keep all research" onClick={() => setConfirmRemoveId(current => current === entry.id ? '' : entry.id)}>Remove</button></div>
           <span title={entry.path}>{entry.path}</span>
           {confirmRemoveId === entry.id && <div className="recent-remove-actions"><div className="recent-remove-confirm" role="group" aria-label={`Confirm remove ${entry.title}`}><p>Remove “{entry.title}” from Recent Projects? The project and its research will be kept in storage.</p><div className="recent-remove-confirm-actions"><button type="button" className="destructive-action" disabled={!!opening} onClick={() => void forget(entry)}>Confirm</button><button type="button" disabled={!!opening} onClick={() => setConfirmRemoveId('')}>Cancel</button></div></div></div>}
         </div>

@@ -51,7 +51,7 @@ with sync_playwright() as playwright:
     page.goto(UI_ORIGIN + "/")
     created = page.evaluate(
         """async () => {
-          const body = {title: 'Automatic long-form paper UI',
+          const body = {title: `Automatic long-form paper UI ${Date.now()}`,
             problem: 'Investigate this bounded research question. ' + 'saved evidence '.repeat(1300),
             investigation_type: 'mathematical', difficulty: 'easy'};
           const response = await fetch('/api/projects/create', {method:'POST',

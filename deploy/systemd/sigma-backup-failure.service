@@ -1,0 +1,6 @@
+[Unit]
+Description=Record SIGMA backup failure in the system journal
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p daemon.crit -t sigma-backup "daily state-disk backup failed; inspect sigma-backup.service journal and last-failure marker"

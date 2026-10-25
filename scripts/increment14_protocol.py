@@ -89,7 +89,7 @@ def manifest(seed: int, repetitions: int) -> dict:
                 )
     rng.shuffle(pairs)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "DRAFT_NOT_FROZEN",
         "seed": seed,
         "replicates_per_task_variant": repetitions,
@@ -97,10 +97,18 @@ def manifest(seed: int, repetitions: int) -> dict:
         "total_arm_runs": 2 * len(pairs),
         "task_file_sha256": sha256(TASKS.read_bytes()),
         "canonical_tasks_sha256": sha256(canonical_bytes(data)),
+        "protocol_script_sha256": sha256(Path(__file__).read_bytes()),
+        "agent_packet_script_sha256": sha256(
+            (ROOT / "scripts/increment14_agent_packet.py").read_bytes()
+        ),
+        "audit_script_sha256": sha256((ROOT / "scripts/increment14_audit.py").read_bytes()),
         "analysis_unit": "task_cluster",
         "independent_task_count": len(data["tasks"]),
         "scoring_schema": "sigma-blind-submission-v1",
         "scoring_schema_sha256": sha256((ROOT / "scripts/increment14_blinding.py").read_bytes()),
+        "evaluator_key_sha256": sha256(
+            (ROOT / "docs/evaluations/increment14/evaluator_only.md").read_bytes()
+        ),
         "pairs": pairs,
         # Proposed ceilings only. Provider/model selection, a priced estimate,
         # protocol freeze, and owner authorization remain separate gates.

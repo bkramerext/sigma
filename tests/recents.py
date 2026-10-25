@@ -1,5 +1,6 @@
 """Sample catalog copies, recent-project behavior, collision safety, and API/CLI access."""
 
+import fcntl
 import hashlib
 import json
 import os
@@ -142,6 +143,50 @@ def check(root: Path, base: Path) -> None:
     assert last_copy.project.id != edited.project.id
 
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
+    from sigma import research_sessions
+
+    active = created[-1]
+    idle = created[-2]
+    idle_directory = Path(idle.path) / "research-sessions"
+    assert not idle_directory.exists()
+    assert not research_sessions.has_active_session(idle.path)
+    assert not idle_directory.exists(), "Home status must not create session storage"
+
+    directory = Path(active.path) / "research-sessions"
+    directory.mkdir()
+    session_id = str(uuid4())
+    session_file = directory / f"{session_id}.json"
+    record = {
+        "id": session_id,
+        "project_id": active.project.id,
+        "project_path": active.path,
+        "status": "running",
+        "created_at": "2026-10-25T00:00:00Z",
+    }
+    session_file.write_text(json.dumps(record), encoding="utf-8")
+    lock_path = directory / f"{session_id}.worker.lock"
+    original_record = session_file.read_bytes()
+    assert not research_sessions.has_active_session(active.path)
+    assert session_file.read_bytes() == original_record
+    assert not lock_path.exists(), "Status reads must not create worker locks"
+    with lock_path.open("a") as worker_lock:
+        fcntl.flock(worker_lock.fileno(), fcntl.LOCK_EX)
+        assert research_sessions.has_active_session(active.path)
+        by_id = {item["id"]: item for item in recent_projects()["projects"]}
+        assert by_id[active.project.id]["research_running"] is True
+        with TestClient(app) as client:
+            response = client.get("/api/projects/recent")
+            assert response.status_code == 200
+            api_by_id = {item["id"]: item for item in response.json()["projects"]}
+            assert api_by_id[active.project.id]["research_running"] is True
+        assert session_file.read_bytes() == original_record
+        fcntl.flock(worker_lock.fileno(), fcntl.LOCK_UN)
+    assert not research_sessions.has_active_session(active.path)
+    for status in ("completed", "paused", "stopped", "failed"):
+        record["status"] = status
+        session_file.write_text(json.dumps(record), encoding="utf-8")
+        assert not research_sessions.has_active_session(active.path)
+
     actual = recent_projects()["projects"]
     assert all(
         not entry["running"]
@@ -151,7 +196,7 @@ def check(root: Path, base: Path) -> None:
     running_project = created[-1]
     session_id = str(uuid4())
     session_dir = Path(running_project.path) / "research-sessions"
-    session_dir.mkdir()
+    session_dir.mkdir(exist_ok=True)
     session_path = session_dir / f"{session_id}.json"
     session_path.write_text(
         json.dumps(

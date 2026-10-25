@@ -1,12 +1,14 @@
-#!/usr/bin/env python3
 """Read-only Increment 17 longitudinal research integrity gate, no inference."""
+
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "docs/evaluations/increment_7/exports"
 
+
 def load(name):
     return json.loads((ROOT / name).read_text())["research_sessions"]
+
 
 def evaluate():
     withheld = load("graph-withheld.audit.json")
@@ -43,9 +45,11 @@ def evaluate():
         "disposition": "RESEARCH_QUALITY_GATE_NOT_MET",
     }
 
+
 def main():
     result = evaluate()
     print(json.dumps(result, indent=2, sort_keys=True))
+
 
 if __name__ == "__main__":
     main()

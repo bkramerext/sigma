@@ -305,6 +305,72 @@ def test_request_audit_truncation_tokens_and_reconciliation():
     archived_public = research_sessions._public(archived)
     assert archived_public["tokens_used"] == 38591
     assert archived_public["token_usage_status"] == "complete"
+    paused_fixture = deepcopy(archived)
+    paused_fixture["status"] = "paused"
+    paused_fixture["message"] = (
+        "Backend restarted before the session completed. At least one dispatched provider call has unknown completion or billing status and will not be retried automatically."
+    )
+    paused_fixture["steps"] = [{"status": "interrupted", "interruption_reason": "backend_restart"}]
+    pause_public = research_sessions._public(paused_fixture)
+    assert "check provider usage or billing first" in pause_public["next_step_guidance"]
+    assert "does not replay that attempt" in pause_public["next_step_guidance"]
+    paused_fixture["message"] = (
+        "Backend restarted before the session completed. No provider request was recorded in flight."
+    )
+    paused_fixture["steps"] = []
+    assert (
+        "No provider request was recorded in flight"
+        in research_sessions._public(paused_fixture)["next_step_guidance"]
+    )
+    paused_fixture["message"] = (
+        "Paused by user. A dispatched provider request may still consume allowance."
+    )
+    paused_fixture["steps"] = []
+    assert (
+        "Resume when you are ready"
+        in research_sessions._public(paused_fixture)["next_step_guidance"]
+    )
+    paused_fixture["status"] = "failed"
+    paused_fixture["message"] = "Provider returned an ambiguous failure after dispatch."
+    failed_guidance = research_sessions._public(paused_fixture)["next_step_guidance"]
+    assert "confirm provider usage or billing" in failed_guidance
+    assert "start a new session" in failed_guidance
+    assert "another attempt is free or safe" in failed_guidance
+    paused_fixture["message"] = (
+        "The conservative estimated cost reserve for another call exceeds the session limit; no additional call was made."
+    )
+    paused_fixture["status"] = "paused"
+    assert "only if you approve" in research_sessions._public(paused_fixture)["next_step_guidance"]
+    paused_fixture["status"] = "ended"
+    paused_fixture["message"] = (
+        "Configured model-call limit reached. Findings are unverified research notes."
+    )
+    assert "start a new session" in research_sessions._public(paused_fixture)["next_step_guidance"]
+    paused_fixture["status"] = "paused"
+    for message, expected in (
+        (
+            "Project or strategy changed; session paused before a new call.",
+            "enable the session's saved strategies",
+        ),
+        (
+            "AI account or billing identity changed; session paused before a new call.",
+            "Restore the intended AI account",
+        ),
+        (
+            "Selected model is no longer available; session paused before a new call.",
+            "Check the selected model",
+        ),
+        (
+            "Configured session duration reached while waiting for provider access. No new call was made.",
+            "start a new session",
+        ),
+        (
+            "Research storage limit reached. Existing artifacts were retained.",
+            "Resolve that limit before resuming",
+        ),
+    ):
+        paused_fixture["message"] = message
+        assert expected in research_sessions._public(paused_fixture)["next_step_guidance"]
     source_artifacts = json.loads(json.dumps(archived["artifacts"]))
     archived["artifacts"] = []
     for artifact in source_artifacts:

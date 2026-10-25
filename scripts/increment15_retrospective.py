@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 """Read-only retrospective checks of existing SIGMA evidence. No model calls."""
+
 import argparse
 import hashlib
 import json
@@ -22,13 +22,14 @@ def main():
     assert session["status"] == "ended"
     assert len(steps) == 4
     assert [step["role"].lower() for step in steps] == [
-        "investigator", "skeptic", "investigator", "skeptic"
+        "investigator",
+        "skeptic",
+        "investigator",
+        "skeptic",
     ]
     assert len(session["artifacts"]) == 2
     assert session["calls_used"] == 4
-    usage = [
-        step.get("token_usage", {}) for step in steps
-    ]
+    usage = [step.get("token_usage", {}) for step in steps]
     # Historical aggregate token count is known to be defective. Preserve
     # per-step evidence but never silently recast this as current accounting.
     assert session["tokens_used"] == 0
@@ -38,7 +39,10 @@ def main():
     assert on_off["original_ids_preserved"] is True
     computation = json.loads((BASE / "increment_4/independent-results.json").read_text())
     assert computation["new_six_step_candidate_counterexample"] == {
-        "n": 0, "actual": 8, "predicted": 9, "residual": -1
+        "n": 0,
+        "actual": 8,
+        "predicted": 9,
+        "residual": -1,
     }
     assert computation["matched_actual_calls"] == 28
     assert computation["graph_insertion_cases"] == 4500

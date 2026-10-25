@@ -11,12 +11,23 @@ from unittest.mock import MagicMock, Mock, call, patch
 
 from sigma.cli import main as cli_main
 from sigma.projects import ROOT
-from sigma.tooling import run_tooling
+from sigma.tooling import _safe_independent_test_step, run_tooling
 from sigma.ui import local_google_configuration_warning, run_shutdown, run_ui, stop_servers
 from sigma.ui_instance import Instance
 
 
 def check_failures() -> None:
+    assert _safe_independent_test_step(
+        ["uv", "run", "--locked", "--no-sync", "python", "tests/gce_host.py"]
+    )
+    assert _safe_independent_test_step(
+        ["uv", "run", "--locked", "--no-sync", "python", "tests/state_backup.py"]
+    )
+    assert not _safe_independent_test_step(["bash", "deploy/install-gce-host.sh"])
+    assert not _safe_independent_test_step(
+        ["uv", "run", "--locked", "--no-sync", "python", "scripts/increment15_offline_pairs.py"]
+    )
+    assert not _safe_independent_test_step(["npm", "--prefix", "frontend", "run", "build"])
     with (
         patch("sigma.tooling.shutil.which", return_value=None),
         patch("sigma.tooling.subprocess.run") as run,
@@ -25,12 +36,25 @@ def check_failures() -> None:
         run.assert_not_called()
     with (
         patch("sigma.tooling.shutil.which", return_value="tool"),
-        patch(
-            "sigma.tooling.subprocess.run", return_value=subprocess.CompletedProcess([], 7)
-        ) as run,
+        patch("sigma.tooling.subprocess.run") as run,
     ):
+
+        def fail_independent_checks(command, **kwargs):
+            returncode = (
+                7 if "tests/lifecycle.py" in command else 3 if "tests/recents.py" in command else 0
+            )
+            return subprocess.CompletedProcess(command, returncode)
+
+        run.side_effect = fail_independent_checks
         assert run_tooling("test") == 7
-        assert run.call_count == 1  # No later steps run after a failure.
+        assert run.call_count > 40
+        completed = [item.args[0] for item in run.call_args_list]
+        assert any("tests/gce_host.py" in command for command in completed)
+        assert any("tests/state_backup.py" in command for command in completed)
+        assert any("tests/host_monitor.py" in command for command in completed)
+        assert any(command[-2:] == ["run", "typecheck"] for command in completed)
+        assert not any("increment15_offline_pairs.py" in command for command in completed)
+        assert not any(command[-2:] == ["run", "build"] for command in completed)
         assert run.call_args.kwargs["cwd"] == ROOT
     with (
         patch("sigma.tooling.shutil.which", return_value="tool"),
@@ -122,6 +146,20 @@ def check_command_help() -> None:
 
 
 def check_ui() -> None:
+    # Host shells may export an admin address without the paired OAuth test
+    # credentials. These lifecycle tests exercise ordinary local startup.
+    with patch.dict(
+        "os.environ",
+        {
+            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            "GOOGLE_OIDC_CLIENT_ID": "",
+            "GOOGLE_OIDC_CLIENT_SECRET": "",
+        },
+    ):
+        _check_ui()
+
+
+def _check_ui() -> None:
     # Process lifecycle/ownership is exercised separately with real processes.
 
     with (
@@ -377,6 +415,8 @@ def main() -> None:
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()
+    assert "2 step(s) failed" in output.getvalue()
+    assert "2 non-read-only step(s) skipped after failures" in output.getvalue()
     assert "FastAPI API server: http://127.0.0.1:8000" in output.getvalue()
     assert "Vite UI server:    http://127.0.0.1:5173" in output.getvalue()
     print("PASS maintenance, UI lifecycle, verified suspended-owner recovery and shutdown")
