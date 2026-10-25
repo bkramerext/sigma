@@ -29,6 +29,22 @@ Preparation elapsed approximately 20 minutes; exact handoff SHA and PR are in
 [messages/t131_gray_hosted_oauth_preparation.txt](../messages/t131_gray_hosted_oauth_preparation.txt) and
 [PR #156](https://github.com/bkramerext/sigma/pull/156).
 
+### T131 browser harness repair follow-up (2026-10-25)
+
+The previously unverified `browser_checks/t23_1_google_signin.py` check now
+starts its own loopback API and Vite servers with temporary storage. Its
+Google status/login/logout redirects are deterministic browser fixtures; the
+test-only identity adapter handles protected API requests. Real Chrome passed
+fixture sign-in, reload persistence, logout, anonymous and revoked-identity
+401s, rejected-access UI, account switching, per-account project isolation,
+and desktop/mobile project-header checks. No Google endpoint, production OAuth
+configuration, credential, or paid provider was used. This resolves the local
+harness setup gap only; deployed cookie behavior and hosted Google OAuth remain
+unverified. See the self-contained command and fixture boundary in
+[`browser_checks/README.md`](../browser_checks/README.md). `./sigma test` also
+passed all scenarios, Ruff, format, Pyright, frontend typecheck, and production
+build. No SIGMA production auth code changed.
+
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 
 Audited current desktop acceptance before adding coverage. T91 already runs
