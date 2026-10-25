@@ -3,7 +3,9 @@
 ## Green UI tickets #95 and #125 (2026-10-25)
 
 Implemented on one branch, `green/t95-t125-ui`, from current `main` at
-`6686e6f`. The work is split into reviewable commits:
+`6686e6f`. Before publication, merged updated `main` at `753b99a` (PR #134)
+without conflicts; its only change was `docs/OPERATION_RUNBOOK.md`. The work is
+split into reviewable commits:
 
 - **#95 paused-session clarity:** the paused lifecycle state now includes a
   nearby explanation and next step. It classifies known context, duration,

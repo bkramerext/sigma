@@ -2,6 +2,9 @@ Green R4R handoff — issues #95 and #125
 
 Branch: green/t95-t125-ui
 Base: main at 6686e6f (2026-10-25)
+Synchronization: merged updated main at 753b99a (PR #134) without conflicts;
+that merge added only docs/OPERATION_RUNBOOK.md. Merge commit:
+4c78a543a9e5eabccc85309f4c2fe78721cd8cec.
 Implementation commits:
 - #95 paused-session UI: 1effc468e0231ffd75fb21de31cec2091b81cd3d
 - #95 typed pause-reason refinement: 486c8db97b9964c66e1756b75daf93986a91694d
