@@ -212,6 +212,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 ),
             )
             conversion_requests: list[dict] = []
+            pending_conclusion_responses: list[tuple[object, dict]] = []
+            pending_text_routes: list[object] = []
 
             def mock_conversion_settings(route):
                 route.fulfill(
@@ -222,6 +224,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
 
             def mock_conclusion_conversion(route):
                 request = json.loads(route.request.post_data or "{}")
+                if request.get("scope") != "research-conclusion":
+                    pending_text_routes.append(route)
+                    return
                 assert request["scope"] == "research-conclusion", request
                 assert request["session_id"] == session["id"], request
                 assert request["target"] == "markdown", request
@@ -229,10 +234,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     session["outcome"]["conclusion"].encode("utf-8")
                 ).hexdigest(), request
                 conversion_requests.append(request)
-                route.fulfill(
-                    status=200,
-                    content_type="application/json",
-                    body=json.dumps(
+                pending_conclusion_responses.append((route, {
+                    "status": 200,
+                    "content_type": "application/json",
+                    "body": json.dumps(
                         {
                             "body": ai_formatted_conclusion,
                             "warnings": [],
@@ -244,11 +249,51 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                             },
                         }
                     ),
-                )
+                }))
 
             page.route("**/api/projects/proposals/config**", mock_conversion_settings)
             page.route("**/api/projects/text/convert", mock_conclusion_conversion)
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
+            expect(project_markdown).to_be_visible()
+            project_markdown.click()
+            project_status = page.locator("#project-markdown-slot .text-view-format-status")
+            expect(project_status).to_be_visible()
+            assert project_status.evaluate(
+                "element => getComputedStyle(element.parentElement).gap"
+            ) == "6px"
+            page.locator(".project-pane-title-line").screenshot(
+                path="/tmp/sigma-project-markdown-formatting.png"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            expect(project_status).to_be_visible()
+            page.screenshot(path="/tmp/sigma-project-markdown-formatting-mobile.png")
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            pending_text_routes.pop(0).fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"Mock provider unavailable"}',
+            )
+            expect(page.locator(".project-intro .error")).to_contain_text(
+                "Mock provider unavailable"
+            )
+            strategy_markdown = page.locator(".strategy-markdown-slot .sigma-render-toggle").first
+            expect(strategy_markdown).to_be_visible()
+            strategy_markdown.click()
+            strategy_status = page.locator(".strategy-markdown-slot .text-view-format-status").first
+            expect(strategy_status).to_be_visible()
+            assert strategy_status.evaluate(
+                "element => getComputedStyle(element.parentElement).gap"
+            ) == "6px"
+            page.locator(".strategy-title-line").first.screenshot(
+                path="/tmp/sigma-strategy-markdown-formatting.png"
+            )
+            pending_text_routes.pop(0).fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"Mock provider unavailable"}',
+            )
             latex_button = page.get_by_role("button", name="LaTeX research paper")
             expect(latex_button).to_be_visible()
             latex_button.hover()
@@ -262,7 +307,27 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )
-            # Start in Advanced Outcome explicitly, independent of a historical project default.
+            # The simplified Outcome hint directly enables the saved project preference.
+            first_row = page.locator(f'li[data-session-id="{session["id"]}"]')
+            first_disclosure = first_row.locator("button.session-row-disclosure")
+            if first_disclosure.get_attribute("aria-expanded") != "true":
+                first_disclosure.click()
+            simple_outcome = first_row.get_by_role("region", name="Research outcome")
+            hint = simple_outcome.locator(".advanced-outcome-hint")
+            expect(hint).to_contain_text(
+                "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
+            )
+            dismiss_errors = page.get_by_role("button", name="Dismiss request error")
+            while dismiss_errors.count():
+                dismiss_errors.first.click()
+            simple_outcome.screenshot(path="/tmp/sigma-advanced-outcome-hint.png")
+            preference_link = hint.get_by_role("button", name="Advanced Outcome")
+            preference_link.focus()
+            expect(preference_link).to_be_focused()
+            preference_link.press("Enter")
+            expect(hint).to_have_count(0)
+            expect(simple_outcome.locator(".outcome-subsections")).to_be_visible()
+            # Confirm the preference was persisted in the project settings.
             settings = page.get_by_role("button", name="Project settings", exact=True)
             settings.click()
             dialog = page.get_by_role("dialog", name="Settings")
@@ -270,12 +335,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             detail_setting = dialog.get_by_role(
                 "checkbox", name="Show advanced Outcome details"
             )
-            if not detail_setting.is_checked():
-                detail_setting.check()
-                dialog.get_by_role("button", name="Save", exact=True).click()
-                expect(dialog).to_be_hidden()
-            else:
-                dialog.get_by_role("button", name="Cancel", exact=True).click()
+            expect(detail_setting).to_be_checked()
+            dialog.get_by_role("button", name="Cancel", exact=True).click()
             for session in sessions:
                 row = page.locator(f'li[data-session-id="{session["id"]}"]')
                 expect(row).to_be_visible(timeout=15000)
@@ -316,6 +377,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1}"
                 )
                 toggle.click()
+                format_status = outcome.locator(".text-view-format-status")
+                expect(format_status).to_be_visible()
+                assert format_status.evaluate(
+                    "element => getComputedStyle(element.parentElement).gap"
+                ) == "6px"
+                response_route, response = pending_conclusion_responses.pop(0)
+                response_route.fulfill(**response)
                 source_toggle = conclusion.locator(".outcome-conclusion-actions .sigma-render-toggle")
                 expect(source_toggle).to_have_attribute("aria-pressed", "true", timeout=15000)
                 expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion")
@@ -372,6 +440,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(first_row.locator("details.outcome-conclusion")).to_contain_text(
                 "The investigation is paused"
             )
+            expect(first_row.locator(".advanced-outcome-hint")).to_have_count(0)
 
             page.set_viewport_size({"width": 375, "height": 812})
             for session in sessions:
@@ -394,6 +463,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 ".outcome-conclusion-actions .sigma-render-toggle"
             )
             mobile_toggle.click()
+            mobile_status = mobile_conclusion.locator(".text-view-format-status")
+            expect(mobile_status).to_be_visible()
+            mobile_route, mobile_response = pending_conclusion_responses.pop(0)
+            mobile_route.fulfill(**mobile_response)
             expect(mobile_toggle).to_have_attribute("aria-pressed", "true")
             expect(mobile_conclusion.locator(".outcome-markdown .katex-display")).to_have_count(3)
             for width in (375, 320):
@@ -420,6 +493,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(dialog).to_be_hidden()
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
+            expect(row.locator(".advanced-outcome-hint")).to_contain_text(
+                "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
+            )
             expect(row.locator(".outcome-simple .katex").first).to_be_visible()
             expect(row.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
                 "aria-pressed", "true"
@@ -435,6 +511,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             for width in (375, 320):
                 page.set_viewport_size({"width": width, "height": 812})
                 expect(prelude).to_be_visible()
+                if width == 375:
+                    row.locator(".session-outcome").screenshot(
+                        path="/tmp/sigma-advanced-outcome-hint-mobile.png"
+                    )
                 overflow = page.evaluate(
                     "({width: document.documentElement.clientWidth, "
                     "scroll: document.documentElement.scrollWidth})"
