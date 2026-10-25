@@ -1,4 +1,5 @@
 """Offline synthetic negative tests for blinded pair audit: no provider calls."""
+# fmt: off
 import importlib.util
 from copy import deepcopy
 from pathlib import Path
@@ -44,3 +45,5 @@ rejected(lambda m,r: r[0].update(scores={"correctness":4}))
 rejected(lambda m,r: r[0].update(scores=dict.fromkeys(audit.DIMENSIONS, 5)))
 rejected(lambda m,r: r[0].update(scorer_saw_arm_identity=True))
 print("Increment 14 blinded audit rejects 13 negative conditions")
+
+# fmt: on
