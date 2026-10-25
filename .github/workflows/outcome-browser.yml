@@ -1,0 +1,50 @@
+name: Research Outcome browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "src/sigma/research_epistemics.py"
+      - "src/sigma/research_sessions.py"
+      - "browser_checks/t47_conclusion.py"
+      - ".github/workflows/outcome-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sigma-outcome-browser-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  outcome-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      SIGMA_CLOUD_AUTH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: ./sigma setup
+      - name: Install isolated Chromium for Playwright
+        run: uv run --with playwright python -m playwright install --with-deps chromium
+      - name: Run real-browser Outcome acceptance without providers
+        shell: bash
+        run: |
+          export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          uv run --with playwright python browser_checks/t47_conclusion.py

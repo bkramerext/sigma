@@ -1128,6 +1128,9 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
             "assumptions_reviewed": ["Assumption 1"],
             "coordinator_decision": completed["artifacts"][0]["coordinator_decision"],
             "next_question": completed["artifacts"][0]["next_question"],
+            "skeptic_output": {
+                "next_question": completed["artifacts"][0]["skeptic_output"]["next_question"],
+            },
             "session_id": completed["id"],
             "session_number": completed["session_number"],
             "strategy_id": strategy.id,
@@ -1147,6 +1150,12 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
                     },
                 }
             ],
+            "source_readiness": {
+                "state": "model_reviewed_steps",
+                "assumptions": "model_reviewed",
+                "original_in_context": False,
+                "independently_verified": False,
+            },
         }
     ], next_context["prior_session_findings"]
     assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]
@@ -6409,8 +6418,387 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
     assert archive.read_bytes() == archive_bytes
 
 
+def test_source_readiness_distinguishes_content_from_verification():
+    """Typed source availability is domain-neutral and never proof certification."""
+    source = {
+        "id": "saved-evidence",
+        "assumptions": ["Samples were randomly assigned"],
+        "assumptions_reviewed": ["  samples WERE randomly   assigned "],
+        "reasoning_steps": [
+            {
+                "argument": "Under the recorded sampling procedure the two groups differ.",
+                "review": {"disposition": "accepted", "objection": ""},
+            }
+        ],
+        "extract_truncated_fields": [],
+    }
+    readiness = research_sessions._finding_source_readiness
+    assert readiness(source) == {
+        "state": "model_reviewed_steps",
+        "assumptions": "model_reviewed",
+        "original_in_context": False,
+        "independently_verified": False,
+    }
+    disputed = deepcopy(source)
+    disputed["assumptions_reviewed"] = ["Different selection procedure"]
+    assert readiness(disputed)["assumptions"] == "requires_review"
+    truncated = deepcopy(source)
+    truncated["extract_truncated_fields"] = ["method", "reasoning_steps"]
+    assert readiness(truncated)["state"] == "incomplete_extract"
+    withdrawn = deepcopy(truncated)
+    withdrawn["retracted_by_artifact_ids"] = ["retraction"]
+    assert readiness(withdrawn)["state"] == "withdrawn"
+    narrative = {"method": "Compare conflicting archive sources."}
+    assert readiness(narrative)["state"] == "narrative_unverified"
+    assert readiness(narrative)["assumptions"] == "none_declared"
+    incomplete = {"reasoning_steps": [{"argument": "A hypothesis, not a finding."}]}
+    assert readiness(incomplete)["state"] == "unresolved_steps"
+
+
+def test_saved_followup_question_selection():
+    """A newer terminal outcome must block stale or unprovided follow-ups."""
+
+    def session(
+        number,
+        strategy_id,
+        decision="stop_budget_exhausted",
+        stop_reason="recoverable_objection",
+        assessment="continue",
+        retracted=False,
+    ):
+        artifact = {
+            "id": f"artifact-{number}",
+            "strategy_id": strategy_id,
+            "coordinator_decision": decision,
+            "next_question": "" if decision == "stop_budget_exhausted" else "New bounded test",
+            "skeptic_output": {
+                "stop_reason": stop_reason,
+                "assessment": assessment,
+                "next_question": "New bounded test",
+            },
+            "objective_review": {"status": "partial"},
+        }
+        if retracted:
+            artifact["retracted_by_artifact_ids"] = ["later-retraction"]
+        return {
+            "id": f"session-{number}",
+            "session_number": number,
+            "status": "ended",
+            "created_at": f"2026-10-25T00:00:{number:02d}Z",
+            "artifacts": [artifact],
+        }
+
+    older = session(1, "A")
+    current = session(2, "A")
+    peer = session(3, "B")
+    supplied = [
+        {"strategy_id": "A", "id": "artifact-1"},
+        {"strategy_id": "A", "id": "artifact-2"},
+        {"strategy_id": "B", "id": "artifact-3"},
+    ]
+    select = research_sessions._saved_followup_questions
+    result = select([older, current, peer], ["A", "B"], supplied)
+    assert result["A"]["artifact_id"] == "artifact-2"
+    assert result["A"]["source_field"] == "skeptic_output.next_question"
+    assert result["A"]["status"] == "model_suggested_unverified"
+    assert result["B"]["artifact_id"] == "artifact-3"
+    assert select([older, current], ["A"], supplied[:1]) == {}
+    # A shortened material scope cannot silently authorize carrying a question.
+    shortened: list[dict[str, Any]] = [dict(item) for item in supplied]
+    shortened[1]["extract_truncated_fields"] = ["assumptions"]
+    assert select([older, current], ["A"], shortened) == {}
+    shortened[1]["extract_truncated_fields"] = ["next_question"]
+    assert select([older, current], ["A"], shortened) == {}
+    shortened[1]["extract_truncated_fields"] = ["skeptic_output.next_question"]
+    assert select([older, current], ["A"], shortened) == {}
+    # A shortened *argument* does not invalidate a bounded next test by itself.
+    shortened[1]["extract_truncated_fields"] = ["reasoning_steps"]
+    assert select([older, current], ["A"], shortened)["A"]["artifact_id"] == "artifact-2"
+    for blocked in (
+        session(2, "A", stop_reason="decisive_counterexample"),
+        session(2, "A", stop_reason="productive_conclusion"),
+        session(2, "A", stop_reason="no_progress"),
+        session(2, "A", retracted=True),
+        session(2, "A", decision="stop_no_progress"),
+        session(2, "A", assessment="stop"),
+    ):
+        assert select([older, blocked], ["A"], supplied) == {}
+    assert select([older, peer], ["A"], supplied)["A"]["artifact_id"] == "artifact-1"
+    assert select([older], ["B"], supplied) == {}
+
+
+async def test_saved_followup_question_reaches_real_dispatch(path: Path):
+    """A budget-ended model suggestion is carried by ID, not treated as approval."""
+    view, strategy, credential, config = await setup(path)
+    other = create_strategy(
+        path, "Independent history inquiry", "Evaluate source reliability in a bounded archive."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=1, model_calls=2)
+    research_sessions.save_limits(str(path), limits)
+    phase = "seed"
+    seen = []
+    later_dispatched = asyncio.Event()
+    question = (
+        "Check a specific edge case using the earlier observation, not a new project-wide claim."
+    )
+
+    async def handler(request):
+        nonlocal phase
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        seen.append((phase, role, context))
+        if phase == "later":
+            if context["strategy"]["id"] == strategy.id:
+                later_dispatched.set()
+            await asyncio.Event().wait()
+        if role == "research_investigator":
+            return httpx.Response(200, json=provider_response(investigation(1)))
+        response = skeptic(1, "continue", "recoverable_objection")
+        response["next_question"] = question
+        return httpx.Response(200, json=provider_response(response))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        first = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        ended = await wait_for(path, first["id"])
+        assert ended["status"] == "ended" and len(ended["artifacts"]) == 1
+        artifact = ended["artifacts"][0]
+        assert artifact["coordinator_decision"] == "stop_budget_exhausted"
+        assert artifact["next_question"] == ""
+        assert artifact["skeptic_output"]["next_question"] == question
+        original_bytes = (path / "research-sessions" / f"{ended['id']}.json").read_bytes()
+
+        limits.update(model_calls=4)
+        research_sessions.save_limits(str(path), limits)
+        phase = "later"
+        next_session = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[strategy.id, other.id],
+        )
+        branches = {row["strategy_id"]: row for row in next_session["strategy_runs"]}
+        assert branches[strategy.id]["current_question"] == question
+        assert branches[other.id]["current_question"].startswith("Advance this strategy")
+        source = branches[strategy.id]["initial_question_source"]
+        assert source["artifact_id"] == artifact["id"]
+        assert source["session_id"] == ended["id"]
+        assert source["status"] == "model_suggested_unverified"
+        assert next_session["current_question"] == question
+        await asyncio.wait_for(later_dispatched.wait(), 2)
+        carried = next(
+            context
+            for stage, role, context in seen
+            if stage == "later"
+            and role == "research_investigator"
+            and context["strategy"]["id"] == strategy.id
+        )
+        assert carried["question"] == question
+        assert carried["question_source"] == source
+        assert artifact["id"] in carried["prior_session_artifact_ids"]
+        source_finding = next(
+            finding
+            for finding in carried["prior_session_findings"]
+            if finding["id"] == artifact["id"]
+        )
+        assert source_finding["skeptic_output"]["next_question"] == question
+        assert source_finding["source_readiness"]["independently_verified"] is False
+        assert source_finding["source_readiness"]["original_in_context"] is False
+        await research_sessions.control_session(str(path), next_session["id"], "stop")
+
+        # Researcher-approved continuations have priority over automatic suggestions.
+        approved = {
+            strategy.id: {
+                "question": "Researcher-approved, narrower follow-up",
+                "parent_strategy_id": strategy.id,
+                "sources": [],
+                "rejected_sources": [],
+                "packet_digest": "offline-test-only",
+            }
+        }
+        with (
+            patch("sigma.continuations.approved_packets", return_value=approved),
+            patch.object(research_sessions, "_worker", new=AsyncMock()),
+        ):
+            override = await research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            assert override["current_question"] == approved[strategy.id]["question"]
+            assert "initial_question_source" not in override
+            await research_sessions.control_session(str(path), override["id"], "stop")
+        assert (path / "research-sessions" / f"{ended['id']}.json").read_bytes() == original_bytes
+
+
+async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path):
+    """One saved question must carry across domains without answer-key tuning.
+
+    Real project persistence and provider dispatch are exercised; the roles
+    themselves are scripted local HTTP fixtures, not research judgments.
+    """
+    cases = (
+        (
+            "biology",
+            "Does an observed growth change survive control for batch effects?",
+            "Growth under different reagent conditions",
+            "Reagent and culture batches were assigned independently.",
+            "Compare within-batch replicate growth estimates before any causal claim.",
+        ),
+        (
+            "default",
+            "Which of two conflicting archive accounts has stronger provenance?",
+            "Source criticism and competing archive accounts",
+            "The two documents refer to the same recorded event.",
+            "Inspect custody and dating for each original source before reconciliation.",
+        ),
+        (
+            "military",
+            "Which routing plan satisfies bounded resource constraints?",
+            "Assess a fictional logistics scenario under stated limits",
+            "The simulated route capacity remains constant during the scenario.",
+            "Test whether the alternative route remains feasible under reduced capacity.",
+        ),
+        (
+            "mathematical",
+            "Does a bounded numerical pattern generalize?",
+            "Test a finite case without asserting a universal theorem",
+            "The proposed recurrence is restricted to nonnegative indices.",
+            "Check the first unsampled index against the proposed recurrence.",
+        ),
+    )
+    for index, (mode, question, approach, assumption, followup) in enumerate(cases):
+        root = path / f"domain-{index}.sigma"
+        view = initialize_project(root, f"Cross-domain case {index}", question, research_mode=mode)
+        strategy = create_strategy(root, "Bounded local test", approach).project.strategies[0]
+        limits = research_sessions.get_limits(str(root))
+        limits.update(research_rounds=1, model_calls=2)
+        research_sessions.save_limits(str(root), limits)
+        credential = {
+            "identity": "offline-case",
+            "mode": "api_key",
+            "token": "fixture-token",
+            "status": "connected",
+        }
+        config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+        state = {"phase": "seed", "captured": [], "dispatched": asyncio.Event()}
+
+        async def handler(request, *, case=(mode, assumption, followup), state=state):
+            case_mode, case_assumption, case_followup = case
+            context = json.loads(json.loads(request.content)["input"])
+            role = json.loads(request.content)["text"]["format"]["name"]
+            state["captured"].append((state["phase"], role, context))
+            if state["phase"] == "later":
+                state["dispatched"].set()
+                await asyncio.Event().wait()
+            if role == "research_investigator":
+                response = investigation(1)
+                response["claim"] = f"Unverified local claim for {case_mode}"
+                response["assumptions"] = [case_assumption]
+                response["evidence_status"] = "Scripted proposition, not verified."
+            else:
+                response = skeptic(1, "continue", "recoverable_objection")
+                response["assumptions_reviewed"] = [case_assumption]
+                response["next_question"] = case_followup
+            return httpx.Response(200, json=provider_response(response))
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "execution_capabilities", return_value=[]),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            first = await research_sessions.start_session(
+                str(root), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            ended = await wait_for(root, first["id"])
+            assert ended["status"] == "ended"
+            assert ended["artifacts"][0]["coordinator_decision"] == "stop_budget_exhausted"
+            saved = (root / "research-sessions" / f"{ended['id']}.json").read_bytes()
+            state["phase"] = "later"
+            limits.update(model_calls=4)
+            research_sessions.save_limits(str(root), limits)
+            later = await research_sessions.start_session(
+                str(root), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            assert later["current_question"] == followup
+            assert later["initial_question_source"]["artifact_id"] == ended["artifacts"][0]["id"]
+            await asyncio.wait_for(state["dispatched"].wait(), 2)
+            contexts = [
+                context
+                for stage, role, context in state["captured"]
+                if stage == "later" and role == "research_investigator"
+            ]
+            assert contexts and contexts[0]["question"] == followup
+            assert contexts[0]["question_source"] == later["initial_question_source"]
+            finding = next(
+                row
+                for row in contexts[0]["prior_session_findings"]
+                if row["id"] == ended["artifacts"][0]["id"]
+            )
+            assert finding["skeptic_output"]["next_question"] == followup
+            assert finding["source_readiness"]["independently_verified"] is False
+            assert finding["source_readiness"]["assumptions"] == "model_reviewed"
+            assert finding["strategy_id"] == strategy.id
+            await research_sessions.control_session(str(root), later["id"], "stop")
+            assert (root / "research-sessions" / f"{ended['id']}.json").read_bytes() == saved
+
+
+def test_outcome_includes_derived_execution_provenance() -> None:
+    record = {
+        "id": "saved-session",
+        "status": "ended",
+        "artifacts": [
+            {
+                "id": "saved-finding",
+                "coordinator_decision": "continue",
+                "claim_or_question": "Unverified model proposal",
+                "skeptic_response": "No successful computation was observed.",
+                "investigator_output": {
+                    "python_execution": {
+                        "id": "saved-execution",
+                        "status": "timeout",
+                        "source": "print('unobserved')",
+                        "stderr": "Timed out",
+                    }
+                },
+            }
+        ],
+        "steps": [],
+    }
+    original = deepcopy(record)
+    outcome = research_sessions._outcome(record)
+    provenance = outcome["execution_provenance"]
+    assert provenance["completed_count"] == 0
+    assert provenance["records"][0]["id"] == "saved-execution"
+    assert provenance["records"][0]["statuses"] == ["timeout"]
+    assert provenance["records"][0]["artifact_ids"] == ["saved-finding"]
+    assert record == original
+
+
 def main():
+    test_outcome_includes_derived_execution_provenance()
     test_epistemic_presentation_is_conservative_and_read_only()
+    test_source_readiness_distinguishes_content_from_verification()
+    test_saved_followup_question_selection()
     test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -6428,6 +6816,12 @@ def main():
             test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
         )
         asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
+        asyncio.run(
+            test_saved_followup_question_reaches_real_dispatch(
+                root / "saved-question-continuation.sigma"
+            )
+        )
+        asyncio.run(test_cross_domain_continuation_dispatch_with_offline_roles(root))
         asyncio.run(
             test_failed_attempt_guides_next_session_with_provenance(
                 root / "failed-continuation.sigma"
