@@ -49,7 +49,7 @@ The runtime does not pull or install packages during an experiment. The containe
 
 **Implemented engineering is not the same as demonstrated scientific discovery.** SIGMA has deterministic tests for orchestration, evidence handoff, cancellation/recovery, isolated computation, and reporting. Early live-agent trials have shown correct handling of a simple mathematical problem and one useful numerical experiment, but **robust independent work on Medium/Hard problems, subtle mathematical error detection, and reliable cross-strategy synthesis remain unproven**.
 
-Research output must distinguish conjecture, finite computation, agent-reviewed argument, and independently verified theorem. Python and model consensus do not constitute formal proof. A Lean-based formal verification capability is only a future proposal.
+Research output must distinguish conjecture, finite computation, agent-reviewed argument, and independently verified theorem. Python and model consensus do not constitute formal proof. Integrating Lean for machine-checked proofs is a future consideration, not a current SIGMA capability.
 
 Future directions include improved evidence-driven coordination, broader scientific tooling such as SageMath, scholarly citation tracking, and deployment beyond local workstations. These are not represented here as shipped features.
 
