@@ -357,7 +357,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const resultText = session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
   const simpleResult = simpleOutcomeLead(session);
   const verificationLabel = review?.verification_status === 'verified' ? 'Verified in the session record' : review?.verification_status === 'convincing_unverified' ? 'Convincing but unverified' : review?.verification_status === 'incomplete' ? 'Evidence incomplete' : 'Not independently verified';
-  const qualificationItems = [...new Set([...(session.outcome.caveats ?? []), ...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? [])])];
+  const qualificationItems = [...new Set([...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? []), ...(session.outcome.caveats ?? [])])];
+  const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
   const metricSources = session.outcome.metrics?.sources;
   const artifactNumber = (id: string) => session.artifacts.find(artifact => artifact.id === id)?.sequence;
   const idList = (ids: string[] | undefined) => ids?.length ? ids.map(id => `Artifact ${artifactNumber(id) ?? '?'} · ${id}`).join(', ') : 'None recorded';
@@ -408,7 +409,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
           <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
         </div>
-        {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{qualificationItems.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+        {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
       </div>}
       {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
         <details className="outcome-subsection outcome-conclusion" open>

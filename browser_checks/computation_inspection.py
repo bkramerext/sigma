@@ -42,7 +42,7 @@ def ready(url, process):
 env = {k: v for k, v in os.environ.items() if not k.startswith(("SIGMA_", "OPENAI_", "ANTHROPIC_"))}
 for key in ["SIGMA_STATE_DIR", "SIGMA_AUTH_HOME", "SIGMA_CLOUD_AUTH_HOME"]:
     directory = scratch / key
-    directory.mkdir()
+    directory.mkdir(mode=0o700)
     env[key] = str(directory)
 env["SIGMA_PROJECTS_ROOT"] = str(Path(manifest["isolated_root"]) / "projects")
 (scratch / "offline_inspection.py").write_text("""import httpx
@@ -181,9 +181,42 @@ try:
                 )
                 assert len(simple.locator(".outcome-summary-text > p").first.inner_text()) <= 902
                 assert row.locator(".continuation-evidence").count() == 0
+                if first_project_open:
+                    for simple_width in [1440, 390, 320]:
+                        page.set_viewport_size(
+                            {"width": simple_width, "height": 1000 if simple_width == 1440 else 844}
+                        )
+                        assert not page.evaluate(
+                            "document.documentElement.scrollWidth > window.innerWidth"
+                        )
+                        simple.evaluate("node => node.scrollIntoView({block: 'start'})")
+                        assert page.locator(".request-toast").count() == 0
+                        page.screenshot(
+                            path=str(OUT / f"{run['scenario']}-simple-{simple_width}.png")
+                        )
+                    page.set_viewport_size({"width": 1440, "height": 1000})
                 settings = page.get_by_role("button", name="Project settings", exact=True)
                 settings.click()
                 preferences = page.get_by_role("dialog", name="Settings")
+                if run["scenario"] == "subset" and first_project_open:
+                    expect(preferences.get_by_role("tab", name="Research")).to_have_attribute(
+                        "aria-selected", "true"
+                    )
+                    expect(preferences.get_by_label("Model", exact=True)).to_be_visible()
+                    controls = preferences.locator(".settings-model-row > div")
+                    desktop = [item.bounding_box() for item in controls.all()]
+                    assert desktop[1]["x"] > desktop[0]["x"]
+                    assert desktop[1]["y"] == desktop[0]["y"]
+                    page.screenshot(path=str(OUT / "settings-research-1440.png"))
+                    for settings_width in [390, 320]:
+                        page.set_viewport_size({"width": settings_width, "height": 844})
+                        mobile = [item.bounding_box() for item in controls.all()]
+                        assert mobile[1]["y"] >= mobile[0]["y"] + mobile[0]["height"] - 1
+                        assert not page.evaluate(
+                            "document.documentElement.scrollWidth > window.innerWidth"
+                        )
+                        page.screenshot(path=str(OUT / f"settings-research-{settings_width}.png"))
+                    page.set_viewport_size({"width": 1440, "height": 1000})
                 preferences.get_by_role("tab", name="Preferences").click()
                 preferences.get_by_role("checkbox", name="Show advanced Outcome details").check()
                 preferences.get_by_role("button", name="Save", exact=True).click()
@@ -256,6 +289,7 @@ try:
                 execution.locator("summary").evaluate(
                     "node => node.scrollIntoView({block: 'start'})"
                 )
+                assert page.locator(".request-toast").count() == 0
                 page.screenshot(path=str(OUT / f"{slug}-execution-{width}.png"))
                 if slug == "subset-actual" and width == 1440:
                     conclusion = row.locator(".outcome-conclusion")
