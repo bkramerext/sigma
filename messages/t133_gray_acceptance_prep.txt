@@ -3,6 +3,7 @@ GRAY — T133 preparation handoff
 State: R4R for preparation; hosted acceptance is still BLOCKED.
 Branch: gray/t133-cloud-acceptance
 Base: origin/main at 583f946ca9a495c44dbef6950dc1d07db1eaf2ac
+Tested implementation commit: cb4d178 (suite and packaged Chrome run on this tree)
 Ticket: tickets/t133.md
 
 Work completed
