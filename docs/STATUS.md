@@ -5635,3 +5635,10 @@ research, computation, report, paper, strategy, and CLI scenarios, then stopped
 at `tests/tooling.py` because the inherited bootstrap-email fixture expected a
 different launcher cleanup path. The earlier recorded workaround is to run
 with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset.
+
+The architecture's research-tools line now names SciPy and SageMath directly
+and describes their use in exploring ideas, testing patterns, and carrying out
+calculations.
+
+**Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
+320px, with touch help at 390px. Frontend TypeScript typecheck passed.

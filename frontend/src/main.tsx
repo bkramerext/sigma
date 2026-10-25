@@ -1809,7 +1809,7 @@ function AboutArchitecture() {
     session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
     orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
-    tools: 'Where enabled, proposed Python code is run through the execution subsystem; source and outputs become inspectable evidence. SageMath requires an available, validated runtime. A computation is not a formal proof.',
+    tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
     workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
     skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
     decision: 'After a review, SIGMA applies the recorded assessment, next question and remaining work within resource limits. A strategy can remain available for later revision or another session.',
@@ -1986,7 +1986,7 @@ function AboutArchitecture() {
                 {card('skeptic', 'Skeptic Agent', 'Challenges assumptions and examines evidence', 'blue')}
               </div>
               <p className="about-agent-instantiation-note">The Skeptic is a separate agent call with a review role, not a formal proof verifier.</p>
-              <div className="about-tools-row"><span>The Investigator can use available research tools</span>{card('tools', 'Research Tools', 'Optional, bounded computations')}</div>
+              <div className="about-tools-row"><span>The Investigator can draw on tools such as SciPy and SageMath to explore ideas and test patterns.</span>{card('tools', 'Research Tools', 'Explore ideas and test patterns')}</div>
             </section>
             <div className="about-inner-connector"><span>Both agent steps become reviewable session evidence</span><i aria-hidden="true"/></div>
             <div className="about-working-evidence">{card('workingEvidence', 'Working Research Evidence', 'Shared context, traceable sources')}</div>
