@@ -13,7 +13,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from sigma.api import app
-from sigma.projects import initialize_project
+from sigma.projects import ProjectError, initialize_project
 from sigma.research_sessions import _obligation_identity, _save
 from sigma.research_state import build_current_understanding, current_understanding
 
@@ -173,6 +173,7 @@ def test_explicit_dispositions_and_no_semantic_matching():
         )
         assert candidate["obligations"][0]["status"] != "resolved_reported"
         assert not candidate["obligations"][0]["dispositions"][0]["valid"]
+        assert any("could not be linked" in note for note in candidate["limitations"])
     # Exact same note under a different branch must retain its distinct scope.
     other = synthetic_artifact("other", 3, strategy="other-strategy", obligations=[text])
     scoped = build_current_understanding("project", [synthetic_session([first, second, other])])
@@ -221,6 +222,12 @@ def test_relations_are_explicit_and_bounded_to_sources():
         build_current_understanding("project", [record])["findings"][0]["status"]
         == "partial_reported"
     )
+    duplicate = build_current_understanding(
+        "project", [synthetic_session([first, deepcopy(first)])]
+    )
+    assert not duplicate["findings"] and any(
+        "excluded" in note for note in duplicate["limitations"]
+    )
     # Peer-handoff retraction must not be interpreted as retracting a whole finding.
     unrelated.pop("finding_relations")
     unrelated["skeptic_output"]["retracted_cross_strategy_source_artifact_ids"] = ["upper"]
@@ -238,6 +245,16 @@ def test_read_only_path_isolation_and_empty_failed():
         state = current_understanding(view.path)
         assert not state["findings"] and not state["next_investigations"]
         assert sorted(str(p.relative_to(root)) for p in root.rglob("*")) == before_files
+        bad_history = Path(view.path) / "research-sessions"
+        bad_history.write_text("not a directory")
+        try:
+            current_understanding(view.path)
+        except ProjectError as exc:
+            assert "not a directory" in str(exc)
+        else:
+            raise AssertionError("Malformed history storage must not appear empty")
+        assert bad_history.read_text() == "not a directory"
+        bad_history.unlink()
         session_id = str(uuid4())
         record = {
             "id": session_id,

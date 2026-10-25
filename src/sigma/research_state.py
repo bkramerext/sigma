@@ -138,6 +138,8 @@ def build_current_understanding(
     obligations: dict[str, RecordedObligation] = {}
     changes: list[ResearchChange] = []
     failures: list[dict[str, Any]] = []
+    missing_dispositions = 0
+    missing_relations = 0
     limitations = [
         "Local saved findings do not establish that the project is solved. Agent reviews and computations are not independent verification.",
         "Latest reviewed findings are shown by strategy; different wording does not establish contradiction, equivalence or supersession.",
@@ -377,6 +379,7 @@ def build_current_understanding(
         ):
             item = obligations.get(_text(disposition.get("obligation_id")))
             if item is None:
+                missing_dispositions += 1
                 continue
             refs = evidence_for(disposition, source)
             state = disposition.get(
@@ -439,6 +442,7 @@ def build_current_understanding(
                         }
                     )
             else:
+                missing_dispositions += 1
                 item["note"] = (
                     "Saved disposition lacks unambiguous available evidence or a rationale; no resolution inferred."
                 )
@@ -474,6 +478,8 @@ def build_current_understanding(
                         "caution": "Explicit saved assessment with available evidence; not independent verification.",
                     }
                 )
+            else:
+                missing_relations += 1
     # Current legacy open notes are proposals only. Older unlinked notes remain
     # visible but are not automatically recycled into mandatory next steps.
     for item in obligations.values():
@@ -529,6 +535,14 @@ def build_current_understanding(
         for item in obligations.values()
         if item["actionable"]
     ]
+    if missing_dispositions:
+        limitations.append(
+            f"{missing_dispositions} saved obligation dispositions could not be linked to identified obligations and available evidence; no resolution was inferred from them."
+        )
+    if missing_relations:
+        limitations.append(
+            f"{missing_relations} saved finding relations could not be supported by unambiguous source pointers; no supersession or refutation was inferred from them."
+        )
     if skipped:
         limitations.append(
             f"{skipped} unavailable, malformed or foreign records were excluded. Missing evidence is not treated as resolved."
