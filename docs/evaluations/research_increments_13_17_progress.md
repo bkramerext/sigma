@@ -33,3 +33,22 @@
 Exact-branch-head full `./sigma test` and Research Outcome browser acceptance must both pass. Earlier failed CI due a new fixture's Ruff formatting; it was corrected without changing production behavior. Later workflow-config failure from referencing a job-ineligible runner path was corrected, and screenshot artifacts are now captured. The latest head and its completed runs must be independently checked before claiming MET.
 
 **Increment 13 preliminary state:** Implementation MET, adversarial coverage MET at offline/Chrome-fixture scope, final exact-head CI pending. Research superiority UNVERIFIED.
+
+
+## Increment 14: preregistration package (engineering review)
+
+**Status:** Six concrete paired tasks and offline tooling committed; live freeze and pilot **not authorized**. This is the design package to review before asking the human to approve a provider/model/account/cost cap. Do not describe it as a comparative win.
+
+- `docs/evaluations/increment14/tasks.json`: six synthetic cross-domain prompts with evidence-present/withheld packets (12 paired conditions). No stock SIGMA solutions, model outputs or paid runs were used.
+- `docs/evaluations/increment14/evaluator_only.md`: reference checks and fixed 0–4 blinded rubric, separate from the exact agent-facing packet. Repository access isolation must be demonstrated; repo directory placement by itself is not a security boundary.
+- `scripts/increment14_protocol.py`: strict structure checks, canonical SHA-256 task/packet hashing, seeded reproducible randomized pair ordering and a deliberately **unapproved/unfrozen** manifest with blank model/budget fields; default one replicate yields 12 matched pairs / 24 arm runs.
+- `docs/evaluations/increment14/RUNBOOK.md`: freeze gate, equal aggregate budgets, baseline strength, independent grading, exclusions and cost formula.
+- `.github/workflows/increment14-protocol.yml`: zero-cost deterministic generator/validation in CI.
+
+### Review caveats
+
+- No observed outputs; there is no evidence yet of research-quality improvement or of a multi-agent advantage.
+- The six cases are synthetic and short; mathematical ceiling effects and source availability confounds threaten power. Independent pre-output task review is required before freeze.
+- The key separation is procedural until runner access control is implemented and tested. Agents must be restricted to task packets and allowed tools.
+- A concrete verified model/provider price, funding account and explicit total cost cap require human approval. The proposed thresholds are preregistration *candidates* until that approval and freeze; no spending will occur before then.
+- Thus engineering package may be **ready for merge review**, but the Increment 14 *freeze and authorization exit* remains outstanding.
