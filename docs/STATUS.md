@@ -4422,10 +4422,11 @@ within-session only (`n=6` task clusters), not evidence about persistence or
 superiority.
 
 A zero-cost adversarial probe showed the generic auditor accepted a six-pair
-manifest where the protocol requires 36. The version-2 default audit now checks
-the full six-task × two-variant × three-repeat matrix, source/code hashes, arm
-assignment/order and fixed caps before accepting records. Its unit fixture opts
-into partial-manifest mode explicitly; 20 synthetic manifest/record mutations
+manifest where the protocol requires 36. The version-3 default audit now checks
+the full six-task × two-variant × three-repeat matrix, task/packet/protocol/
+agent/audit/key/scoring hashes, assignment and declared schedule positions, and
+fixed caps before accepting records. Its unit fixture opts into partial-
+manifest mode explicitly; 23 synthetic manifest/record mutations
 are rejected by the offline dry run. The remaining live gates are documented
 in [the Increment 21 readiness audit](evaluations/increment_21/readiness-audit.md)
 and reproducible machine outputs/hashes are retained in

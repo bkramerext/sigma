@@ -6,9 +6,12 @@ The offline fixture generated its normal 72 synthetic records. Passing the list
 in reverse order while preserving each record's declared schedule_position still
 accepted all 36 pairs, since output-list order is not execution chronology. A
 separate mutation that changed one record's schedule_position was rejected.
+The complete offline run also rejects a downgraded manifest schema (v3 to v2)
+and tampering with the auditor or evaluator-key source hashes.
 Result:
 
 PASS: schedule_position must match the randomized manifest.
+PASS: version-2 manifests are rejected after the version-3 contract extension.
 LIMITATION: schedule_position is an unauthenticated record assertion; no live
 runner or trusted dispatch log exists to verify actual execution chronology.
 

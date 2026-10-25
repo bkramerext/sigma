@@ -38,7 +38,7 @@ WEIGHTS = (0.35, 0.30, 0.15, 0.10, 0.10)
 
 def check_frozen_protocol_manifest(manifest: dict[str, Any]) -> None:
     """Require a full, source-matched T114 v2 design before auditing its runs."""
-    if manifest.get("schema_version") != 2:
+    if manifest.get("schema_version") != 3:
         raise ValueError("Unsupported or missing frozen protocol schema")
     seed = manifest.get("seed")
     if not isinstance(seed, int) or isinstance(seed, bool):
@@ -54,6 +54,8 @@ def check_frozen_protocol_manifest(manifest: dict[str, Any]) -> None:
         "canonical_tasks_sha256",
         "protocol_script_sha256",
         "agent_packet_script_sha256",
+        "audit_script_sha256",
+        "evaluator_key_sha256",
         "analysis_unit",
         "independent_task_count",
         "scoring_schema",

@@ -147,12 +147,15 @@ def dry_run() -> dict:
     must_reject(lambda m, r: r[0].update(scorer_saw_arm_identity=True))
     must_reject(lambda m, r: m.update(user_approved=False))
     must_reject(lambda m, r: m.update(status="DRAFT_NOT_FROZEN"))
+    must_reject(lambda m, r: m.update(schema_version=2))
     must_reject(lambda m, r: m["pairs"].pop())
     must_reject(lambda m, r: m["pairs"][0].update(replicate=99))
     must_reject(lambda m, r: m.update(seed=140018))
     must_reject(lambda m, r: m.update(per_arm_output_token_cap=16001))
     must_reject(lambda m, r: m.update(protocol_script_sha256="tampered"))
     must_reject(lambda m, r: r[1].update(schedule_position=r[0]["schedule_position"]))
+    must_reject(lambda m, r: m.update(audit_script_sha256="tampered"))
+    must_reject(lambda m, r: m.update(evaluator_key_sha256="tampered"))
 
     result = audit.check_trial_records(frozen, records)
     if result != {

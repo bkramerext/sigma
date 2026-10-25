@@ -16,6 +16,9 @@ assert len(data["tasks"]) == 6
 manifest1 = module.manifest(140017, 1)
 manifest2 = module.manifest(140017, 1)
 assert manifest1 == manifest2
+assert manifest1["schema_version"] == 3
+assert len(manifest1["audit_script_sha256"]) == 64
+assert len(manifest1["evaluator_key_sha256"]) == 64
 assert manifest1["paired_runs"] == 12 and manifest1["total_arm_runs"] == 24
 assert not manifest1["user_approved"] and not manifest1["freeze_approved"]
 assert manifest1["per_arm_input_token_cap"] == 48000
