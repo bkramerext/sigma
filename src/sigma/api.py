@@ -352,6 +352,24 @@ def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
     )
 
 
+@app.get("/api/projects/papers/{paper_id}/txt")
+def paper_txt_view(paper_id: str, path: str):
+    return Response(
+        papers.paper_text(path, paper_id),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.txt"',
+        },
+    )
+
+
+@app.delete("/api/projects/papers/{paper_id}")
+def paper_delete_view(paper_id: str, path: str):
+    papers.delete_paper(path, paper_id)
+    return {"deleted": paper_id}
+
+
 @app.post("/api/projects/papers")
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     await require_cloud_inference_binding(

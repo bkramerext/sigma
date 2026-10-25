@@ -1155,7 +1155,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: string; projectId: string; downloadFilename: string; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId: string; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -1168,10 +1168,11 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
   const [checkpoint, setCheckpoint] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [longForm, setLongForm] = useState(false);
-  const [openInTab, setOpenInTab] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState('');
   useEffect(() => { dialog.current?.showModal(); void refresh(); return () => request.current?.abort(); }, []);
   async function refresh(keepId?: string) {
     setLoading(true);
@@ -1211,6 +1212,19 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function removePaper(id: string) {
+    setBusy(true); setError('');
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not remove this paper version.');
+      const remaining = papers.filter(item => item.paper_id !== id);
+      setPapers(remaining); setConfirmDeleteId(''); setExpandedPaperId('');
+      if (selected?.paper_id === id) setSelected(null);
+      if (remaining.length) await openPaper(remaining[0].paper_id);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
   }
   async function restartCheckpoint() {
     if (busy || !checkpoint?.checkpoint_can_restart || !binding) return;
@@ -1305,7 +1319,6 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       if (!controller.signal.aborted) setError(errorMessage(cause));
     } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
-  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path, ...(openInTab ? { open_in_browser: 'true' } : {}) })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button></div></header>
     <div className="settings-body ai-paper-body">
@@ -1315,7 +1328,6 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
       <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
       <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
-      <label className="ai-paper-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>
       {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
         {checkpoint.resume_available
           ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
@@ -1325,9 +1337,14 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
-      {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}
-      {!loading && papers.length > 0 && <select id="ai-paper-version" value={selected?.paper_id ?? ''} disabled={busy} onChange={event => void openPaper(event.target.value)}>{papers.map(item => <option key={item.paper_id} value={item.paper_id}>{item.title} · {dateLabel(item.created_at)}</option>)}</select>}
-      {selected && <article className="ai-paper-preview">
+      {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map((paper, index) => <article className="saved-paper-card" key={paper.paper_id}>
+        <div className="saved-paper-heading"><div><h4>{paper.title}</h4><p>{dateLabel(paper.created_at)} · Version {papers.length - index}</p></div>
+          <div className="saved-paper-actions"><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/txt?${new URLSearchParams({ path })}`}>Download .txt</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.pdf`}>Download .pdf</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open .pdf in browser</a></>}
+            <button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button>
+          </div></div>
+        {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm remove</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></div>}
+        <button type="button" className="text-view-link saved-paper-expand" aria-expanded={expandedPaperId === paper.paper_id} aria-controls={`saved-paper-body-${paper.paper_id}`} onClick={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }}><DisclosureChevron expanded={expandedPaperId === paper.paper_id}/>{expandedPaperId === paper.paper_id ? 'Hide saved paper' : 'Read saved paper'}</button>
+        <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">
         <h3>{selected.draft.title}</h3>
         <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
         <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
@@ -1349,11 +1366,9 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
         {!!selected.obligation_reconciliation?.length && <><h4>Frozen obligation reconciliation</h4><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the saved evidence source and field.</p><ul>{selected.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
         <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
         <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
-        {selected.pdf_available && (openInTab
-          ? <a className="text-view-link" href={pdfUrl} target="_blank" rel="noopener noreferrer">Open compiled PDF in new tab</a>
-          : <a className="text-view-link" href={pdfUrl} download={downloadFilename}>Download compiled PDF</a>)}
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
-      </article>}
+      </article>}</div>
+      </article>)}</section>}
     </div>
   </dialog>;
 }
@@ -3272,7 +3287,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />

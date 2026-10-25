@@ -2373,6 +2373,60 @@ def get_paper(path: str, paper_id: str) -> dict[str, Any]:
     return record
 
 
+def paper_text(path: str, paper_id: str) -> str:
+    """Render the saved version's authored content as a plain-text download."""
+    record = get_paper(path, paper_id)
+    draft = record["draft"]
+    lines = [draft.get("title", "Untitled paper"), "", "Abstract", draft.get("abstract", "")]
+    for heading, key in (
+        ("Problem framing", "problem_framing"),
+        ("Methods and evidence", "methods"),
+    ):
+        lines.extend(("", heading, *(str(item) for item in draft.get(key, []))))
+    for section in draft.get("sections", []):
+        lines.extend(
+            (
+                "",
+                str(section.get("heading", "")),
+                *(str(item) for item in section.get("paragraphs", [])),
+            )
+        )
+    if draft.get("claims"):
+        lines.extend(("", "Claim register"))
+        for claim in draft["claims"]:
+            lines.extend(
+                (
+                    f"{claim.get('id', '')} · {claim.get('status', '')}: {claim.get('statement', '')}",
+                    str(claim.get("reasoning", "")),
+                )
+            )
+    for heading, key in (
+        ("Limitations", "limitations"),
+        ("Open obligations", "open_obligations"),
+        ("Conclusions", "conclusions"),
+    ):
+        items = draft.get(key, [])
+        if items:
+            lines.extend(("", heading, *(str(item) for item in items)))
+    return "\n".join(lines).strip() + "\n"
+
+
+def delete_paper(path: str, paper_id: str) -> None:
+    directory = _paper_dir(path, create=False)
+    record = get_paper(path, paper_id)
+    if record.get("project_id") != inspect_project(path).project.id:
+        raise ProjectError("Paper belongs to a different project")
+    # A version owns only its JSON record and compiled PDF. Leave all other
+    # papers, checkpoints, and project research history untouched.
+    for suffix in (".json", ".pdf"):
+        artifact = directory / f"{_paper_id(paper_id)}{suffix}"
+        try:
+            if artifact.is_symlink() or artifact.is_file():
+                artifact.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _valid_pdf_file(directory: Path, record: dict[str, Any]) -> bool:
     file = directory / f"{record.get('paper_id')}.pdf"
     try:
