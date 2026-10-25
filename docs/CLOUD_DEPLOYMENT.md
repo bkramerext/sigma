@@ -51,6 +51,8 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 
 **State filesystem initialization (2026-10-25):** Operator verified `/dev/disk/by-id/google-sigma-state -> ../../sdb`, with empty `blkid` and `wipefs -n` output, then ran `sudo mkfs.ext4 -L sigma-state /dev/disk/by-id/google-sigma-state`. `mke2fs` reported successful ext4 creation, UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Post-format `blkid`, mount and reboot checks pending. Never repeat mkfs on this disk.
 
+**State mount observation (2026-10-25):** Operator mounted UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5` at `/srv/sigma-state`; `findmnt` showed `/dev/sdb`, ext4, `rw,relatime`. Filesystem root ownership/mode, persistent fstab entry and reboot validation remain pending.
+
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
 
 ## Contents
