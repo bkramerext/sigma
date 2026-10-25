@@ -29,6 +29,18 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 
 - 2026-10-25: Operator reported existing `SIGMA Auth` project identity (name, project ID, project number). Confirmed selected DuckDNS hostname from approved deployment documentation. No production resources, IAM grants, billing changes, or DNS updates executed by this documentation change.
 
+### T127 Console provisioning log (2026-10-25)
+
+- **Production project:** `SIGMA Production`, ID `sigma-research-prod`, number `224387813390`. Existing auth project: `SIGMA Auth`, ID `sigma-auth-512601`, number `665111821572`.
+- **Duplicate project:** `sigma-production-512718` shut down per operator report; in deletion recovery period. Do not confuse with production.
+- **Billing:** Active Direct account `My Billing Account`, ID `015C1D-E6B877-9913D6`; production and auth projects linked per Console screenshot. Free trial showed $300 credit and $0 used on October 25. Calculated 90-day end January 22, 2027; confirm Console expiry.
+- **Budget:** `SIGMA Production - Trial Budget`, $300, custom October 24, 2026–January 22, 2027. Operator confirmed saved row; alerts at 50%, 75%, 90%, 100%; normal email notifications. Budget alerts do not cap spend.
+- **APIs enabled:** Compute Engine, IAM, Cloud Resource Manager, Secret Manager, IAP, Cloud Billing Budgets (operator screenshots/reports).
+- **Service account:** `sigma-runtime@sigma-research-prod.iam.gserviceaccount.com` created and enabled, screenshot; project roles left blank, no account keys created. Two secret-level access grants pending.
+- **Secret Manager:** Creating first OAuth secret deferred because Console form requires a version value. Neither secret reported created.
+- **Hostname:** `sigma-research.duckdns.org`, registered. Static IP and live DNS update pending.
+- **Not yet provisioned:** custom VPC/subnet, IAP SSH firewall, state disk, static IP, VM; live SSH and disk checks outstanding.
+
 ## Before any operation
 
 1. Identify the GCP project, `us-west1-b` zone, VM `sigma-gce-01`, disk `sigma-state`, public hostname, and current `SIGMA_RELEASE`. Confirm these against **live GCP**, not just this document.
