@@ -48,11 +48,7 @@ def api_fixture(route):
             "message": "Browser fixture; no provider call is made.",
         }
         route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
-    elif path == "/api/projects/samples":
-        route.fulfill(
-            status=200, content_type="application/json", body=json.dumps({"projects": []})
-        )
-    elif path == "/api/projects/recent":
+    elif path in {"/api/projects/samples", "/api/projects/recent"}:
         route.fulfill(
             status=200, content_type="application/json", body=json.dumps({"projects": []})
         )
