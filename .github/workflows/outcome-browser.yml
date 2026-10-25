@@ -24,6 +24,7 @@ jobs:
     env:
       CI: "true"
       SIGMA_CLOUD_AUTH_ENABLED: "false"
+      SIGMA_OUTCOME_SCREENSHOT_DIR: ${{ runner.temp }}/sigma-outcome-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,3 +49,11 @@ jobs:
         run: |
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           uv run --with playwright python browser_checks/t47_conclusion.py
+      - name: Preserve browser acceptance screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: outcome-browser-screenshots
+          path: ${{ runner.temp }}/sigma-outcome-acceptance/sigma-increment13-*.png
+          if-no-files-found: warn
+          retention-days: 14
