@@ -6411,9 +6411,15 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
 
 def test_saved_followup_question_selection():
     """A newer terminal outcome must block stale or unprovided follow-ups."""
-    def session(number, strategy_id, decision="stop_budget_exhausted",
-                stop_reason="recoverable_objection", assessment="continue",
-                retracted=False):
+
+    def session(
+        number,
+        strategy_id,
+        decision="stop_budget_exhausted",
+        stop_reason="recoverable_objection",
+        assessment="continue",
+        retracted=False,
+    ):
         artifact = {
             "id": f"artifact-{number}",
             "strategy_id": strategy_id,
@@ -6429,8 +6435,10 @@ def test_saved_followup_question_selection():
         if retracted:
             artifact["retracted_by_artifact_ids"] = ["later-retraction"]
         return {
-            "id": f"session-{number}", "session_number": number,
-            "status": "ended", "created_at": f"2026-10-25T00:00:{number:02d}Z",
+            "id": f"session-{number}",
+            "session_number": number,
+            "status": "ended",
+            "created_at": f"2026-10-25T00:00:{number:02d}Z",
             "artifacts": [artifact],
         }
 
@@ -6474,7 +6482,9 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
     phase = "seed"
     seen = []
     later_dispatched = asyncio.Event()
-    question = "Check a specific edge case using the earlier observation, not a new project-wide claim."
+    question = (
+        "Check a specific edge case using the earlier observation, not a new project-wide claim."
+    )
 
     async def handler(request):
         nonlocal phase
@@ -6518,8 +6528,12 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         research_sessions.save_limits(str(path), limits)
         phase = "later"
         next_session = await research_sessions.start_session(
-            str(path), strategy.id, str(uuid4()), view.project.id,
-            credential["identity"], strategy_ids=[strategy.id, other.id],
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[strategy.id, other.id],
         )
         branches = {row["strategy_id"]: row for row in next_session["strategy_runs"]}
         assert branches[strategy.id]["current_question"] == question
@@ -6531,8 +6545,10 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         assert next_session["current_question"] == question
         await asyncio.wait_for(later_dispatched.wait(), 2)
         carried = next(
-            context for stage, role, context in seen
-            if stage == "later" and role == "research_investigator"
+            context
+            for stage, role, context in seen
+            if stage == "later"
+            and role == "research_investigator"
             and context["strategy"]["id"] == strategy.id
         )
         assert carried["question"] == question
