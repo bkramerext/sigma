@@ -1872,6 +1872,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <section className="about-feature"><h4>Human Guidance</h4><p>Researchers can provide feedback, revise strategies, and choose which directions to pursue.</p></section>
       <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
       <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
+      <section className="about-feature"><h4>Readable Mathematical Text</h4><p>AI can reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatted mathematics still needs review.</p></section>
       <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
@@ -2276,7 +2277,15 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     event.preventDefault(); if (submitting.current || !compatible || (initial && !limitValidation.value) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : values);
+      const createValues = {
+        title: values.title,
+        problem: values.problem,
+        investigation_type: values.investigation_type,
+        ai_model: values.ai_model,
+        reasoning_effort: values.reasoning_effort,
+        difficulty: values.difficulty,
+      };
+      const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
       if (initial) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');

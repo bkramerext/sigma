@@ -317,3 +317,19 @@ order, Reasoning / proof Markdown rendering, and computational source/output
 access, narrow Outcome rendering, and the Model/Thinking side-by-side desktop
 and stacked mobile layouts. This is browser
 emulation at 390px and 320px, not physical-phone testing.
+
+
+## Project creation request and About math-formatting regressions
+
+With the local UI running, execute these real-Chrome checks:
+
+```sh
+SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 uv run --with playwright python browser_checks/project_create_contract.py
+SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 uv run --with playwright python browser_checks/about_math_formatting.py
+```
+
+The project-creation check intercepts the create request and verifies the
+frontend sends only fields accepted by the strict API; it creates no project.
+The About check verifies the AI-assisted mathematical formatting description
+and dialog fit at desktop and narrow mobile widths. All APIs are mocked and no
+provider calls are made.

@@ -15,6 +15,7 @@ Instead of treating a long conversation as the research record, SIGMA organizes 
 - **Coordinate related investigations.** Evidence-linked cross-strategy findings can change a peer strategy's next research question. Contradictions, overlaps, complementary results, and later withdrawals remain inspectable. These relationships are model-reported and are **not automatically verified**.
 - **Execute scientific Python experiments.** When appropriate, Investigators can propose code for an isolated Docker sandbox with NumPy, SciPy, pandas, SymPy, and Matplotlib. The Skeptic receives the exact code, result, diagnostics, and execution provenance. Computations and captured files are retained as research evidence.
 - **Inspect and publish research artifacts.** View session evidence, export audits or deterministic reports, and use bounded AI authoring to create versioned research papers and compiled PDFs with claims linked to frozen evidence snapshots.
+- **Read mathematical text clearly.** Use AI to reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatting is not mathematical verification.
 - **Work locally and retain control.** Projects remain on your machine. Manual work does not require an AI account. You choose the connected AI provider and can supervise, stop, and review agent activity.
 
 The included samples cover varying domains and difficulty levels. The Riemann Hypothesis example is an **open research problem**, not an existing proof or claim that SIGMA can solve it.
