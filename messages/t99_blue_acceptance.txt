@@ -1,0 +1,67 @@
+R4R — T99.1 pre-cloud sponsored inference acceptance
+
+PR: https://github.com/bkramerext/sigma/pull/110
+Branch: blue/t99-sponsored-acceptance
+Base: current main, refreshed through 2a6ca7d4cc28c4335a594d45f2d57ea038cf4fb0
+Implementation commit: 9b8f2d774e67435d88a64a2d2e0f6b7ab3b3efe9
+Current branch refresh: 276d804b87f9f34bd65fdffa73d506ce0292c439
+Scope: inference infrastructure and spending accounting only. No merge performed.
+
+Acceptance matrix
+
+1. PASS — Production FastAPI proposal, agentic proposal, Markdown conversion,
+   one-shot paper, and long-form paper endpoints. The existing API test now
+   exercises the real hosted credential/configuration adapter, persistent
+   temporary workspaces and ledger, deterministic authenticated test principals,
+   and an offline OpenAI Responses transport.
+2. PASS — Server sponsor credential selected when a personal API key is also
+   present. Removing the sponsor credential prevents dispatch. No key values
+   appear in response data.
+3. PASS — Global ceiling blocks user B before dispatch after user A exhausts
+   the shared pool; user B's own ceiling also blocks dispatch with global
+   capacity restored. Concurrent same-user operation is rejected while the
+   first request is in provider I/O. Existing full-request reservation
+   exhaustion check remains in place.
+4. PASS — HTTP 429, provider read timeout, malformed completion without usage,
+   and cancellation after dispatch each retain an unknown-charge hold.
+   Cancellation returns bounded HTTP 499.
+5. PASS — A fresh Uvicorn FastAPI process opens the same persistent workspace
+   root and SQLite ledger. It sees user A's four unknown attempts and exhausted
+   allowance, while user B still has zero unknown attempts and the full $1
+   allowance.
+6. PASS — Research projects, paper metadata and generated PDF files are inside
+   the authenticated owner's private workspace. Cross-owner project reads are
+   denied.
+7. PASS — No real provider calls, GCP resources, Google OAuth calls, or paid
+   usage. Provider Responses and model-list requests use deterministic local
+   MockTransport fixtures; PDF compilation is stubbed.
+
+Defect fixed
+
+Explicit proposal cancellation previously escaped as asyncio.CancelledError,
+leaving the ASGI middleware without an HTTP response. `src/sigma/api.py` now
+returns the existing bounded cancellation response with HTTP 499. The new
+concurrent API regression reproduces the defect and verifies both response and
+unknown-charge retention.
+
+Checks actually run
+
+- `uv run --locked --no-sync python tests/cloud_research_api.py` — PASS.
+- `uv run --locked --no-sync python tests/cloud_research_sponsored_api.py` — PASS
+  (the T41 test added to main during this assignment's final base refresh).
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — PASS on current main
+  including Ruff, format, Pyright, frontend typecheck, and production build.
+- Bare `./sigma test` was run before the current-main refresh and failed at the
+  existing UI cleanup assertion in `tests/tooling.py`, because the shell exports
+  `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`. The clean-environment full-suite rerun
+  passed the same test.
+- `git diff --check`, focused Ruff check, and focused Ruff format check — PASS.
+
+Limitations
+
+- Authentication identities are deterministic test principals installed only
+  by `tests/cloud_workspace_test_app.py`; this is not live Google OIDC.
+- The provider, PDF compilation, and browser are simulated or stubbed. This
+  does not assess provider quality, hosted browser behavior, GCP deployment, or
+  real provider billing.
+- No self-merge. The PR remains open for independent review.
