@@ -43,8 +43,20 @@ with sync_playwright() as playwright:
     generate.click()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
-    expect(card.get_by_role("link", name="Download .txt")).to_be_visible()
-    pdf_download = card.get_by_role("link", name="Download .pdf")
+    tex_download = card.get_by_role("link", name="Download TeX file")
+    expect(tex_download).to_be_visible()
+    with page.expect_download() as tex_download_event:
+        tex_download.click()
+    assert tex_download_event.value.suggested_filename.endswith(".tex")
+    tex_response = page.evaluate(
+        "async href => { const response=await fetch(href); return {status:response.status,type:response.headers.get('content-type'),disposition:response.headers.get('content-disposition'),text:await response.text()}; }",
+        tex_download.get_attribute("href"),
+    )
+    assert tex_response["status"] == 200 and "application/x-tex" in tex_response["type"]
+    assert "attachment" in tex_response["disposition"] and tex_response["text"].startswith(
+        "\\documentclass"
+    )
+    pdf_download = card.get_by_role("link", name="Download PDF")
     expect(pdf_download).to_be_visible()
     with page.expect_download() as download_event:
         pdf_download.click()
@@ -66,15 +78,25 @@ with sync_playwright() as playwright:
         70,
         45,
     ]
-    txt_link = card.get_by_role("link", name="Download .txt")
-    txt_response = page.evaluate(
-        "async href => { const response=await fetch(href); return {status:response.status,type:response.headers.get('content-type'),disposition:response.headers.get('content-disposition'),text:await response.text()}; }",
-        txt_link.get_attribute("href"),
+    actions = card.locator(".saved-paper-actions")
+    expect(actions.get_by_role("link", name="Download TeX file")).to_be_visible()
+    expect(actions.get_by_role("link", name="Download PDF")).to_be_visible()
+    expect(actions.get_by_role("link", name="Open PDF in browser")).to_be_visible()
+    title_line = card.locator(".saved-paper-expand")
+    metadata_line = card.locator(".saved-paper-meta")
+    remove_button = metadata_line.get_by_role("button", name="Remove")
+    title_box = title_line.bounding_box()
+    actions_box = actions.bounding_box()
+    metadata_box = metadata_line.locator("p").bounding_box()
+    remove_box = remove_button.bounding_box()
+    assert title_box and actions_box and actions_box["x"] >= title_box["x"] + title_box["width"] - 1
+    assert metadata_box and remove_box and abs(metadata_box["y"] - remove_box["y"]) < 4
+    action_boxes = actions.locator("a").evaluate_all(
+        "items => items.map(item => item.getBoundingClientRect().y)"
     )
-    assert txt_response["status"] == 200 and "text/plain" in txt_response["type"]
-    assert "attachment" in txt_response["disposition"] and txt_response["text"].strip()
+    assert action_boxes == sorted(action_boxes)
     with page.expect_popup() as popup_event:
-        card.get_by_role("link", name="Open .pdf in browser").click()
+        card.get_by_role("link", name="Open PDF in browser").click()
     pdf_page = popup_event.value
     assert "/pdf?" in pdf_page.url
     assert "open_in_browser=true" in pdf_page.url
@@ -84,18 +106,23 @@ with sync_playwright() as playwright:
     )
     assert inline["status"] == 200 and "inline" in inline["disposition"]
     pdf_page.close()
-    expand = card.get_by_role("button", name="Read saved paper")
+    expand = card.locator("button.saved-paper-expand")
     assert expand.get_attribute("aria-controls")
     expand.click()
     article = card.locator(".ai-paper-preview")
     expect(article).to_be_visible()
     expect(article).to_contain_text("Abstract.")
     assert not article.locator("script").count()
+    expect(actions.get_by_role("link", name="Download TeX file")).to_be_visible()
+    expect(actions.get_by_role("link", name="Download PDF")).to_be_visible()
+    expect(actions.get_by_role("link", name="Open PDF in browser")).to_be_visible()
+    expand.click()
+    expect(article).to_be_hidden()
+    expect(actions.get_by_role("link", name="Download TeX file")).to_be_visible()
 
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-    actions = card.locator(".saved-paper-actions")
-    assert actions.is_visible()
+    expect(actions).to_be_visible()
     card.get_by_role("button", name="Remove").click()
     expect(card.get_by_role("group", name="Confirm removal of")).to_be_visible()
     card.get_by_role("button", name="Cancel").click()
@@ -113,5 +140,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS real Chrome saved-paper library: TXT/PDF headers and payloads, new-tab inline PDF, accessible saved-content disclosure, mobile layout, confirmed version deletion."
+    "PASS real Chrome saved-paper library: TeX/PDF headers and payloads, vertical actions beside title/metadata, persistent actions across disclosure, new-tab inline PDF, mobile layout, confirmed version deletion."
 )

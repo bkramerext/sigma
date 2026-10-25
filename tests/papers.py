@@ -1204,6 +1204,7 @@ def main() -> None:
         assert record["snapshot_sha256"] == first["snapshot_sha256"]
         assert record["tex_source"].startswith(r"\documentclass")
         assert r"\end{document}" in record["tex_source"]
+        assert papers.paper_tex(str(path), first["paper_id"]) == record["tex_source"]
         assert record["tex_source"].count(r"\section*{About this paper}") == 1
         assert "AI-generated research synthesis" in record["tex_source"]
         assert record["generation"]["call_limit"] == 1

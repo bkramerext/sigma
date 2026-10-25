@@ -90,6 +90,16 @@ Home page reflects session starts and stops. Real Chrome
 → stopped transition without reloading. The local app server was restarted
 after the test2 run had ended so its backend loaded the updated response field.
 
+The user then requested saved AI paper cards match the session-row disclosure
+pattern. Each saved version now has an adjacent disclosure arrow and title,
+date/version metadata with Remove on that line, and vertically stacked TeX/PDF
+actions on the right that remain visible while expanded. The TeX action now
+downloads the saved `.tex` source used to compile the PDF through a dedicated
+authenticated route; the older plain-text route remains available. Real Chrome
+`browser_checks/saved_paper_library.py` passed the TeX/PDF download, inline PDF,
+collapsed/expanded layout and action visibility, metadata/remove alignment,
+mobile layout, and confirmed deletion checks against a fresh local fixture.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored

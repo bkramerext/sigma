@@ -2411,6 +2411,15 @@ def paper_text(path: str, paper_id: str) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def paper_tex(path: str, paper_id: str) -> str:
+    """Return the exact TeX source compiled into this saved version's PDF."""
+    record = get_paper(path, paper_id)
+    source = record.get("tex_source")
+    if not isinstance(source, str) or not source:
+        raise ProjectError("The TeX source for this saved paper is unavailable.")
+    return source
+
+
 def delete_paper(path: str, paper_id: str) -> None:
     directory = _paper_dir(path, create=False)
     record = get_paper(path, paper_id)

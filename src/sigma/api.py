@@ -364,6 +364,18 @@ def paper_txt_view(paper_id: str, path: str):
     )
 
 
+@app.get("/api/projects/papers/{paper_id}/tex")
+def paper_tex_view(paper_id: str, path: str):
+    return Response(
+        papers.paper_tex(path, paper_id),
+        media_type="application/x-tex; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.tex"',
+        },
+    )
+
+
 @app.delete("/api/projects/papers/{paper_id}")
 def paper_delete_view(paper_id: str, path: str):
     papers.delete_paper(path, paper_id)
