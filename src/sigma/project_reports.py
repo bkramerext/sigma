@@ -126,10 +126,13 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             ),
         ]
         for execution in provenance["records"]:
-            refs = "; ".join(
-                [f"artifact {value}" for value in execution["artifact_ids"]]
-                + [f"step {value}" for value in execution["step_ids"]]
-            ) or "no owning artifact/step reference recorded"
+            refs = (
+                "; ".join(
+                    [f"artifact {value}" for value in execution["artifact_ids"]]
+                    + [f"step {value}" for value in execution["step_ids"]]
+                )
+                or "no owning artifact/step reference recorded"
+            )
             lines.append(
                 f"Execution {_value(execution['id'])}: {_value(execution['runtime'])} · "
                 f"status {' / '.join(execution['statuses'])} · {refs}; "
