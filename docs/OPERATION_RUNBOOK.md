@@ -17,7 +17,20 @@ The detailed configuration and exact provisioning parameters live in [CLOUD_DEPL
 **Prerequisites:** Explicit approved GCP project/resources, IAM, static IP, state disk, Secret Manager configuration, production Google OAuth Web client and DuckDNS access.
 
 1. Follow [Cloud Deployment: Google setup and operator commands](CLOUD_DEPLOYMENT.md#google-setup-and-operator-commands) and the provisioning runbook there. Provision Ubuntu 24.04 amd64 in `us-west1-b` with a separately retained state disk (`auto-delete=no`). Restrict SSH to approved IAP path, public ingress to 80/443 when ready.
-2. Confirm disk identity and UUID before initial filesystem setup. **Never format an existing disk**. Mount persistently at `/srv/sigma-state`; verify owner, permissions and systemd mount ordering.
+2. Confirm the attached `sigma-state` disk identity before initial filesystem
+   setup. **Never format an existing disk**. If the owner-confirmed new disk is
+   blank, perform any required one-time formatting only after verifying its
+   GCE attachment. Once its filesystem UUID is known, run:
+
+   ```sh
+   sudo /opt/sigma/current/deploy/prepare_state_disk.py OWNER_CONFIRMED_UUID
+   ```
+
+   This writes an idempotent UUID-backed `/etc/fstab` entry with restrictive
+   mount flags, mounts at `/srv/sigma-state`, and makes the filesystem root
+   `root:root 0700`. It does not format disks. The preflight confirms that the
+   mounted UUID and fstab UUID match; `sigma.service` requires the generated
+   mount unit and fails closed when the disk is absent.
 3. Stage reviewed code at `/opt/sigma/current` and run `sudo /opt/sigma/current/deploy/install-gce-host.sh`. Install/configure the dedicated `sigma-sandbox` rootless Docker daemon.
 4. Build Python and Sage runner images **under the rootless daemon** using `deploy/build-sandbox-images.sh`, as described in the Cloud Deployment host setup contract.
 5. Set `/etc/sigma/deploy.env` with release SHA, domain, OAuth client ID, approved limits and secret-file paths; protect it `root:root 0600`. Use `deploy/fetch-secrets.sh` for named secrets. Never print secret values.

@@ -266,13 +266,21 @@ trial-signup, project-creation, or API-enablement command.
 
 ## Host setup and launch contract
 
-1. Verify the attached state disk identity before mounting; do not format a disk
-   as part of host setup. Add its owner-confirmed filesystem UUID to `/etc/fstab`
-   at `/srv/sigma-state` so systemd generates
-   `srv-sigma\x2dstate.mount`. Mount it, then set the filesystem root to
-   `root:root` mode `0700`. `deploy/start-gce.sh` creates the separate `auth`
-   directory as UID/GID `10001`, mode `0700`; the rootless sandbox account must
-   not traverse the state filesystem. Do not put secrets on this disk.
+1. Verify the attached state disk identity before mounting. Never format an
+   existing disk; if a newly provisioned disk is blank, any one-time format
+   action must follow owner confirmation of the GCE attachment. Once the
+   filesystem UUID is known, run
+   `sudo /opt/sigma/current/deploy/prepare_state_disk.py OWNER_CONFIRMED_UUID`.
+   It verifies the UUID resolves to the attached block filesystem, adds or
+   hardens its `/etc/fstab` row, reloads systemd, mounts it at
+   `/srv/sigma-state`, and sets the filesystem root to `root:root` mode `0700`.
+   It does not format the disk. Its fstab options include `nodev`, `nosuid`,
+   `noexec`, and `nofail`; the explicit `sigma.service` mount dependency still
+   prevents application startup when the state disk is absent. The read-only
+   preflight verifies the mounted UUID matches the UUID-backed fstab entry.
+   `deploy/start-gce.sh` creates the separate `auth` directory as UID/GID
+   `10001`, mode `0700`; the rootless sandbox account must not traverse the
+   state filesystem. Do not put secrets on this disk.
 2. Stage the reviewed checkout at `/opt/sigma/current`, then run
    `sudo /opt/sigma/current/deploy/install-gce-host.sh` on Ubuntu 24.04 amd64.
    The idempotent installer configures Docker's official Ubuntu repository,
@@ -836,9 +844,11 @@ operations/transfer. Do not create it under this runbook without approval.
 ### Private host setup before public launch
 
 1. Through IAP, verify Ubuntu release, disk identity/size, OS Login, shielded
-   state, package-update policy, time sync, and absence of public SSH. Format
-   and mount the state disk at `/srv/sigma-state` only after verifying it is
-   the new `sigma-state` disk.
+   state, package-update policy, time sync, and absence of public SSH. If and
+   only if the owner-confirmed new `sigma-state` disk is blank, use the approved
+   one-time format procedure. Then run
+   `sudo /opt/sigma/current/deploy/prepare_state_disk.py OWNER_CONFIRMED_UUID`
+   to install and verify the persistent mount. This helper never formats disks.
 2. Install Docker Engine/Compose using the reviewed Ubuntu procedure in
    `docs/#deployment-architecture-and-operations`. Create the separate `sigma-sandbox` account and
    rootless Docker service. Verify runner isolation from `/srv/sigma-state`
