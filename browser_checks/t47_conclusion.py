@@ -54,8 +54,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
     (project_path / "project.json").write_text(json.dumps(project), encoding="utf-8")
     session["project_path"] = str(project_path.resolve())
     session["outcome"]["conclusion"] = (
-        "### Complete reviewed candidate answer\n\n"
+        "### Preliminary finding\n\n"
         "Conditional on general position, the arrangement reaches the triangular bound for every n.\n\n"
+        "The displayed relation is preserved from the saved conclusion:\n\n"
+        "\\[R(n) = 1 + \\frac{n(n+1)}{2}\\]\n\n"
+        r"The inline relation is \(s^2\)." + "\n\n"
+        "ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1}dx\n\n"
+        "$$\n$$\n\n"
         "### Verification and scope\n\nSIGMA has not independently verified the result."
     )
     session["outcome"]["solution_review"] = {
@@ -219,15 +224,42 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "element => element.nextElementSibling.classList.contains('outcome-subsections')"
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text(session["outcome"]["conclusion"].splitlines()[2])
-                toggle = outcome.get_by_role("button", name="Render Conclusion as Markdown")
-                toggle.click()
-                expect(
-                    outcome.get_by_role("button", name="Show Conclusion Markdown source")
-                ).to_have_attribute("aria-pressed", "true")
-                expect(conclusion.locator(".outcome-markdown h3").first).to_be_visible()
                 toggle = outcome.get_by_role("button", name="Show Conclusion Markdown source")
+                expect(
+                    toggle
+                ).to_have_attribute("aria-pressed", "true")
+                finding = conclusion.locator(".outcome-markdown h3").first
+                expect(finding).to_be_visible()
+                expect(finding).to_have_text("Preliminary finding")
+                expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
+                expect(conclusion.locator(".outcome-markdown .katex")).to_have_count(3)
+                expect(conclusion.locator(".outcome-markdown .katex").nth(2)).to_contain_text(
+                    "{x}"
+                )
+                expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
+                expect(conclusion.locator(".outcome-markdown img")).to_have_count(0)
+                expect(conclusion.locator(".outcome-markdown .katex-display")).to_have_count(1)
+                expect(conclusion.locator(".outcome-markdown")).not_to_contain_text(
+                    "### Preliminary finding"
+                )
                 toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
+                    "### Preliminary finding"
+                )
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
+                    r"\[R(n) = 1 + \frac{n(n+1)}{2}\]"
+                )
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
+                    "$$"
+                )
+                render_toggle = outcome.get_by_role(
+                    "button", name="Render Conclusion as Markdown"
+                )
+                render_toggle.click()
+                expect(conclusion.locator(".outcome-markdown h3").first).to_have_text(
+                    "Preliminary finding"
+                )
                 outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
@@ -270,6 +302,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(dialog).to_be_hidden()
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
+            expect(row.locator(".outcome-simple .katex").first).to_be_visible()
+            expect(row.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
+                "aria-pressed", "true"
+            )
             prelude = row.locator(".outcome-evidence-prelude")
             expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
             assert prelude.evaluate(

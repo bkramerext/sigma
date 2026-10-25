@@ -137,6 +137,16 @@ function researchConclusionMarkdown(session: ResearchSession): string {
   return session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
 }
 
+function containsMathNotation(text: string): boolean {
+  return /\\\[|\\\(|\$\$?[^$\n]+\$/.test(text) || text.split('\n').some(line => {
+    const expression = line.trim();
+    return expression.length > 0 && expression.length <= 240
+      && !/\s|[`$\\]/u.test(expression)
+      && /[\p{Script=Greek}∫∑√≤≥≠≈∞±×÷^_]/u.test(expression)
+      && /[=+*/^_∫∑√≤≥≠≈]/u.test(expression);
+  });
+}
+
 function simpleOutcomeLead(session: ResearchSession): { text: string; shortened: boolean } {
   const saved = (session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.').trim();
   const firstSection = session.outcome.conclusion ? saved.split(/\n(?=#{2,6}\s)/, 2)[0] : saved;
@@ -331,8 +341,11 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
 }) {
-  const [outcomeMarkdown, setOutcomeMarkdown] = useState(false);
-  const [conclusionMarkdown, setConclusionMarkdown] = useState(false);
+  const startsWithRenderedMath = containsMathNotation(
+    `${session.outcome.conclusion || ''}\n${session.outcome.summary || ''}`,
+  );
+  const [outcomeMarkdown, setOutcomeMarkdown] = useState(startsWithRenderedMath);
+  const [conclusionMarkdown, setConclusionMarkdown] = useState(startsWithRenderedMath);
   const [reasoningMarkdown, setReasoningMarkdown] = useState(false);
   const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
@@ -428,7 +441,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
             {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}</div>}
             {session.outcome.conclusion && conclusionMarkdown
-              ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchConclusionMarkdown(session)}/></Suspense></div>
+              ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={researchConclusionMarkdown(session)}/></Suspense></div>
               : !session.outcome.conclusion && outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
                 : <div className="outcome-conclusion-source">{resultText}</div>}
             {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
