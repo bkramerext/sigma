@@ -125,6 +125,13 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
                 f"{provenance['completed_count']} with unambiguous completed status."
             ),
         ]
+        if provenance["completed_without_recorded_io_count"]:
+            lines.append(
+                "Warning: "
+                f"{provenance['completed_without_recorded_io_count']} "
+                "completed-status execution record(s) lack saved source or output. "
+                "A completion label alone is not a measured result."
+            )
         for execution in provenance["records"]:
             refs = (
                 "; ".join(

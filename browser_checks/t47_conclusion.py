@@ -12,6 +12,8 @@ from urllib.parse import quote
 from playwright.sync_api import expect, sync_playwright
 
 REPO = Path(__file__).resolve().parents[1]
+SCREENSHOT_DIR = Path(os.environ.get("SIGMA_OUTCOME_SCREENSHOT_DIR", "/tmp"))
+SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 ARCHIVE = (
     REPO
     / "docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
@@ -213,7 +215,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert conclusion.locator("summary").inner_text().strip() == "Conclusion"
                 prelude = outcome.locator(".outcome-evidence-prelude")
                 expect(prelude).to_be_visible()
-                expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
+                expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
                 expect(prelude).to_contain_text("No persisted Python/SageMath execution records")
                 assert prelude.evaluate(
                     "element => element.nextElementSibling.classList.contains('outcome-subsections')"
@@ -232,6 +234,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
                 expect(outcome).to_contain_text("The intersection bound yields at most n pieces.")
+                page.screenshot(
+                    path=str(SCREENSHOT_DIR / "sigma-increment13-advanced-desktop.png"),
+                    full_page=True,
+                )
 
             page.reload()
             first_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
@@ -256,6 +262,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 conclusion = row.locator("details.outcome-conclusion")
                 expect(conclusion).to_be_visible()
                 assert conclusion.get_attribute("open") is not None
+            page.screenshot(
+                path=str(SCREENSHOT_DIR / "sigma-increment13-advanced-mobile.png"),
+                full_page=True,
+            )
             # Switch to Simple Outcome and verify the same provenance is above the narrative.
             settings = page.get_by_role("button", name="Project settings", exact=True)
             settings.click()
@@ -271,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
             prelude = row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
+            expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
             assert prelude.evaluate(
                 "element => (element.compareDocumentPosition("
                 "element.parentElement.querySelector('.outcome-simple')) & "
@@ -286,6 +296,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     "scroll: document.documentElement.scrollWidth})"
                 )
                 assert overflow["scroll"] <= overflow["width"], overflow
+                page.screenshot(
+                    path=str(SCREENSHOT_DIR / f"sigma-increment13-simple-{width}.png"),
+                    full_page=True,
+                )
 
             # Adversarial, no-provider record: one saved timeout must never count as success.
             inspected = sessions[0]
@@ -298,6 +312,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 "source": "print('nothing measured')",
                 "stderr": "Timed out before producing a measurement",
             }
+            # A metadata-only completed status is not evidence of a recorded
+            # measurement. Check the warning alongside a distinct timeout.
+            inspected.setdefault("steps", []).append(
+                {
+                    "id": "missing-output-step",
+                    "output": {
+                        "python_execution": {
+                            "id": "offline-reported-only",
+                            "runtime": "python",
+                            "status": "completed",
+                        }
+                    },
+                }
+            )
             (sessions_path / f"{inspected['id']}.json").write_text(
                 json.dumps(inspected, ensure_ascii=False), encoding="utf-8"
             )
@@ -308,11 +336,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             if disclosure.get_attribute("aria-expanded") != "true":
                 disclosure.click()
             prelude = saved_row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("0 completed of 1 identified saved execution")
+            expect(prelude).to_contain_text("1 reported completed of 2 identified saved executions")
+            expect(prelude).to_contain_text(
+                "1 completed-status record(s) do not include saved source and output"
+            )
             prelude.locator("summary").click()
             expect(prelude).to_contain_text("offline-timeout")
             expect(prelude).to_contain_text("timeout")
+            expect(prelude).to_contain_text("offline-reported-only")
+            expect(prelude).to_contain_text("source unavailable, output unavailable")
             expect(saved_row.locator(".outcome-simple")).to_be_visible()
+            page.screenshot(
+                path=str(SCREENSHOT_DIR / "sigma-increment13-timeout-mobile.png"),
+                full_page=True,
+            )
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
             browser.close()

@@ -29,6 +29,7 @@ The goal is to demonstrate **better research per unit cost and time** than a str
 
 ### 17. Replication and product decision (requires authorization)
 - Replicate on unseen tasks and another domain mix with blinded scoring. Compare gains to added cost/latency and assess stability across task types.
+- Include one genuinely extended, multi-session investigation with real unscripted model work and an independently reviewable record of what changed between sessions: useful new results, resolved objections, false leads not repeated, or measured failure to progress. This is an additional longitudinal gate, not a substitute for blinded short-task comparisons.
 - **Exit:** decide whether to promote SIGMA multi-agent research as demonstrably beneficial, constrain claims to supported domains, or default to simpler architecture.
 
 ## Evidence hierarchy and stop rules
