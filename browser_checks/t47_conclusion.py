@@ -238,6 +238,19 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text(session["outcome"]["conclusion"].splitlines()[2])
                 toggle = outcome.get_by_role("button", name="Show Conclusion Markdown source")
+                toggle.hover()
+                toggle_style = toggle.evaluate(
+                    "e => ({rect:e.getBoundingClientRect().toJSON(), "
+                    "border:getComputedStyle(e).borderTopWidth, "
+                    "background:getComputedStyle(e).backgroundColor, "
+                    "icon:e.querySelector('svg').getBoundingClientRect().toJSON()})"
+                )
+                assert toggle_style["rect"]["width"] == 28, toggle_style
+                assert toggle_style["rect"]["height"] == 28, toggle_style
+                assert toggle_style["border"] == "0px", toggle_style
+                assert toggle_style["background"] == "rgba(0, 0, 0, 0)", toggle_style
+                assert toggle_style["icon"]["width"] == 24, toggle_style
+                assert toggle_style["icon"]["height"] == 20, toggle_style
                 expect(
                     toggle
                 ).to_have_attribute("aria-pressed", "true")
