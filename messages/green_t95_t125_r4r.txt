@@ -1,0 +1,60 @@
+# Green → ChatGPT coordinator — #95 and #125 R4R
+
+**Tickets:** [#95 paused-session clarity](https://github.com/bkramerext/sigma/issues/95); [#125 saved AI papers library](https://github.com/bkramerext/sigma/issues/125)  
+**Branch:** `green/t95-paused-session-t125-papers`  
+**Base:** `main` at `fd8a10edeb2f25b120bf87b77236e3c9b894a903`  
+**PR:** [#138](https://github.com/bkramerext/sigma/pull/138), open against `main`; R4R, do not self-merge.  
+**Implementation commits:** #95 `871f402`; #125 `69ef0fc`.  
+**Combined head at handoff:** `197933ff5e0ce828503772f533cefc8bc5fc75b0`.
+
+## #95 — paused-session clarity
+
+- The session UI displays the saved backend message, current action, typed
+  failure/interruption cause where available, and a next safe action.
+- The real-Chrome fixture covers manual pause, backend restart/provider
+  interruption, context, wall-clock, cost, account/connection, project/strategy,
+  and unknown guarded states. It checks close/reopen persistence, visible
+  guarded-resume errors, desktop/390px layout, and no session-start request when
+  opening a paused session.
+- No interrupted call is retried automatically; the guidance warns that a
+  dispatched request may still consume allowance.
+
+## #125 — saved AI papers library
+
+- Saved drafts are visible near the top of the paper dialog with a title, saved
+  date, per-version TXT/PDF downloads, and inline PDF opening in a new tab.
+- Saved HTML is collapsed by default and rendered as escaped text. Removing a
+  saved draft requires visible confirmation; deletion checks project identity
+  and removes only that draft's JSON/PDF artifacts. The UI updates immediately.
+- TXT is derived from the immutable paper record without a model call. Cross-user
+  text/PDF/download/delete access is denied by the API.
+- The real-Chrome check covers desktop/mobile layout, hostile HTML, text/PDF
+  payloads and headers, new-tab link, confirmation/cancel, per-version cleanup,
+  and zero generation POSTs.
+
+## Verification reported by Green
+
+- `./sigma test` — passed on this rebased head, including all scripted scenarios,
+  Ruff, Ruff format, Pyright (0 errors/warnings/information), frontend typecheck,
+  and production build. Vite reports the existing >500 kB chunk warning.
+- `uv run python tests/papers.py` — passed.
+- `uv run python tests/cloud_workspaces.py` — passed.
+- `uv run --with playwright python browser_checks/t95_paused_session.py` — passed
+  in real Google Chrome.
+- `uv run --with playwright python browser_checks/t125_saved_paper_library.py` —
+  passed in real Google Chrome.
+- With the deterministic local provider fixture on port 8015 and Vite on 5181,
+  `SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 uv run
+  --with playwright python browser_checks/t45_long_paper.py` — passed in real
+  Google Chrome, including failure/retry, cancel, saved version and PDF retrieval.
+- No paid/live provider calls were made.
+
+Elapsed time was **17m39s**, measured from creation of the isolated worktree
+(2026-10-25 11:16:37 PDT) to the R4R handoff (18:34:16 UTC). This is shorter
+than the requested approximately 45-minute cadence per substantial increment;
+the implementation and validation completed sooner, and elapsed time is
+reported as measured.
+
+No ticket acceptance gaps remain identified. The existing frontend bundle-size
+warning is recorded above; it did not fail the build. I did not merge the PR or
+coordinate directly with another worker.

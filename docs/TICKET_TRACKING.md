@@ -66,8 +66,8 @@
 | T45 | **HIGH:** Long-form TeX paper generation under output/context limits | Implemented; PR #68 open for final review | [ticket](../tickets/t45.md) · [PR #68](https://github.com/bkramerext/sigma/pull/68) |
 | T46 | Home and Project About dialog and product introduction | R4R · Green · [PR #73](https://github.com/bkramerext/sigma/pull/73) · [ticket](../tickets/t46.md) |
 | T47 | First-class Markdown Conclusion in Research Session Outcome | Implemented; R4R | Gray · [ticket](tickets/t47.md) · [PR #72](https://github.com/bkramerext/sigma/pull/72) |
-| #95 | Explain paused research sessions and next action in UI | Implemented; Chrome checked; combined PR in progress | Green · [issue #95](https://github.com/bkramerext/sigma/issues/95) |
-| #125 | Polish saved AI papers with Strategies-style library UI | In progress on same Green branch | Green · [issue #125](https://github.com/bkramerext/sigma/issues/125) |
+| #95 | Explain paused research sessions and next action in UI | R4R · combined with #125 in [PR #138](https://github.com/bkramerext/sigma/pull/138) | Green · [issue #95](https://github.com/bkramerext/sigma/issues/95) |
+| #125 | Polish saved AI papers with Strategies-style library UI | R4R · combined with #95 in [PR #138](https://github.com/bkramerext/sigma/pull/138) | Green · [issue #125](https://github.com/bkramerext/sigma/issues/125) |
 
 ### T23.1 scope
 
