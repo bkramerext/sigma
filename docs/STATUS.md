@@ -285,15 +285,19 @@ typecheck, and production build. No paid inference or cloud resources were used.
 
 ## Project header About pill placement (2026-10-25)
 
-The project header now uses the labeled About pill in the left column beside
-Google and ChatGPT, matching Home. On narrow screens About and Google share a
-row, with Model beside ChatGPT below; Thinking remains in the left column. The
-real Chrome `browser_checks/header.py` check passed at 1280, 1100, 700, 390 and
-320 px, including left-of-auth-pill placement and no horizontal overflow.
-Screenshots: `/tmp/sigma-a13-header-1280.png` and
-`/tmp/sigma-a13-header-390.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
-./sigma test` passed all scenarios, Ruff, formatting, Pyright, frontend typecheck
-and production build. No live provider calls or cloud changes.
+The project header uses the labeled About pill in the left column beside Google
+and ChatGPT. On narrow screens About and Google share a row, with Model beside
+ChatGPT below; Thinking remains in the left column. The Home header orders its
+About/Admin group left of the Google/ChatGPT connection pills. Removing mobile
+offsets keeps Admin in its aligned second row instead of over the project list.
+Real Chrome `browser_checks/header.py` passed at 1280, 1100, 700, 390 and 320 px,
+including Home placement and no horizontal overflow. Screenshots:
+`/tmp/sigma-a13-header-1280.png`, `/tmp/sigma-a13-header-390.png`,
+`/tmp/sigma-home-header-admin-desktop.png` and
+`/tmp/sigma-home-header-admin-mobile.png`. `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios, Ruff,
+formatting, Pyright, frontend typecheck and production build. No live provider
+calls or cloud changes.
 
 ## T84 detailed command-specific CLI help (2026-10-25)
 
