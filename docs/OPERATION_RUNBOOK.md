@@ -124,7 +124,19 @@ sudo /usr/local/libexec/sigma/gce_preflight.py --json
 sudo journalctl -u sigma.service -n 100 --no-pager
 ```
 
-Verify public HTTPS, `/api` routing and application health with the documented probe, not only process status. Redact tokens, personal data and request bodies from captured logs. For failure classify DNS/TLS, VM/network, disk mount, Docker/rootless socket, service, OAuth, secret access, quota, provider or persistent state before restarting.
+Verify public DNS, HTTPS, `/api` routing and application health with the read-only probe below, not only process status. Run it from a network outside the VM so public firewall behavior is observed. It compares the DNS A answer with the owner-verified static IPv4, checks that TCP 8000/5173/2375/2376 are unreachable, requires HTTP `/` to redirect to the canonical HTTPS origin, validates the certificate with the system trust store, checks an SPA deep link, and requires hosted API readiness. It changes no DNS, cloud firewall, or application state. Redact tokens, personal data and request bodies from captured logs. For failure classify DNS/TLS, VM/network, disk mount, Docker/rootless socket, service, OAuth, secret access, quota, provider or persistent state before restarting.
+
+```sh
+cd /opt/sigma/current
+python3 deploy/verify_public_endpoint.py --expected-ip OWNER_VERIFIED_STATIC_IPV4
+```
+
+The GCP ingress contract allows only public TCP 80/443 after launch approval;
+TCP 22 remains IAP-only. Do not add public TCP 8000, 5173, 2375 or 2376.
+Compose publishes only TCP 80/443 on the edge. Caddy owns HTTP to HTTPS
+redirects, sends `/api` and `/api/*` to FastAPI, and sends other paths to the
+SPA frontend. A successful DNS/TLS probe is endpoint evidence, not proof of
+OAuth identity isolation or persistent-state recovery.
 
 After starting or restarting the service, verify all three container healthchecks
 and the public app/API paths. Run on the host from the reviewed release

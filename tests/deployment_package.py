@@ -47,6 +47,12 @@ def main() -> None:
     assert "SIGMA_CLOUD_AUTH_LOCAL" not in compose
     assert "SIGMA_SANDBOX_DOCKER_SOCKET" in compose
     assert ":443/tcp" in compose and ":80/tcp" in compose
+    assert ":443/udp" not in compose
+    assert compose.count("    ports:") == 1
+    assert "SIGMA_CADDY_SCHEME: ${SIGMA_CADDY_SCHEME:-https}" in compose
+    assert "@api path /api /api/*" in caddy
+    assert "handle @api" in caddy and "Strict-Transport-Security" in caddy
+    assert '"8000:8000"' not in compose and '"5173:5173"' not in compose
     assert "reverse_proxy backend:8000" in caddy
     assert "reverse_proxy frontend:8080" in caddy
     assert 'CMD ["python", "-m", "sigma.deployment_health"]' in backend
