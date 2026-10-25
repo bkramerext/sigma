@@ -44,7 +44,7 @@ with sync_playwright() as playwright:
                 "enabled": True,
                 "ready": True,
                 "authenticated": True,
-                "user": {"email": "header-reviewer@example.org", "role": "member"},
+                "user": {"email": "header-reviewer@example.org", "role": "admin"},
                 "admin_contact_email": None,
             }
         ),
@@ -89,6 +89,28 @@ with sync_playwright() as playwright:
     )
     page.goto(UI_ORIGIN + "/")
     expect(page.locator(".home-slogan")).to_be_visible()
+    home_about = page.locator(".home-topline .home-about-button")
+    home_admin = page.locator(".home-topline .administrator-settings-link")
+    home_google = page.locator(".home-topline .project-google-signin")
+    home_chatgpt = page.locator(".home-topline .api-connection > summary")
+    for width in (1280, 390, 320):
+        page.set_viewport_size({"width": width, "height": 800})
+        expect(home_about).to_be_visible()
+        expect(home_admin).to_be_visible()
+        about_box = home_about.bounding_box()
+        admin_box = home_admin.bounding_box()
+        google_box = home_google.bounding_box()
+        chatgpt_box = home_chatgpt.bounding_box()
+        assert about_box and admin_box and google_box and chatgpt_box
+        assert about_box["x"] + about_box["width"] <= google_box["x"] + 1, (width, about_box, google_box)
+        assert admin_box["x"] + admin_box["width"] <= chatgpt_box["x"] + 1, (width, admin_box, chatgpt_box)
+        assert abs(about_box["y"] - google_box["y"]) <= 1, (width, about_box, google_box)
+        assert abs(admin_box["y"] - chatgpt_box["y"]) <= 1, (width, admin_box, chatgpt_box)
+        if width == 1280:
+            page.screenshot(path="/tmp/sigma-home-header-admin-desktop.png", full_page=True)
+        elif width == 390:
+            page.screenshot(path="/tmp/sigma-home-header-admin-mobile.png", full_page=True)
+    page.set_viewport_size({"width": 1280, "height": 800})
     home_actions = page.locator(".home-projects-heading")
     home_open = home_actions.get_by_role("button", name="Open", exact=True)
     home_new = home_actions.get_by_role("button", name="New", exact=True)
