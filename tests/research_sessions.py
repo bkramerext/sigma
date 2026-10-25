@@ -1133,6 +1133,20 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
             "strategy_id": strategy.id,
             "strategy_title": strategy.title,
             "extract_truncated_fields": [],
+            "reasoning_steps": [
+                {
+                    "number": 1,
+                    "title": "Cycle 1 bounded consequence",
+                    "epistemic_status": "deduction",
+                    "basis_artifact_ids": [],
+                    "argument": "The cycle 1 strategy yields its stated local consequence under the recorded assumption.",
+                    "review": {
+                        "disposition": "accepted",
+                        "rationale": "The stated local consequence follows from its supplied premise for this cycle.",
+                        "objection": "",
+                    },
+                }
+            ],
         }
     ], next_context["prior_session_findings"]
     assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]

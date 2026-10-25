@@ -1,0 +1,24 @@
+GitHub Actions run 40179615968, head 33c18dd9fe526b48826ed3ae519a0e6907c8517a, failed because graph-present expected a local Python Docker image on CI.
+Original relevant log excerpt follows.
+
+> uv run --locked --no-sync python tests/epistemic_continuity.py
+2026-10-25T09:14:05.4842132Z Traceback (most recent call last):
+2026-10-25T09:14:05.4842963Z   File "/home/runner/work/sigma/sigma/tests/epistemic_continuity.py", line 869, in <module>
+2026-10-25T09:14:05.4843951Z     asyncio.run(main())
+2026-10-25T09:14:05.4845398Z   File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/asyncio/runners.py", line 195, in run
+2026-10-25T09:14:05.4846199Z     return runner.run(main)
+2026-10-25T09:14:05.4846740Z            ^^^^^^^^^^^^^^^^
+2026-10-25T09:14:05.4847535Z   File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/asyncio/runners.py", line 118, in run
+2026-10-25T09:14:05.4848249Z     return self._loop.run_until_complete(task)
+2026-10-25T09:14:05.4848697Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-25T09:14:05.4849841Z   File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+2026-10-25T09:14:05.4850645Z     return future.result()
+2026-10-25T09:14:05.4850966Z            ^^^^^^^^^^^^^^^
+2026-10-25T09:14:05.4851679Z   File "/home/runner/work/sigma/sigma/tests/epistemic_continuity.py", line 794, in main
+2026-10-25T09:14:05.4852851Z     present = await graph_project(root / "graph-present.sigma", capture, withheld=False)
+2026-10-25T09:14:05.4853560Z               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-25T09:14:05.4854751Z   File "/home/runner/work/sigma/sigma/tests/epistemic_continuity.py", line 553, in graph_project
+2026-10-25T09:14:05.4855455Z     assert initial["status"] == "ended"
+2026-10-25T09:14:05.4855862Z            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-10-25T09:14:05.4856200Z AssertionError
+2026-10-25T09:14:05.5782822Z sigma test stopped: uv run --locked --no-sync python tests/epistemic_continuity.py failed (exit 1).

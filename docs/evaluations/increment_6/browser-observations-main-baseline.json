@@ -1,0 +1,106 @@
+{
+  "tested_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
+  "base_main_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
+  "browser": "Google Chrome 156.0.8078.47",
+  "provider_calls": 0,
+  "new_sessions": 0,
+  "projects": [
+    {
+      "slug": "nonconsecutive-subset-sums",
+      "id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "sessions_before": 16,
+      "source_artifacts_steps_equal": true
+    },
+    {
+      "slug": "algorithm-design",
+      "id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
+      "sessions_before": 2,
+      "source_artifacts_steps_equal": true
+    }
+  ],
+  "viewports": [
+    {
+      "project": "nonconsecutive-subset-sums",
+      "mode": "simple",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "mode": "simple",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "mode": "simple",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "mode": "advanced",
+      "width": 1440,
+      "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+      "overflow": false
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "mode": "advanced",
+      "width": 390,
+      "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+      "overflow": false
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "mode": "advanced",
+      "width": 320,
+      "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+      "overflow": false
+    },
+    {
+      "project": "algorithm-design",
+      "mode": "simple",
+      "width": 1440,
+      "overflow": false
+    },
+    {
+      "project": "algorithm-design",
+      "mode": "simple",
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "project": "algorithm-design",
+      "mode": "simple",
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "project": "algorithm-design",
+      "mode": "advanced",
+      "width": 1440,
+      "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+      "overflow": false
+    },
+    {
+      "project": "algorithm-design",
+      "mode": "advanced",
+      "width": 390,
+      "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+      "overflow": false
+    },
+    {
+      "project": "algorithm-design",
+      "mode": "advanced",
+      "width": 320,
+      "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+      "overflow": false
+    }
+  ],
+  "page_errors": [],
+  "request_toasts": 0,
+  "direct_artifact_focus": false,
+  "unapproved_history_accessible": "ccc1045f-479d-4018-b8ed-42a60b94e567",
+  "direct_artifact_expected_id": "research-artifact-6c552b3c-44e4-4b57-8b93-e5a645d057d1-5e15b337-adf1-483c-8ba6-7cd2de5f500b"
+}
