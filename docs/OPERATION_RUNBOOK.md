@@ -4,6 +4,26 @@
 
 The detailed configuration and exact provisioning parameters live in [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md). This runbook is the short operational entry point. Record the deployed commit, tested command, outcome, operator, date and any deviation after performing each operation. No secrets, access tokens or user data in logs, PRs or chat.
 
+## Deployment inventory and operator evidence (T127)
+
+This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-inventory-t127) are the maintained records. The deployment coordinator records actual IDs, resource creation, verification results, dates, and deviations as the operator supplies evidence. **The operator should not need to maintain a separate checklist or remember identifiers.** Proposed resource names must not be presented as live resources.
+
+| Item | Current record | Verification |
+| --- | --- | --- |
+| Google OAuth project | `SIGMA Auth`; ID `sigma-auth-512601`; number `665111821572` | Operator read from Cloud Console, 2026-10-25 |
+| Infrastructure project | Proposed `SIGMA Production`, suggested ID `sigma-research-prod` | Not yet created/confirmed; separate project requires explicit approval/deviation from T127 existing-project prerequisite |
+| DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Registered; A record target not yet confirmed |
+| Zone and VM | `us-west1-b`; planned `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-4` | Provisioning pending |
+| Disk | Planned `sigma-state` 200 GiB `pd-balanced`, retained; boot 100 GiB `pd-standard` | Provisioning and UUID verification pending |
+| Network | Planned `sigma-vpc`, subnet `sigma-us-west1`, proposed `10.42.0.0/24`, static IP name `sigma-web-ip` | CIDR and resource creation pending |
+| VM identity and access | Planned `sigma-runtime` service account, secret-scoped access; IAP SSH with OS Login | Creation and live IAM verification pending |
+| Billing / alert | Trial/billing link and $300 project budget | Not yet verified |
+| Production release | Exact Git SHA and live host evidence | Not deployed |
+
+**Change log**
+
+- 2026-10-25: Operator reported existing `SIGMA Auth` project identity (name, project ID, project number). Confirmed selected DuckDNS hostname from approved deployment documentation. No production resources, IAM grants, billing changes, or DNS updates executed by this documentation change.
+
 ## Before any operation
 
 1. Identify the GCP project, `us-west1-b` zone, VM `sigma-gce-01`, disk `sigma-state`, public hostname, and current `SIGMA_RELEASE`. Confirm these against **live GCP**, not just this document.
