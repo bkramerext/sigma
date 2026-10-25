@@ -99,6 +99,13 @@ Google OIDC, a hosted browser session, GCE rootless execution and the Red-owned
 actual hosted provider usage remains unauthorized. Increment 18 remains
 partially verified pending coordinator disposition of these dependencies.
 
+The actual synthetic hosted project and text-report response bytes produced by
+the accepted API workflow are retained in
+[`increment_18/exports`](evaluations/increment_18/exports/manifest.json). The
+manifest records project/session IDs, capture/app commit, exercised actions and
+omissions. These are exports of the deterministic fixture session, not live
+research or hosted customer data.
+
 Elapsed worker time was approximately 40 minutes through PR-ready handoff.
 The focused change is on `blue/increment-18-hosted-research`; see
 [`messages/i18_blue_r4r.md`](../messages/i18_blue_r4r.md) for exact commands,
