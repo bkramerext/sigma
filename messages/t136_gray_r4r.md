@@ -5,7 +5,7 @@
 **Status:** R4R for offline preparation; hosted acceptance is unverified
 **Branch:** `gray/t136-cloud-ops-recovery`
 **Base:** current `main` at `690fff6`
-**PR:** pending at initial handoff; add PR URL after creation
+**PR:** [#144](https://github.com/bkramerext/sigma/pull/144) (open, unmerged)
 
 ## Delivered
 

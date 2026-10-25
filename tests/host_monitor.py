@@ -218,6 +218,8 @@ class HostMonitorTests(unittest.TestCase):
         self.assertIn("--schema-compatible", script)
         self.assertIn('docker image inspect "sigma-backend:$target"', script)
         self.assertIn("systemctl restart sigma.service", script)
+        self.assertIn("rollback_active=1", script)
+        self.assertIn("restore_previous_env", script)
         self.assertNotIn("down --volumes", script)
         self.assertNotIn("docker volume rm", script)
         result = subprocess.run(

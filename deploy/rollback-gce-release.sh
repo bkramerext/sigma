@@ -21,10 +21,30 @@ docker image inspect "sigma-frontend:$target" >/dev/null 2>&1 || fail 'previous 
 release_dir=/var/lib/sigma/releases
 install -d -o root -g root -m 0700 "$release_dir"
 backup="$release_dir/deploy.env.$current"
-[[ ! -e $backup ]] || fail "environment backup already exists: $backup"
-install -o root -g root -m 0600 "$env_file" "$backup"
+if [[ -e $backup ]]; then
+  cmp -s "$backup" "$env_file" || fail "saved environment differs from current release configuration: $backup"
+else
+  install -o root -g root -m 0600 "$env_file" "$backup"
+fi
 temporary=$(mktemp /etc/sigma/deploy.env.XXXXXX)
-cleanup() { rm -f "$temporary"; }
+rollback_active=0
+restore_previous_env() {
+  local restore_temp
+  restore_temp=$(mktemp /etc/sigma/deploy.env.restore.XXXXXX)
+  install -o root -g root -m 0600 "$backup" "$restore_temp"
+  mv -f "$restore_temp" "$env_file"
+}
+cleanup() {
+  rm -f "$temporary"
+  if (( rollback_active )); then
+    rollback_active=0
+    if restore_previous_env; then
+      systemctl restart sigma.service || logger -p daemon.crit -t sigma-rollback 'interrupted rollback restored prior environment but service restart failed'
+    else
+      logger -p daemon.crit -t sigma-rollback 'interrupted rollback could not restore prior environment; operator intervention required'
+    fi
+  fi
+}
 trap cleanup EXIT
 python3 - "$env_file" "$temporary" "$target" <<'PY'
 import os, re, sys
@@ -44,13 +64,16 @@ PY
 chown root:root "$temporary"
 chmod 0600 "$temporary"
 mv -f "$temporary" "$env_file"
+rollback_active=1
 if ! /usr/local/libexec/sigma/gce_preflight.py --json; then
-  install -o root -g root -m 0600 "$backup" "$env_file"
+  restore_previous_env
+  rollback_active=0
   fail 'preflight rejected rollback candidate; original release pin restored'
 fi
 
 if ! systemctl restart sigma.service; then
-  install -o root -g root -m 0600 "$backup" "$env_file"
+  restore_previous_env
+  rollback_active=0
   systemctl restart sigma.service || logger -p daemon.crit -t sigma-rollback 'candidate failed and prior release restart failed; operator intervention required'
   fail 'rollback candidate failed to start; prior release pin restored'
 fi
@@ -63,13 +86,15 @@ for attempt in $(seq 1 24); do
      [[ $(docker inspect -f '{{.State.Health.Status}}' "$backend" 2>/dev/null || true) == healthy ]] && \
      [[ $(docker inspect -f '{{.State.Health.Status}}' "$frontend" 2>/dev/null || true) == healthy ]] && \
      [[ $(docker inspect -f '{{.State.Status}}' "$edge" 2>/dev/null || true) == running ]]; then
+    rollback_active=0
     logger -t sigma-rollback "code rollback from ${current} to ${target} started and container healthchecks passed"
     echo "PASS: release pin switched from $current to $target; container healthchecks passed. Verify public HTTPS and application state per runbook."
     exit 0
   fi
   sleep 5
 done
-install -o root -g root -m 0600 "$backup" "$env_file"
+restore_previous_env
+rollback_active=0
 if ! systemctl restart sigma.service; then
   logger -p daemon.crit -t sigma-rollback 'container health check failed and prior release did not restart; operator intervention required'
 fi
