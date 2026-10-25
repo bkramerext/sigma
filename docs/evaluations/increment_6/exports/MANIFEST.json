@@ -1,6 +1,6 @@
 {
-  "base_main_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
-  "tested_fix_sha": "fd876853d60b9bf21ef0c25b873ac869eb30952a",
+  "base_main_sha": "afebf33f901f3662bcfc286c82693111a15416b7",
+  "tested_fix_sha": "06cb8c46f460bdb041780845b0e95dbbbc2dd1be",
   "chrome": "Google Chrome 156.0.8078.47",
   "source_increment_5_manifest": "docs/evaluations/increment_5/exports/MANIFEST.json",
   "provider_calls_this_increment": 0,
@@ -20,7 +20,7 @@
         {
           "path": "docs/evaluations/increment_6/exports/subset.main.audit.json",
           "bytes": 4727723,
-          "sha256": "69e4549ec4ac45d7be3761e7a1f12a43156aa821c3860181f0fbc24f4945709e"
+          "sha256": "6bc11517854747f446df2ec287967d02f10ecc58efcba2c04705c5e9b2774bc4"
         },
         {
           "path": "docs/evaluations/increment_6/exports/subset.main.report.txt",
@@ -52,7 +52,7 @@
         {
           "path": "docs/evaluations/increment_6/exports/algorithm.main.audit.json",
           "bytes": 435840,
-          "sha256": "b605a0a0ff58d66137a7ce8cdeeee88af9ea489175ce82c5e94a6ffe60081e78"
+          "sha256": "2d6094cd7dd8116907603434d4a4c92df7d4cebda897cb8b8befda79e89546b6"
         }
       ]
     }
@@ -77,5 +77,7 @@
   "browser_observations": "docs/evaluations/increment_6/browser-observations.json",
   "report_formats_note": "SIGMA exported native text, HTML and LaTeX reports. It has no native Markdown report export; this human-authored release audit is Markdown and is not relabeled as a SIGMA report.",
   "main_baseline_observations": "docs/evaluations/increment_6/browser-observations-main-baseline.json",
-  "main_baseline_transcript": "docs/evaluations/increment_6/main-browser-baseline.txt"
+  "main_baseline_transcript": "docs/evaluations/increment_6/main-browser-baseline.txt",
+  "prior_fix_observations": "docs/evaluations/increment_6/browser-observations-prior-main.json",
+  "current_main_merge_transcript": "docs/evaluations/increment_6/current-main-merge-browser.txt"
 }

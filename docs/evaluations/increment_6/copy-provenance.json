@@ -1,12 +1,12 @@
 {
-  "main_sha": "fd876853d60b9bf21ef0c25b873ac869eb30952a",
-  "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-44g1i74u",
+  "main_sha": "06cb8c46f460bdb041780845b0e95dbbbc2dd1be",
+  "isolated_root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-1w9i2_1_",
   "copies": [
     {
       "slug": "nonconsecutive-subset-sums",
       "prefix": "subset",
       "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
-      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-44g1i74u/projects/nonconsecutive-subset-sums.sigma",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-1w9i2_1_/projects/nonconsecutive-subset-sums.sigma",
       "source": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-_qbj25dc/projects/nonconsecutive-subset-sums.sigma",
       "rebound_session_paths": 16
     },
@@ -14,7 +14,7 @@
       "slug": "algorithm-design",
       "prefix": "algorithm",
       "project_id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
-      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-44g1i74u/projects/algorithm-design.sigma",
+      "path": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-main6-1w9i2_1_/projects/algorithm-design.sigma",
       "source": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-_qbj25dc/projects/algorithm-design.sigma",
       "rebound_session_paths": 2
     }

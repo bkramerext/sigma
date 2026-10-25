@@ -33,6 +33,9 @@ PROJECTS = SCRATCH / "projects"
 PROJECTS.mkdir(mode=0o700)
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 SHA = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+BASE_MAIN_SHA = subprocess.check_output(
+    ["git", "merge-base", "HEAD", "origin/main"], cwd=ROOT, text=True
+).strip()
 
 
 def copy_project(item):
@@ -202,7 +205,7 @@ def expand(row):
 
 observations = {
     "tested_sha": SHA,
-    "base_main_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
+    "base_main_sha": BASE_MAIN_SHA,
     "browser": subprocess.check_output([CHROME, "--version"], text=True).strip(),
     "provider_calls": 0,
     "new_sessions": 0,

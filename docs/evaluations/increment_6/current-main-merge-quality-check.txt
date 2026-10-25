@@ -1,0 +1,13 @@
+command=embedded read-only export/observation assertion script
+current_main_sha=afebf33f901f3662bcfc286c82693111a15416b7
+merged_candidate_sha=06cb8c46f460bdb041780845b0e95dbbbc2dd1be
+start_utc=2026-10-25T08:08:34.966668+00:00
+end_utc=2026-10-25T08:08:34.984681+00:00
+elapsed_seconds=0.018
+exit_code=0
+
+nonconsecutive-subset-sums: 16 saved sessions, 7 Increment 5 sessions, no new Verified general result; export hashes match
+algorithm-design: 2 saved sessions, 2 Increment 5 sessions, no new Verified general result; export hashes match
+frozen GRAPH source bytes match protocol SHA-256
+current merged candidate focus true; original exact-main baseline false; 12 viewports each
+PASS

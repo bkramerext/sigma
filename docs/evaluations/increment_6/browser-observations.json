@@ -1,6 +1,6 @@
 {
-  "tested_sha": "fd876853d60b9bf21ef0c25b873ac869eb30952a",
-  "base_main_sha": "4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c",
+  "tested_sha": "06cb8c46f460bdb041780845b0e95dbbbc2dd1be",
+  "base_main_sha": "afebf33f901f3662bcfc286c82693111a15416b7",
   "browser": "Google Chrome 156.0.8078.47",
   "provider_calls": 0,
   "new_sessions": 0,
