@@ -1,7 +1,6 @@
 """Offline adversarial regression for Increment 14 protocol and answer-key integrity."""
 import importlib.util
 import json
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
