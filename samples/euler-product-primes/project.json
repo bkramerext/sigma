@@ -2,7 +2,7 @@
   "schema_version": 8,
   "id": "cec11fe5-9c2f-4ca3-af2d-a46da30f7782",
   "title": "Prime Factorization and the Euler Product",
-  "problem": "For complex s with Re(s) > 1, investigate the relationship between the Dirichlet series \u03b6(s) = \u03a3(n\u22651) n^(-s) and products indexed by primes. Determine and prove any exact factorization, with precise convergence conditions. Separate finite-product identities from infinite limits and justify every interchange using absolute convergence or another explicit bound. Check a small numerical case with a certified tail estimate. Explain what prime-power information follows from logarithmic differentiation, and why that does not by itself prove the Riemann Hypothesis. Distinguish recalled standard results from facts derived in this investigation; do not invent sources or claim computation that was not performed.",
+  "problem": "What does prime factorization reveal about the Riemann zeta function, and where is its prime product genuinely valid? For complex s with Re(s) > 1, compare ζ(s) = Σ(n≥1) n^(-s) with products indexed by primes. Determine and prove any exact factorization, with precise convergence conditions. Separate finite-product identities from infinite limits and justify every interchange using absolute convergence or another explicit bound. Check a small numerical case with a certified tail estimate. Explain what prime-power information follows from logarithmic differentiation, and why that does not by itself prove the Riemann Hypothesis. Distinguish recalled standard results from facts derived in this investigation; do not invent sources or claim computation that was not performed.",
   "events": [
     {
       "sequence": 1,

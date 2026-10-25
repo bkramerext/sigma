@@ -2,7 +2,7 @@
   "schema_version": 8,
   "id": "c9bff69e-705a-448b-8c72-d40613835ed5",
   "title": "Counting Pairwise Handshakes",
-  "problem": "A group has n people, and each pair shakes hands exactly once. Determine the total number of handshakes for general positive integer n. Justify the counting argument and state clearly whether a person may shake their own hand.",
+  "problem": "At a gathering of n people, how many handshakes take place if every pair meets once? Justify the count and state clearly whether a person may shake their own hand.",
   "events": [
     {
       "sequence": 1,

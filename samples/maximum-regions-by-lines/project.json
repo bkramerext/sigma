@@ -2,7 +2,7 @@
   "schema_version": 8,
   "id": "98e5f7ca-9a39-4e78-a8fb-48a15956e634",
   "title": "Maximum Regions Formed by Lines",
-  "problem": "For each integer n >= 0, determine the maximum number of regions into which n distinct straight lines can divide the Euclidean plane. Lines may be placed arbitrarily. Derive a formula for the maximum, prove that no arrangement can exceed it, and show that an arrangement attaining it exists for every n. Include the n = 0 case and check small values. Do not assume a particular proof method.",
+  "problem": "How many regions can n straight lines create at most? Find a bound that rules out better arrangements, then look for a construction that reaches it. Lines may be placed arbitrarily. Derive a formula for the maximum, prove that no arrangement can exceed it, and show that an arrangement attaining it exists for every n. Include the n = 0 case and check small values. Do not assume a particular proof method.",
   "events": [
     {
       "sequence": 1,
@@ -14,29 +14,53 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-22T20:00:00+00:00",
       "strategy_id": "16d591eb-fd1d-4719-93bc-f2e038a43f85"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.removed",
+      "timestamp": "2026-10-25T16:55:15.048530+00:00",
+      "strategy_id": "16d591eb-fd1d-4719-93bc-f2e038a43f85"
+    },
+    {
+      "sequence": 4,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:55:15.049696+00:00",
+      "strategy_id": "ee7d3b31-9c8d-4b44-a1a8-b123c67e59df"
     }
   ],
   "strategies": [
     {
       "id": "16d591eb-fd1d-4719-93bc-f2e038a43f85",
       "title": "Incremental region counting with an explicit maximizing arrangement",
-      "approach": "Define a region as a connected component of the plane after removing the lines. With no lines, the whole plane is one region, so R(0) = 1.\n\nFor the upper bound, insert the lines one at a time. The kth line meets the preceding k − 1 lines in at most k − 1 distinct points. Those points divide the new line into at most k open intervals or rays. Each such piece lies in an existing region. Every existing region is convex: it is the intersection of the open half-planes specifying which side of each existing line its points occupy. Consequently, a region cannot contain two separated pieces of the new line. A region met by a piece is split into exactly two regions, since it is open and convex and has points on both sides of the new line. Thus the kth line adds at most k regions. Summing gives R(n) ≤ 1 + ∑(k = 1 to n) k = 1 + n(n + 1)/2.\n\nFor attainment, take the n lines L_k: y = kx + k², for k = 1, …, n. When L_k is inserted, its intersection with L_i, where i < k, has x-coordinate −(i + k). These k − 1 coordinates are distinct. Hence L_k is divided into exactly k pieces by the earlier lines. By the convex-region argument above, these pieces lie in distinct existing regions, each of which is split in two. Therefore L_k adds exactly k regions. This arrangement attains 1 + n(n + 1)/2 for every positive n; the empty arrangement attains it for n = 0. Together with the upper bound, this proves the formula.",
+      "approach": "Define a region as a connected component of the plane after removing the lines. With no lines, the whole plane is one region, so R(0) = 1.\n\nFor the upper bound, insert the lines one at a time. The kth line meets the preceding k \u2212 1 lines in at most k \u2212 1 distinct points. Those points divide the new line into at most k open intervals or rays. Each such piece lies in an existing region. Every existing region is convex: it is the intersection of the open half-planes specifying which side of each existing line its points occupy. Consequently, a region cannot contain two separated pieces of the new line. A region met by a piece is split into exactly two regions, since it is open and convex and has points on both sides of the new line. Thus the kth line adds at most k regions. Summing gives R(n) \u2264 1 + \u2211(k = 1 to n) k = 1 + n(n + 1)/2.\n\nFor attainment, take the n lines L_k: y = kx + k\u00b2, for k = 1, \u2026, n. When L_k is inserted, its intersection with L_i, where i < k, has x-coordinate \u2212(i + k). These k \u2212 1 coordinates are distinct. Hence L_k is divided into exactly k pieces by the earlier lines. By the convex-region argument above, these pieces lie in distinct existing regions, each of which is split in two. Therefore L_k adds exactly k regions. This arrangement attains 1 + n(n + 1)/2 for every positive n; the empty arrangement attains it for n = 0. Together with the upper bound, this proves the formula.",
       "author_kind": "human",
       "created_at": "2026-10-22T20:00:00+00:00",
-      "removed_at": null,
+      "removed_at": "2026-10-25T16:55:15.048530+00:00",
       "stage": "draft",
       "summary": "The maximum is R(n) = 1 + n(n + 1)/2, obtained by adding lines that each meet all earlier lines at distinct points.",
-      "enabled": true,
       "provenance": {
         "provider": "openai",
         "model": "gpt-6.1-sol",
         "reasoning_effort": "high"
-      }
+      },
+      "enabled": true
+    },
+    {
+      "id": "ee7d3b31-9c8d-4b44-a1a8-b123c67e59df",
+      "title": "Bound the new regions, then seek equality",
+      "approach": "Start with a few lines and count how many pieces each newly added line can create. Use this to prove an upper bound that holds for every arrangement. Then try to place lines so each step reaches its own bound; explain which intersection patterns make that possible. Keep the general upper-bound argument separate from the construction, and use small cases only to test a conjecture, not as proof.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:55:15.049696+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "",
+      "provenance": null,
+      "enabled": true
     }
   ],
-  "research_mode": "mathematical",
+  "investigation_type": "mathematical",
   "active_order": [
-    "16d591eb-fd1d-4719-93bc-f2e038a43f85"
+    "ee7d3b31-9c8d-4b44-a1a8-b123c67e59df"
   ],
   "ai_model": "gpt-6.1-sol",
   "reasoning_effort": "high",
