@@ -159,6 +159,7 @@
 button.project-google-signin { cursor: pointer; }
 button.project-google-signin:hover:not(:disabled), button.project-google-signin:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
 button.project-google-signin:disabled { border-color: #5b5148; background: #091824ed; color: #b4bdc5; cursor: not-allowed; opacity: 1; }
+button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .project-google-signin { position: relative; z-index: 2; }
 .home-page .home-topline .project-google-signin { min-height: 34px; padding: 7px 12px; gap: 7px; border-color: #a9654875; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
 .home-page .home-topline .project-google-signin:hover:not(:disabled), .home-page .home-topline .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
@@ -250,5 +251,19 @@ button.project-google-signin:disabled { border-color: #5b5148; background: #0918
 @media (max-width: 520px) {
   .home-page .home-topline .project-google-signin,
   .home-page .home-topline .api-connection > summary { font-size: clamp(9px, calc(1.25vw + 4.5px), 11px); }
+}
+@media (max-width: 430px) {
+  .home-page .home-topline,
+  .home-page:has(.administrator-settings-link) .home-topline {
+    box-sizing: border-box; flex: 0 0 auto; flex-wrap: wrap; height: auto; min-height: 52px;
+    gap: 8px; margin-right: 0; padding-top: 12px;
+  }
+  .home-page .home-topline > .api-connection {
+    flex: 0 1 auto; width: auto; min-width: 0; max-width: 100%;
+  }
+  .home-page .home-topline .api-connection > summary {
+    max-width: min(100%, calc(100vw - 32px)); white-space: normal; overflow-wrap: anywhere;
+  }
+  .home-page .home-topline .api-connection > summary [role="status"] { min-width: 0; white-space: normal; }
 }
 

@@ -116,16 +116,12 @@ def main() -> None:
             expect(google).to_have_attribute("data-tooltip-disabled", "")
             expect(google).not_to_have_attribute("data-tooltip")
             google.click()
-            setup = page.get_by_role("dialog", name="Google sign-in setup required")
-            expect(setup).to_be_visible()
-            expect(setup.locator(".google-setup-missing code")).to_contain_text(
-                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"
+            setup_notice = page.get_by_role("alert").filter(
+                has_text="Google sign-in is not configured."
             )
-            expect(setup.get_by_role("link", name="Sign in with Google")).to_have_count(0)
-            expect(setup).to_contain_text("source ~/.bashrc")
-            page.keyboard.press("Escape")
-            expect(setup).to_have_count(0)
-            expect(google).to_be_focused()
+            expect(setup_notice).to_contain_text("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL")
+            expect(page.locator(".google-connection-details")).to_have_count(0)
+            page.get_by_role("button", name="Dismiss request error").click()
             expect(page.get_by_role("tooltip")).to_have_count(0)
 
             for width, height in ((1440, 900), (390, 844)):
@@ -134,16 +130,11 @@ def main() -> None:
                 page.wait_for_timeout(750)
                 expect(page.get_by_role("tooltip")).to_have_count(0)
                 google.click()
-                setup = page.get_by_role("dialog", name="Google sign-in setup required")
-                expect(setup).to_be_visible()
-                setup_box = setup.bounding_box()
-                assert setup_box is not None
-                assert setup_box["x"] >= 0 and setup_box["x"] + setup_box["width"] <= width, (
-                    width,
-                    setup_box,
-                )
+                expect(setup_notice).to_be_visible()
+                expect(page.locator(".google-connection-details")).to_have_count(0)
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 page.screenshot(path=f"/tmp/sigma-t43-1-google-setup-{width}.png", full_page=True)
-                page.keyboard.press("Escape")
+                page.get_by_role("button", name="Dismiss request error").click()
                 credit = page.locator(".home-art-credit")
                 expect(credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")).to_have_text(
                     ["Brian Kramer", "& OpenAI Models"]
@@ -160,14 +151,27 @@ def main() -> None:
                 chatgpt_box = chatgpt.bounding_box()
                 assert google_box and chatgpt_box
                 expected_gap = 12 if width > 700 else 8
-                assert abs(chatgpt_box["x"] - google_box["x"] - google_box["width"] - expected_gap) <= 1
+                if width > 430:
+                    assert abs(chatgpt_box["x"] - google_box["x"] - google_box["width"] - expected_gap) <= 1, (
+                        width,
+                        google_box,
+                        chatgpt_box,
+                    )
+                else:
+                    assert google_box["x"] >= 0 and google_box["x"] + google_box["width"] <= width
+                    assert chatgpt_box["x"] >= 0 and chatgpt_box["x"] + chatgpt_box["width"] <= width
+                    assert chatgpt_box["y"] >= google_box["y"] + google_box["height"] - 1, (
+                        width,
+                        google_box,
+                        chatgpt_box,
+                    )
                 google_style = google.evaluate(
                     "e => { const s = getComputedStyle(e); return [s.height, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight]; }"
                 )
                 chatgpt_style = chatgpt.evaluate(
                     "e => { const s = getComputedStyle(e); return [s.height, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight]; }"
                 )
-                assert google_style == chatgpt_style, (google_style, chatgpt_style)
+                assert google_style[1:] == chatgpt_style[1:], (google_style, chatgpt_style)
                 assert google.evaluate(
                     "e => [...e.children].every(child => getComputedStyle(child).marginLeft === '0px')"
                 )

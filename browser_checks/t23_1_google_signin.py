@@ -75,16 +75,13 @@ with sync_playwright() as playwright:
     page.route("**/api/cloud-auth/login", begin_login)
     page.route("**/api/cloud-auth/logout", sign_out)
 
-    # The real local sign-in control opens the established account dialog.
+    # The signed-out identity pill starts the established OAuth route directly.
     page.goto(UI + "/", wait_until="networkidle")
     expect(page.get_by_role("heading", name="Sign in with approved Gmail account to access projects.")).to_be_visible()
     expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
     google = page.get_by_role("button", name="Sign in with Google")
     expect(google).to_have_text("Sign in with Google")
     google.click()
-    account = page.get_by_role("dialog", name="Connect your Google account")
-    expect(account.locator(".google-account-target")).to_have_count(0)
-    account.get_by_role("link", name="Sign in with Google", exact=True).click()
     expect(page.get_by_text("Google OAuth fixture route", exact=False)).to_be_visible()
     assert len(login_attempts) == 1
 
@@ -117,8 +114,42 @@ with sync_playwright() as playwright:
         expect(control).not_to_have_attribute("title")
         expect(control).not_to_have_attribute("data-tooltip")
 
+    latex = page.locator(".project-latex-button")
+    expect(latex).to_be_visible()
+    wordmark = latex.locator(".latex-wordmark")
+    button_box = latex.bounding_box()
+    wordmark_box = wordmark.bounding_box()
+    assert button_box and wordmark_box
+    assert abs(button_box["width"] - 56) <= 1 and abs(button_box["height"] - 38) <= 1
+    assert abs(
+        (button_box["x"] + button_box["width"] / 2)
+        - (wordmark_box["x"] + wordmark_box["width"] / 2)
+    ) <= 1
+    horizontal_inset = wordmark_box["x"] - button_box["x"]
+    horizontal_inset_end = button_box["x"] + button_box["width"] - wordmark_box["x"] - wordmark_box["width"]
+    assert abs(horizontal_inset - horizontal_inset_end) <= 1
+    assert horizontal_inset >= 7
+    vertical_inset = wordmark_box["y"] - button_box["y"]
+    vertical_inset_end = button_box["y"] + button_box["height"] - wordmark_box["y"] - wordmark_box["height"]
+    assert abs(vertical_inset - vertical_inset_end) <= 1
+    assert vertical_inset >= 7
+    latex.hover()
+    assert latex.evaluate("e => getComputedStyle(e).backgroundImage") != "none"
+
     for width, height in ((1280, 800), (390, 844), (320, 700)):
         page.set_viewport_size({"width": width, "height": height})
+        expect(latex).to_be_visible()
+        latex.hover()
+        responsive_button_box = latex.bounding_box()
+        responsive_wordmark_box = wordmark.bounding_box()
+        assert responsive_button_box and responsive_wordmark_box
+        assert abs(responsive_button_box["width"] - 56) <= 1
+        assert abs(responsive_button_box["height"] - 38) <= 1
+        assert abs(
+            (responsive_button_box["x"] + responsive_button_box["width"] / 2)
+            - (responsive_wordmark_box["x"] + responsive_wordmark_box["width"] / 2)
+        ) <= 1
+        assert latex.evaluate("e => getComputedStyle(e).backgroundImage") != "none"
         google_style = google.evaluate("e => { const s = getComputedStyle(e); return [s.minHeight, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight, s.borderRadius]; }")
         chatgpt_style = chatgpt.evaluate("e => { const s = getComputedStyle(e); return [s.minHeight, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight, s.borderRadius]; }")
         assert google_style == chatgpt_style, (width, google_style, chatgpt_style)
