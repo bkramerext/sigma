@@ -1,6 +1,6 @@
 """Offline synthetic negative tests for blinded pair audit: no provider calls."""
-from copy import deepcopy
 import importlib.util
+from copy import deepcopy
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
