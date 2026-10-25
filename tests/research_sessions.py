@@ -6796,6 +6796,7 @@ def test_outcome_includes_derived_execution_provenance() -> None:
 def main():
     test_outcome_includes_derived_execution_provenance()
     test_epistemic_presentation_is_conservative_and_read_only()
+    test_source_readiness_distinguishes_content_from_verification()
     test_saved_followup_question_selection()
     test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
@@ -6819,6 +6820,7 @@ def main():
                 root / "saved-question-continuation.sigma"
             )
         )
+        asyncio.run(test_cross_domain_continuation_dispatch_with_offline_roles(root / "domains"))
         asyncio.run(
             test_failed_attempt_guides_next_session_with_provenance(
                 root / "failed-continuation.sigma"
