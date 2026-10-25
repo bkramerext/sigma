@@ -57,4 +57,4 @@ jobs:
           curl -fsS http://127.0.0.1:5173/ >/dev/null
           curl -fsS http://127.0.0.1:8001/openapi.json >/dev/null
           export SIGMA_BROWSER_EXECUTABLE="$(uv run --with playwright python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
-          uv run --with playwright python browser_checks/recents.py
+          uv run --with playwright python browser_checks/t92_recent_running.py
