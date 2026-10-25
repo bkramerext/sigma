@@ -1,5 +1,6 @@
 """Real Chrome: Home Recent reflects persisted session activity without reload."""
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -40,7 +41,7 @@ with sync_playwright() as playwright:
     recent_panel.locator(".recent-type-group summary").click()
     project_button = recent_panel.locator(".recent-open").first
     expect(project_button).to_be_visible()
-    metadata = project_button.locator("xpath=../..").locator(".recent-meta-row small span")
+    metadata = project_button.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(metadata).not_to_contain_text("Running")
 
     session_id = str(uuid4())
@@ -56,11 +57,15 @@ with sync_playwright() as playwright:
             }
         )
     )
-    expect(metadata).to_contain_text(" · Running", timeout=10_000)
-    assert recent_panel.locator(".home-runnable-state").count() == 0
+    lock_path = session_file.with_name(f"{session_id}.worker.lock")
+    with lock_path.open("a") as worker_lock:
+        fcntl.flock(worker_lock.fileno(), fcntl.LOCK_EX)
+        expect(metadata).to_contain_text(" · Running", timeout=10_000)
+        assert recent_panel.locator(".home-runnable-state").count() == 0
 
-    session_file.write_text(session_file.read_text().replace('"running"', '"stopped"'))
-    expect(metadata).not_to_contain_text("Running", timeout=10_000)
+        session_file.write_text(session_file.read_text().replace('"running"', '"stopped"'))
+        expect(metadata).not_to_contain_text("Running", timeout=10_000)
+        fcntl.flock(worker_lock.fileno(), fcntl.LOCK_UN)
     assert not page.locator("[role=alert]").count()
     print(
         "PASS real Chrome Home Recent updates inline Running status as the persisted session starts and stops"

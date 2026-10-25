@@ -251,7 +251,6 @@ class RecentProject:
     title: str
     investigation_type: str | None
     strategy_count: int | None
-    running: bool
     difficulty: str | None
     research_running: bool
     accessed_at: str | None
@@ -291,9 +290,6 @@ def recent_projects() -> dict:
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
             category = view.project.investigation_type.value
-            from sigma.research_sessions import read_session_snapshot
-
-            sessions, _ = read_session_snapshot(entry["path"])
             if category_counts.get(category, 0) >= MAX_PER_CATEGORY:
                 continue
             category_counts[category] = category_counts.get(category, 0) + 1
@@ -304,7 +300,6 @@ def recent_projects() -> dict:
                         title=view.project.title,
                         investigation_type=view.project.investigation_type,
                         strategy_count=len(view.project.active_order),
-                        running=any(session.get("status") == "running" for session in sessions),
                         difficulty=view.project.difficulty,
                         research_running=has_active_session(view.path),
                         available=True,
@@ -322,7 +317,6 @@ def recent_projects() -> dict:
                         title=Path(entry["path"]).name,
                         investigation_type=None,
                         strategy_count=None,
-                        running=False,
                         difficulty=None,
                         research_running=False,
                         available=False,
