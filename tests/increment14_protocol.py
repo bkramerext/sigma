@@ -22,14 +22,18 @@ assert manifest1["per_arm_input_token_cap"] == 48000
 assert manifest1["per_arm_output_token_cap"] == 16000
 assert manifest1["per_call_output_token_cap"] == 4000
 assert manifest1["per_arm_model_call_cap"] == 4
-assert manifest1["per_arm_usd_cap"] == 2.00 and manifest1["total_usd_cap"] == 48.00
+assert manifest1["per_arm_usd_cap"] == 0.55 and abs(manifest1["total_usd_cap"] - 13.20) < 1e-9
 assert len({(x["task_id"], x["variant"], x["replicate"]) for x in manifest1["pairs"]}) == 12
 assert len({x["packet_sha256"] for x in manifest1["pairs"]}) == 12
 assert module.manifest(140018, 1)["pairs"] != manifest1["pairs"]
-repeated = module.manifest(140017, 2)
-assert repeated["total_arm_runs"] == 48 and repeated["total_usd_cap"] == 96.00
+repeated = module.manifest(140017, 3)
+assert repeated["paired_runs"] == 36 and repeated["total_arm_runs"] == 72
+assert abs(repeated["total_usd_cap"] - 39.60) < 1e-9
+assert repeated["independent_task_count"] == 6 and repeated["analysis_unit"] == "task_cluster"
 for entry in manifest1["pairs"]:
     assert sorted(entry["execution_order"]) == ["A", "B"]
+    assert set(entry["arm_assignment"]) == {"A", "B"}
+    assert set(entry["arm_assignment"].values()) == {"sigma", "single_role"}
 assert "evaluator" not in json.dumps(data).lower()
 
 # Independently verify the graph fixture: all degrees 3, no 3- or 4-cycles.

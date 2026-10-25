@@ -15,8 +15,11 @@ later answer-free live run produced a reviewed proof candidate, but exact role
 inputs were not retained and output fields were truncated; its independence is
 unverified. Deterministic fixtures and archived sessions are useful engineering
 evidence, not new live trials. The matched-budget blind comparison remains
-**unexecuted**. Its current proposal is [issue 114 preregistration](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md);
-the proposed $48 ceiling is **not authorized**.
+**unexecuted**. Its current proposal is [issue 114 preregistration](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
+It tests only within-session adversarial review against single-role self-review;
+it cannot establish cumulative persistence. The separate longitudinal design
+is [issue #119](https://github.com/bkramerext/sigma/issues/119). No live
+shakedown or scored run is authorized.
 
 **What is established:** the dated entries below link to actual tests, exports,
 browser observations and bounded engineering results, with their stated limits.
@@ -27,9 +30,10 @@ the [researcher-centered product limits](RESEARCHER_CENTERED_SIGMA.md).
 
 **Still unverified / launch blockers:** unscripted multi-agent advantage,
 general research quality, and independent proof correctness remain unverified.
-The proposed blind study still needs independent task/key review, proven
-model-visible isolation, matching request capture, current pricing and budget
-controls, blinded graders, and explicit owner approval. Cloud deployment also
+The proposed blind study still needs independent task/key review and
+contamination/provenance assessment, sealed-key custody, proven model-visible
+isolation, shared output-boundary validation, independent graders, current
+pricing and enforceable budget controls, and explicit owner approval. Cloud deployment also
 has host-specific acceptance requirements; those are recorded in the Red/cloud
 entries below and are not implied by local checks.
 
@@ -3885,3 +3889,34 @@ survived restart and full container recreation. **SKIPPED:** real Google OAuth
 fixture), and the T100 persistent-disk configuration (this run uses Compose's
 default local storage). T99 inference is also skipped; no provider calls were
 made. This is local acceptance, not live OAuth or cloud-deployment evidence.
+
+## Issue 118 — harden within-session blind comparison (2026-10-25)
+
+Revised the T114 proposal after adversarial review. The active design uses three
+repeats for each of six tasks and two evidence variants (36 paired comparisons,
+72 arm runs), but treats only the six tasks as independent clusters. It reports
+all task-level effects and a six-cluster interval and does not claim confirmatory
+power. It tests within-session adversarial review versus single-role self-review;
+it does not test cumulative persistence (separate issue #119).
+
+Added a common six-field output normalizer, identical character caps, explicit
+clipping and native schema-truncation audit fields, scorer-only anonymous
+packets, output-digest validation and a task-cluster summary. Removed
+objection-uptake scoring and replaced the old decisive `+0.40` threshold with
+task-outcome/reasoning primary scoring and exploratory interpretation. The
+proposal now requires an independent curator to document task/key/model-family
+provenance and contamination, separate key custody, and graders independent of
+the task author, curator, implementer and provider run. A one-pair throwaway
+shakedown is specified but remains **not authorized**.
+
+Focused protocol and audit regressions passed. The offline paired harness
+validated 72 synthetic records across 36 pairs with zero model calls or cost.
+The changed Python scripts passed focused Ruff checks and `git diff --check`.
+`./sigma test` stopped at the existing `tests/tooling.py::check_ui` mocked
+`stop_servers` assertion (expected one call, got zero); the runner stopped
+before Ruff/format, Pyright, frontend checks and production build. No browser
+workflow changed. No paid inference, live shakedown, cloud operation or browser
+check occurred. No project was modified or exercised, so no project export was
+created. The newcomer summary above is retained; the concurrent Green
+PR #108 also edits `STATUS.md`, so integration must preserve that summary and
+this issue record.

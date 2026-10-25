@@ -4,6 +4,7 @@
 This exercises deterministic scheduling, exact packet hashes, capped records,
 transcript audit and pair completeness. It is NOT a live runner or isolation proof.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,16 +29,26 @@ def dry_run() -> dict:
     protocol = load("protocol15", "scripts/increment14_protocol.py")
     packets = load("packets15", "scripts/increment14_agent_packet.py")
     audit = load("audit15", "scripts/increment14_audit.py")
-    planned = protocol.manifest(140017, 1)
+    planned = protocol.manifest(140017, 3)
     # These local placeholder caps have NO authorization significance.
-    frozen = dict(planned, status="FROZEN", freeze_approved=True,
-                  user_approved=True, model_provider="offline-fixture",
-                  model_exact_version="offline-only", per_arm_token_cap=200,
-                  per_arm_input_token_cap=100, per_arm_output_token_cap=100,
-                  per_call_input_token_cap=100, per_call_output_token_cap=100,
-                  per_arm_model_call_cap=2, per_arm_tool_call_cap=0,
-                  per_arm_wall_seconds=60, per_arm_usd_cap=0,
-                  total_usd_cap=0)
+    frozen = dict(
+        planned,
+        status="FROZEN",
+        freeze_approved=True,
+        user_approved=True,
+        model_provider="offline-fixture",
+        model_exact_version="offline-only",
+        per_arm_token_cap=200,
+        per_arm_input_token_cap=100,
+        per_arm_output_token_cap=100,
+        per_call_input_token_cap=100,
+        per_call_output_token_cap=100,
+        per_arm_model_call_cap=2,
+        per_arm_tool_call_cap=0,
+        per_arm_wall_seconds=60,
+        per_arm_usd_cap=0,
+        total_usd_cap=0,
+    )
     records = []
     for pair in planned["pairs"]:
         payload = packets.agent_packet(pair["task_id"], pair["variant"])
@@ -45,21 +56,68 @@ def dry_run() -> dict:
         if digest != pair["packet_sha256"]:
             raise ValueError("Packet mismatch")
         for arm in pair["execution_order"]:
-            synthetic = {"kind": "synthetic-not-a-model", "arm": arm,
-                         "task": pair["task_id"], "variant": pair["variant"],
-                         "message": "No inference performed"}
+            synthetic = {
+                "kind": "synthetic-not-a-model",
+                "arm": arm,
+                "task": pair["task_id"],
+                "variant": pair["variant"],
+                "message": "No inference performed",
+            }
             transcript = protocol.canonical_bytes({"request": payload, "response": synthetic})
-            record = dict(task_id=pair["task_id"], variant=pair["variant"],
-                          replicate=pair["replicate"], arm_code=arm,
-                          packet_sha256=digest, model_provider="offline-fixture",
-                          model_exact_version="offline-only",
-                          total_tokens=0, input_tokens=0, output_tokens=0,
-                          call_usage=[], model_calls=0, tool_calls=0,
-                          elapsed_seconds=0, cost_usd=0,
-                          transcript_sha256=hashlib.sha256(transcript).hexdigest(),
-                          tool_audit_sha256=hashlib.sha256(b"[]").hexdigest(),
-                          scores={d: 0 for d in audit.DIMENSIONS},
-                          critical_integrity_failure=False)
+            record = {
+                "task_id": pair["task_id"],
+                "variant": pair["variant"],
+                "replicate": pair["replicate"],
+                "arm_code": arm,
+                "executed_arm": pair["arm_assignment"][arm],
+                "packet_sha256": digest,
+                "model_provider": "offline-fixture",
+                "model_exact_version": "offline-only",
+                "total_tokens": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "call_usage": [],
+                "model_calls": 0,
+                "tool_calls": 0,
+                "elapsed_seconds": 0,
+                "cost_usd": 0,
+                "transcript_sha256": hashlib.sha256(transcript).hexdigest(),
+                "tool_audit_sha256": hashlib.sha256(b"[]").hexdigest(),
+                "normalized_submission": audit._BLINDING.normalize_submission(
+                    {
+                        "conclusion": "synthetic offline fixture",
+                        "reasoning": "no model inference performed",
+                        "challenge": "not applicable",
+                        "evidence": "fixture only",
+                        "uncertainty": "not research evidence",
+                        "next_test": "none",
+                    },
+                    arm="single_role",
+                ),
+                "schema_truncation_fields": [],
+                "schema_validation_errors": [],
+                "scores": {d: 0 for d in audit.DIMENSIONS},
+                "scorer_reviews": [
+                    {
+                        "grader_id": "fixture-grader-1",
+                        "scores": {d: 0 for d in audit.DIMENSIONS},
+                        "task_key_pass": False,
+                        "arm_guess": "uncertain",
+                        "guess_confidence": 0,
+                    },
+                    {
+                        "grader_id": "fixture-grader-2",
+                        "scores": {d: 0 for d in audit.DIMENSIONS},
+                        "task_key_pass": False,
+                        "arm_guess": "uncertain",
+                        "guess_confidence": 0,
+                    },
+                ],
+                "critical_integrity_failure": False,
+            }
+            record["submission_sha256"] = audit._BLINDING.digest_submission(
+                record["normalized_submission"]
+            )
             records.append(record)
     # Adversarial fixture mutations must fail closed, not silently score a win.
     from copy import deepcopy
@@ -82,8 +140,14 @@ def dry_run() -> dict:
     must_reject(lambda m, r: r[0].update(input_tokens=101, total_tokens=101))
     must_reject(lambda m, r: r[0].update(output_tokens=101, total_tokens=101))
     must_reject(lambda m, r: r[0].update(input_tokens=1))
-    must_reject(lambda m, r: r[0].update(call_usage=[{"input_tokens": 101, "output_tokens": 0}],
-                                          model_calls=1, input_tokens=101, total_tokens=101))
+    must_reject(
+        lambda m, r: r[0].update(
+            call_usage=[{"input_tokens": 101, "output_tokens": 0}],
+            model_calls=1,
+            input_tokens=101,
+            total_tokens=101,
+        )
+    )
     must_reject(lambda m, r: r[0].update(cost_usd=0.01))
     must_reject(lambda m, r: r[0].update(transcript_sha256=""))
     must_reject(lambda m, r: r[0].update(scorer_saw_arm_identity=True))
@@ -91,12 +155,35 @@ def dry_run() -> dict:
     must_reject(lambda m, r: m.update(status="DRAFT_NOT_FROZEN"))
 
     result = audit.check_trial_records(frozen, records)
-    if result != {"pairs": 12, "cost_usd": 0, "integrity_failures": 0}:
+    if result != {
+        "pairs": 36,
+        "cost_usd": 0,
+        "integrity_failures": 0,
+        "clipped_submissions": 0,
+        "schema_truncation_fields": 0,
+        "schema_validation_errors": 0,
+        "blinding_guess_accuracy": None,
+    }:
         raise AssertionError("Unexpected paired-run summary")
-    return {"kind": "OFFLINE_FIXTURE_ONLY", "model_calls": 0,
-            "spend_usd": 0, "records": len(records), "pairs": result["pairs"],
-            "audit_passed": True, "real_runner_isolation_verified": False,
-            "live_pilot_authorized": False}
+    differences = audit.paired_score_differences(frozen, records)
+    cluster_summary = audit.task_cluster_summary(differences)
+    pass_cluster_summary = audit.task_cluster_summary(
+        differences, outcome_field="task_key_pass_rate_diff"
+    )
+    if cluster_summary["independent_units"] != 6 or len(differences) != 36:
+        raise AssertionError("Unexpected task-cluster analysis summary")
+    if pass_cluster_summary["independent_units"] != 6:
+        raise AssertionError("Unexpected task-key pass analysis summary")
+    return {
+        "kind": "OFFLINE_FIXTURE_ONLY",
+        "model_calls": 0,
+        "spend_usd": 0,
+        "records": len(records),
+        "pairs": result["pairs"],
+        "audit_passed": True,
+        "real_runner_isolation_verified": False,
+        "live_pilot_authorized": False,
+    }
 
 
 def main() -> None:
@@ -106,7 +193,7 @@ def main() -> None:
     outcome = dry_run()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(outcome, indent=2, sort_keys=True) + "\n")
-    print("PASS 24 synthetic records, 12 matched pairs, zero model calls/cost")
+    print("PASS 72 synthetic records, 36 matched pairs, zero model calls/cost")
 
 
 if __name__ == "__main__":
