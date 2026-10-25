@@ -66,6 +66,15 @@ one evaluation exporter remain lint-gated without bulk formatting churn. CI is
 pinned to Ubuntu 24.04 and runs host-safety and environment isolation checks
 before the full suite.
 
+After the initial branch was created, main advanced through PR #122 to
+`cf7dcb024996b95a0913c75438c6d17c4c065299`. That update was merged into the
+T117 branch; its deterministic CLI-level BLOCKED test was retained alongside
+the Ubuntu FAIL/1 fixture. Focused GCE checks and the full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed again on the
+synchronized branch. Total elapsed time through R4R was approximately 20
+minutes. GitHub Actions on the PR is pending; actual Ubuntu package/systemd/
+rootless-Docker host acceptance remains unverified.
+
 Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
 scenarios, expanded Ruff lint, Ruff format, Pyright, frontend typecheck and
 production build); `tests/gce_host.py` (10 tests); `tests/tooling.py` with and

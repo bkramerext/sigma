@@ -3,6 +3,12 @@ T117 — Gray release safety and test reliability handoff
 Status: R4R. Branch: gray/issue-117-release-safety. Base: main at
 22efbf8c867787b2105cc8444fca714e289021e9 (PR #120).
 
+While this branch was under review, main advanced through PR #122 to
+cf7dcb024996b95a0913c75438c6d17c4c065299. That main commit was merged into
+this branch. Its deterministic CLI-level BLOCKED test was preserved alongside
+the separate simulated-Ubuntu FAIL/1 regression; `tests/gce_host.py` and the
+full `./sigma test` suite were rerun successfully on the synchronized head.
+
 Implemented:
 - Extracted the Ubuntu 24.04 identity guard to deploy/gce_host_guard.sh. Its
   tests use quoted/unquoted Ubuntu, Debian, and Fedora fixtures and never run
