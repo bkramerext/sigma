@@ -137,12 +137,19 @@ def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
             collect_fields(branch.get("pending_investigation"))
 
     records = list(rows.values())
-    completed = sum(row["statuses"] == ["completed"] for row in records)
+    completed_rows = [row for row in records if row["statuses"] == ["completed"]]
+    completed = len(completed_rows)
+    # A saved 'completed' status without the corresponding source/output fields
+    # must never be presented as an observed experiment by implication.
+    unsubstantiated = sum(
+        not (row["source_recorded"] and row["output_recorded"]) for row in completed_rows
+    )
     inconclusive = len(records) - completed
     return {
         "records": records,
         "unidentified_count": unidentified,
         "completed_count": completed,
+        "completed_without_recorded_io_count": unsubstantiated,
         "other_count": inconclusive,
         "note": (
             "No persisted Python/SageMath execution records; authored measurement "
