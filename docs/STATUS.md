@@ -1,5 +1,42 @@
 # SIGMA status
 
+## Green UI tickets #95 and #125 (2026-10-25)
+
+Implemented on one branch, `green/t95-t125-ui`, from current `main` at
+`6686e6f`. The work is split into reviewable commits:
+
+- **#95 paused-session clarity:** the paused lifecycle state now includes a
+  nearby explanation and next step. It classifies known context, duration,
+  budget, model/connection, project/strategy, restart, and manual-pause reasons
+  from `current_action`, `message`, and the latest typed failure/interruption
+  fields. Other recorded reasons remain visible verbatim; a missing reason is
+  explicitly described as unrecorded. Resume behavior and backend safeguards
+  are unchanged. Commits: `1effc46`, `486c8db`, `04b6a75`.
+- **#125 saved AI papers:** saved versions appear as a responsive card library
+  with title and date/version metadata, per-version TXT and PDF downloads, and
+  an inline-PDF new-tab action. Each card expands a collapsed-by-default view
+  of that exact saved draft using escaped React text. Removal has an inline
+  confirmation, deletes only the selected paper JSON/PDF, and immediately
+  updates the list. The TXT route emits the stored paper text as an attachment;
+  existing project-owner authorization protects reads and deletion. Commit:
+  `597afcd`.
+
+Real Chrome passed `browser_checks/paused_session_clarity.py` (manual pause,
+page close/reopen, visible explanation and next step, narrow viewport, safe
+resume) and `browser_checks/saved_paper_library.py` (fixture-authored version,
+TXT/PDF payloads and headers, actual inline-PDF popup, accessible expansion,
+mobile layout, cancellation and confirmed deletion). `tests/papers.py` and
+`tests/cloud_workspaces.py` passed. Frontend typecheck and production build,
+Ruff check/format, and Pyright (0 diagnostics) passed. The full `./sigma test`
+ran twice and stopped at the existing `tests/tooling.py:177` assertion that
+expects `stop_servers` once; it was called zero times. The paper and cloud
+ownership scenarios were then run directly and passed. The broad legacy
+`browser_checks/a17_research.py` also stops later at a stale `12/30 calls`
+expectation; its focused pause/reopen behavior passed before that assertion.
+No live or paid provider calls or cloud changes occurred. The browser paper
+check used only the deterministic local fixture; its one generation is fixture
+traffic.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored

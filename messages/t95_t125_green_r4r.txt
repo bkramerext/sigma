@@ -1,0 +1,50 @@
+Green R4R handoff — issues #95 and #125
+
+Branch: green/t95-t125-ui
+Base: main at 6686e6f (2026-10-25)
+Implementation commits:
+- #95 paused-session UI: 1effc468e0231ffd75fb21de31cec2091b81cd3d
+- #95 typed pause-reason refinement: 486c8db97b9964c66e1756b75daf93986a91694d
+- #95 real-Chrome acceptance: 04b6a758e290be32d198d05eb4c9d24c270dfc9b
+- #125 saved-paper library: 597afcd426b8049eedad9fc7ab20d90ed5b3d64d
+
+#95 result
+- The paused status now explains known causes and next actions beside the
+  lifecycle label using backend current_action, message, and typed failure or
+  interruption fields. Unrecognized recorded reasons are shown verbatim; absent
+  reasons are described as unrecorded. Existing resume safeguards are retained.
+- Real Chrome passed browser_checks/paused_session_clarity.py, covering manual
+  pause, closing and reopening the page, visible reason/next action, narrow
+  layout, and resume.
+
+#125 result
+- Saved versions use a responsive card library with title, date/version,
+  Download .txt, Download .pdf, Open .pdf in browser, and inline Remove actions.
+  The saved paper view is collapsed by default and renders stored fields as
+  escaped React text. Removal asks for confirmation and deletes only that
+  version's JSON/PDF. The TXT endpoint returns stored paper text as an
+  attachment; existing ownership middleware enforces access.
+- Real Chrome passed browser_checks/saved_paper_library.py: fixture generation,
+  TXT/PDF payloads and headers, real inline-PDF popup, accessible expansion,
+  mobile layout, cancellation/confirmation, and list update after deletion.
+- tests/papers.py and tests/cloud_workspaces.py passed. Frontend typecheck and
+  production build, Ruff check/format, and Pyright (0 diagnostics) passed.
+
+Combined checks and limits
+- ./sigma test ran twice and stopped at tests/tooling.py:177: expected
+  stop_servers once, called zero times. This is the repository's existing
+  tooling assertion. Paper and cloud-workspace scenarios were run separately
+  afterward and passed.
+- The broad existing browser_checks/a17_research.py stopped later at its stale
+  12/30 calls expectation. Its pause/reopen/resume portion passed before that
+  assertion. The focused #95 Chrome check above passed in full.
+- No live or paid provider calls and no cloud changes. The #125 browser check
+  used only the deterministic provider fixture; its authoring request was
+  fixture traffic.
+- No known ticket acceptance gaps. The complete offline suite remains blocked
+  at the pre-existing tooling assertion above.
+
+Elapsed implementation and validation time: 13 minutes 50 seconds from fresh
+branch creation (11:10:34 PDT) through the final validation at 11:24:24 PDT.
+
+R4R: one PR for both tickets, targeting main. Do not self-merge.
