@@ -8,6 +8,8 @@ cf7dcb024996b95a0913c75438c6d17c4c065299. That main commit was merged into
 this branch. Its deterministic CLI-level BLOCKED test was preserved alongside
 the separate simulated-Ubuntu FAIL/1 regression; `tests/gce_host.py` and the
 full `./sigma test` suite were rerun successfully on the synchronized head.
+GitHub Actions run 40216306901 (#429) then passed on Ubuntu 24.04, including
+the focused host/lifecycle step and full repository verification.
 
 Implemented:
 - Extracted the Ubuntu 24.04 identity guard to deploy/gce_host_guard.sh. Its
@@ -40,5 +42,5 @@ Executed and passed:
 - Ruff lint and format commands in the updated test runner; git diff --check.
 
 No provider calls, GCP resources, installer execution, or real-browser checks.
-The Ubuntu CI workflow is configured but its GitHub run is pending. Actual
-Ubuntu package/systemd/rootless-Docker host acceptance remains unverified.
+Actual Ubuntu package/systemd/rootless-Docker host acceptance remains
+unverified.

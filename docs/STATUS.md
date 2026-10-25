@@ -71,9 +71,12 @@ After the initial branch was created, main advanced through PR #122 to
 T117 branch; its deterministic CLI-level BLOCKED test was retained alongside
 the Ubuntu FAIL/1 fixture. Focused GCE checks and the full
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed again on the
-synchronized branch. Total elapsed time through R4R was approximately 20
-minutes. GitHub Actions on the PR is pending; actual Ubuntu package/systemd/
-rootless-Docker host acceptance remains unverified.
+synchronized branch. GitHub Actions run 40216306901 (#429) passed on Ubuntu
+24.04 at head `da3dd7d6a9af8d636ead917edc12c59886093382`, including the focused
+host/lifecycle step and full repository verification. Total elapsed time
+through CI completion was approximately 25 minutes. Actual Ubuntu package
+installation, systemd setup, rootless Docker, and installer execution remain
+unverified and were not attempted.
 
 Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
 scenarios, expanded Ruff lint, Ruff format, Pyright, frontend typecheck and
