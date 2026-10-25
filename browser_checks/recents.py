@@ -28,7 +28,7 @@ with sync_playwright() as playwright:
         route.fulfill(response=route.fetch(url=route.request.url.replace(UI_ORIGIN, API_ORIGIN)))
 
     page.route("**/api/**", forward)
-    page.goto("http://127.0.0.1:5173/")
+    page.goto(UI_ORIGIN + "/")
     page.get_by_role("button", name="New", exact=True).hover()
     expect(page.get_by_role("tooltip")).to_have_text("Create a project")
     page.get_by_role("button", name="Open", exact=True).hover()
@@ -41,8 +41,13 @@ with sync_playwright() as playwright:
     open_dialog.get_by_role("heading", name="Open Project", exact=True).evaluate(
         "h => { const cancel = h.nextElementSibling; if (!cancel || !cancel.matches('button.entry-cancel') || cancel.getBoundingClientRect().left < h.getBoundingClientRect().right) throw new Error('Cancel must flow immediately after the Open Project title'); }"
     )
-    assert open_cancel.bounding_box()["y"] < open_dialog.get_by_role("button", name="Open Project", exact=True).bounding_box()["y"]
-    expect(open_dialog.locator(".entry-dialog-actions").get_by_role("button", name="Cancel")).to_have_count(0)
+    assert (
+        open_cancel.bounding_box()["y"]
+        < open_dialog.get_by_role("button", name="Open Project", exact=True).bounding_box()["y"]
+    )
+    expect(
+        open_dialog.locator(".entry-dialog-actions").get_by_role("button", name="Cancel")
+    ).to_have_count(0)
     open_cancel.click()
     expect(open_dialog).to_have_count(0)
     samples_tab = page.get_by_role("tab", name="Samples", exact=True)
@@ -62,12 +67,21 @@ with sync_playwright() as playwright:
     expect(samples_panel.get_by_text("Did Jesus Use Cannabis?")).to_be_visible()
     expect(
         samples_panel.get_by_role("button", name="Open Maximum Regions Formed by Lines").locator(
-            "small span"
+            "small span:first-child"
         )
     ).to_have_text("1 strategy · Easy difficulty")
+    expect(
+        samples_panel.get_by_role("button", name="Open Maximum Regions Formed by Lines").locator(
+            ".home-runnable-state"
+        )
+    ).to_have_text("Runnable")
     sample_title_box = samples_panel.locator(".sample-open strong").first.bounding_box()
     sample_meta_box = samples_panel.locator(".sample-open small span").first.bounding_box()
-    assert sample_title_box and sample_meta_box and abs(sample_title_box["x"] - sample_meta_box["x"]) < 1
+    assert (
+        sample_title_box
+        and sample_meta_box
+        and abs(sample_title_box["x"] - sample_meta_box["x"]) < 1
+    )
     sample_type = samples_panel.locator(".sample-open strong").first.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
@@ -174,7 +188,11 @@ with sync_playwright() as playwright:
     assert "Mathematics" not in recent_meta.inner_text()
     recent_title_box = first_copy.bounding_box()
     recent_meta_box = recent_meta.bounding_box()
-    assert recent_title_box and recent_meta_box and abs(recent_title_box["x"] - recent_meta_box["x"]) < 1
+    assert (
+        recent_title_box
+        and recent_meta_box
+        and abs(recent_title_box["x"] - recent_meta_box["x"]) < 1
+    )
     recent_meta_style = recent_meta.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )

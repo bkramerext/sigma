@@ -251,6 +251,7 @@ class RecentProject:
     title: str
     investigation_type: str | None
     strategy_count: int | None
+    runnable: bool
     difficulty: str | None
     accessed_at: str | None
     included_example: bool
@@ -297,6 +298,10 @@ def recent_projects() -> dict:
                         title=view.project.title,
                         investigation_type=view.project.investigation_type,
                         strategy_count=len(view.project.active_order),
+                        runnable=any(
+                            strategy.enabled and strategy.id in view.project.active_order
+                            for strategy in view.project.strategies
+                        ),
                         difficulty=view.project.difficulty,
                         available=True,
                     )
@@ -313,6 +318,7 @@ def recent_projects() -> dict:
                         title=Path(entry["path"]).name,
                         investigation_type=None,
                         strategy_count=None,
+                        runnable=False,
                         difficulty=None,
                         available=False,
                         error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",

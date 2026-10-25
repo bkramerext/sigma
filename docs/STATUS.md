@@ -39,6 +39,29 @@ No live or paid provider calls or cloud changes occurred. The browser paper
 check used only the deterministic local fixture; its one generation is fixture
 traffic.
 
+### Manual feedback follow-up (build 85a9efa)
+
+- The UI now calls every resumable interruption **Stopped**, including backend
+  guard states that remain `paused` internally for compatibility. Resume is
+  available when no other session is active. **Ended** remains terminal and
+  does not offer Resume. The stopped-session notice explains the cause and safe
+  next step; when no complete Investigator/Skeptic artifact exists, it also
+  states: “The session is stopped and has not saved a complete
+  Investigator/Skeptic finding. No answer to the project question is
+  established yet.”
+- Home Recent and Samples entries show **Runnable** only when the project has
+  an active, enabled strategy. The label describes project readiness; AI
+  connection availability still applies.
+- About already closed on backdrop clicks; real-Chrome coverage now checks
+  dismissal and focus restoration.
+- Real Chrome passed the stopped-session reopen/resume check and the About
+  backdrop check. In the broader `browser_checks/recents.py`, the new Runnable
+  assertion passed, then the existing scroll-height assertion failed because
+  the sample scroller's `scrollHeight` equaled its `clientHeight` (1275).
+- A fresh `./sigma test` again reached the existing `tests/tooling.py:177`
+  `stop_servers` call-count failure. Focused `tests/recents.py`, frontend
+  typecheck/build, Ruff, and Pyright passed.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored

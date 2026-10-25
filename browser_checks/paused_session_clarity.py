@@ -1,4 +1,4 @@
-"""Real Chrome pause persistence and next-action guidance check."""
+"""Real Chrome stopped-session persistence and next-action guidance check."""
 
 import os
 from urllib.parse import quote
@@ -43,7 +43,7 @@ with sync_playwright() as playwright:
     path = created["body"]["path"]
     project_id = created["body"]["project"]["id"]
     strategy = page.evaluate(
-        "async path => { const response=await fetch('/api/projects/strategies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,title:'Pause clarity fixture',approach:'Inspect the saved objective and report one bounded observation.'})}); return {status:response.status,body:await response.json()}; }",
+        "async path => { const response=await fetch('/api/projects/strategies',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,title:'Stop clarity fixture',approach:'Inspect the saved objective and report one bounded observation.'})}); return {status:response.status,body:await response.json()}; }",
         path,
     )
     assert strategy["status"] == 201, strategy
@@ -53,20 +53,23 @@ with sync_playwright() as playwright:
     row = page.locator("li[data-session-id]").first
     expect(row.locator(".session-status")).to_have_text("running", timeout=15000)
     session_id = row.get_attribute("data-session-id")
-    paused = page.evaluate(
-        "async ({id,path}) => { const response=await fetch(`/api/projects/research-sessions/${id}/control`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,action:'pause'})}); return {status:response.status,body:await response.json()}; }",
+    stopped = page.evaluate(
+        "async ({id,path}) => { const response=await fetch(`/api/projects/research-sessions/${id}/control`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,action:'stop'})}); return {status:response.status,body:await response.json()}; }",
         {"id": session_id, "path": path},
     )
-    assert paused["status"] == 200 and paused["body"]["status"] == "paused", paused
+    assert stopped["status"] == 200 and stopped["body"]["status"] == "stopped", stopped
     url = page.url
     page.close()
     page = new_page()
     page.goto(url)
     row = page.locator(f"li[data-session-id='{session_id}']")
-    expect(row.locator(".session-status")).to_have_text("paused", timeout=15000)
-    guidance = row.get_by_role("note", name="Why session 1 paused and what to do next")
-    expect(guidance).to_contain_text("Paused by user")
+    expect(row.locator(".session-status")).to_have_text("stopped", timeout=15000)
+    guidance = row.get_by_role("note", name="Why session 1 stopped and what to do next")
+    expect(guidance).to_contain_text("Stopped by user")
     expect(guidance).to_contain_text("Resume when you are ready")
+    expect(guidance).to_contain_text(
+        "The session is stopped and has not saved a complete Investigator/Skeptic finding. No answer to the project question is established yet."
+    )
     assert project_id == created["body"]["project"]["id"]
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -76,5 +79,5 @@ with sync_playwright() as playwright:
     browser.close()
 
 print(
-    "PASS real Chrome pause/reopen/resume: recorded manual pause reason, next action, and narrow layout."
+    "PASS real Chrome stop/reopen/resume: clear stoppage reason, incomplete-finding notice, next action, and narrow layout."
 )
