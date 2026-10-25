@@ -92,6 +92,10 @@ type StrategyFinding = { strategy_id: string; strategy_title: string; status: st
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
 type ResearchSession = { id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
+type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
+type CurrentQuestion = { id: string; text: string; status: string; actionable: boolean; sources: EvidencePointer[]; narrative_resolution_sources: EvidencePointer[]; note: string; dispositions: { source: EvidencePointer; valid: boolean; rationale: string }[] };
+type CurrentUnderstanding = { version: number; project_id: string; session_count: number; project_status: string; scope_note: string; findings: CurrentFinding[]; current_finding_ids: string[]; obligations: CurrentQuestion[]; changes: { kind: string; text: string; source: EvidencePointer; earlier: EvidencePointer | null; caution: string }[]; next_investigations: { obligation_id: string; question: string; source: EvidencePointer; qualification: string }[]; failures: { session_id: string; session_number: number; status: string; note: string }[]; limitations: string[] };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type DurationUnit = 'minutes' | 'hours' | 'days';
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_value: string; session_duration_unit: DurationUnit; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
@@ -424,7 +428,7 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
               const execution = artifact.investigator_output[executionField] && typeof artifact.investigator_output[executionField] === 'object' ? artifact.investigator_output[executionField] as Record<string, unknown> : null;
               const captured = execution && Array.isArray(execution.artifacts) ? execution.artifacts as Record<string, unknown>[] : [];
               const reused = artifact.investigator_output[executionField + '_reuse_reason'];
-              return <li key={artifact.id}>{artifactsMarkdown ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(artifact)}/></Suspense></div> : <details>
+              return <li key={artifact.id} id={`research-artifact-${session.id}-${artifact.id}`}>{artifactsMarkdown ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(artifact)}/></Suspense></div> : <details>
                 <summary>Cycle {artifact.strategy_cycle ?? artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
                 <div className="research-artifact-content"><p><strong>Method:</strong> {artifact.method}</p><p><strong>Assumptions:</strong> {artifact.assumptions.join(' · ') || 'None stated'}</p><p><strong>Evidence status:</strong> {artifact.evidence_status}</p><p><strong>Skeptic response:</strong> {artifact.skeptic_response}</p><p><strong>Objections:</strong> {artifact.objections.join(' · ') || 'No concrete objection recorded'}</p><p><strong>Open obligations:</strong> {artifact.open_obligations.join(' · ') || 'None recorded'}</p>{Array.isArray(artifact.skeptic_output.obligation_reviews) && artifact.skeptic_output.obligation_reviews.length > 0 && <p><strong>Obligation dispositions:</strong> {(artifact.skeptic_output.obligation_reviews as Record<string, unknown>[]).map(review => `${String(review.status ?? 'unknown')} · ${String(review.rationale ?? '')} [${Array.isArray(review.basis_artifact_ids) ? review.basis_artifact_ids.join(', ') : 'no artifact source'}]`).join(' · ')}. Model-reported and unverified.</p>}<p><strong>Coordinator decision:</strong> {artifact.coordinator_decision}</p><p><strong>Next question:</strong> {artifact.next_question || 'No further question; the session ended.'}</p>
                   {execution && <section className="outcome-python-evidence"><h5>{toolName} execution · {String(execution.status ?? 'status unavailable')}</h5><details className="research-execution-record"><summary>Execution source and output</summary><pre>{JSON.stringify(execution, null, 2)}</pre></details><p><strong>Execution ID:</strong> {String(execution.id ?? 'Unavailable')}</p>{typeof execution.exit_code === 'number' && <p><strong>Exit code:</strong> {execution.exit_code}</p>}{typeof reused === 'string' && <p><strong>Reuse:</strong> {reused}</p>}<p>{typeof execution.source === 'string' ? 'Exact source is retained in the execution record.' : 'Source unavailable in this record.'} Computation status is not proof of a mathematical claim.</p>{!!captured.length && <div><strong>Captured files</strong><ul>{captured.map((file, index) => <li key={index}>{String(file.filename ?? 'Unnamed file')} · {typeof file.size_bytes === 'number' ? `${file.size_bytes} bytes` : 'size unavailable'} · SHA-256 {String(file.sha256 ?? 'unavailable')}</li>)}</ul></div>}</section>}
@@ -438,9 +442,37 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   </div>;
 }
 
+function CurrentUnderstandingView({ state, onEvidence, onSession }: { state: CurrentUnderstanding; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
+  const sourceButton = (source: EvidencePointer, context: string) => <button type="button" className="text-view-link" disabled={!source.available} aria-label={`${context}: Session ${source.session_number}, Artifact ${source.artifact_sequence || 'unnumbered'}`} onClick={() => onEvidence(source)}>Session #{source.session_number} · {source.artifact_sequence ? `Artifact ${source.artifact_sequence}` : 'Saved evidence'}</button>;
+  const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (saved text continues)` : text;
+  const findings = state.current_finding_ids.map(id => state.findings.find(row => row.id === id)).filter((row): row is CurrentFinding => !!row);
+  const questions = [...state.obligations].sort((a, b) => (Number(b.actionable) * 4 + Number(b.status === 'historical_unreconciled') * 2) - (Number(a.actionable) * 4 + Number(a.status === 'historical_unreconciled') * 2));
+  const suggested = state.next_investigations[0];
+  const visibleQuestions = questions.filter(row => row.id !== suggested?.obligation_id && !['resolved_reported', 'superseded_reported', 'retracted_reported'].includes(row.status)).slice(0, 2);
+  const remainingQuestions = questions.filter(row => row.id !== suggested?.obligation_id && !visibleQuestions.includes(row));
+  const findingRow = (row: CurrentFinding) => <li key={row.id}><strong>{row.strategy_title || 'Historical strategy'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.verification}</p><p>{sourceButton(row.source, 'Inspect finding')}</p></li>;
+  const changeRow = (row: CurrentUnderstanding['changes'][number], index: number) => <li key={`${row.kind}-${row.source.session_id}-${row.source.artifact_id}-${index}`}><p>{excerpt(row.text)}</p><p className="hint">{row.caution}</p><p>{sourceButton(row.source, 'Inspect later evidence')}{row.earlier && <> · {sourceButton(row.earlier, 'Inspect earlier evidence')}</>}</p></li>;
+  const questionRow = (row: CurrentQuestion) => <li key={row.id}><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.note}</p>{row.sources.length > 0 && <p>{sourceButton(row.sources.at(-1)!, 'Inspect obligation')}{row.narrative_resolution_sources.slice(-1).map(source => <span key={source.record_path}> · {sourceButton(source, 'Inspect narrative resolution')}</span>)}{row.dispositions.filter(item => item.valid).slice(-1).map(item => <span key={item.source.record_path}> · {sourceButton(item.source, 'Inspect disposition')}</span>)}</p>}</li>;
+  return <details className="outcome-subsection current-understanding" aria-label="Current understanding" open>
+    <summary>Current understanding <small>{state.session_count} saved {state.session_count === 1 ? 'session' : 'sessions'}</small></summary>
+    <p className="hint current-understanding-scope">{state.scope_note}</p>
+    <div className="current-understanding-columns">
+      <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
+      <section><h3>What changed / superseded</h3>{state.changes.length ? <><ol>{state.changes.slice(0, 2).map(changeRow)}</ol>{state.changes.length > 2 && <details><summary>{state.changes.length - 2} more recorded changes</summary><ol>{state.changes.slice(2).map(changeRow)}</ol></details>}</> : <p>No explicit change or supersession is recorded. Different wording is not a contradiction.</p>}{state.failures.length > 0 && <details><summary>Execution states and unsuccessful branches</summary><ul>{state.failures.map((row, index) => <li key={`${row.session_id}-${index}`}>{row.status}: {row.note} <button className="text-view-link" type="button" onClick={() => onSession(row.session_id)}>Session #{row.session_number}</button></li>)}</ul></details>}</section>
+      <section><h3>Open or not yet reconciled</h3>
+        <h4>Possible next investigation</h4>{suggested ? <div><p>{suggested.question}</p><p className="hint">{suggested.qualification}</p>{sourceButton(suggested.source, 'Inspect suggested question')}</div> : <p>No current evidence-linked next investigation is determined. Inspect unreconciled history before choosing a new run.</p>}
+        {visibleQuestions.length ? <ol>{visibleQuestions.map(questionRow)}</ol> : !questions.length && <p>No explicit obligation is recorded; this does not mean the question is solved.</p>}
+        {remainingQuestions.length > 0 && <details><summary>{remainingQuestions.length} more recorded questions / dispositions</summary><ol>{remainingQuestions.map(questionRow)}</ol></details>}
+      </section>
+    </div>
+    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map(note => <li key={note}>{note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
+  </details>;
+}
+
 function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
+  const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
   const [pendingStrategyIds, setPendingStrategyIds] = useState<string[]>([]);
@@ -467,6 +499,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     const nextSessions = data.sessions as ResearchSession[];
     setSessions(nextSessions);
+    setCurrentUnderstanding(data.current_understanding?.project_id === projectId ? data.current_understanding as CurrentUnderstanding : null);
     readErrorReported.current = false;
     setReadError('');
     const requestedId = preferredId ?? selectedSessionId.current;
@@ -490,7 +523,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
       lastAnnouncement.current = transition;
     }
     return chosen;
-  }, [path]);
+  }, [path, projectId]);
 
   const reportReadFailure = useCallback((cause: unknown) => {
     const message = errorMessage(cause);
@@ -589,6 +622,28 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     }));
   }
 
+  function revealEvidence(source: EvidencePointer) {
+    if (source.project_id !== projectId || !source.available) return;
+    revealSession(source.session_id);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(source.session_id)}"]`);
+      const evidence = row?.querySelector<HTMLDetailsElement>('.outcome-evidence-subsection');
+      if (evidence) evidence.open = true;
+      const artifact = document.getElementById(`research-artifact-${source.session_id}-${source.artifact_id}`);
+      if (artifact) {
+        const disclosure = artifact.querySelector<HTMLDetailsElement>('details');
+        if (disclosure) disclosure.open = true;
+        artifact.tabIndex = -1;
+        artifact.focus({ preventScroll: true });
+        artifact.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setAnnouncement(`Opened saved evidence from Session #${source.session_number}.`);
+      } else if (row) {
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setAnnouncement('The owning session is open; inspect its saved evidence.');
+      }
+    }));
+  }
+
   async function removeSession(target: ResearchSession) {
     setBusy(true); setError('');
     try {
@@ -639,6 +694,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} onEvidence={revealEvidence} onSession={revealSession}/>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {

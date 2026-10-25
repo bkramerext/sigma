@@ -2546,6 +2546,44 @@ def _all(path: str) -> list[dict[str, Any]]:
     return records
 
 
+def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
+    """Read durable records without recovery, directory creation, or provider work.
+
+    Current understanding must not pause/restart a worker merely to read its
+    history. Unreadable/foreign records are counted, never silently presented as
+    absent evidence or followed into another project.
+    """
+    view = inspect_project(path)
+    directory = Path(view.path) / "research-sessions"
+    if directory.is_symlink():
+        raise ProjectError("Research session directory must not be a symbolic link")
+    if not directory.exists():
+        return [], 0
+    records: list[dict[str, Any]] = []
+    unavailable = 0
+    for file in sorted(directory.glob("*.json")):
+        if file.name == "limits.json":
+            continue
+        try:
+            if file.is_symlink() or not file.is_file() or file.stat().st_size > MAX_RECORD:
+                unavailable += 1
+                continue
+            raw = json.loads(file.read_text(encoding="utf-8"))
+            if (
+                not isinstance(raw, dict)
+                or raw.get("id") != file.stem
+                or raw.get("project_id") != view.project.id
+                or raw.get("project_path") != view.path
+            ):
+                unavailable += 1
+                continue
+            UUID(file.stem)
+            records.append(raw)
+        except (OSError, ValueError):
+            unavailable += 1
+    return records, unavailable
+
+
 def _public(record: dict[str, Any]) -> dict[str, Any]:
     result = {
         k: v
