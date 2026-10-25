@@ -1,0 +1,11 @@
+{
+  "audit_passed": true,
+  "kind": "OFFLINE_FIXTURE_ONLY",
+  "live_pilot_authorized": false,
+  "model_calls": 0,
+  "pairs": 36,
+  "real_runner_isolation_verified": false,
+  "records": 72,
+  "spend_usd": 0,
+  "unsafe_mutations_rejected": 20
+}

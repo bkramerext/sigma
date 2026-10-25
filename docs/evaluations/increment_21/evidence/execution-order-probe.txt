@@ -1,0 +1,17 @@
+Increment 21 execution-order auditor probe
+Date: 2026-10-25
+Provider calls / spend: 0 / $0
+
+The offline fixture generated its normal 72 synthetic records. Passing the list
+in reverse order while preserving each record's declared schedule_position still
+accepted all 36 pairs, since output-list order is not execution chronology. A
+separate mutation that changed one record's schedule_position was rejected.
+Result:
+
+PASS: schedule_position must match the randomized manifest.
+LIMITATION: schedule_position is an unauthenticated record assertion; no live
+runner or trusted dispatch log exists to verify actual execution chronology.
+
+This is a code-path probe, not a live execution. It verifies the auditor's
+declared-position check and documents the absence of authenticated dispatch
+evidence. It does not establish that any run was reordered.

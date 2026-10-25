@@ -97,6 +97,10 @@ def manifest(seed: int, repetitions: int) -> dict:
         "total_arm_runs": 2 * len(pairs),
         "task_file_sha256": sha256(TASKS.read_bytes()),
         "canonical_tasks_sha256": sha256(canonical_bytes(data)),
+        "protocol_script_sha256": sha256(Path(__file__).read_bytes()),
+        "agent_packet_script_sha256": sha256(
+            (ROOT / "scripts/increment14_agent_packet.py").read_bytes()
+        ),
         "analysis_unit": "task_cluster",
         "independent_task_count": len(data["tasks"]),
         "scoring_schema": "sigma-blind-submission-v1",

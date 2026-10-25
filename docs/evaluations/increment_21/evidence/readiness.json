@@ -1,0 +1,15 @@
+{
+  "baseline_and_sigma_run_adapter_tested": false,
+  "cost_enforcement_demonstrated": false,
+  "manifest_is_frozen": false,
+  "model_version_configured": false,
+  "paid_provider_calls": 0,
+  "paid_runs_approved": false,
+  "paired_trials": 36,
+  "planned_model_runs": 72,
+  "proposed_total_usd_cap": 39.6,
+  "runner_isolation_demonstrated": false,
+  "status": "BLOCKED_FOR_LIVE_PILOT",
+  "task_packet_hashes": "passed",
+  "two_independent_blind_graders_ready": false
+}

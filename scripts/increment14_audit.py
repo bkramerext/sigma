@@ -12,6 +12,13 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+_PROTOCOL_SPEC = importlib.util.spec_from_file_location(
+    "increment14_protocol", Path(__file__).with_name("increment14_protocol.py")
+)
+assert _PROTOCOL_SPEC and _PROTOCOL_SPEC.loader
+_PROTOCOL = importlib.util.module_from_spec(_PROTOCOL_SPEC)
+_PROTOCOL_SPEC.loader.exec_module(_PROTOCOL)
+
 _BLINDING_SPEC = importlib.util.spec_from_file_location(
     "increment14_blinding", Path(__file__).with_name("increment14_blinding.py")
 )
@@ -29,7 +36,53 @@ DIMENSIONS = (
 WEIGHTS = (0.35, 0.30, 0.15, 0.10, 0.10)
 
 
-def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
+def check_frozen_protocol_manifest(manifest: dict[str, Any]) -> None:
+    """Require a full, source-matched T114 v2 design before auditing its runs."""
+    if manifest.get("schema_version") != 2:
+        raise ValueError("Unsupported or missing frozen protocol schema")
+    seed = manifest.get("seed")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise TypeError("Invalid scheduling seed")
+    expected = _PROTOCOL.manifest(seed, 3)
+    structural_fields = (
+        "schema_version",
+        "seed",
+        "replicates_per_task_variant",
+        "paired_runs",
+        "total_arm_runs",
+        "task_file_sha256",
+        "canonical_tasks_sha256",
+        "protocol_script_sha256",
+        "agent_packet_script_sha256",
+        "analysis_unit",
+        "independent_task_count",
+        "scoring_schema",
+        "scoring_schema_sha256",
+        "pairs",
+        "per_arm_token_cap",
+        "per_arm_input_token_cap",
+        "per_arm_output_token_cap",
+        "per_call_input_token_cap",
+        "per_call_output_token_cap",
+        "per_arm_model_call_cap",
+        "per_arm_tool_call_cap",
+        "per_arm_wall_seconds",
+        "per_arm_usd_cap",
+        "total_usd_cap",
+    )
+    if any(manifest.get(field) != expected[field] for field in structural_fields):
+        raise ValueError("Manifest differs from the complete current T114 protocol design")
+
+
+def check_trial_records(
+    manifest: dict[str, Any],
+    records: list[dict[str, Any]],
+    *,
+    allow_partial_fixture: bool = False,
+) -> dict[str, Any]:
+    """Audit a complete T114 run; partial manifests are only for unit fixtures."""
+    if not allow_partial_fixture:
+        check_frozen_protocol_manifest(manifest)
     if manifest.get("status") != "FROZEN" or not manifest.get("freeze_approved"):
         raise ValueError("Unfrozen protocol")
     if not manifest.get("user_approved"):
@@ -56,6 +109,13 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
     pairs = {(p["task_id"], p["variant"], p["replicate"]): p for p in manifest["pairs"]}
     if len(pairs) != len(manifest["pairs"]):
         raise ValueError("Duplicate manifest pair")
+    schedule = []
+    for pair in manifest["pairs"]:
+        order = pair.get("execution_order")
+        if not isinstance(order, list) or len(order) != 2 or set(order) != {"A", "B"}:
+            raise ValueError("Missing or malformed randomized execution order")
+        key = (pair["task_id"], pair["variant"], pair["replicate"])
+        schedule.extend((key, arm) for arm in order)
     seen: dict[tuple[str, str, int], dict[str, dict[str, Any]]] = defaultdict(dict)
     total_cost = 0.0
     schema_truncation_fields = 0
@@ -65,6 +125,14 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
     for r in records:
         key = (r["task_id"], r["variant"], r["replicate"])
         arm = r["arm_code"]
+        position = r.get("schedule_position")
+        if (
+            not isinstance(position, int)
+            or isinstance(position, bool)
+            or not 0 <= position < len(schedule)
+            or schedule[position] != (key, arm)
+        ):
+            raise ValueError("Recorded execution position differs from randomized schedule")
         if key not in pairs or arm not in ("A", "B") or arm in seen[key]:
             raise ValueError("Unknown or repeated run")
         if r["packet_sha256"] != pairs[key]["packet_sha256"]:
