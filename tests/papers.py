@@ -715,8 +715,82 @@ def test_xenopus_sample_long_snapshot_uses_bounded_sections() -> None:
         assert len(saved["draft"]["sections"]) == 2
 
 
+def test_saved_paper_text_and_scoped_removal() -> None:
+    with TemporaryDirectory() as temporary:
+        first_path = Path(temporary) / "first.sigma"
+        second_path = Path(temporary) / "second.sigma"
+        initialize_project(first_path, "First project", "A saved paper test.")
+        initialize_project(second_path, "Second project", "A separate saved paper test.")
+        project_id = inspect_project(first_path).project.id
+        paper_id = "a" * 32
+        other_paper_id = "b" * 32
+
+        def save(identifier: str) -> None:
+            papers._save(
+                str(first_path),
+                {
+                    "paper_id": identifier,
+                    "project_id": project_id,
+                    "created_at": "2026-10-25T12:00:00+00:00",
+                    "snapshot_sha256": "c" * 64,
+                    "snapshot": {"sources": []},
+                    "draft": draft().model_dump(mode="json"),
+                    "validation_warnings": [],
+                    "generation": {"model": "test-fixture", "mode": "api_key"},
+                },
+                b"%PDF-1.4 fixture",
+            )
+
+        save(paper_id)
+        save(other_paper_id)
+        history_path = first_path / "research-sessions" / "preserved.json"
+        history_path.parent.mkdir()
+        history_path.write_text('{"preserved": true}', encoding="utf-8")
+        papers._save(
+            str(second_path),
+            {
+                "paper_id": paper_id,
+                "project_id": project_id,
+                "created_at": "2026-10-25T12:00:00+00:00",
+                "snapshot_sha256": "c" * 64,
+                "snapshot": {"sources": []},
+                "draft": draft().model_dump(mode="json"),
+                "validation_warnings": [],
+                "generation": {"model": "test-fixture", "mode": "api_key"},
+            },
+            b"%PDF-1.4 fixture",
+        )
+        rendered = papers.get_text(str(first_path), paper_id)
+        assert rendered.startswith("An evidence-bound exploratory note\n")
+        assert "The complete snapshot was retained." in rendered
+        assert "Only claims tied to the recorded snapshot are presented." in rendered
+        assert papers.get_pdf(str(first_path), paper_id) == b"%PDF-1.4 fixture"
+
+        try:
+            papers.delete_paper(str(second_path), paper_id)
+        except ProjectError as exc:
+            assert "different project" in str(exc)
+        else:
+            raise AssertionError("A paper must not be deleted through another project")
+        assert (first_path / "papers" / f"{paper_id}.json").is_file()
+        assert (second_path / "papers" / f"{paper_id}.json").is_file()
+
+        assert papers.delete_paper(str(first_path), paper_id) == {
+            "paper_id": paper_id,
+            "status": "removed",
+        }
+        remaining = papers.list_papers(str(first_path))
+        assert [item["paper_id"] for item in remaining] == [other_paper_id]
+        assert not (first_path / "papers" / f"{paper_id}.json").exists()
+        assert not (first_path / "papers" / f"{paper_id}.pdf").exists()
+        assert (first_path / "papers" / f"{other_paper_id}.json").is_file()
+        assert (first_path / "papers" / f"{other_paper_id}.pdf").is_file()
+        assert history_path.read_text(encoding="utf-8") == '{"preserved": true}'
+
+
 def main() -> None:
     test_incomplete_chatgpt_paper_stream_is_rejected()
+    test_saved_paper_text_and_scoped_removal()
     test_long_tex_compiler_source_bound_is_configurable()
     test_api_paper_stream_reports_progress_and_completion()
     test_long_index_reduction_resumes_and_preserves_session_conflicts()

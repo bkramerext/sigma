@@ -2394,3 +2394,71 @@ def get_pdf(path: str, paper_id: str) -> bytes:
     if not record["pdf_available"]:
         raise ProjectError("Compiled PDF is missing or unsafe")
     return file.read_bytes()
+
+
+def get_text(path: str, paper_id: str) -> str:
+    """Render the immutable saved draft as plain text without another authoring call."""
+    record = get_paper(path, paper_id)
+    draft = record.get("draft", {})
+    lines = [str(draft.get("title") or "Saved AI paper"), ""]
+    for label, key in (
+        ("Abstract", "abstract"),
+        ("Problem framing", "problem_framing"),
+        ("Methods and evidence", "methods"),
+    ):
+        values = draft.get(key, []) if key != "abstract" else [draft.get(key, "")]
+        lines.extend([label, ""])
+        lines.extend(str(value) for value in values if value)
+        lines.append("")
+    for section in draft.get("sections", []):
+        lines.extend([str(section.get("heading") or "Section"), ""])
+        lines.extend(str(value) for value in section.get("paragraphs", []))
+        lines.append("")
+    claims = draft.get("claims", [])
+    if claims:
+        lines.extend(["Claim register", ""])
+        for claim in claims:
+            lines.extend(
+                [
+                    f"{claim.get('id', 'Claim')} · {claim.get('status', 'status unavailable')}: {claim.get('statement', '')}",
+                    str(claim.get("reasoning", "")),
+                    "Evidence: "
+                    + (
+                        ", ".join(map(str, claim.get("evidence_refs", []))) or "No source reference"
+                    ),
+                    "",
+                ]
+            )
+    for label, key in (
+        ("Limitations", "limitations"),
+        ("Open obligations", "open_obligations"),
+        ("Conclusions", "conclusions"),
+    ):
+        values = draft.get(key, [])
+        if values:
+            lines.extend([label, "", *(str(value) for value in values), ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def delete_paper(path: str, paper_id: str) -> dict[str, str]:
+    """Delete only one verified paper record and its corresponding PDF artifact."""
+    directory = _paper_dir(path, create=False)
+    identifier = _paper_id(paper_id)
+    record = _read_one(directory, identifier)
+    if record.get("project_id") != inspect_project(path).project.id:
+        raise ProjectError("Paper belongs to a different project")
+    for suffix in (".pdf", ".json"):
+        artifact = directory / f"{identifier}{suffix}"
+        try:
+            artifact.unlink(missing_ok=True)
+        except OSError as exc:
+            raise ProjectError("Saved paper could not be removed completely") from exc
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+    return {"paper_id": identifier, "status": "removed"}

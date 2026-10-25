@@ -97,23 +97,27 @@ type ResearchSession = { approved_continuations?: Record<string, { parent_strate
 
 function pausedSessionNextAction(session: ResearchSession): string {
   const details = [session.current_action, session.message, ...session.steps.slice(-2).flatMap(step => [step.failure_kind, step.interruption_reason]), ...(session.strategy_runs ?? []).map(run => run.reason ?? '')].join(' ').toLowerCase();
-  if (details.includes('backend restart') || details.includes('interrupted') || details.includes('provider call')) {
-    return 'SIGMA will not retry an interrupted provider call automatically. Review recent activity and your provider usage, then resume when you are ready; continuing may dispatch a new call.';
-  }
+  if (details.includes('paused by user')) return 'You paused this session. Resume when ready. A provider request already sent may still consume allowance.';
   if (details.includes('context') || details.includes('storage limit')) {
     return 'Review the context or storage limit details below. Reduce the material or make room first, then resume if the session allows it.';
   }
-  if (details.includes('cost') || details.includes('billing')) {
+  if (details.includes('cost limit') || details.includes('cost unavailable') || details.includes('spending limit')) {
     return 'Review the cost limit and AI billing connection before resuming. Do not resume until the expected account and limit are clear.';
-  }
-  if (details.includes('model') || details.includes('connection') || details.includes('identity') || details.includes('account')) {
-    return 'Restore the model and AI connection or billing identity described below before resuming.';
   }
   if (details.includes('project or strategy changed') || details.includes('strategy is disabled')) {
     return 'Review the project and strategy state described below, make any required changes, then resume.';
   }
-  if (details.includes('paused by user')) {
-    return 'You paused this session. Resume when ready. A provider request already sent may still consume allowance.';
+  if (details.includes('model') || details.includes('connection') || details.includes('identity') || details.includes('account') || details.includes('billing identity')) {
+    return 'Restore the model and AI connection or billing identity described below before resuming.';
+  }
+  if (details.includes('duration limit') || details.includes('wall-clock limit') || details.includes('session duration')) {
+    return 'The configured session duration was reached. Review the duration setting and start a new session to continue from saved work.';
+  }
+  if (details.includes('call limit') || details.includes('budget exhausted') || details.includes('call ceiling')) {
+    return 'The configured model-call limit was reached. Review the limit and start a new session if more calls are appropriate.';
+  }
+  if (details.includes('backend restart') || details.includes('interrupted') || details.includes('interruption')) {
+    return 'SIGMA will not retry an interrupted provider call automatically. Review recent activity and your provider usage, then resume when you are ready; continuing may dispatch a new call.';
   }
   return 'Review the recorded reason and current action below. If the cause is resolved, resume when ready; SIGMA will report any resume guard that still applies.';
 }
@@ -1165,12 +1169,41 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: string; projectId: string; downloadFilename: string; onCancel: () => void }) {
+function SavedPaperHtml({ paper }: { paper: PaperRecord }) {
+  return <article className="ai-paper-document">
+    <h4>{paper.draft.title}</h4>
+    <p><strong>Abstract.</strong> {paper.draft.abstract}</p>
+    <p className="settings-hint">Abstract claim links: {paper.draft.abstract_claim_ids.join(', ') || 'None'}</p>
+    <h5>Problem framing</h5>{paper.draft.problem_framing.map((text, index) => <p key={`framing-${index}`}>{text}</p>)}
+    <p className="settings-hint">Claim links: {paper.draft.problem_framing_claim_ids.join(', ') || 'None'}</p>
+    <h5>Methods and evidence</h5>{paper.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
+    <p className="settings-hint">Claim links: {paper.draft.methods_claim_ids.join(', ') || 'None'}</p>
+    <p><strong>Snapshot.</strong> SHA-256 {paper.snapshot_sha256} · {paper.snapshot.sources.length} stable evidence sources</p>
+    <p><strong>Generated.</strong> {paper.generation.model} ({paper.generation.mode}) · {dateLabel(paper.created_at)}{paper.generation.long_form ? ` · ${paper.generation.evidence_batch_count} evidence batches · ${paper.generation.provider_calls_attempted} calls this run · ${paper.generation.provider_calls_prior_runs} prior-run calls · ${paper.generation.provider_calls_lifetime_total} lifetime calls` : ''}</p>
+    {!!paper.generation.omitted_evidence?.length && <details><summary>Evidence fields omitted from the generated index ({paper.generation.evidence_fields_omitted})</summary>{paper.generation.omitted_evidence.map(item => <p className="ai-paper-warning" key={item.field_ref}><code>{item.source_ref}{item.field}</code>: {item.reason}</p>)}</details>}
+    {!!paper.generation.reduction_source_refs_omitted?.length && <details><summary>Sources omitted during index reduction ({paper.generation.reduction_source_refs_omitted.length})</summary>{paper.generation.reduction_source_refs_omitted.map(source => <p className="ai-paper-warning" key={source}><code>{source}</code></p>)}<p className="settings-hint">The complete original source records remain in the archived snapshot.</p></details>}
+    {!!paper.generation.evidence_conflicts?.length && <details><summary>Potential conflicts and gaps identified by the evidence index ({paper.generation.evidence_conflict_note_count})</summary>{paper.generation.evidence_conflicts.map((conflict, index) => <p className="ai-paper-warning" key={`conflict-${index}`}>{conflict.statement} <strong>Sources:</strong> {conflict.evidence_refs.map(source => <code key={source}>{source} </code>)}</p>)}</details>}
+    {paper.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
+    {(paper.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
+    {paper.draft.sections.map(section => <section key={section.heading}><h5>{section.heading}</h5>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}
+    <h5>Claim register</h5>{paper.draft.claims.map(claim => <section key={claim.id}><p><strong>{claim.id} · {claim.status}:</strong> {claim.statement}</p><p>{claim.reasoning}</p><p className="settings-hint">Evidence: {claim.evidence_refs.join(', ') || 'No source reference'}</p></section>)}
+    <h5>Limitations</h5><ul>{paper.draft.limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
+    {!!paper.draft.open_obligations.length && <><h5>Open obligations</h5><ul>{paper.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
+    {!!paper.obligation_reconciliation?.length && <><h5>Frozen obligation reconciliation</h5><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the saved evidence source and field.</p><ul>{paper.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
+    <h5>Conclusions</h5>{paper.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
+    <p className="settings-hint">Conclusion claim links: {paper.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
+  </article>;
+}
+
+function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId: string; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [selected, setSelected] = useState<PaperRecord | null>(null);
+  const [expandedPaperId, setExpandedPaperId] = useState('');
+  const [confirmRemovePaperId, setConfirmRemovePaperId] = useState('');
+  const [removingPaperId, setRemovingPaperId] = useState('');
   const [binding, setBinding] = useState('');
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
@@ -1178,7 +1211,6 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
   const [checkpoint, setCheckpoint] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [longForm, setLongForm] = useState(false);
-  const [openInTab, setOpenInTab] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1221,6 +1253,24 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       const record = await response.json(); if (!response.ok) throw new Error(record.error ?? 'Could not open this paper version.');
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
+  }
+  async function removePaper(id: string) {
+    if (removingPaperId) return;
+    setRemovingPaperId(id); setError('');
+    try {
+      const response = await fetch(`/api/projects/papers/${encodeURIComponent(id)}?${new URLSearchParams({ path })}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not remove this saved paper.');
+      const remaining = papers.filter(item => item.paper_id !== id);
+      setPapers(remaining);
+      setConfirmRemovePaperId('');
+      if (expandedPaperId === id) setExpandedPaperId('');
+      if (selected?.paper_id === id) {
+        setSelected(null);
+        if (remaining.length) await openPaper(remaining[0].paper_id);
+      }
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setRemovingPaperId(''); }
   }
   async function restartCheckpoint() {
     if (busy || !checkpoint?.checkpoint_can_restart || !binding) return;
@@ -1315,17 +1365,48 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       if (!controller.signal.aborted) setError(errorMessage(cause));
     } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
-  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path, ...(openInTab ? { open_in_browser: 'true' } : {}) })}` : '';
+  const paperArtifactUrl = (id: string, format: 'txt' | 'pdf', openInBrowser = false) => `/api/projects/papers/${encodeURIComponent(id)}/${format}?${new URLSearchParams({ path, ...(openInBrowser ? { open_in_browser: 'true' } : {}) })}`;
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button></div></header>
     <div className="settings-body ai-paper-body">
+      {!loading && papers.length > 0 && <section className="ai-paper-library" aria-labelledby="ai-paper-library-heading">
+        <h3 id="ai-paper-library-heading">Saved AI papers</h3>
+        <ol aria-label="Saved AI paper versions">
+          {papers.map(item => <li className={`ai-paper-row${selected?.paper_id === item.paper_id ? ' is-selected' : ''}`} key={item.paper_id} data-paper-id={item.paper_id}>
+            <div className="ai-paper-row-heading">
+              <div className="ai-paper-row-title">
+                <button type="button" className="ai-paper-title-button" onClick={() => void openPaper(item.paper_id)} aria-current={selected?.paper_id === item.paper_id ? 'true' : undefined}>{item.title}</button>
+                <span>Saved {dateLabel(item.created_at)}</span>
+              </div>
+              <nav className="ai-paper-row-actions" aria-label={`${item.title} actions`}>
+                <a className="text-view-link" href={paperArtifactUrl(item.paper_id, 'txt')} download={`sigma-ai-paper-${item.paper_id}.txt`}>Download .txt</a>
+                {item.pdf_available && <a className="text-view-link" href={paperArtifactUrl(item.paper_id, 'pdf')} download={`sigma-ai-paper-${item.paper_id}.pdf`}>Download .pdf</a>}
+                {item.pdf_available && <a className="text-view-link" href={paperArtifactUrl(item.paper_id, 'pdf', true)} target="_blank" rel="noopener noreferrer">Open .pdf in browser</a>}
+                <button type="button" className="text-view-link destructive-action" disabled={busy || !!removingPaperId} onClick={() => setConfirmRemovePaperId(item.paper_id)}>Remove</button>
+              </nav>
+            </div>
+            {!item.pdf_available && <p className="ai-paper-row-unavailable" role="status">The paper record is saved, but its compiled PDF is unavailable.</p>}
+            {confirmRemovePaperId === item.paper_id && <div className="ai-paper-remove-confirm" role="group" aria-label={`Confirm removal of ${item.title}`}>
+              <p>Remove this saved version and its paper files? Other versions, project history and strategies will remain.</p>
+              <button type="button" className="text-view-link destructive-action" disabled={!!removingPaperId} onClick={() => void removePaper(item.paper_id)}>{removingPaperId === item.paper_id ? 'Removing…' : 'Confirm remove'}</button>
+              <button type="button" className="text-view-link" disabled={!!removingPaperId} onClick={() => setConfirmRemovePaperId('')}>Cancel</button>
+            </div>}
+            <details className="ai-paper-html-details" open={expandedPaperId === item.paper_id} onToggle={event => {
+              if (event.currentTarget.open) { setExpandedPaperId(item.paper_id); if (selected?.paper_id !== item.paper_id) void openPaper(item.paper_id); }
+              else if (expandedPaperId === item.paper_id) setExpandedPaperId('');
+            }}>
+              <summary>Expand saved paper (HTML)</summary>
+              {selected?.paper_id === item.paper_id ? <SavedPaperHtml paper={selected}/> : <p>Loading this saved version…</p>}
+            </details>
+          </li>)}
+        </ol>
+      </section>}
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">SIGMA uses the project's complete research history to prepare a paper, including supporting evidence, unsuccessful approaches, contradictions, and unresolved questions. It distinguishes established findings from conjectures and identifies gaps rather than inventing missing proof steps.</p>
       <p className="settings-hint">The resulting paper is AI-generated and has not been independently verified. Readers should examine its evidence and limitations before relying on its conclusions.</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
       <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
       <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
-      <label className="ai-paper-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>
       {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
         {checkpoint.resume_available
           ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
@@ -1335,35 +1416,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
-      {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}
-      {!loading && papers.length > 0 && <select id="ai-paper-version" value={selected?.paper_id ?? ''} disabled={busy} onChange={event => void openPaper(event.target.value)}>{papers.map(item => <option key={item.paper_id} value={item.paper_id}>{item.title} · {dateLabel(item.created_at)}</option>)}</select>}
-      {selected && <article className="ai-paper-preview">
-        <h3>{selected.draft.title}</h3>
-        <p><strong>Abstract.</strong> {selected.draft.abstract}</p>
-        <p className="settings-hint">Abstract claim links: {selected.draft.abstract_claim_ids.join(', ') || 'None'}</p>
-        <h4>Problem framing</h4>{selected.draft.problem_framing.map((text, index) => <p key={`framing-${index}`}>{text}</p>)}
-        <p className="settings-hint">Claim links: {selected.draft.problem_framing_claim_ids.join(', ') || 'None'}</p>
-        <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
-        <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
-        <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
-        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} calls this run · ${selected.generation.provider_calls_prior_runs} prior-run calls · ${selected.generation.provider_calls_lifetime_total} lifetime calls` : ''}</p>
-        {!!selected.generation.omitted_evidence?.length && <details><summary>Evidence fields omitted from the generated index ({selected.generation.evidence_fields_omitted})</summary>{selected.generation.omitted_evidence.map(item => <p className="ai-paper-warning" key={item.field_ref}><code>{item.source_ref}{item.field}</code>: {item.reason}</p>)}</details>}
-        {!!selected.generation.reduction_source_refs_omitted?.length && <details><summary>Sources omitted during index reduction ({selected.generation.reduction_source_refs_omitted.length})</summary>{selected.generation.reduction_source_refs_omitted.map(source => <p className="ai-paper-warning" key={source}><code>{source}</code></p>)}<p className="settings-hint">The complete original source records remain in the archived snapshot.</p></details>}
-        {!!selected.generation.evidence_conflicts?.length && <details><summary>Potential conflicts and gaps identified by the evidence index ({selected.generation.evidence_conflict_note_count})</summary>{selected.generation.evidence_conflicts.map((conflict, index) => <p className="ai-paper-warning" key={`conflict-${index}`}>{conflict.statement} <strong>Sources:</strong> {conflict.evidence_refs.map(source => <code key={source}>{source} </code>)}</p>)}</details>}
-        {selected.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
-        {(selected.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
-        {selected.draft.sections.map(section => <section key={section.heading}><h4>{section.heading}</h4>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}
-        <h4>Claim register</h4>{selected.draft.claims.map(claim => <section key={claim.id}><p><strong>{claim.id} · {claim.status}:</strong> {claim.statement}</p><p>{claim.reasoning}</p><p className="settings-hint">Evidence: {claim.evidence_refs.join(', ') || 'No source reference'}</p></section>)}
-        <h4>Limitations</h4><ul>{selected.draft.limitations.map((item, index) => <li key={index}>{item}</li>)}</ul>
-        {selected.draft.open_obligations.length > 0 && <><h4>Open obligations</h4><ul>{selected.draft.open_obligations.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
-        {!!selected.obligation_reconciliation?.length && <><h4>Frozen obligation reconciliation</h4><p className="settings-hint">Unlisted evidence obligations are not presumed resolved. References point to the saved evidence source and field.</p><ul>{selected.obligation_reconciliation.map((item, index) => <li key={index}><strong>{item.status}.</strong> {item.text}<br/><span className="settings-hint">{item.source_refs.join(', ') || 'No exact frozen-record match'}</span></li>)}</ul></>}
-        <h4>Conclusions</h4>{selected.draft.conclusions.map((item, index) => <p key={`conclusion-${index}`}>{item}</p>)}
-        <p className="settings-hint">Conclusion claim links: {selected.draft.conclusion_claim_ids.join(', ') || 'None'}</p>
-        {selected.pdf_available && (openInTab
-          ? <a className="text-view-link" href={pdfUrl} target="_blank" rel="noopener noreferrer">Open compiled PDF in new tab</a>
-          : <a className="text-view-link" href={pdfUrl} download={downloadFilename}>Download compiled PDF</a>)}
-        {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
-      </article>}
+
     </div>
   </dialog>;
 }
@@ -3282,7 +3335,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />

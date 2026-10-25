@@ -252,11 +252,47 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 params={"path": a_path},
             )
             assert paper_download.content == paper_pdf
+            assert paper_download.headers["content-type"].startswith("application/pdf")
+            assert "attachment" in paper_download.headers["content-disposition"]
+            inline_pdf = request(
+                user_a,
+                "GET",
+                f"/api/projects/papers/{paper_id}/pdf",
+                params={"path": a_path, "open_in_browser": "true"},
+            )
+            assert inline_pdf.content == paper_pdf
+            assert "inline" in inline_pdf.headers["content-disposition"]
+            paper_text = request(
+                user_a,
+                "GET",
+                f"/api/projects/papers/{paper_id}/txt",
+                params={"path": a_path},
+            )
+            assert paper_text.status_code == 200
+            assert paper_text.headers["content-type"].startswith("text/plain")
+            assert "attachment" in paper_text.headers["content-disposition"]
+            assert "T100 private paper fixture" in paper_text.text
             expect_hidden(
                 request(
                     user_b,
                     "GET",
                     f"/api/projects/papers/{paper_id}/pdf",
+                    params={"path": a_path},
+                )
+            )
+            expect_hidden(
+                request(
+                    user_b,
+                    "GET",
+                    f"/api/projects/papers/{paper_id}/txt",
+                    params={"path": a_path},
+                )
+            )
+            expect_hidden(
+                request(
+                    user_b,
+                    "DELETE",
+                    f"/api/projects/papers/{paper_id}",
                     params={"path": a_path},
                 )
             )

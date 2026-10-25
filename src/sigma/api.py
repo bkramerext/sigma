@@ -339,6 +339,19 @@ def paper_view(paper_id: str, path: str):
     return papers.get_paper(path, paper_id)
 
 
+@app.get("/api/projects/papers/{paper_id}/txt")
+def paper_text_view(paper_id: str, path: str):
+    return Response(
+        papers.get_text(path, paper_id),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.txt"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.get("/api/projects/papers/{paper_id}/pdf")
 def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
     disposition = "inline" if open_in_browser else "attachment"
@@ -350,6 +363,11 @@ def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
             "Content-Disposition": f'{disposition}; filename="sigma-ai-paper-{paper_id}.pdf"',
         },
     )
+
+
+@app.delete("/api/projects/papers/{paper_id}")
+def paper_remove_view(paper_id: str, path: str):
+    return papers.delete_paper(path, paper_id)
 
 
 @app.post("/api/projects/papers")

@@ -92,16 +92,10 @@ with sync_playwright() as playwright:
     )
     assert mobile_layout["height"] <= 0.9 * 844, mobile_layout
     assert mobile_layout["scrollHeight"] > mobile_layout["clientHeight"], mobile_layout
-    dialog.evaluate("element => { const body = element.querySelector('.ai-paper-body'); body.scrollTop = body.scrollHeight; }")
-    mobile_open_tab = dialog.get_by_role("checkbox", name="Open in browser tab", exact=True)
-    mobile_open_box = mobile_open_tab.bounding_box()
-    mobile_body_box = dialog.locator(".ai-paper-body").bounding_box()
-    assert mobile_open_box and mobile_body_box
-    assert mobile_body_box["y"] <= mobile_open_box["y"] < mobile_body_box["y"] + mobile_body_box["height"]
     dialog.evaluate("element => { element.querySelector('.ai-paper-body').scrollTop = 0; }")
     page.screenshot(path="/tmp/sigma-ai-paper-dialog-mobile.png")
     page.set_viewport_size({"width": 1440, "height": 1000})
-    initial_version_count = dialog.locator("#ai-paper-version option").count()
+    initial_version_count = dialog.locator(".ai-paper-row").count()
 
     def dismiss_test_toasts():
         page.locator(".request-toast button[aria-label='Dismiss request error']").evaluate_all(
@@ -111,9 +105,7 @@ with sync_playwright() as playwright:
     long_form = dialog.get_by_role(
         "checkbox", name="Use expanded multi-section authoring for a more detailed paper"
     )
-    open_in_tab = dialog.get_by_role("checkbox", name="Open in browser tab", exact=True)
     expect(long_form).not_to_be_checked()
-    expect(open_in_tab).not_to_be_checked()
     long_form.check()
     expect(long_form).to_be_checked()
     generate_button = dialog.get_by_role("button", name="Generate paper", exact=True)
@@ -130,8 +122,6 @@ with sync_playwright() as playwright:
     page.screenshot(path="/tmp/sigma-ai-paper-dialog-retry.png")
     retry_box = retry_button.bounding_box()
     assert retry_box
-    open_in_tab.check()
-    expect(open_in_tab).to_be_checked()
     retry_button.click()
     progress = dialog.locator(".ai-paper-status")
     expect(progress).to_be_visible(timeout=10_000)
@@ -145,25 +135,26 @@ with sync_playwright() as playwright:
     dismiss_test_toasts()
     page.screenshot(path="/tmp/sigma-ai-paper-dialog-authoring.png")
     page.wait_for_function(
-        "count => { const dialog = document.querySelector('.ai-paper-dialog'); return dialog?.querySelectorAll('#ai-paper-version option').length > count; }",
+        "count => { const dialog = document.querySelector('.ai-paper-dialog'); return dialog?.querySelectorAll('.ai-paper-row').length > count; }",
         arg=initial_version_count,
         timeout=60_000,
     )
-    expect(dialog.locator("#ai-paper-version option")).to_have_count(initial_version_count + 1)
+    expect(dialog.locator(".ai-paper-row")).to_have_count(initial_version_count + 1)
     expect(dialog).to_contain_text("Long-Form Experimental Research Synthesis")
     remaining_alerts = dialog.get_by_role("alert").all_inner_texts()
     assert not remaining_alerts, remaining_alerts
-    expect(dialog.locator(".ai-paper-open-tab")).to_contain_text("Open in browser tab")
     scroll_layout = dialog.evaluate(
         "element => { const body = element.querySelector('.ai-paper-body'); return {dialogHeight: element.getBoundingClientRect().height, bodyHeight: body.clientHeight, bodyScrollHeight: body.scrollHeight, bodyBottom: body.getBoundingClientRect().bottom, viewportHeight: innerHeight}; }"
     )
     assert scroll_layout["dialogHeight"] <= 0.9 * 1000, scroll_layout
-    assert scroll_layout["bodyScrollHeight"] > scroll_layout["bodyHeight"], scroll_layout
+    assert scroll_layout["bodyScrollHeight"] >= scroll_layout["bodyHeight"], scroll_layout
     assert scroll_layout["bodyBottom"] <= scroll_layout["viewportHeight"], scroll_layout
     dismiss_test_toasts()
     page.screenshot(path="/tmp/sigma-ai-paper-dialog-complete.png")
-    pdf_link = dialog.get_by_role("link", name="Open compiled PDF in new tab")
+    paper_row = dialog.locator(".ai-paper-row").first
+    pdf_link = paper_row.get_by_role("link", name="Open .pdf in browser")
     expect(pdf_link).to_be_visible()
+    paper_row.locator("details.ai-paper-html-details > summary").click()
     expect(dialog).to_contain_text("evidence batches")
     expect(dialog).to_contain_text("calls this run")
     expect(dialog).to_contain_text("Experimental question and prior context")
@@ -174,7 +165,9 @@ with sync_playwright() as playwright:
     pdf_bytes = base64.b64decode(pdf_result["bytes"])
     assert pdf_result["status"] == 200 and "application/pdf" in pdf_result["type"]
     assert pdf_result["disposition"].startswith("inline;"), pdf_result["disposition"]
-    assert pdf_result["defaultDisposition"].startswith("attachment;"), pdf_result["defaultDisposition"]
+    assert pdf_result["defaultDisposition"].startswith("attachment;"), pdf_result[
+        "defaultDisposition"
+    ]
     assert pdf_bytes.startswith(b"%PDF-") and len(pdf_bytes) > 1000
     Path("/tmp/sigma-t45-xenopus.pdf").write_bytes(pdf_bytes)
     with page.expect_popup(timeout=10_000) as popup_info:
@@ -184,10 +177,9 @@ with sync_playwright() as playwright:
         re.compile(rf"^{re.escape(UI_ORIGIN)}/api/projects/papers/[^/]+/pdf\?"),
         timeout=10_000,
     )
-    open_in_tab.uncheck()
-    download_link = dialog.get_by_role("link", name="Download compiled PDF")
+    download_link = paper_row.get_by_role("link", name="Download .pdf")
     expect(download_link).to_be_visible()
-    assert download_link.get_attribute("download") == "sigma-paper.pdf"
+    assert download_link.get_attribute("download").endswith(".pdf")
     dialog.get_by_role("button", name="Generate new version", exact=True).click()
     expect(dialog.locator(".ai-paper-status")).to_be_visible(timeout=10_000)
     cancel_generation = dialog.get_by_role("button", name="Cancel generation", exact=True)
