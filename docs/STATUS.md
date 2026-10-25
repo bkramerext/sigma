@@ -3513,3 +3513,21 @@ path. It is not a clean-machine README onboarding/browser acceptance run, live
 Google OAuth, sponsored inference, GCE startup, rootless-daemon isolation,
 public HTTPS, backup restore, or cloud deployment approval. Those remain
 separate acceptance items in T91 and the cloud runbook.
+
+## T91 — packaged Chrome workflow increment (2026-10-25)
+
+From current `main` (`f0dd5c63dd88cdd79190231856119dbfb317522d`), expanded the
+local Compose check to drive installed Chrome against the packaged Caddy,
+Nginx, and FastAPI services. The backend image now includes the stock `samples/`
+catalog, which the packaged sample endpoint requires. See the explicit
+acceptance matrix and run instructions in `docs/evaluations/t91/README.md`.
+
+**PASS:** sample creation; project and strategy edits; save, reload and reopen;
+five saved sessions and outcomes; HTML report download; User B denied User A's
+project, report, and session evidence; the same session and edited project
+survived backend container recreation; packaged Compose health and auth SQLite
+survived restart and full container recreation. **SKIPPED:** real Google OAuth
+(the workflow seeds two ephemeral local sessions), PDF download (no saved PDF
+fixture), T100 persistent-disk storage (not in current `main`), and T99
+inference (no provider calls). This is local acceptance, not live OAuth or
+cloud-deployment evidence.

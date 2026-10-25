@@ -79,6 +79,20 @@ for attempt in $(seq 1 60); do
   sleep 2
 done
 
+# Exercise the packaged Nginx/Caddy application in real Chrome while the
+# disposable Compose stack and its state volume are still running. This is
+# separate from the optional developer Vite workflows in browser_checks/.
+chrome=${SIGMA_BROWSER_EXECUTABLE:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}
+if [[ -f "$chrome" ]] && command -v uv >/dev/null 2>&1; then
+  SIGMA_T91_BASE_URL=http://localhost:18080 \
+  SIGMA_T91_COMPOSE_PROJECT="$project" \
+  SIGMA_T91_COMPOSE_ENV="$environment" \
+  SIGMA_T91_CHROME="$chrome" \
+  uv run --with playwright python "$root/browser_checks/t91_packaged_compose.py"
+else
+  echo "[SKIPPED] Real Chrome packaged-workflow matrix: requires installed Chrome and uv."
+fi
+
 "${compose[@]}" exec -T backend python -c \
   'from pathlib import Path; assert list(Path("/var/lib/sigma-auth").glob("*.sqlite3"))'
 "${compose[@]}" restart backend >/dev/null
