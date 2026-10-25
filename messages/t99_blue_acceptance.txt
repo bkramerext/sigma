@@ -7,6 +7,8 @@ Implementation commit: 9b8f2d774e67435d88a64a2d2e0f6b7ab3b3efe9
 Current branch refresh: 276d804b87f9f34bd65fdffa73d506ce0292c439
 Scope: inference infrastructure and spending accounting only. No merge performed.
 
+Acceptance matrix tally: PASS 7, FAIL 0, BLOCKED 0.
+
 Acceptance matrix
 
 1. PASS — Production FastAPI proposal, agentic proposal, Markdown conversion,

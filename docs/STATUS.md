@@ -139,6 +139,8 @@ offline `httpx.MockTransport` provider fixture. A personal API key is present
 as a decoy; all Responses calls carry only the sponsor credential. No real
 provider calls, GCP resources, or paid usage occurred.
 
+**Acceptance matrix tally: PASS 7, FAIL 0, BLOCKED 0.**
+
 | Acceptance item | Result | Evidence |
 |---|---|---|
 | Proposal, agentic proposal, Markdown conversion, one-shot and long-form paper endpoints | PASS | Existing production-route scenario; Responses fixture returns schema-valid payloads and each operation reconciles ledger calls. |
