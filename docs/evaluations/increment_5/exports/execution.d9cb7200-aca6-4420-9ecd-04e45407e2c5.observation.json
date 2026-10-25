@@ -1,0 +1,1 @@
+{"n_max": 18, "scope": "finite exact counts; no global recurrence or limit proof", "test": "six_step_candidate", "values": [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79, 128, 205, 331, 536, 864, 1397, 2261], "witness": {"actual": 8, "n": 0, "predicted": 9, "residual": -1}}

@@ -3255,3 +3255,146 @@ function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail
 
 installRequestErrorToasts();
 createRoot(document.getElementById('root')!).render(<><CloudAuthGate/><RequestErrorToasts/></>);
+
+## Blue Increment 3 — approved causal research continuation (2026-10-24)
+
+Coordinator assignment: `messages/blue_out_4.md`; implementation app revision
+`373f564ab957a2f13db298c4190e2e29893328b9`, on `blue_session`, not merged.
+Researchers can inspect a saved open duty or write a bounded follow-up, select
+cross-strategy sources, reject transfers with reasons and explicitly approve a
+new durable strategy. Immutable companion packets preserve parent/source IDs,
+source snapshots and uncertainty. New sessions freeze them into actual role
+contexts, exact call audits and coordinator decisions. Uptake is explicitly
+model-reported, with negative-constraint treatment required for saved local
+counterexamples; no proof obligation is automatically closed. New Outcomes expose
+inherited sources and reported changes. Original history remains unchanged.
+
+Actual validation: focused continuation/role-contract and research-state tests,
+research-session suite and full `./sigma test` passed. Actual installed Chrome
+exercised approval, explicit session start, source inspection and reload; saved
+source navigation passed at 1440/390/320px without page errors or horizontal
+overflow. Reader fixed to exclude `sequence.json` allocation metadata from
+unavailable-session counts, found after the first actual new session. Full-run
+lint/import failures were fixed before final passing checks.
+
+Controlled actual orchestration: six new sessions, 21 offline scripted HTTP
+attempts (20 completed role steps, one interrupted), ten new artifacts. Evidence
+ON changes the second dispatched Investigator question relative to OFF. A fresh
+RH-SYM injected candidate retains its explicit objection and separate approved
+follow-up; the first Investigator context excludes the evaluator answer key.
+Negative-transfer rejection and stop/API-process-restart/resume are retained.
+All 21 exported call inputs match actual transport bodies/hashes; five original
+subset session exports compare equal before/after. Independent exact oracles
+check the short-rule counterexample, `a_12=128`, finite Gaussian normalization
+and RH logical-countermodel scope. These are not novel agent discoveries.
+
+Evidence and actual before/after Project Audit JSON/native TXT/HTML/TeX reports:
+`docs/evaluations/increment_3/`. Zero live provider calls and zero charges; token
+accounting in scripted responses is synthetic. Native Markdown reports, PDF,
+AI-authored paper quality and unscripted agent research quality are not claimed.
+Companion approval-bearing audit-to-sample conversion is explicitly refused
+rather than dropping lineage. Dense/repetitive reading surfaces and relevance
+selection remain product weaknesses documented in the assessment. No stock
+sample or historical source project was changed. Permanent clean-tree mailbox
+polling resumes after the report is pushed; no self-merge.
+
+## Blue Increment 4 — real computational research feedback (2026-10-24)
+
+Assignment: `messages/blue_out_5.md`; engine implementation `d9b1b19`, annotation-only
+static-check correction `fb919af`; on `blue_session`, not merged. Added optional
+strict computational feedback bound to supplied execution ID/status/output hash,
+citation and the actual next question. Failed/missing computation, stderr, or
+missing/invalid citation/hash cannot support a structured counterexample/result.
+Legacy/unstructured claims remain unverified. New continuation contexts pool exact
+repeated text losslessly; new Conclusions aggregate repeated uptake prose. Full
+approved sources/history remain unchanged. No frontend changes this increment.
+
+Actual SIGMA orchestration with offline HTTP provider transport ran Python and
+Sage in the existing local Docker images: nine sessions, 28 captured role requests,
+ten execution-attempt records (seven completed, one failed, one actual 15-second
+timeout, one uncertain interrupted reservation). Explicit changed-source retry
+follows backend death/recovery; incorrect output hash fails closed. Separate
+withheld controls have no computations/citations. Source-hashed actual subset
+DP disproves an evaluator-authored six-step candidate at `n=0` (`a6=8`, prediction
+9); actual graph enumeration refutes an immediate-reverse-edge cycle guard with
+a three-vertex cycle. Next dispatched questions contain observed witnesses and
+lead to actual discriminating computations. Independent mask/topological-order
+oracles validate finite outputs; Sage exact polynomial counts match Python.
+Global recurrence/limit and general dynamic-algorithm proofs/bounds remain open.
+
+All 28 exported call inputs match captured actual HTTP bodies/hashes. Existing
+nine subset sessions compare equal before/after. Actual API audits/native TXT,
+HTML, TeX reports, execution JSON and downloaded observation artifacts are in
+`docs/evaluations/increment_4/exports/`. Earlier Sage serialization failure is
+retained separately as a failed computation, not disproof. No live provider calls
+or charges; provider accounting inputs are synthetic. Exact-text expansion
+preserves all selected source coverage while saving 14.6% in the paired context
+serialization comparison; main subset Conclusion falls from a deterministic
+legacy-render baseline of 7,416 to 2,904 characters. Neither comparison is a new
+provider run or an archive rewrite.
+
+Focused feedback/continuation/session checks and final `./sigma test` pass.
+Real installed Chrome inspected existing execution source/output navigation and
+reload at 1440/390/320px for six cases: 18 checks, no page errors or horizontal
+overflow. No Sage installation, cloud provisioning, live research, worker
+coordination or self-merge. Unscripted reasoning, general proof/discovery quality,
+PDF/AI papers and native Markdown reports are not claimed. Return to permanent
+clean-tree 30-second fetch/fast-forward-only polling after pushing `blue_in_4`.
+
+## Blue Increment 5 — integrated research Outcome and provenance gate (2026-10-24)
+
+Coordinator assignment: `messages/blue_out_6.md`. The isolated PR #77 integration
+branch merged current `main` (Green's Simple/Advanced Outcome hierarchy and
+previously merged UI work) into Increments 3–4 without rewriting any historical
+research export. Simple displays a bounded opening excerpt of the saved
+Conclusion first when present, with its three leading substantive qualifications,
+or a clearly named historical summary when absent; the full text remains in
+Advanced and exports. Researcher-approved inherited
+sources are collapsed in Advanced, with direct source links and frozen detail;
+ordinary available history is labeled separately and duplicate inherited rows
+are suppressed in the other-prior-sources list. Settings and older sessions
+remain intact. An approved continuation branch filters cross-strategy historical
+findings to explicitly approved sources plus its own prior work, preventing an
+unselected parent artifact from entering via a multi-strategy session index.
+
+New Python execution reservations now carry the validated saved Investigator
+step ID, role, model and thinking level, matching Sage; old records remain
+unchanged. An interrupted reservation may retain known proposal attribution,
+but its execution result remains unknown. New role calls dispatch full literal
+approved continuation text by default. The exact-text pool is retained behind
+an internal false-by-default experimental constant; deterministic opt-in tests
+confirm round-trip, source coverage and corrupt-alias refusal. In the new actual
+smoke run, 20 literal contexts totaled 1,139,058 bytes; a paired deterministic
+pooled alternative totaled 972,678 bytes (14.61% fewer bytes), **not** a live
+token/cost or comprehension result.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps after
+formatter correction; focused continuation, computational-feedback,
+research-session and project-settings tests passed. Real SIGMA API orchestration
+with offline scripted provider transport generated nine new sessions and 28
+captured role calls across isolated subset and algorithm projects, with ten
+Docker execution attempts: seven complete, one failed, one timed out and one
+interrupted. Existing nine subset sessions compare exactly before/after.
+Exact output/hash/citations and next-dispatched questions passed independent
+subset and graph oracles, including 543 four-vertex DAGs and 4,500 insertions.
+All ten execution records carry the correct saved Investigator provenance; no
+live inference or charges occurred. The script's deterministic next-test choice
+does not establish autonomous model comprehension.
+
+Installed Chrome covered Simple→Advanced Preference, per-project isolation,
+historical summary, inherited source navigation, Markdown icon visibility and
+saved execution source/output at 1440/390/320px for six cases (18 evidence
+viewport checks, plus six Simple, two mobile Preferences and three Research
+Model/Thinking settings screenshots).
+No page errors, request-error overlays or horizontal overflow; final browser-state audits show
+Preferences changed while every research session object remained equal. An
+explicitly synthetic adversarial report test shows a correctly hashed but
+meaningless `theorem_proved=true` stdout is only an observation: a conservative
+review stays incomplete, while an optimistic role review can still become a
+**positive unverified candidate**, never an independently verified proof. This
+is a product trust limit, not a solved inference problem. Audit JSON, native
+TXT/HTML/TeX reports, execution JSON, downloaded evidence, browser screenshots,
+test logs, synthetic-test diagnostics and provenance are in
+`docs/evaluations/increment_5/`. The blind unscripted quality gate is proposed
+there but awaits explicit paid-provider authorization. No PDF/AI-paper quality,
+unprompted reasoning advantage or general mathematical proof is claimed.

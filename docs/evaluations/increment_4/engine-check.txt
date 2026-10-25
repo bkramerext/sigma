@@ -1,0 +1,7 @@
+{
+  "result": "PASS",
+  "root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-computational-k7xk15eg",
+  "sessions": 9,
+  "offline_calls": 28,
+  "exports": "/Users/admin/sigma_blue/docs/evaluations/increment_4/exports"
+}

@@ -1,0 +1,170 @@
+{
+  "observations": [
+    {
+      "case": "subset-actual",
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+      "status": "completed",
+      "width": 1440,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-actual",
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+      "status": "completed",
+      "width": 390,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-actual",
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+      "status": "completed",
+      "width": 320,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "graph-actual",
+      "session_id": "152a6149-7aa9-435d-b7ff-0ea87a641643",
+      "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+      "status": "completed",
+      "width": 1440,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "graph-actual",
+      "session_id": "152a6149-7aa9-435d-b7ff-0ea87a641643",
+      "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+      "status": "completed",
+      "width": 390,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "graph-actual",
+      "session_id": "152a6149-7aa9-435d-b7ff-0ea87a641643",
+      "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+      "status": "completed",
+      "width": 320,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-error",
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "execution_id": "61bdc26f-26e4-4fe6-a4f5-391ed40a2761",
+      "status": "failed",
+      "width": 1440,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-error",
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "execution_id": "61bdc26f-26e4-4fe6-a4f5-391ed40a2761",
+      "status": "failed",
+      "width": 390,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-error",
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "execution_id": "61bdc26f-26e4-4fe6-a4f5-391ed40a2761",
+      "status": "failed",
+      "width": 320,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-timeout",
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "execution_id": "e6275786-dc5a-4b37-9358-6f5e3583bfb0",
+      "status": "timeout",
+      "width": 1440,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-timeout",
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "execution_id": "e6275786-dc5a-4b37-9358-6f5e3583bfb0",
+      "status": "timeout",
+      "width": 390,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-timeout",
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "execution_id": "e6275786-dc5a-4b37-9358-6f5e3583bfb0",
+      "status": "timeout",
+      "width": 320,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-sage",
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "execution_id": "9ed8f40e-56f5-4db1-978d-aba3bc25ec53",
+      "status": "completed",
+      "width": 1440,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-sage",
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "execution_id": "9ed8f40e-56f5-4db1-978d-aba3bc25ec53",
+      "status": "completed",
+      "width": 390,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-sage",
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "execution_id": "9ed8f40e-56f5-4db1-978d-aba3bc25ec53",
+      "status": "completed",
+      "width": 320,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-restart",
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "execution_id": "0c376030-2755-4ec7-a9a0-90770300f2a0",
+      "status": "interrupted",
+      "width": 1440,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-restart",
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "execution_id": "0c376030-2755-4ec7-a9a0-90770300f2a0",
+      "status": "interrupted",
+      "width": 390,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    },
+    {
+      "case": "subset-restart",
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "execution_id": "0c376030-2755-4ec7-a9a0-90770300f2a0",
+      "status": "interrupted",
+      "width": 320,
+      "reload_exact_execution_equal": true,
+      "horizontal_overflow": false
+    }
+  ],
+  "page_errors": [],
+  "new_sessions": 0,
+  "new_provider_calls": 0,
+  "browser": "Actual installed Google Chrome, Playwright"
+}

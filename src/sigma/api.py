@@ -26,6 +26,9 @@ from sigma import (
 )
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
+from sigma.continuations import Approval, approved_packets
+from sigma.continuations import approve as approve_continuation
+from sigma.continuations import proposal as continuation_proposal
 from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
@@ -196,6 +199,24 @@ async def workspace_access_error(request: Request, exc: WorkspaceAccessError):
 
 class OpenRequest(BaseModel):
     path: str
+
+
+class ContinuationApprovalRequest(Approval):
+    path: str
+
+
+@app.get("/api/projects/continuations/proposal")
+def continuation_proposal_view(
+    path: str, parent_strategy_id: str, obligation_id: str | None = None
+):
+    return continuation_proposal(path, parent_strategy_id, obligation_id)
+
+
+@app.post("/api/projects/continuations/approve")
+def continuation_approve_view(body: ContinuationApprovalRequest):
+    return asdict(
+        approve_continuation(body.path, Approval.model_validate(body.model_dump(exclude={"path"})))
+    )
 
 
 class ResearchStartRequest(OpenRequest):
@@ -530,11 +551,13 @@ def export_project_view(path: str):
     project = json.loads(_document(inspect_project(path).project))
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
     sessions = list(reversed(research_sessions.list_sessions(path)))
+    continuations = list(approved_packets(path, validate_dispatch=False).values())
     return {
         "export_version": 2,
         "project": project,
         "agentic_runs": runs,
         "research_sessions": sessions,
+        **({"continuations": continuations} if continuations else {}),
     }
 
 

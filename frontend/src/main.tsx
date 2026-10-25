@@ -92,7 +92,7 @@ type OutcomeArgumentStep = { number: number; title: string; argument: string; ep
 type StrategyFinding = { strategy_id: string; strategy_title: string; status: string; execution_status?: string; failure_reason?: string; claim: string; research_artifact_id: string; research_artifact_ids?: string[]; reasoning_steps: OutcomeArgumentStep[]; skeptic_response: string; objections: string[]; open_obligations: string[] };
 type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
 type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
 type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
 type CurrentQuestion = { id: string; text: string; status: string; actionable: boolean; sources: EvidencePointer[]; narrative_resolution_sources: EvidencePointer[]; note: string; dispositions: { source: EvidencePointer; valid: boolean; rationale: string }[] };
@@ -134,6 +134,15 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
 
 function researchConclusionMarkdown(session: ResearchSession): string {
   return session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
+}
+
+function simpleOutcomeLead(session: ResearchSession): { text: string; shortened: boolean } {
+  const saved = (session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.').trim();
+  const firstSection = session.outcome.conclusion ? saved.split(/\n(?=#{2,6}\s)/, 2)[0] : saved;
+  const lead = firstSection.replace(/^#{2,6}\s+[^\n]+\n+/, '').trim() || session.outcome.summary || saved;
+  if (lead.length <= 900) return { text: lead, shortened: firstSection.length < saved.length };
+  const boundary = lead.lastIndexOf(' ', 900);
+  return { text: `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`, shortened: true };
 }
 
 function researchReasoningMarkdown(session: ResearchSession): string {
@@ -337,14 +346,19 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   }, [session.status]);
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
+  const approvedPackets = Object.values(session.approved_continuations ?? {});
+  const approvedSourceIds = new Set(approvedPackets.flatMap(packet => packet.sources.map(source => source.artifact_id)));
+  const otherPriorFindings = (session.prior_session_findings ?? []).filter(finding => !approvedSourceIds.has(finding.id));
   const review = session.outcome.solution_review;
   const primaryEvidenceIds = [...new Set([...(session.outcome.basis_artifact_ids ?? []), ...(review?.basis_artifact_ids ?? [])])];
   const hasEvidence = session.artifacts.length > 0 || primaryEvidenceIds.length > 0;
   const historicalSummary = !session.outcome.conclusion && !['queued', 'running', 'paused'].includes(session.status);
   const resultLabel = session.outcome.conclusion ? 'Conclusion' : historicalSummary ? 'Historical session summary' : 'Session summary';
   const resultText = session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
+  const simpleResult = simpleOutcomeLead(session);
   const verificationLabel = review?.verification_status === 'verified' ? 'Verified in the session record' : review?.verification_status === 'convincing_unverified' ? 'Convincing but unverified' : review?.verification_status === 'incomplete' ? 'Evidence incomplete' : 'Not independently verified';
-  const qualificationItems = [...new Set([...(session.outcome.caveats ?? []), ...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? [])])];
+  const qualificationItems = [...new Set([...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? []), ...(session.outcome.caveats ?? [])])];
+  const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
   const metricSources = session.outcome.metrics?.sources;
   const artifactNumber = (id: string) => session.artifacts.find(artifact => artifact.id === id)?.sequence;
   const idList = (ids: string[] | undefined) => ids?.length ? ids.map(id => `Artifact ${artifactNumber(id) ?? '?'} · ${id}`).join(', ') : 'None recorded';
@@ -390,11 +404,12 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
-          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <p>{resultText}</p>}
+          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult.text}</p>}><RenderedMarkdown body={simpleResult.text}/></Suspense></div> : <p>{simpleResult.text}</p>}
+          {simpleResult.shortened && <small>Opening excerpt from the saved {session.outcome.conclusion ? 'Conclusion' : 'summary'}; the full text is in Advanced Outcome.</small>}
           {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
           <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
         </div>
-        {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{qualificationItems.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+        {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
       </div>}
       {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
         <details className="outcome-subsection outcome-conclusion" open>
@@ -404,13 +419,29 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}</div>}
             {session.outcome.conclusion && conclusionMarkdown
               ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchConclusionMarkdown(session)}/></Suspense></div>
-              : outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
+              : !session.outcome.conclusion && outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
                 : <div className="outcome-conclusion-source">{resultText}</div>}
             {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
             <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
             {(session.outcome.caveats?.length || review?.open_obligations?.length || review?.unresolved_objections?.length) ? <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong>{!!session.outcome.caveats?.length && <ul>{session.outcome.caveats.map((item, index) => <li key={`caveat-${index}`}>{item}</li>)}</ul>}{!!review?.open_obligations?.length && <ul>{review.open_obligations.map((item, index) => <li key={`obligation-${index}`}>{item}</li>)}</ul>}{!!review?.unresolved_objections?.length && <ul>{review.unresolved_objections.map((item, index) => <li key={`objection-${index}`}>{item}</li>)}</ul>}</div> : null}
           </div>
         </details>
+        {approvedPackets.length > 0 && <details className="outcome-subsection continuation-evidence">
+          <summary><DisclosureChevron expanded={false}/>Researcher-approved inherited evidence · {approvedSourceIds.size} source{approvedSourceIds.size === 1 ? '' : 's'}</summary>
+          <div className="outcome-subsection-content">
+            <p>These frozen artifacts were explicitly approved for transfer. Other available project evidence was not approved by this action. Delivery is recorded in exact provider inputs; the model's interpretation remains unverified.</p>
+            {approvedPackets.map(packet => <section key={packet.packet_digest}>
+              <p><strong>Approved question:</strong> {packet.question}</p>
+              <p><button type="button" className="text-view-link" onClick={() => onViewStrategy(packet.parent_strategy_id)}>Inspect parent strategy</button></p>
+              <ul>{packet.sources.map(source => <li key={source.artifact_id}>
+                <button type="button" className="text-view-link" onClick={() => onViewPriorSession(source.source.session_id)}>Approved source · Session #{source.source.session_number} · {source.strategy_title}</button>
+                <p>{source.claim}</p><p>{source.status} · {source.verification}</p>
+                <details><summary>Frozen artifact {source.artifact_id}</summary><pre>{JSON.stringify(source.artifact, null, 2)}</pre></details>
+              </li>)}</ul>
+              {packet.rejected_sources.length > 0 && <details><summary>{packet.rejected_sources.length} explicitly rejected transfer{packet.rejected_sources.length === 1 ? '' : 's'}</summary><ul>{packet.rejected_sources.map(row => <li key={row.artifact_id}>{row.artifact_id} — {row.rationale}</li>)}</ul></details>}
+            </section>)}
+          </div>
+        </details>}
         {review && <details className="outcome-subsection outcome-reasoning-subsection"><summary><DisclosureChevron expanded={false}/>Reasoning / proof</summary><div className="outcome-subsection-content"><div className="outcome-reasoning-actions"><h4>Reasoning / proof</h4>{reasoningFormatToggle}</div>{reasoningMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{review.argument_summary || review.claim || 'No reasoning was saved.'}</p>}><RenderedMarkdown body={researchReasoningMarkdown(session)}/></Suspense></div> : <div className="solution-review"><p><strong>Investigated:</strong> {session.problem || 'Project objective unavailable in this historical record.'}</p><p><strong>Bounded strategy:</strong> {session.strategy_text || session.strategy_title || 'Strategy details unavailable.'}</p><p><strong>Claim:</strong> {review.claim || 'No claim recorded.'}</p><p><strong>Skeptic response:</strong> {review.skeptic_response || 'No substantive Skeptic response recorded.'}</p>{!!review.skeptic_objections?.length && <p><strong>Skeptic objections:</strong> {review.skeptic_objections.join(' · ')}</p>}{review.argument_steps?.length ? <ol>{review.argument_steps.map(step => <li key={`${step.research_artifact_id ?? ''}:${step.number}`}><strong>{step.title}</strong> <span>({step.epistemic_status})</span><p>{step.argument}</p><p><strong>Skeptic review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || 'No rationale recorded'}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences([...(step.basis_artifact_ids || []), ...(step.research_artifact_id ? [step.research_artifact_id] : [])], session)}</p></li>)}</ol> : <p>No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.</p>}{(review.strategy_findings?.length ?? 0) > 0 && <div><h4>Findings by strategy</h4>{review.strategy_findings!.map(item => <section key={item.strategy_id}><h5>{item.strategy_title} · {item.status}</h5><p>{item.claim}</p>{!!item.execution_status && <p><strong>Execution status:</strong> {item.execution_status}</p>}{!!item.failure_reason && <p><strong>Failure detail:</strong> {item.failure_reason}</p>}{item.reasoning_steps.length ? <ol>{item.reasoning_steps.map(step => <li key={step.number}><strong>{step.title}</strong> ({step.epistemic_status})<p>{step.argument}</p><p><strong>Review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || item.skeptic_response}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}</li>)}</ol> : <p>No structured reasoning steps were preserved for this finding.</p>}{!!item.objections.length && <p><strong>Objections:</strong> {item.objections.join(' · ')}</p>}{!!item.open_obligations.length && <p><strong>Open obligations:</strong> {item.open_obligations.join(' · ')}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences(item.research_artifact_ids?.length ? item.research_artifact_ids : (item.research_artifact_id ? [item.research_artifact_id] : []), session)}</p></section>)}</div>}<p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations considered:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Still open:</strong> {review.open_obligations?.join(' · ') || 'None recorded'}</p>{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{!!review.resolved_objections?.length && <p><strong>Objections addressed:</strong> {review.resolved_objections.join(' · ')}</p>}</div>}</div></details>}
         {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection">
           <summary><DisclosureChevron expanded={false}/>Citations, evidence &amp; obligations</summary>
@@ -476,7 +507,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
             {metricSources && <div className="outcome-provenance-group"><h4>Metric source inventory</h4><p className="outcome-subsection-intro">These session-scoped IDs identify records used by the metrics projection; they are not a per-measurement source map.</p>{([['Steps', metricSources.step_ids], ['Artifacts', metricSources.artifact_ids], ['Computation executions', metricSources.execution_ids], ['Strategies', metricSources.strategy_ids]] as [string, string[]][]).map(([label, ids]) => <div className="outcome-label-value" key={label}><dt>{label}</dt><dd>{ids.length ? ids.join(', ') : 'None recorded'}</dd></div>)}</div>}
             {session.steps.length > 0 && <div className="outcome-provenance-group"><h4>Model call attempts</h4><ol className="outcome-provenance-list">{session.steps.map(step => <li key={step.id}><div className="outcome-label-value"><dt>{step.role} · {step.status}</dt><dd>Step {step.id} · Cycle {step.cycle} · Call {step.call_number}{step.strategy_id ? ` · Strategy ${step.strategy_id}` : ''}</dd></div><p>{step.started_at ? dateLabel(step.started_at) : 'Start time unavailable'}{step.finished_at ? ` · ${dateLabel(step.finished_at)}` : ' · no finish time recorded'}{step.provider_http_status ? ` · HTTP ${step.provider_http_status}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}{step.interruption_reason ? ` · ${step.interruption_reason}` : ''}</p>{!!(step.context_artifact_ids?.length || step.prior_session_artifact_ids?.length || step.peer_strategy_artifact_ids?.length || step.peer_handoff_artifact_ids?.length) && <p><strong>Context artifacts:</strong> {idList([...(step.context_artifact_ids ?? []), ...(step.prior_session_artifact_ids ?? []), ...(step.peer_strategy_artifact_ids ?? []), ...(step.peer_handoff_artifact_ids ?? [])])}</p>}{!!step.peer_handoff_ids?.length && <p><strong>Peer handoffs:</strong> {step.peer_handoff_ids.join(', ')}</p>}{step.context_manifest && <details className="context-used-disclosure"><summary>Context used · {step.context_manifest.selected_count ?? step.context_manifest.sources?.filter(source => source.status === 'selected').length ?? 0} current artifacts selected · {step.context_manifest.omitted_count ?? 0} omitted</summary><p>{step.context_manifest.note ?? 'Deterministic extracts from saved records; originals remain in session history.'}</p>{typeof step.context_manifest.assembled_context_bytes === 'number' && <p>Serialized context: {step.context_manifest.assembled_context_bytes.toLocaleString()} bytes of {step.context_manifest.byte_limit?.toLocaleString() ?? 'bounded'} UTF-8 input</p>}{step.context_manifest.sources?.length ? <ul>{step.context_manifest.sources.slice(0, 32).map((source, index) => <li key={`${source.source_ids?.[0] ?? 'source'}-${index}`}><strong>{source.category?.replaceAll('_', ' ') ?? 'Source'} · {source.status ?? 'recorded'}:</strong> {source.source_ids?.join(', ') ?? 'ID unavailable'} — {source.reason ?? source.representation ?? 'See saved source'}</li>)}</ul> : <p>No source-level manifest was recorded for this historical step.</p>}{(step.context_manifest.sources?.length ?? 0) > 32 && <p>{(step.context_manifest.sources?.length ?? 0) - 32} additional manifest entries omitted from this view.</p>}{step.context_manifest.omitted_prior_session_findings?.count ? <p>{step.context_manifest.omitted_prior_session_findings.count} older session findings omitted; source IDs: {step.context_manifest.omitted_prior_session_findings.source_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}{step.context_manifest.omitted_prior_failures?.count ? <p>{step.context_manifest.omitted_prior_failures.count} older operational failures omitted; attempt IDs: {step.context_manifest.omitted_prior_failures.attempt_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}<ContextManifestNotes manifest={step.context_manifest}/></details>}{step.potential_truncation_fields?.length ? <p className="research-output-warning" role="status"><strong>Potentially truncated output:</strong> {step.potential_truncation_fields.join(', ')} reached a structured output field limit. Review the saved source text before relying on it.</p> : null}{step.provider_input_audit && <details className="context-used-disclosure"><summary>Exact provider input · {step.provider_input_audit.status}</summary><p>Saved request body before dispatch; authorization headers and credentials are excluded.</p><h5>Role instructions</h5><pre>{String(step.provider_input_audit.request_body.instructions ?? '')}</pre><h5>Submitted input</h5><pre>{JSON.stringify(step.provider_input_audit.request_body.input, null, 2)}</pre></details>}</li>)}</ol></div>}
             {session.artifacts.length > 0 && <div className="outcome-provenance-group"><h4>Saved artifact origins</h4><ul className="outcome-provenance-list">{session.artifacts.map(artifact => <li key={artifact.id}><div className="outcome-label-value"><dt>Artifact {artifact.sequence}</dt><dd>{artifact.id}</dd></div><p>{artifact.session_id ? `Session ${artifact.session_id}` : 'Source session unavailable'} · {artifact.strategy_id ? `Strategy ${artifact.strategy_id}` : 'Strategy unavailable'} · {typeof artifact.strategy_cycle === 'number' ? `Cycle ${artifact.strategy_cycle}` : 'Cycle unavailable'}</p></li>)}</ul></div>}
-            {!!session.prior_session_findings?.length && <div className="outcome-provenance-group"><h4>Prior session sources</h4><ul className="outcome-provenance-list">{session.prior_session_findings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session #{finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
+            {otherPriorFindings.length > 0 && <div className="outcome-provenance-group"><h4>Other prior session sources</h4><p>Available history; these sources are not implied to be researcher-approved transfers.</p><ul className="outcome-provenance-list">{otherPriorFindings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session #{finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
             {!!session.peer_handoffs_prompted?.length && <div className="outcome-provenance-group"><h4>Peer handoffs prompted</h4><ul className="outcome-provenance-list">{session.peer_handoffs_prompted.map((handoff, index) => <li key={index}><pre>{JSON.stringify(handoff, null, 2)}</pre></li>)}</ul></div>}
             <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Output limit</dt><dd>{typeof session.output_token_limit === 'number' ? `${session.output_token_limit} tokens per call` : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
             {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h4><button type="button" title={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h4><ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
@@ -536,7 +567,51 @@ function CurrentUnderstandingView({ state, onEvidence, onSession }: { state: Cur
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
+type ContinuationProposal = { preview_digest: string; question: string; caution: string; obligation: { id: string } | null; sources: { artifact_id: string; source: EvidencePointer; strategy_title: string; claim: string; status: string; verification: string; mandatory: boolean; artifact: Record<string, unknown> }[] };
+function ContinuationApproval({ path, strategies, state, onEvidence, onSaved, onInvestigate }: { path: string; strategies: Strategy[]; state: CurrentUnderstanding; onEvidence: (source: EvidencePointer) => void; onSaved: (view: ProjectView) => void; onInvestigate: (ids: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [parent, setParent] = useState(strategies[0]?.id || '');
+  const [obligation, setObligation] = useState('');
+  const [preview, setPreview] = useState<ContinuationProposal | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [rejections, setRejections] = useState<Record<string, string>>({});
+  const [title, setTitle] = useState('Bounded continuation');
+  const [question, setQuestion] = useState('');
+  const [savedId, setSavedId] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function inspect() {
+    setBusy(true); setError(''); setSavedId('');
+    try {
+      const response = await fetch(`/api/projects/continuations/proposal?${new URLSearchParams({ path, parent_strategy_id: parent, ...(obligation ? { obligation_id: obligation } : {}) })}`);
+      const data = await response.json(); if (!response.ok) throw new Error(data.error);
+      setPreview(data); setQuestion(data.question); setSelected(data.sources.filter((row: { mandatory: boolean }) => row.mandatory).map((row: { artifact_id: string }) => row.artifact_id)); setRejections({});
+    } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
+  }
+  async function approve() {
+    if (!preview) return;
+    setBusy(true); setError('');
+    try {
+      const next = await post<ProjectView>('continuations/approve', { path, parent_strategy_id: parent, title, question, obligation_id: preview.obligation?.id || null, preview_digest: preview.preview_digest, source_artifact_ids: selected, rejected_sources: Object.entries(rejections).filter(([id, reason]) => !selected.includes(id) && reason.trim()).map(([artifact_id, rationale]) => ({ artifact_id, rationale })) });
+      const id = next.project.strategies.at(-1)!.id;
+      setSavedId(id); setPreview(null); onSaved(next);
+    } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
+  }
+  return <details className="outcome-subsection continuation-approval" open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary>Continue from saved evidence</summary>
+    <p>Inspect sources, narrow a question, then explicitly approve a new strategy. Original strategies and history remain saved. Approval does not start a session.</p>
+    <label>Parent strategy<select aria-label="Parent strategy" value={parent} onChange={event => { setParent(event.target.value); setObligation(''); setPreview(null); }}>{strategies.filter(row => !row.removed_at).map(row => <option key={row.id} value={row.id}>{row.title}</option>)}</select></label>
+    <label>Open obligation<select aria-label="Open obligation" value={obligation} onChange={event => { setObligation(event.target.value); setPreview(null); }}><option value="">Write a bounded follow-up</option>{state.obligations.filter(row => row.actionable && row.sources.some(source => source.strategy_id === parent)).map(row => <option key={row.id} value={row.id}>{row.text}</option>)}</select></label>
+    <button type="button" className="text-view-link" disabled={busy || !parent} onClick={() => void inspect()}>Inspect continuation proposal</button>
+    {preview && <div><p className="hint">{preview.caution}</p><label>Continuation title<input value={title} maxLength={200} onChange={event => setTitle(event.target.value)}/></label><label>Approved next question<textarea aria-label="Approved next question" value={question} maxLength={1000} onChange={event => setQuestion(event.target.value)}/></label>
+      <ol>{preview.sources.map(row => <li key={row.artifact_id}><label><input type="checkbox" checked={selected.includes(row.artifact_id)} disabled={row.mandatory} onChange={event => setSelected(ids => event.target.checked ? [...ids, row.artifact_id] : ids.filter(id => id !== row.artifact_id))}/>{row.strategy_title}{row.mandatory ? ' · required local evidence' : ''}</label><p>{row.claim}</p><p className="hint">{row.status} · {row.verification}</p><p><button type="button" className="text-view-link" onClick={() => onEvidence(row.source)}>Inspect source Session #{row.source.session_number}</button> <code>{row.artifact_id}</code></p><details><summary>Frozen source evidence</summary><pre>{JSON.stringify(row.artifact, null, 2)}</pre></details>{!selected.includes(row.artifact_id) && <label>Reason to reject transfer (optional)<input value={rejections[row.artifact_id] || ''} maxLength={600} onChange={event => setRejections(current => ({ ...current, [row.artifact_id]: event.target.value }))}/></label>}</li>)}</ol>
+      <button type="button" className="text-view-link" disabled={busy || question.trim().length < 10 || !selected.length} onClick={() => void approve()}>Approve continuation fork</button>
+    </div>}
+    {savedId && <p role="status">Continuation saved with frozen source evidence. <button type="button" className="text-view-link" onClick={() => onInvestigate([savedId])}>Investigate approved continuation</button></p>}
+    {error && <p role="alert">{error}</p>}
+  </details>;
+}
+
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
@@ -616,7 +691,8 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', poll); stopWatching(); };
   }, [activeSession?.id, activeSession?.status, load, path, projectId, reportReadFailure]);
 
-  async function begin() {
+  async function begin(onlyIds?: string[]) {
+    const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
       const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
@@ -629,15 +705,15 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
         throw new Error('Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
       }
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
-      if (eligible.length > 12) {
+      if (chosenIds.length > 12) {
         throw new Error('A session can include at most 12 enabled strategies. Disable strategies before starting.');
       }
-      if (eligible.length * 2 > currentLimits.model_calls) {
+      if (chosenIds.length * 2 > currentLimits.model_calls) {
         throw new Error(
-          `The ${eligible.length} enabled strategies need at least ${eligible.length * 2} model calls for their Investigator/Skeptic pairs, but the budget allows ${currentLimits.model_calls}. Disable strategies or increase the model-call limit in Project Settings.`,
+          `The ${chosenIds.length} enabled strategies need at least ${chosenIds.length * 2} model calls for their Investigator/Skeptic pairs, but the budget allows ${currentLimits.model_calls}. Disable strategies or increase the model-call limit in Project Settings.`,
         );
       }
-      setPendingStrategyIds(eligible.map(strategy => strategy.id));
+      setPendingStrategyIds(chosenIds);
       setConfig(current); setLimits(currentLimits);
       setConfirmStart(true);
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
@@ -761,7 +837,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} onEvidence={revealEvidence} onSession={revealSession}/>}
+    {currentUnderstanding && <><CurrentUnderstandingView state={currentUnderstanding} onEvidence={revealEvidence} onSession={revealSession}/><ContinuationApproval path={path} strategies={strategies} state={currentUnderstanding} onEvidence={revealEvidence} onSaved={onContinuationSaved} onInvestigate={ids => void begin(ids)}/></>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
@@ -2790,7 +2866,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (

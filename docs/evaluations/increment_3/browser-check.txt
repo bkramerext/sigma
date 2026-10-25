@@ -1,0 +1,7 @@
+{
+  "result": "PASS",
+  "root": "/private/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-blue-causal-1b5ylrz4",
+  "offline_calls": 21,
+  "new_sessions": 6,
+  "exports": "/Users/admin/sigma_blue/docs/evaluations/increment_3/exports"
+}

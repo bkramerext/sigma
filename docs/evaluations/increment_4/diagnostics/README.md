@@ -1,0 +1,5 @@
+# Development diagnostic retained separately
+
+The first actual Sage proposal computed values but failed while serializing native Sage integers to JSON. The exact saved execution JSON and the actual offline HTTP capture lines are retained here; they are not final-run API exports. The Skeptic reported execution failure/inconclusive, not a mathematical disproof. The proposal was corrected to convert JSON numeric values, and the final evaluated run is identified by `exports/MANIFEST.json`. This failed strategy/session remain in their original isolated working copy; no history was erased or repaired. No Sage installation or image change was needed.
+
+Initial harness attempts also needed private auth-directory permissions, the documented `executions` response envelope, and direct owned-server process termination for a valid backend-restart test. Failed harness assertions are not counted as successful restart coverage. The final run checks an interrupted durable execution and an explicit changed-source retry.

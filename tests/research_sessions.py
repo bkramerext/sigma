@@ -612,6 +612,8 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         "session_id": started["id"],
         "strategy_id": strategy.id,
         "cycle": 1,
+        "runtime_name": "python",
+        "step_id": next(step["id"] for step in finished["steps"] if step["role"] == "investigator"),
     }
     assert [role for role, _ in contexts] == [
         "research_investigator",
