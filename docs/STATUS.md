@@ -4708,3 +4708,29 @@ and reproducible machine outputs/hashes are retained in
 readiness and retrospective checks passed. The full `./sigma test` passed after
 installing locked frontend dependencies. No provider calls or cost occurred;
 no comparative result is claimed.
+
+## T130 — Public DNS and HTTPS preparation (2026-10-25)
+
+Based on `main` at `455d752`, added a read-only public endpoint validator in
+`sigma.public_endpoint` and `deploy/verify_public_endpoint.py`. It verifies the
+hostname resolves only to the owner-provided IPv4, TCP 8000/5173/2375/2376 are
+unreachable, HTTP `/` redirects to canonical HTTPS, default TLS verification
+succeeds, a SPA deep link returns 200, and `/api/cloud-auth/status` reports
+ready hosted auth. Expanded Caddy routing to include exact `/api`, removed the
+unused UDP 443 host publish, and documented the public firewall and external
+probe procedure. No DNS, GCP firewall, or public endpoint was changed.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build. Six focused public endpoint tests
+cover success and DNS, redirect, SPA, malformed/unready API, and direct-port
+failure cases; existing deployment package and GCE host tests also passed.
+`bash deploy/validate-local.sh` built both locked images but could not start its
+disposable stack: the Colima Docker engine could not mount the worktree's
+`/private/tmp/.../deploy/.local-secrets...` fixture path. The script exited
+before browser exercise and cleaned up its temporary stack; no real-browser
+or hosted HTTPS evidence was obtained. Rerun the packaged browser smoke from a
+Docker-shared checkout path if available.
+
+Public DNS/TLS acceptance remains pending the provisioned VM, Brian's
+owner-authorized DuckDNS update and GCP ingress decision, and production launch
+prerequisites. Do not treat offline or local checks as public acceptance.
