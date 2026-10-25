@@ -1,8 +1,9 @@
 # Blue Increment 18 R4R — hosted research/export integration
 
 - **Branch:** `blue/increment-18-hosted-research`
-- **Base:** `origin/main` at `ade23f8` (Round 2 ticket detail merge)
-- **Head:** recorded after final commit
+- **Starting base:** `origin/main` at `ade23f8` (Round 2 ticket detail merge)
+- **Latest integration:** merged `origin/main` at `f76d834` after the remote advanced during the assignment; no conflicts in the test or handoff files.
+- **Head:** PR head commit; final full-suite verification was run after integrating `f76d834`.
 - **Scope:** one extension to `tests/cloud_research_sponsored_api.py` that follows an authenticated deterministic hosted research run through the owner-facing project export, saved Outcome verification wording, text report response, and fresh FastAPI process recovery from the same durable workspace.
 
 ## Win
@@ -41,6 +42,6 @@ assigned after Red's host run. I did not change scope or lower acceptance.
 
 ## Handoff
 
-Elapsed worker time was approximately 37 minutes from assignment start through
+Elapsed worker time was approximately 40 minutes from assignment start through
 PR-ready work. No Cloud-owned implementation was changed. See `docs/STATUS.md`
 for the retained project status entry and final head/PR link.
