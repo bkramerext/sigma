@@ -2515,7 +2515,11 @@ def _all(path: str) -> list[dict[str, Any]]:
             continue
         try:
             raw = json.loads(file.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and raw.get("project_path") == str(project_path(path)):
+            if (
+                isinstance(raw, dict)
+                and isinstance(raw.get("id"), str)
+                and raw.get("project_path") == str(project_path(path))
+            ):
                 records.append(raw)
         except (OSError, ValueError):
             continue
@@ -2570,10 +2574,12 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
     if isinstance(saved_conclusion, str):
         outcome["conclusion"] = saved_conclusion
     else:
-        outcome["conclusion"] = (
-            "### Historical session\n\n"
-            "No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below."
-        )
+        # Keep an absent historical Conclusion absent. Presentation layers can
+        # label the saved summary without misrepresenting it as agent-authored.
+        outcome["conclusion"] = None
+        saved_summary = saved_outcome.get("summary") if isinstance(saved_outcome, dict) else None
+        if isinstance(saved_summary, str) and saved_summary.strip():
+            outcome["summary"] = saved_summary
     outcome["metrics"] = _outcome_metrics(record, outcome)
     result["outcome"] = outcome
     assessments = record.get("strategy_assessments")

@@ -191,6 +191,7 @@ async def main_async(root: Path):
         initialize_project(legacy, "Legacy", "Count a_n for n >= 0")
         raw = json.loads((legacy / "project.json").read_bytes())
         raw["schema_version"] = version
+        raw.pop("show_advanced_outcome_details", None)
         raw.pop("difficulty", None)
         if version < 6:
             raw.pop("ai_model", None)
