@@ -25,7 +25,8 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Runtime service account | `sigma-runtime@PROJECT_ID.iam.gserviceaccount.com`; two secret-scoped grants only | Planned; PROJECT_ID unresolved |
 | Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Planned, no secret payloads here |
 | Production Google OAuth client | HTTPS origin `https://sigma-research.duckdns.org`; callback `https://sigma-research.duckdns.org/api/cloud-auth/callback` | Planned; client/project decision pending |
-| Billing / trial / project budget | $300 project-filtered usage-alert proposal; actual billing link and trial dates | Not yet verified |
+| Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; project association and trial unverified |
+| Billing / trial / project budget | $300 project-filtered usage-alert proposal; project billing link, trial credit and dates | Not yet verified |
 | Application release | Exact deployed Git SHA | Pending deployment |
 
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
