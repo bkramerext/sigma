@@ -11,6 +11,7 @@
 - The coordinator has inserted the link on this branch. Review its placement; refine only if readability materially benefits, while preserving all unrelated README edits and the asset-cleanup work.
 - Do not add sections on implementation complexity, how the project originated, the creator, or how many agents were used to build SIGMA.
 - Do not conflate intended benefits with validated outcomes: the current research-quality caveats in README must remain.
+- Preserve the exact sentence **"And we're prepared to simplify SIGMA if the answer is no."** in both the README opening and the linked `docs/WHY_SIGMA.md`. Its candid willingness to abandon needless complexity is an essential part of the product purpose, not optional marketing polish.
 - Verify the relative Markdown link, inspect README preview and the linked document, and report commit/test status back to the coordinator. No direct agent-to-agent coordination.
 - Green separately owns shorter, collapsible About copy on `green/about-polish`; Gray should not edit Green's UI branch.
 
