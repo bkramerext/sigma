@@ -475,6 +475,9 @@
 .workspace-page .session-row-heading small { color: var(--workspace-muted); font-size: 12px; }
 .workspace-page .session-status { display: inline-flex; align-items: center; gap: 8px; color: #bdcad5; font-size: 12px; text-transform: capitalize; }
 .workspace-page .session-status i { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; border: 1px solid #849db1; }
+.workspace-page .session-summary > .paused-session-guidance { grid-column: 1 / -1; max-width: 72ch; margin: 8px 0 0; padding: 10px 12px; border-left: 3px solid #d5a847; border-radius: 0 8px 8px 0; background: #242a30; color: #e3e8ec; font-size: 13px; }
+.workspace-page .paused-session-guidance p { margin: 0; }
+.workspace-page .paused-session-guidance p + p { margin-top: 5px; }
 .workspace-page .session-queued i, .workspace-page .session-running i { border-color: #49adcf; box-shadow: 0 0 5px #49adcf; }
 .workspace-page .session-paused i { border-color: #d59b41; box-shadow: 0 0 5px #d59b41; }
 .workspace-page .session-completed i { border-color: #75b18c; box-shadow: 0 0 5px #75b18c; }
