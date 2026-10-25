@@ -1,5 +1,11 @@
 # SIGMA status
 
+## Blue Increment 6: main release audit and evidence anchor (2026-10-24/25)
+
+Verified merged main `4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c` after PR #77: post-merge GitHub Actions run 40159404783 succeeded, local `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, and focused continuation, feedback, session and settings scripts passed. A second full suite passed after a one-line candidate fix `fd87685` for Current Understanding's exact-artifact anchor. No live provider calls or new research sessions occurred.
+
+Real Chrome 156 on isolated copies of the saved subset and graph projects checked Home/open, project preferences, Simple and Advanced Outcomes, historical Conclusions, approved and unapproved evidence, execution JSON against API, Markdown rendering and 1440/390/320 widths. Twelve viewport checks had no overflow or page errors; all copied session objects were unchanged after preference inspection. Main's “Inspect finding” opened only the owning session; the candidate fix focuses the cited artifact. The fix awaits coordinator review/merge. Full actual `.txt` command transcripts, screenshots, machine observations, new preference-state Project Audit JSON, native reports and the explicit research-quality boundaries are in [Increment 6 release audit](evaluations/increment_6/RELEASE_AUDIT.md). The missing Increment 5 `.log` files were not reconstructed. A frozen blind gate is proposed, not executed; it requires explicit human provider/model/budget authorization.
+
 ## PR #76 integration with main (2026-10-24)
 
 Merged `origin/main` at `81384dd` into `green/outcome-hierarchy` without
