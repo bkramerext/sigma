@@ -146,13 +146,13 @@ function containsMathNotation(text: string): boolean {
   });
 }
 
-function simpleOutcomeLead(session: ResearchSession): { text: string; shortened: boolean } {
+function simpleOutcomeLead(session: ResearchSession): string {
   const saved = (session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.').trim();
   const firstSection = session.outcome.conclusion ? saved.split(/\n(?=#{2,6}\s)/, 2)[0] : saved;
   const lead = firstSection.replace(/^#{2,6}\s+[^\n]+\n+/, '').trim() || session.outcome.summary || saved;
-  if (lead.length <= 900) return { text: lead, shortened: firstSection.length < saved.length };
+  if (lead.length <= 900) return lead;
   const boundary = lead.lastIndexOf(' ', 900);
-  return { text: `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`, shortened: true };
+  return `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`;
 }
 
 function researchReasoningMarkdown(session: ResearchSession): string {
@@ -332,9 +332,10 @@ function ContextManifestNotes({ manifest }: { manifest: ContextManifest }) {
   return <ul className="context-omission-notes">{notes.map(item => <li key={item.key}>{item.text}</li>)}</ul>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
+function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
   path: string;
   session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
+  onEnableAdvancedOutcome: () => Promise<void>;
   onViewStrategy: (id: string) => void;
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
@@ -348,6 +349,8 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const [convertedConclusion, setConvertedConclusion] = useState<string | null>(null);
   const [conclusionRendering, setConclusionRendering] = useState(false);
   const [conclusionFormatError, setConclusionFormatError] = useState('');
+  const [advancedOutcomeEnableError, setAdvancedOutcomeEnableError] = useState('');
+  const [enablingAdvancedOutcome, setEnablingAdvancedOutcome] = useState(false);
   const conclusionConversionAbort = useRef<AbortController | null>(null);
   const [reasoningMarkdown, setReasoningMarkdown] = useState(false);
   const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
@@ -492,8 +495,14 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       {provenancePrelude}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
-          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult.text}</p>}><RenderedMarkdown body={simpleResult.text}/></Suspense></div> : <p>{simpleResult.text}</p>}
-          {simpleResult.shortened && <small>Opening excerpt from the saved {session.outcome.conclusion ? 'Conclusion' : 'summary'}; the full text is in Advanced Outcome.</small>}
+          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
+          <p className="advanced-outcome-hint">Want more detail? Turn on <button type="button" className="advanced-outcome-link" disabled={enablingAdvancedOutcome} onClick={async () => {
+            setEnablingAdvancedOutcome(true); setAdvancedOutcomeEnableError('');
+            try { await onEnableAdvancedOutcome(); }
+            catch (cause) { setAdvancedOutcomeEnableError(errorMessage(cause)); }
+            finally { setEnablingAdvancedOutcome(false); }
+          }}>{enablingAdvancedOutcome ? 'Advanced Outcome…' : 'Advanced Outcome'}</button> to see the full research findings and evidence.</p>
+          {advancedOutcomeEnableError && <p className="advanced-outcome-hint-error" role="alert">{advancedOutcomeEnableError}</p>}
           {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
           <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
         </div>
@@ -504,7 +513,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
           <div className="outcome-subsection-content outcome-conclusion-content">
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
-            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span role="status">Formatting with AI…</span>}</div>}
+            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</div>}
             {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
             {session.outcome.conclusion && conclusionMarkdown
               ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={convertedConclusion ?? session.outcome.conclusion}/></Suspense></div>
@@ -700,7 +709,7 @@ function ContinuationApproval({ path, strategies, state, onEvidence, onSaved, on
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
@@ -947,7 +956,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
               </div>
             </div>
-            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
+            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
@@ -1564,8 +1573,12 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
       }} title={renderTooltip}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+  const markdownControl = <span className="text-view-format-control">
+    {markdownToggle}
+    {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
+  </span>;
   const viewActions = <>
-    {!markdownSlotId && markdownToggle}
+    {!markdownSlotId && markdownControl}
 
     {editing ? combinedEditMode ? null : <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" title={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
@@ -1576,7 +1589,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SettingsGearIcon /></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
-    {markdownPortalTarget && createPortal(markdownToggle, markdownPortalTarget)}
+    {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
     {scope === 'project' && exportOpen && <ProjectExportDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && !hideProjectHeading && <h2 className="investigation-heading">Project</h2>}
@@ -1592,7 +1605,6 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         {mathematical && plainRecovery && format === 'plain' && <button type="button" className="text-view-link" disabled={busy || modeDisabled} onClick={() => void convert('plain')}>Convert to Plain</button>}
         {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
       </div>}
-    {busy && !editing && <span className="sr-only" role="status">Converting to Markdown…</span>}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -3191,7 +3203,13 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
+      const current = settingsOf(view);
+      if (current.show_advanced_outcome_details) return;
+      const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
+      setView(next);
+      setAnnouncement('Advanced Outcome enabled.');
+    }} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (

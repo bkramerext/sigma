@@ -24,6 +24,20 @@ creation assertions in this local cloud-auth environment because its initial
 “Checking AI…” expectation was not met; the standalone request-contract check
 covers the reported regression directly.
 
+The Conclusion formatting controls now show the same visible “Formatting with
+AI…” label beside the hourglass in project descriptions, strategy approaches,
+and saved Conclusions, with consistent 6px spacing. The simple Outcome view now
+offers a quiet, underlined “Advanced Outcome” action below the summary; it saves
+the project preference and opens the full findings. The redundant excerpt note
+was removed. Focused real-Chrome checks cover all three formatting controls,
+the persisted preference link, rendered/raw modes, and desktop and narrow mobile
+layouts. Screenshots are `/tmp/sigma-project-markdown-formatting.png`,
+`/tmp/sigma-project-markdown-formatting-mobile.png`, and
+`/tmp/sigma-strategy-markdown-formatting.png`. `t47_conclusion.py` passed, and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed in full,
+including frontend typecheck and production build. No provider calls or cloud
+changes.
+
 ## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
 
 Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
