@@ -800,6 +800,7 @@ def text_source_view(body: TextSourceRequest):
 class TextConversionRequest(OpenRequest):
     scope: str
     strategy_id: str | None = None
+    session_id: str | None = None
     target: str
     expected_digest: str
     expected_binding: str | None = None
@@ -821,6 +822,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.strategy_id,
             body.expected_digest,
             body.expected_binding,
+            body.session_id,
         )
     )
     connection = asyncio.create_task(disconnected())

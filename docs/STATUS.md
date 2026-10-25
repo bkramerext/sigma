@@ -1,6 +1,5 @@
 # SIGMA status
 
-<<<<<<< HEAD
 ## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
 
 Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
@@ -42,7 +41,7 @@ passed. The runtime smoke script was exercised on actual Docker containers.
 The GCE command and real rootless execution remain a required Red follow-up;
 hosted AI paper generation, identity authorization, restart persistence, and
 sponsored budget operations are outside this Blue runtime increment.
-=======
+
 ## T93 Conclusion Markdown and math rendering (2026-10-25)
 
 Markdown-rendered Conclusions now show a neutral loading message while the lazy
@@ -61,7 +60,6 @@ with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset (the first run with it set failed
 an existing UI lifecycle cleanup assertion); focused Chrome check
 `uv run --with playwright python browser_checks/t47_conclusion.py`, frontend
 typecheck, and `git diff --check` passed. No provider calls or cloud changes.
->>>>>>> 9380ca4 (Fix math rendering in saved research outcomes)
 
 Follow-up: the Conclusion Markdown toggle had been missed by the earlier
 Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
@@ -73,6 +71,20 @@ dimensions and transparent hover surface while continuing to verify rendered
 Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
 full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
 calls or cloud changes.
+
+The next Chrome inspection exposed a separate issue: the pressed copper icon
+could accompany raw formula characters because the Conclusion was only passed
+through the local Markdown/KaTeX parser. It now uses the same AI formatting
+endpoint and preservation instructions as project text, with an explicit
+user click. The source digest is checked before and after conversion; formatted
+Markdown stays in the view state and the saved session archive is never edited.
+The button stays gray in plain mode even under hover and turns copper when the
+formatted result is displayed. An offline API regression checks display-math
+and layout instructions plus byte-identical saved history. Real Chrome with a
+mocked conversion checked the RH-style source, formatted line breaks and three
+display equations at 1440, 375 and 320 px; screenshots are in `/tmp/sigma-conclusion-ai-desktop.png`,
+`/tmp/sigma-conclusion-ai-375.png` and `/tmp/sigma-conclusion-ai-320.png`. No
+provider calls or cloud changes.
 
 ## Project header About pill placement (2026-10-25)
 
