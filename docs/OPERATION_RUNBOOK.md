@@ -47,6 +47,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 
 - 2026-10-25: Operator verified reserved regional Premium external IPv4 `sigma-web-ip` = `136.66.128.82`; not yet assigned to VM. DuckDNS A-record update pending.
 
+- 2026-10-25: Human operator confirmed existing project IAM role **Owner** in `sigma-research-prod`. OS Admin Login, IAP tunnel access, and service-account-user grants are not yet verified; do not assume Owner covers those permissions.
+
 ## Before any operation
 
 1. Identify the GCP project, `us-west1-b` zone, VM `sigma-gce-01`, disk `sigma-state`, public hostname, and current `SIGMA_RELEASE`. Confirm these against **live GCP**, not just this document.
