@@ -1,5 +1,23 @@
 # SIGMA status
 
+## T41 — Sponsored cloud inference verification (2026-10-23)
+
+Added deterministic sponsored-inference API coverage through the production
+FastAPI routes and a fake OpenAI HTTP transport. The check exercises cloud-only
+credential selection, model discovery, successful Responses usage settlement,
+idempotency, authenticated workspace isolation, explicit unconfigured behavior,
+provider HTTP failure and timeout handling, uncertain-charge holds without
+replay, and allowance exhaustion before provider dispatch. No live provider,
+cloud resources, UI changes, or product implementation changes were needed.
+
+The T41-specific test lives in `tests/cloud_research_sponsored_api.py` and is
+registered in `./sigma test`. Current-main `tests/cloud_research_api.py` remains
+intact with T99 budgeted-inference parity coverage, including its own API
+failures, timeout, quota and cross-owner checks. The T41 scenario uniquely
+exercises the production sponsored credential and Responses transport for
+research-session dispatch; shared cloud-ledger tests cover contention and
+restart/recovery.
+
 ## T100 persistent-disk storage (2026-10-25)
 
 Implemented opt-in `SIGMA_STORAGE_BACKEND=persistent_disk` with a validated
