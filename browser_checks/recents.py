@@ -178,7 +178,7 @@ with sync_playwright() as playwright:
         "button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True
     )
     expect(first_copy).to_be_visible()
-    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
+    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(recent_meta).to_contain_text("strategies · ")
     expect(recent_meta).to_contain_text("Hard difficulty")
     assert "Mathematics" not in recent_meta.inner_text()
@@ -252,7 +252,7 @@ with sync_playwright() as playwright:
     normal_recent_type = first_copy.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
-    normal_recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
+    normal_recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
     normal_recent_meta_style = normal_recent_meta.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
