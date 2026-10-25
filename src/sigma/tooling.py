@@ -75,6 +75,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/storage.py"],
             [*python, "python", "tests/cloud_research.py"],
             [*python, "python", "tests/cloud_research_api.py"],
+            [*python, "python", "tests/cloud_research_sponsored_api.py"],
             [*python, "python", "tests/deployment_package.py"],
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_registry.py"],

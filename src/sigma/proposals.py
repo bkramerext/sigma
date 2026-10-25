@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sigma import cloud_research, cloud_workspaces
 from sigma.model_catalog import DEFAULT_MODEL, validate_pair
 from sigma.openai_connection import auth_context, models
 from sigma.plan_stream import completed, failure
@@ -257,6 +258,7 @@ async def generate_proposal(
         raise ProjectError(
             "A proposal request is already running. Wait for it to finish or cancel it."
         )
+    cloud_attempt = None
     try:
         schema = Proposal.model_json_schema()
         payload = {
@@ -309,7 +311,21 @@ async def generate_proposal(
             raise ProjectError(
                 "AI account/billing mode changed. Retry explicitly with the selected account; no request was sent."
             )
+        if cloud_workspaces.enabled():
+            if (
+                credential["identity"] != "cloud_service_api_key"
+                or credential["mode"] != "api_key"
+                or not credential["token"]
+            ):
+                raise ProjectError("Sponsored cloud inference is not configured.")
+            cloud_attempt = cloud_research.start_provider_attempt(
+                project_id, path, config["model"], payload, 8000
+            )
         # asyncio.timeout bounds the whole operation, including slow streaming peers.
+        if cloud_attempt is not None:
+            # A transport timeout can happen after the provider accepted bytes
+            # but before an HTTP response context is entered.
+            cloud_attempt.dispatched = True
         async with (
             asyncio.timeout(TIMEOUT_SECONDS),
             httpx.AsyncClient(
@@ -349,6 +365,7 @@ async def generate_proposal(
                         ).hexdigest(),
                     )
                 raw = json.loads(data)
+        cloud_research.settle_provider_attempt(cloud_attempt, raw)
         current_credential = await auth_context()
         if (
             current_credential["identity"] != credential["identity"]
@@ -439,5 +456,12 @@ async def generate_proposal(
         raise ProjectError(
             "Provider returned malformed proposal data; no strategy was saved."
         ) from exc
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
     finally:
+        if cloud_attempt is not None:
+            try:
+                cloud_research.finish_provider_attempt(cloud_attempt)
+            except cloud_research.CloudResearchUnavailable:
+                pass
         _gate.release()

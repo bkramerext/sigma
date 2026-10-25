@@ -7,7 +7,7 @@ import os
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import httpx
@@ -31,9 +31,8 @@ def main() -> None:
             "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
             "SIGMA_STATE_DIR": str(root / "local-state"),
             "SIGMA_CLOUD_OPENAI_API_KEY": "fake-server-credential",
-            "OPENAI_API_KEY": "local-key-must-not-be-used",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
-            "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "0.25",
+            "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "1.00",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
             "SIGMA_CLOUD_GLOBAL_MAX_CONCURRENT": "2",
             "SIGMA_CLOUD_USER_MAX_QUEUED": "2",
@@ -46,23 +45,29 @@ def main() -> None:
             import cloud_workspace_test_app
             from fastapi.testclient import TestClient
 
-            from sigma import cloud_research
+            from sigma import (
+                agentic,
+                cloud_research,
+                papers,
+                proposals,
+                research_sessions,
+                text_conversion,
+            )
 
-            # Exercise the real server credential lookup, model discovery,
-            # Responses request construction, usage parsing, and cloud ledger.
-            # The fixture is deterministic and never makes an external request.
+            credential = {
+                "mode": "api_key",
+                "identity": "cloud_service_api_key",
+                "token": "fake-server-credential",
+                "status": "connected",
+            }
+            config = {
+                "available": True,
+                "model": "gpt-6.1-sol",
+                "reasoning_effort": "high",
+            }
             investigator = {
                 "claim": "An induction suggests the recurrence bound.",
                 "method": "Apply the recurrence once and check the base case.",
-                "reasoning_steps": [
-                    {
-                        "title": "Recurrence consequence",
-                        "argument": "The recurrence supports the stated local consequence under the supplied assumption.",
-                        "epistemic_status": "deduction",
-                        "basis_artifact_ids": [],
-                    }
-                ],
-                "claim_is_conditional": False,
                 "assumptions": ["The recurrence is valid at positive indices."],
                 "evidence_status": "Unverified model derivation.",
                 "open_obligations": ["Check the base case."],
@@ -87,75 +92,24 @@ def main() -> None:
                 "unresolved_objections": ["Verify the first value."],
                 "supporting_cycles": [1],
                 "verification_status": "incomplete",
-                "reasoning_assessments": [
-                    {
-                        "step_number": 1,
-                        "disposition": "accepted",
-                        "rationale": "The stated local consequence follows from its supplied premise.",
-                        "objection": "",
-                        "basis_artifact_ids": [],
-                    }
-                ],
-                "claim_is_conditional": False,
                 "strategy_contribution": "productive",
                 "contribution_rationale": "The remaining check is now explicit.",
                 "cross_strategy_relations": [],
                 "retracted_cross_strategy_source_artifact_ids": [],
                 "peer_handoff_reviews": [],
                 "human_guidance_reviews": [],
-                "obligation_reviews": [],
                 "computational_citations": [],
             }
-            provider_calls: list[str] = []
-            fail_next_inference = False
-            timeout_next_inference = False
+            usage = {
+                "input_tokens": 90,
+                "cached_input_tokens": 0,
+                "output_tokens": 30,
+            }
 
-            def provider_response(value):
-                return {
-                    "status": "completed",
-                    "usage": {
-                        "input_tokens": 90,
-                        "input_tokens_details": {"cached_tokens": 0},
-                        "output_tokens": 30,
-                    },
-                    "output": [
-                        {
-                            "type": "message",
-                            "content": [{"type": "output_text", "text": json.dumps(value)}],
-                        }
-                    ],
-                }
-
-            def provider_handler(request):
-                nonlocal fail_next_inference, timeout_next_inference
-                assert request.headers["authorization"] == "Bearer fake-server-credential"
-                if request.url.path == "/v1/models":
-                    return httpx.Response(
-                        200,
-                        json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
-                    )
-                assert request.url.path == "/v1/responses"
-                payload = json.loads(request.content)
-                role = payload["text"]["format"]["name"]
-                assert role in {"research_investigator", "research_skeptic"}
-                assert payload["store"] is False
-                provider_calls.append(role)
-                if timeout_next_inference:
-                    timeout_next_inference = False
-                    raise httpx.ReadTimeout("deterministic fake provider timeout", request=request)
-                if fail_next_inference:
-                    fail_next_inference = False
-                    return httpx.Response(
-                        500,
-                        json={"error": {"code": "fixture_server_error", "message": "fixture"}},
-                    )
-                output = investigator if role == "research_investigator" else skeptic
-                return httpx.Response(200, json=provider_response(output))
-
-            real_client = httpx.AsyncClient
-
-            def fake_provider_client(**kwargs):
-                return real_client(transport=httpx.MockTransport(provider_handler), **kwargs)
+            async def fake_call(record, role, context, timeout_seconds=None, step_id=None):
+                del record, context, timeout_seconds
+                assert isinstance(step_id, str)
+                return (investigator if role == "investigator" else skeptic), usage
 
             settings = {
                 "research_rounds": 5,
@@ -165,30 +119,21 @@ def main() -> None:
                 "maximum_estimated_cost_usd": 1.0,
             }
             with (
-                patch(
-                    "sigma.openai_connection.httpx.AsyncClient", side_effect=fake_provider_client
+                patch.object(
+                    research_sessions, "auth_context", new=AsyncMock(return_value=credential)
                 ),
-                patch(
-                    "sigma.research_sessions.httpx.AsyncClient", side_effect=fake_provider_client
+                patch.object(
+                    research_sessions, "configuration", new=AsyncMock(return_value=config)
                 ),
-                patch("sigma.research_sessions.execution_capabilities", return_value=[]),
+                patch.object(research_sessions, "execution_capabilities", return_value=[]),
+                patch.object(
+                    research_sessions, "_call", new=AsyncMock(side_effect=fake_call)
+                ) as calls,
                 TestClient(cloud_workspace_test_app.app) as client,
             ):
-                # Missing identity and revoked identity are rejected at the
-                # production workspace boundary. Missing sponsor credentials
-                # produce an explicit unconfigured status and no provider I/O.
-                assert client.get("/api/ai/models").status_code == 401
                 client.headers.update(
                     {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
                 )
-                client.headers["X-Test-Revoked"] = "true"
-                assert client.get("/api/ai/models").status_code == 401
-                del client.headers["X-Test-Revoked"]
-                with patch.dict(os.environ, {"SIGMA_CLOUD_OPENAI_API_KEY": ""}):
-                    unconfigured = client.get("/api/ai/models")
-                assert unconfigured.status_code == 200
-                assert unconfigured.json()["connection"]["status"] == "unconfigured"
-                assert provider_calls == []
                 created = client.post(
                     "/api/projects/create",
                     json={"title": "Cloud research API", "problem": "A recurrence bound"},
@@ -221,7 +166,7 @@ def main() -> None:
                     "strategy_id": strategy_id,
                     "idempotency_key": key,
                     "expected_project_id": project_id,
-                    "expected_binding": "cloud_service_api_key",
+                    "expected_binding": credential["identity"],
                     "expected_limits": limits.json(),
                 }
                 started = client.post("/api/projects/research-sessions/start", json=start_body)
@@ -241,21 +186,641 @@ def main() -> None:
                     time.sleep(0.01)
                 else:
                     raise AssertionError("HTTP-started cloud research did not reach a saved state")
-                assert saved["status"] == "ended", saved
+                assert saved["status"] == "ended"
                 assert len(saved["steps"]) == 6
-                assert len(provider_calls) == 6
-                assert provider_calls == [
-                    "research_investigator",
-                    "research_skeptic",
-                    "research_investigator",
-                    "research_skeptic",
-                    "research_investigator",
-                    "research_skeptic",
+                assert calls.await_count == 6
+
+                # Standalone strategy generation uses the same sponsored
+                # credential and durable ledger as research sessions.
+                response_body = {
+                    "status": "completed",
+                    "model": "gpt-6.1-sol",
+                    "usage": {
+                        "input_tokens": 120,
+                        "output_tokens": 40,
+                        "input_tokens_details": {"cached_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(
+                                        {
+                                            "title": "Recurrence boundary check",
+                                            "summary": "Check the initial terms before using the inductive bound.",
+                                            "approach": "Compute the first recurrence values exactly, then compare the boundary case with the proposed induction hypothesis.",
+                                            "first_tests": "Evaluate the recurrence for its first three valid indices.",
+                                            "assumptions": "The recurrence definition applies at each stated index.",
+                                            "failure_modes": "A failed base case invalidates this induction direction.",
+                                        }
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+                real_async_client = httpx.AsyncClient
+                provider_status = 200
+                provider_interrupt = False
+                paper_long_mode = False
+                paper_long_evidence_ref = None
+                provider_calls = 0
+
+                async def provider_fixture(request):
+                    nonlocal paper_long_evidence_ref, provider_calls
+                    provider_calls += 1
+                    assert request.headers["authorization"] == "Bearer fake-server-credential"
+                    if provider_interrupt:
+                        raise httpx.ReadTimeout(
+                            "deterministic interrupted provider", request=request
+                        )
+                    if provider_status != 200:
+                        return httpx.Response(provider_status, json={"error": "fixture failure"})
+                    if paper_long_mode:
+                        payload = json.loads(request.content)
+                        schema_name = payload["text"]["format"]["name"]
+                        if schema_name == "sigma_paper_evidence_batch":
+                            batch = json.loads(payload["input"])
+                            fields = batch["fields"]
+                            paper_long_evidence_ref = fields[0]["source_ref"]
+                            output = {
+                                "notes": [
+                                    {
+                                        "statement": "The saved project contains a recurrence question.",
+                                        "kind": "context",
+                                        "evidence_refs": [paper_long_evidence_ref],
+                                    }
+                                ],
+                                "conflicts_or_gaps": [],
+                                "covered_field_refs": [field["field_ref"] for field in fields],
+                                "omitted_fields": [],
+                            }
+                        elif schema_name == "sigma_long_paper_plan":
+                            output = {
+                                "title": "A source-linked recurrence note",
+                                "abstract": "This note describes the saved recurrence question and records the limits of the evidence available in the project snapshot. No result beyond that record is established.",
+                                "abstract_claim_ids": ["C1"],
+                                "problem_framing": ["The project asks about a recurrence."],
+                                "problem_framing_claim_ids": ["C1"],
+                                "methods": ["We reviewed the single saved project record."],
+                                "methods_claim_ids": ["C1"],
+                                "claims": [
+                                    {
+                                        "id": "C1",
+                                        "statement": "The saved project records a recurrence question.",
+                                        "status": "established",
+                                        "evidence_refs": [paper_long_evidence_ref],
+                                        "reasoning": "The question occurs directly in the saved source record.",
+                                    }
+                                ],
+                                "sections": [
+                                    {
+                                        "heading": "Project question",
+                                        "purpose": "Describe the source record and its question.",
+                                        "evidence_refs": [paper_long_evidence_ref],
+                                        "claim_ids": ["C1"],
+                                    },
+                                    {
+                                        "heading": "Evidence limits",
+                                        "purpose": "State what the single saved source does not establish.",
+                                        "evidence_refs": [paper_long_evidence_ref],
+                                        "claim_ids": ["C1"],
+                                    },
+                                ],
+                                "limitations": ["No recurrence computation or proof was recorded."],
+                                "open_obligations": [],
+                                "conclusions": [
+                                    "The saved project contains a recurrence question."
+                                ],
+                                "conclusion_claim_ids": ["C1"],
+                                "validation_warnings": [],
+                            }
+                        elif schema_name == "sigma_long_paper_section":
+                            output = {
+                                "paragraphs": [
+                                    "The saved project record identifies a recurrence question. This statement is limited to the source record and does not establish a recurrence formula."
+                                ]
+                            }
+                        else:
+                            raise AssertionError(f"Unexpected cloud paper stage: {schema_name}")
+                        return httpx.Response(
+                            200,
+                            json={
+                                "status": "completed",
+                                "model": "gpt-6.1-sol",
+                                "usage": {
+                                    "input_tokens": 180,
+                                    "output_tokens": 120,
+                                    "input_tokens_details": {"cached_tokens": 0},
+                                },
+                                "output": [
+                                    {
+                                        "type": "message",
+                                        "content": [
+                                            {"type": "output_text", "text": json.dumps(output)}
+                                        ],
+                                    }
+                                ],
+                            },
+                        )
+                    return httpx.Response(200, json=response_body)
+
+                with (
+                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(
+                        proposals.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    generated = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert generated.status_code == 200, generated.text
+                db = cloud_research._connect()
+                proposal_call = db.execute(
+                    "SELECT c.status,j.project_id FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND j.session_id!=? ORDER BY c.created_at DESC LIMIT 1",
+                    (project_id, session_id),
+                ).fetchone()
+                db.close()
+                assert proposal_call is not None
+                assert proposal_call["status"] == "usage_estimated"
+                assert proposal_call["project_id"] == project_id
+
+                # Text conversion goes through the same sponsored reservation
+                # path while preserving its source revision checks.
+                source = client.get(
+                    "/api/projects/text", params={"path": path, "scope": "project"}
+                ).json()
+                response_body = {
+                    "status": "completed",
+                    "model": "gpt-6.1-sol",
+                    "usage": {
+                        "input_tokens": 120,
+                        "output_tokens": 40,
+                        "input_tokens_details": {"cached_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(
+                                        {
+                                            "body": "The recurrence starts from a saved mathematical problem.\n\nThe initial terms need explicit verification.",
+                                            "warnings": [],
+                                        }
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+                with (
+                    patch.object(
+                        text_conversion, "auth_context", new=AsyncMock(return_value=credential)
+                    ),
+                    patch.object(
+                        text_conversion, "configuration", new=AsyncMock(return_value=config)
+                    ),
+                    patch.object(
+                        text_conversion.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    converted = client.post(
+                        "/api/projects/text/convert",
+                        json={
+                            "path": path,
+                            "scope": "project",
+                            "target": "markdown",
+                            "expected_digest": source["source_digest"],
+                            "expected_binding": credential["identity"],
+                            "expected_project_id": project_id,
+                        },
+                    )
+                assert converted.status_code == 200, converted.text
+                assert converted.json()["markdown"]["current"] is True
+                db = cloud_research._connect()
+                conversion_audit = db.execute(
+                    "SELECT COUNT(*) FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND c.status='usage_estimated'",
+                    (project_id,),
+                ).fetchone()[0]
+                db.close()
+                assert conversion_audit == 8
+
+                # Agentic exploration and independent review reserve each call
+                # separately while keeping the resulting proposal unsaved.
+                agentic_outputs = [
+                    {
+                        "title": "Check the recurrence boundary",
+                        "summary": "Test the initial cases before extending the recurrence argument.",
+                        "approach": "Evaluate the first valid terms independently, then compare the boundary case with the induction hypothesis before extending the recurrence argument.",
+                        "first_tests": "Compute the first three defined terms exactly.",
+                        "assumptions": "The recurrence applies at every stated index.",
+                        "failure_modes": "A mismatch at the base case invalidates the approach.",
+                        "mechanism": "An exact boundary check tests the base of a recurrence argument.",
+                        "evidence_boundary": "Finite values are checks and do not prove the general recurrence.",
+                        "prior_finding_ids": [],
+                    },
+                    {
+                        "assessment": "distinct",
+                        "public_summary": "The boundary check is a distinct and relevant direction; the induction still needs proof.",
+                        "mechanism_comparison": "No current strategy checks the first values independently before using the induction hypothesis.",
+                        "objections": ["The recurrence may not be defined at the initial index."],
+                        "missing_obligations": "Verify the domain and first defined value.",
+                        "revision_needed": False,
+                    },
                 ]
+                provider_status = 200
+                agentic_calls_before = provider_calls
+
+                async def agentic_provider(request):
+                    nonlocal provider_calls
+                    provider_calls += 1
+                    assert request.headers["authorization"] == "Bearer fake-server-credential"
+                    output = agentic_outputs.pop(0)
+                    return httpx.Response(
+                        200,
+                        json={
+                            "status": "completed",
+                            "model": "gpt-6.1-sol",
+                            "usage": {
+                                "input_tokens": 180,
+                                "output_tokens": 120,
+                                "input_tokens_details": {"cached_tokens": 0},
+                            },
+                            "output": [
+                                {
+                                    "type": "message",
+                                    "content": [
+                                        {"type": "output_text", "text": json.dumps(output)}
+                                    ],
+                                }
+                            ],
+                        },
+                    )
+
+                with (
+                    patch.object(agentic, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(agentic, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(
+                        agentic.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(agentic_provider), **kwargs
+                        ),
+                    ),
+                ):
+                    agentic_response = client.post(
+                        "/api/projects/proposals/agentic",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert agentic_response.status_code == 200, agentic_response.text
+                assert '"type": "run.completed"' in agentic_response.text
+                assert len(agentic_outputs) == 0
+                assert provider_calls - agentic_calls_before == 2
+                db = cloud_research._connect()
+                agentic_audit = db.execute(
+                    "SELECT COUNT(*) FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND c.status='usage_estimated'",
+                    (project_id,),
+                ).fetchone()[0]
+                db.close()
+                assert agentic_audit == 10
+
+                # A bounded one-shot paper goes through sponsored admission and
+                # persists both TeX source and the resulting PDF artifact.
+                paper_project = client.post(
+                    "/api/projects/create",
+                    json={"title": "Cloud paper fixture", "problem": "Check a recurrence."},
+                )
+                assert paper_project.status_code == 201, paper_project.text
+                paper_path = paper_project.json()["path"]
+                paper_project_id = paper_project.json()["project"]["id"]
+                package, _ = papers._snapshot(paper_path)
+                evidence_ref = package["sources"][0]["id"]
+                paper_draft = {
+                    "title": "A bounded exploratory note",
+                    "abstract": "This note records one limited observation in the saved project and describes the unresolved checks that remain before any claim about a recurrence can be established.",
+                    "abstract_claim_ids": ["C1"],
+                    "problem_framing": ["The project asks about a recurrence."],
+                    "problem_framing_claim_ids": ["C1"],
+                    "methods": ["We inspected the saved project record."],
+                    "methods_claim_ids": ["C1"],
+                    "claims": [
+                        {
+                            "id": "C1",
+                            "statement": "The project record contains a recurrence question.",
+                            "status": "established",
+                            "evidence_refs": [evidence_ref],
+                            "reasoning": "The question appears in the saved project source.",
+                        }
+                    ],
+                    "sections": [
+                        {
+                            "heading": "Saved evidence",
+                            "paragraphs": ["The project record was retained."],
+                            "claim_ids": ["C1"],
+                        },
+                        {
+                            "heading": "Limitations",
+                            "paragraphs": ["No recurrence evaluation was performed."],
+                            "claim_ids": ["C1"],
+                        },
+                    ],
+                    "limitations": ["This note is not a proof."],
+                    "open_obligations": ["Check the initial values."],
+                    "conclusions": ["Only the saved question is asserted."],
+                    "conclusion_claim_ids": ["C1"],
+                    "validation_warnings": [],
+                }
+                response_body = {
+                    "status": "completed",
+                    "model": "gpt-6.1-sol",
+                    "usage": {
+                        "input_tokens": 180,
+                        "output_tokens": 120,
+                        "input_tokens_details": {"cached_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [{"type": "output_text", "text": json.dumps(paper_draft)}],
+                        }
+                    ],
+                }
+                preflight = client.get(
+                    "/api/projects/papers/preflight", params={"path": paper_path}
+                ).json()
+                with (
+                    patch.object(papers, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(papers, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nfixture\n"),
+                    patch.object(
+                        papers.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    paper_response = client.post(
+                        "/api/projects/papers",
+                        json={
+                            "path": paper_path,
+                            "expected_project_id": paper_project_id,
+                            "expected_binding": credential["identity"],
+                            "expected_snapshot_sha256": preflight["snapshot_sha256"],
+                        },
+                    )
+                assert paper_response.status_code == 200, paper_response.text
+                assert '"type": "complete"' in paper_response.text, paper_response.text
+                saved_papers = client.get(
+                    "/api/projects/papers", params={"path": paper_path}
+                ).json()["papers"]
+                assert len(saved_papers) == 1 and saved_papers[0]["pdf_available"]
+                saved_paper = client.get(
+                    f"/api/projects/papers/{saved_papers[0]['paper_id']}",
+                    params={"path": paper_path},
+                ).json()
+                assert saved_paper["tex_source"].startswith("\\documentclass")
+                db = cloud_research._connect()
+                paper_audit = db.execute(
+                    "SELECT COUNT(*) FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND c.status='usage_estimated'",
+                    (paper_project_id,),
+                ).fetchone()[0]
+                db.close()
+                assert paper_audit == 1
+
+                # Forced long-form generation meters every evidence, plan and
+                # section call and preserves a resumable per-project workflow.
+                paper_long_mode = True
+                long_preflight = client.get(
+                    "/api/projects/papers/preflight",
+                    params={"path": paper_path, "long_form": "true"},
+                ).json()
+                long_calls_before = provider_calls
+                with (
+                    patch.object(papers, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(papers, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nlong fixture\n"),
+                    patch.object(
+                        papers.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    long_response = client.post(
+                        "/api/projects/papers",
+                        json={
+                            "path": paper_path,
+                            "expected_project_id": paper_project_id,
+                            "expected_binding": credential["identity"],
+                            "expected_snapshot_sha256": long_preflight["snapshot_sha256"],
+                            "long_form": True,
+                        },
+                    )
+                paper_long_mode = False
+                assert long_response.status_code == 200, long_response.text
+                assert '"type": "complete"' in long_response.text, long_response.text
+                assert provider_calls - long_calls_before == 4
+                all_papers = client.get("/api/projects/papers", params={"path": paper_path}).json()[
+                    "papers"
+                ]
+                assert len(all_papers) == 2 and all(item["pdf_available"] for item in all_papers)
+                db = cloud_research._connect()
+                paper_audit = db.execute(
+                    "SELECT COUNT(*) FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND c.status='usage_estimated'",
+                    (paper_project_id,),
+                ).fetchone()[0]
+                db.close()
+                assert paper_audit == 5
+
+                response_body = {
+                    "status": "completed",
+                    "model": "gpt-6.1-sol",
+                    "usage": {
+                        "input_tokens": 120,
+                        "output_tokens": 40,
+                        "input_tokens_details": {"cached_tokens": 0},
+                    },
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps(
+                                        {
+                                            "title": "Recurrence boundary check",
+                                            "summary": "Check the initial terms before using the inductive bound.",
+                                            "approach": "Compute the first recurrence values exactly, then compare the boundary case with the proposed induction hypothesis.",
+                                            "first_tests": "Evaluate the recurrence for its first three valid indices.",
+                                            "assumptions": "The recurrence definition applies at each stated index.",
+                                            "failure_modes": "A failed base case invalidates this induction direction.",
+                                        }
+                                    ),
+                                }
+                            ],
+                        }
+                    ],
+                }
+
+                # Provider errors remain auditable as uncertain charges.
+                provider_status = 429
+                with (
+                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(
+                        proposals.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    failed_proposal = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert failed_proposal.status_code == 400, failed_proposal.text
+                db = cloud_research._connect()
+                unknown_attempts = db.execute(
+                    "SELECT COUNT(*) FROM calls WHERE status='unknown' AND workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                ).fetchone()[0]
+                db.close()
+                assert unknown_attempts == 1, (
+                    unknown_attempts,
+                    failed_proposal.status_code,
+                    failed_proposal.text,
+                )
+
+                # A transport interruption after dispatch keeps its
+                # write-ahead reservation instead of releasing the charge.
+                provider_status = 200
+                provider_interrupt = True
+                with (
+                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(
+                        proposals.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    interrupted = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert interrupted.status_code == 400 and "timed out" in interrupted.text
+                provider_interrupt = False
+                db = cloud_research._connect()
+                unknown_attempts = db.execute(
+                    "SELECT COUNT(*) FROM calls WHERE status='unknown' AND workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                ).fetchone()[0]
+                db.close()
+                assert unknown_attempts == 2
+
+                # Leave only enough budget for the dynamic text reservation.
+                # Instructions and the response schema push the complete
+                # request above the available amount, before dispatch.
+                db = cloud_research._connect()
+                db.execute(
+                    "UPDATE calls SET amount_usd=0 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                )
+                db.execute(
+                    "UPDATE calls SET amount_usd=0.90 WHERE call_id=(SELECT c.call_id FROM calls c JOIN jobs j USING(session_id) WHERE j.session_id=? LIMIT 1)",
+                    (session_id,),
+                )
+                db.close()
+                attempted_before_quota = provider_calls
+                real_start_provider_attempt = cloud_research.start_provider_attempt
+                overhead_was_budgeted = False
+
+                def start_with_overhead_assertion(
+                    attempt_project_id, attempt_path, model, payload, output_tokens
+                ):
+                    nonlocal overhead_was_budgeted
+                    assert isinstance(payload["input"], str)
+                    dynamic_bytes = len(payload["input"].encode("utf-8"))
+                    complete_bytes = cloud_research.provider_request_input_bytes(payload)
+                    dynamic_cost, _ = cloud_research.standalone_call_reservation(
+                        model, dynamic_bytes, output_tokens
+                    )
+                    complete_cost, _ = cloud_research.standalone_call_reservation(
+                        model, complete_bytes, output_tokens
+                    )
+                    assert dynamic_cost <= 0.10 < complete_cost
+                    overhead_was_budgeted = complete_bytes > dynamic_bytes
+                    return real_start_provider_attempt(
+                        attempt_project_id, attempt_path, model, payload, output_tokens
+                    )
+
+                with (
+                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
+                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(
+                        cloud_research,
+                        "start_provider_attempt",
+                        side_effect=start_with_overhead_assertion,
+                    ),
+                    patch.object(
+                        proposals.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                ):
+                    exhausted_proposal = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert exhausted_proposal.status_code == 400, exhausted_proposal.text
+                assert overhead_was_budgeted
+                assert provider_calls == attempted_before_quota
+
                 duplicate = client.post("/api/projects/research-sessions/start", json=start_body)
                 assert duplicate.status_code == 200, duplicate.text
                 assert duplicate.json()["id"] == session_id
-                assert len(provider_calls) == 6
+                assert calls.await_count == 6
 
                 budget = client.get(
                     "/api/cloud-research/budget",
@@ -263,9 +828,25 @@ def main() -> None:
                 )
                 assert budget.status_code == 200, budget.text
                 assert budget.headers["cache-control"] == "no-store"
-                assert budget.json()["allowance_usd"] == 0.25
+                assert budget.json()["allowance_usd"] == 1.0
                 assert budget.json()["estimated_usage_usd"] > 0
                 assert budget.json()["remaining_usd"] < 2.0
+                # Simulate cumulative exhaustion; it must block inference only,
+                # while saved research remains readable to its owner.
+                db = cloud_research._connect()
+                db.execute(
+                    "UPDATE calls SET amount_usd=1.00 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                )
+                db.close()
+                exhausted = client.get("/api/cloud-research/budget")
+                assert exhausted.status_code == 200
+                assert exhausted.json()["remaining_usd"] == 0
+                still_readable = client.get(
+                    f"/api/projects/research-sessions/{session_id}", params={"path": path}
+                )
+                assert still_readable.status_code == 200, still_readable.text
+
                 client.headers.update(
                     {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
                 )
@@ -278,138 +859,17 @@ def main() -> None:
                 )
                 assert hidden_status.status_code == 404, hidden_status.text
                 assert hidden_control.status_code == 404, hidden_control.text
+                hidden_proposal = client.post(
+                    "/api/projects/proposals",
+                    json={"path": path, "expected_project_id": project_id},
+                )
+                assert hidden_proposal.status_code == 404, hidden_proposal.text
                 owner_b_budget = client.get("/api/cloud-research/budget")
                 assert owner_b_budget.status_code == 200
                 assert owner_b_budget.json()["reserved_and_estimated_usd"] == 0
 
-                # A provider-side failure after dispatch is uncertain billing:
-                # the reservation is retained and the attempt is never retried.
-                second_project = client.post(
-                    "/api/projects/create",
-                    json={"title": "Cloud failure case", "problem": "A bounded question"},
-                )
-                assert second_project.status_code == 201, second_project.text
-                second_path = second_project.json()["path"]
-                second_id = second_project.json()["project"]["id"]
-                second_strategy_response = client.post(
-                    "/api/projects/strategies",
-                    json={
-                        "path": second_path,
-                        "title": "Test approach",
-                        "approach": "Check a bounded claim.",
-                    },
-                )
-                assert second_strategy_response.status_code == 201
-                second_strategy = client.get(
-                    "/api/projects/strategies", params={"path": second_path}
-                ).json()["strategies"][0]
-                second_limits = client.put(
-                    "/api/projects/research-limits", json={"path": second_path, **settings}
-                )
-                assert second_limits.status_code == 200
-                fail_next_inference = True
-                failed_start = client.post(
-                    "/api/projects/research-sessions/start",
-                    json={
-                        "path": second_path,
-                        "strategy_id": second_strategy["id"],
-                        "idempotency_key": str(uuid4()),
-                        "expected_project_id": second_id,
-                        "expected_binding": "cloud_service_api_key",
-                        "expected_limits": second_limits.json(),
-                    },
-                )
-                assert failed_start.status_code == 200, failed_start.text
-                failed_session_id = failed_start.json()["id"]
-                for _ in range(500):
-                    failed_status = client.get(
-                        f"/api/projects/research-sessions/{failed_session_id}",
-                        params={"path": second_path},
-                    )
-                    if failed_status.json()["status"] in {"ended", "failed", "paused"}:
-                        break
-                    time.sleep(0.01)
-                else:
-                    raise AssertionError("fake-provider failure did not reach a terminal session")
-                assert failed_status.json()["status"] == "failed", failed_status.json()
-                assert failed_status.json()["steps"][0]["attempt_status"] == "unknown"
-                assert len(provider_calls) == 7
-
-                # Timeouts after transport dispatch are also unknown charges;
-                # the in-flight reservation is held without replay.
-                timeout_next_inference = True
-                timeout_start = client.post(
-                    "/api/projects/research-sessions/start",
-                    json={
-                        "path": second_path,
-                        "strategy_id": second_strategy["id"],
-                        "idempotency_key": str(uuid4()),
-                        "expected_project_id": second_id,
-                        "expected_binding": "cloud_service_api_key",
-                        "expected_limits": second_limits.json(),
-                    },
-                )
-                assert timeout_start.status_code == 200, timeout_start.text
-                timeout_session_id = timeout_start.json()["id"]
-                for _ in range(500):
-                    timeout_status = client.get(
-                        f"/api/projects/research-sessions/{timeout_session_id}",
-                        params={"path": second_path},
-                    )
-                    if timeout_status.json()["status"] in {"ended", "failed", "paused"}:
-                        break
-                    time.sleep(0.01)
-                else:
-                    raise AssertionError("fake-provider timeout did not reach a terminal session")
-                assert timeout_status.json()["status"] == "failed"
-                assert timeout_status.json()["steps"][0]["attempt_status"] == "unknown"
-                assert len(provider_calls) == 8
-                unknown_budget = client.get("/api/cloud-research/budget").json()
-                assert unknown_budget["unknown_provider_attempts"] == 2
-                assert unknown_budget["reserved_and_estimated_usd"] > 0
-
-                # Exhaust the first owner's persisted allowance. A later
-                # session must be denied before provider dispatch, while the
-                # completed evidence remains readable.
-                client.headers.update(
-                    {"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"}
-                )
-                db = cloud_research._connect()
-                db.execute(
-                    "UPDATE calls SET amount_usd=0.25 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
-                    (session_id,),
-                )
-                db.close()
-                exhausted = client.get("/api/cloud-research/budget")
-                assert exhausted.status_code == 200
-                assert exhausted.json()["remaining_usd"] == 0
-                still_readable = client.get(
-                    f"/api/projects/research-sessions/{session_id}", params={"path": path}
-                )
-                assert still_readable.status_code == 200, still_readable.text
-                exhausted_start = client.post(
-                    "/api/projects/research-sessions/start",
-                    json={**start_body, "idempotency_key": str(uuid4())},
-                )
-                assert exhausted_start.status_code == 200, exhausted_start.text
-                exhausted_id = exhausted_start.json()["id"]
-                for _ in range(500):
-                    exhausted_status = client.get(
-                        f"/api/projects/research-sessions/{exhausted_id}",
-                        params={"path": path},
-                    )
-                    if exhausted_status.json()["status"] in {"ended", "failed", "paused"}:
-                        break
-                    time.sleep(0.01)
-                else:
-                    raise AssertionError(
-                        "exhausted sponsored session did not reach a terminal state"
-                    )
-                assert len(provider_calls) == 8
-                assert exhausted_status.json()["steps"][0]["attempt_status"] == "not_dispatched"
-
     print(
-        "PASS authenticated HTTP sponsored inference through a deterministic fake OpenAI provider, including no personal account, budget exhaustion, uncertain failure holds, idempotency, and cross-workspace isolation"
+        "PASS authenticated HTTP research start/status/idempotency and cross-workspace status/control denial with deterministic provider"
     )
 
 

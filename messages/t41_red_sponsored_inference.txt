@@ -2,11 +2,11 @@ T41 — Sponsored AI inference for authorized hosted SIGMA users
 
 Status: R4R requested; not merged.
 Branch: codex/t41-sponsored-inference
-Base: current main at ef57a87f9fa8806f4c796d9c67eda8a9a86595dd (T100 merged)
+Base: current main at 903a356 (T99 cloud inference parity merged)
 PR: #58 — https://github.com/bkramerext/sigma/pull/58
 
 Audit finding
-- The ticket landed on `main` at 1aff185 during this work and was read. T40 PR #57 then merged at `087196ef475261f09ec041d4318290fc5df03ee0`; the PR branch has now been reconciled with that current main by merge and retains the full T40 base behavior. T41 adds fake-provider API cases for missing credentials, denied users, provider failures, timeouts and uncertain charges; contention and restart/recovery remain covered by current cloud ledger tests.
+- The ticket landed on `main` at 1aff185 during this work and was read. T40 PR #57 then merged at `087196ef475261f09ec041d4318290fc5df03ee0`; the PR branch has now been reconciled with current main through T99 cloud inference parity and retains the full T40 base behavior. T41 adds `tests/cloud_research_sponsored_api.py`, a registered deterministic fake-provider integration for actual research-session dispatch, credential selection, success, provider failure/timeout unknown charges, no replay, quota exhaustion and authenticated isolation. T99’s existing `tests/cloud_research_api.py` was preserved unchanged for its broader inference API parity coverage; shared cloud ledger tests cover contention and restart/recovery.
 - Current main already contains sponsored cloud inference: `openai_connection.auth_context()` uses only `SIGMA_CLOUD_OPENAI_API_KEY` while cloud mode is enabled; `research_sessions` restricts that credential to bounded research sessions; `cloud_research` enforces verified-workspace reservation, user/global spending ceilings, token limits, settlement and unknown-charge retention. Standalone inference routes stay blocked in cloud mode. No production code change was missing for the supplied requirements.
 
 MET
@@ -29,12 +29,13 @@ UNVERIFIED
 - Real-browser checks are not applicable: only the backend integration test changed and no UI files were changed.
 
 VERIFICATION
-- `uv run --project . python tests/cloud_research_api.py`: PASS. Authenticated end-to-end route uses deterministic fake OpenAI Responses/model endpoints.
-- `tests/cloud_auth.py`: PASS (11 tests).
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/cloud_research_api.py`: PASS (current-main T99 integration).
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/cloud_research_sponsored_api.py`: PASS (actual research-session Responses/model endpoints; no external provider calls).
+- `tests/cloud_auth.py`: PASS (15 tests).
 - `tests/cloud_research.py`: PASS.
 - Ruff check/format and Pyright: PASS after fixing formatting and loop-terminal assertions.
-- Current-main reconciliation: PR #58 includes current main `ef57a87f9fa8806f4c796d9c67eda8a9a86595dd`; existing main functionality is retained.
-- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`: PASS on the reconciled T41 scope (all executable scenarios, Ruff check/format, Pyright with zero diagnostics, frontend typecheck and production build). The exported bootstrap-email variable was present without matching OAuth client settings, so plain `./sigma test` stopped in a T40 launcher fixture before the rerun with that unrelated variable unset. No T40 source/test changes were made.
+- Current-main reconciliation: PR #58 includes current main `903a356` (which includes `ef57a87`); T99’s existing API test and implementation are retained.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`: PASS on the reconciled T41/T99 scope (all executable scenarios, Ruff check/format, Pyright with zero diagnostics, frontend typecheck and production build). The exported bootstrap-email variable was present without matching OAuth client settings, so plain `./sigma test` stopped in a T40 launcher fixture before the rerun with that unrelated variable unset. No T40 source/test changes were made.
 - No paid provider calls or cloud provisioning.
 
 R4R: requested on PR #58. Do not self-merge.

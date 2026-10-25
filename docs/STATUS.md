@@ -10,10 +10,13 @@ provider HTTP failure and timeout handling, uncertain-charge holds without
 replay, and allowance exhaustion before provider dispatch. No live provider,
 cloud resources, UI changes, or product implementation changes were needed.
 
-Shared service tests cover concurrent quota reservation, restart/recovery, and
-ledger invariants; current T99 research-session tests separately cover provider
-failure and timeout behavior at the session layer. The API integration remains
-focused on sponsored HTTP and authentication boundaries.
+The T41-specific test lives in `tests/cloud_research_sponsored_api.py` and is
+registered in `./sigma test`. Current-main `tests/cloud_research_api.py` remains
+intact with T99 budgeted-inference parity coverage, including its own API
+failures, timeout, quota and cross-owner checks. The T41 scenario uniquely
+exercises the production sponsored credential and Responses transport for
+research-session dispatch; shared cloud-ledger tests cover contention and
+restart/recovery.
 
 ## T100 persistent-disk storage (2026-10-25)
 
@@ -102,6 +105,53 @@ passed. The runtime smoke script was exercised on actual Docker containers.
 The GCE command and real rootless execution remain a required Red follow-up;
 hosted AI paper generation, identity authorization, restart persistence, and
 sponsored budget operations are outside this Blue runtime increment.
+
+## T99 Blue: sponsored inference outside sessions (2026-10-25)
+
+Started from current `main` at `d4ca2194b68314336855823970b4b97f55c1256a` on
+the isolated `t99-cloud-inference-parity` branch. Reused the existing durable
+cloud call ledger for standalone proposal calls, agentic proposal steps, text
+conversion, and one-shot paper generation. Each provider attempt now reserves a
+per-user/global spend amount, token ceiling and concurrent slot before dispatch,
+then reconciles reported usage using the reviewed model prices. Provider failures
+and interruptions after dispatch retain the reservation as an unknown charge.
+Cloud inference accepts only the server-side sponsored API credential. Existing
+project ownership checks, cancellation paths and LOCAL credential selection
+remain in place.
+
+Removed the cloud 403 gates from the four operation routes after adding ledger
+admission at each provider-call site, including every long-form paper stage.
+Paper preflight and checkpoint restart are available to authenticated owners as
+well. Cloud provider quality, live OIDC, hosted persistence, cloud browser
+behavior, and TeX compilation on the hosted VM were not exercised; no paid calls
+or cloud resources were used.
+
+`docs/CLOUD_DEPLOYMENT.md` still describes these routes as disabled; that
+Red-owned deployment document was left untouched for its owner to reconcile.
+
+Deterministic API coverage exercises successful strategy and agentic proposals,
+text conversion, one-shot and forced long-form paper generation, TeX/PDF archival
+with the sponsored bearer, and checks their reconciled ledger rows. Provider 429
+and a request-timeout fixture both retain unknown reservations; exhaustion blocks
+dispatch and cross-user project access is denied. Existing local proposal,
+agentic, paper and text conversion regression scenarios also passed.
+Focused commands `uv run --locked --no-sync python tests/cloud_research_api.py`,
+`tests/proposals.py`, `tests/agentic.py`, `tests/papers.py` and
+`tests/text_views.py` passed. The first bare `./sigma test` run stopped at the
+existing `tests/tooling.py` UI cleanup assertion while
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` was set. After `./sigma setup`,
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, formatting, Pyright, frontend typecheck and production build. The
+environment override matches the repository's existing UI test workaround.
+
+Adversarial review of PR #107 found that the write-ahead estimate counted only
+request-specific dynamic input. The reservation now uses the UTF-8 JSON size of
+the full billable `instructions`, `input`, and structured-output `text` payload,
+then adds maximum output tokens. A deterministic API regression leaves enough
+budget for dynamic input alone but not for the complete request; the provider is
+not dispatched. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed
+again after the correction, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. No paid inference or cloud resources were used.
 
 ## T84 detailed command-specific CLI help (2026-10-25)
 
