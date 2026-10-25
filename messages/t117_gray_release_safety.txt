@@ -5,12 +5,18 @@ Status: R4R. Branch: gray/issue-117-release-safety. Base: main at
 
 While this branch was under review, main advanced through PR #122 to
 cf7dcb024996b95a0913c75438c6d17c4c065299 and then through PR #112 to
-f5388d8. Both main updates were merged, preserving Green's UI changes. Its
+f5388d8 and then PRs #123/#126 through main f73a749. All updates were merged,
+preserving Green's UI changes. The overlapping protocol scripts were resolved
+to main's versions and remain outside this PR's diff. Its
 deterministic CLI-level BLOCKED test was preserved alongside the separate
 simulated-Ubuntu FAIL/1 regression. CI run #431 found a stale shebang and
 formatting issue in the newly merged Increment 17 audit script; the narrow fix
 passed the full local suite, and GitHub Actions run 40217021377 (#436) passed
-on Ubuntu 24.04 at head fabf591ff366ba0971c1acb3eee29fc582f73338.
+on Ubuntu 24.04 at head fabf591ff366ba0971c1acb3eee29fc582f73338. The latest
+main sync added an executable bit to `scripts/increment15_readiness.py`
+without a shebang; that bit was removed because the workflow calls it through
+Python. The full suite then passed locally (Ruff: 107 files, Pyright, frontend
+typecheck and build). CI for final head 83c5e25 is pending.
 
 Implemented:
 - Extracted the Ubuntu 24.04 identity guard to deploy/gce_host_guard.sh. Its
@@ -44,4 +50,4 @@ Executed and passed:
 
 No provider calls, GCP resources, installer execution, or real-browser checks.
 Actual Ubuntu package/systemd/rootless-Docker host acceptance remains
-unverified. Total elapsed time was approximately 35 minutes.
+unverified. Total elapsed time was approximately 40 minutes.
