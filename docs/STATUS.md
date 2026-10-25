@@ -1,5 +1,23 @@
 # SIGMA status
 
+## T41 — Sponsored cloud inference verification (2026-10-23)
+
+Added deterministic sponsored-inference API coverage through the production
+FastAPI routes and a fake OpenAI HTTP transport. The check exercises cloud-only
+credential selection, model discovery, successful Responses usage settlement,
+idempotency, authenticated workspace isolation, explicit unconfigured behavior,
+provider HTTP failure and timeout handling, uncertain-charge holds without
+replay, and allowance exhaustion before provider dispatch. No live provider,
+cloud resources, UI changes, or product implementation changes were needed.
+
+The T41-specific test lives in `tests/cloud_research_sponsored_api.py` and is
+registered in `./sigma test`. Current-main `tests/cloud_research_api.py` remains
+intact with T99 budgeted-inference parity coverage, including its own API
+failures, timeout, quota and cross-owner checks. The T41 scenario uniquely
+exercises the production sponsored credential and Responses transport for
+research-session dispatch; shared cloud-ledger tests cover contention and
+restart/recovery.
+
 ## T100 persistent-disk storage (2026-10-25)
 
 Implemented opt-in `SIGMA_STORAGE_BACKEND=persistent_disk` with a validated
@@ -3619,3 +3637,22 @@ path. It is not a clean-machine README onboarding/browser acceptance run, live
 Google OAuth, sponsored inference, GCE startup, rootless-daemon isolation,
 public HTTPS, backup restore, or cloud deployment approval. Those remain
 separate acceptance items in T91 and the cloud runbook.
+
+## T91 — packaged Chrome workflow increment (2026-10-25)
+
+From `main` at `f0dd5c63dd88cdd79190231856119dbfb317522d` and reconciled with
+current `main` (`903a356230267390aa7fdcc20d774eda56195c48`), expanded the
+local Compose check to drive installed Chrome against the packaged Caddy,
+Nginx, and FastAPI services. The backend image now includes the stock `samples/`
+catalog, which the packaged sample endpoint requires. See the explicit
+acceptance matrix and run instructions in `docs/evaluations/t91/README.md`.
+
+**PASS:** sample creation; project and strategy edits; save, reload and reopen;
+five saved sessions and outcomes; HTML report download; User B denied User A's
+project, report, and session evidence; the same session and edited project
+survived backend container recreation; packaged Compose health and auth SQLite
+survived restart and full container recreation. **SKIPPED:** real Google OAuth
+(the workflow seeds two ephemeral local sessions), PDF download (no saved PDF
+fixture), and the T100 persistent-disk configuration (this run uses Compose's
+default local storage). T99 inference is also skipped; no provider calls were
+made. This is local acceptance, not live OAuth or cloud-deployment evidence.
