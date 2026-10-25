@@ -1,5 +1,34 @@
 # SIGMA status
 
+## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
+
+Started from current `main` at `455d752` in an isolated ticket worktree. Audited
+the existing Google OIDC callback validation, secure cookie/session behavior,
+unauthorized and rejected identity cases, and authorized-to-authorized and
+authorized-to-denied account switching. Added deterministic coverage for a
+session surviving a fresh client/browser context, logout clearing the secure
+cookie and revoking the stored session, and a stale copied cookie remaining
+unauthorized. Added the [T131 hosted OAuth procedure](T131_HOSTED_OAUTH_ACCEPTANCE.md)
+with the exact production origin/callback, consent/client and secret-handling
+requirements, repeatable desktop actions, and evidence record. Linked it from
+the runbook and ticket. No production OAuth client, Google Cloud credentials,
+IAM, secrets, or UI code were changed; no live authentication or paid provider
+call was attempted.
+
+Validation: `./sigma test` passed all scenarios, Ruff check/format, Pyright,
+frontend typecheck, and production build. The cloud-auth module passed all 16
+tests. A real Chrome local Google-sign-in fixture check was attempted but is
+**UNVERIFIED**: its default API port 8001 was not running; pointing it to the
+normal local API then failed because the existing script assumes a test-only
+authenticated API harness it does not launch. The local app was stopped after
+the attempt. This did not contact Google. Hosted desktop acceptance remains
+**UNVERIFIED** pending the deployed release, exact saved OAuth settings/secret
+delivery, public HTTPS, and owner-authorized admin/member/rejected test
+identities. T130 routing/TLS and T129 deployment remain outside this change.
+Preparation elapsed approximately 20 minutes; exact handoff SHA and PR are in
+[messages/t131_gray_hosted_oauth_preparation.txt](../messages/t131_gray_hosted_oauth_preparation.txt) and
+[PR #156](https://github.com/bkramerext/sigma/pull/156).
+
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 
 Audited current desktop acceptance before adding coverage. T91 already runs

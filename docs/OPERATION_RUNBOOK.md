@@ -111,6 +111,11 @@ For T134's repeatable two-identity privacy matrix, direct-reference probes,
 sign-out/sign-in transitions, no-mutation checks and sanitized evidence template,
 see [T134 hosted acceptance](T134_HOSTED_ACCEPTANCE.md). Do not run provider-backed
 checks without separate authorization. Local fixtures do not satisfy hosted acceptance.
+For production Google OAuth settings and the focused desktop sign-in, callback,
+session, sign-out, denial and account-switch procedure, see
+[T131 hosted OAuth acceptance](T131_HOSTED_OAUTH_ACCEPTANCE.md). Hosted OAuth
+acceptance requires saved settings, a deployed SHA, HTTPS and owner-authorized
+test identities; local tests remain preparation evidence only.
 
 ## 2. Routine health and diagnosis
 
