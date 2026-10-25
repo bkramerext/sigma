@@ -102,9 +102,10 @@ partially verified pending coordinator disposition of these dependencies.
 The actual synthetic hosted project and text-report response bytes produced by
 the accepted API workflow are retained in
 [`increment_18/exports`](evaluations/increment_18/exports/manifest.json). The
-manifest records project/session IDs, capture/app commit, exercised actions and
-omissions. These are exports of the deterministic fixture session, not live
-research or hosted customer data.
+manifest records project/session IDs, capture/app commit `adb3205`, initial
+artifact publishing commit `ab35f2f`, exercised actions and omissions. These
+are exports of the deterministic fixture session, not live research or hosted
+customer data.
 
 Elapsed worker time was approximately 40 minutes through PR-ready handoff.
 The focused change is on `blue/increment-18-hosted-research`; see

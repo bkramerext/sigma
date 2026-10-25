@@ -5,6 +5,7 @@
   ],
   "captured_at_utc": "2026-10-25T17:53:11.931951+00:00",
   "capture_app_commit": "adb3205a2b24240b61fa28994d149b16f87cf094",
+  "publishing_commit": "ab35f2f1c635e142819ae86a91e67969465d4b89",
   "capture_method": "Production FastAPI project/export and report routes in the deterministic authenticated cloud sponsored-session scenario.",
   "activity": [
     "Created a private project and saved strategy through authenticated routes.",
