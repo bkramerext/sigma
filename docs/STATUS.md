@@ -50,7 +50,9 @@ Real Chrome passed. Captures are in
 desktop and mobile after, and authoring progress. `env -u
 SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
 formatting, Pyright, frontend typecheck, and production build. No paid provider
-calls or cloud changes.
+calls or cloud changes. After merging the latest `main` update, reran
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real
+Chrome `browser_checks/t45_long_paper.py`; both passed on the published tree.
 
 ## Adversarial review transparency and documentation cleanup (2026-10-25)
 
