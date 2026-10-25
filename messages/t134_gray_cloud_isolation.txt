@@ -1,0 +1,19 @@
+GRAY T134 handoff — offline preparation only
+
+Branch/base: gray/t134-cloud-isolation, based on main 19e5bd7.
+
+Work completed:
+- Audited existing two-subject ownership and access tests in tests/cloud_workspaces.py, tests/cloud_auth.py, and tests/cloud_research_api.py. Existing coverage includes private project/strategy access, Recent, project exports, research session access/control, execution artifacts, paper/PDF downloads, traversal/symlinks, session invalidation/account switching, per-user usage accounting, restart and restore behavior.
+- Added explicit assertions that rejected cross-owner strategy create/remove requests do not alter the victim's project JSON bytes and that the victim's strategy remains readable.
+- Fixed browser_checks/t22_private_workspaces.py to allow its dynamically selected local Vite origin in the isolated test app.
+- Added docs/T134_HOSTED_ACCEPTANCE.md with a repeatable two-identity hosted procedure, request matrix, before/after no-mutation checks and sanitized evidence template. Linked it from docs/OPERATION_RUNBOOK.md and marked T134 as offline preparation in the ticket/checklist/status.
+
+Checks actually run:
+- ./sigma test — passed all offline scenarios, Ruff check/format, Pyright (0 diagnostics), frontend typecheck and production build. Cloud auth reported 15 passing tests; the existing cloud workspace/research/accounting scenarios passed.
+- uv run --locked --no-sync python tests/cloud_workspaces.py — passed after final test edit, including cross-owner direct access, non-disclosure, victim state preservation, restart and backup/restore.
+- uv run --with playwright python browser_checks/t22_private_workspaces.py — passed using installed real Chrome with disposable deterministic A/B principals and local test storage. Initial run failed because the dynamic UI origin was missing from test fixture allowlist; launcher fix was rerun successfully.
+- git diff --check — passed before final status/handoff additions; rerun before commit.
+
+Hosted acceptance: UNVERIFIED. T131 hosted Google sign-in and the application deployment are not ready. No real Google identities, OAuth exchange, hosted endpoint, production IAM/OAuth setting, provider call or cost was used. Provider-backed session/usage verification remains gated on separate authorization. Do not claim T134 accepted from this work.
+
+No known implementation defects found in reviewed ownership paths. This handoff and the hosted matrix are preparation evidence only. Preparation elapsed time: approximately 30 minutes.

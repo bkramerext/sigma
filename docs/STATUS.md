@@ -1,5 +1,38 @@
 # SIGMA status
 
+## T134 cloud isolation and privacy acceptance preparation (2026-10-25)
+
+On branch `gray/t134-cloud-isolation`, based on current `main` at `19e5bd7`,
+audited existing ownership coverage in `tests/cloud_workspaces.py`,
+`tests/cloud_auth.py`, and `tests/cloud_research_api.py`. Added explicit
+no-mutation checks for rejected cross-owner strategy creation/removal, verified
+the victim strategy remains available, and fixed the T22 desktop browser check
+to allow its actual dynamically assigned Vite fixture origin. Added a reusable
+hosted A/B privacy matrix, direct-resource probes, sign-in transition and
+sanitized evidence template in [T134 hosted acceptance](T134_HOSTED_ACCEPTANCE.md),
+linked from the operator runbook. Ticket and deployment checklist now identify
+this as offline preparation, with hosted acceptance blocked on T131/application
+deployment.
+
+Validation: `./sigma test` passed all offline scenarios, Ruff, format, Pyright
+(0 diagnostics), frontend typecheck and build. The full run included cloud auth
+(15 tests), two-workspace isolation/restart/restore, cloud research/API
+accounting and fake-provider isolation checks. `uv run --locked --no-sync
+python tests/cloud_workspaces.py` passed after the final focused test change.
+`uv run --with playwright python browser_checks/t22_private_workspaces.py`
+passed with real Chrome using disposable deterministic principals and local
+storage. The first browser run exposed the missing dynamic-origin fixture
+allowlist; the test launcher was corrected and rerun successfully. No live
+Google identities, hosted endpoints, OAuth exchanges or provider calls/costs
+were used. This does not establish hosted acceptance.
+
+Hosted evidence remains UNVERIFIED and blocked until T131 and application
+deployment are ready, owner-authorized Google test identities are available,
+and any provider-backed session/usage path has separate authorization. No
+production IAM/OAuth settings or behavior changes were made. Preparation took
+approximately 30 minutes at handoff; PR details and exact commit are in the
+linked T134 message file.
+
 ## T136 monitoring and recovery preparation (2026-10-25)
 
 On branch `gray/t136-cloud-ops-recovery`, based on current `main` at
