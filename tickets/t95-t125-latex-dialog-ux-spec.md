@@ -4,6 +4,12 @@ Status: **Owner-requested revision; manual UI acceptance pending**
 Owner: Green | Branch: `green/t95-t125-ui` | Related UI work: T95/T125 / PR #135  
 Scope: The paper generation dialog, not a rewrite of the LaTeX authoring engine.
 
+## Launch priority: deliberately minimal UI
+
+**Owner direction (supersedes any excessive acceptance detail below):** Ship the smallest understandable dialog now. Users may discover edge cases and request richer controls after launch. Do not delay release to build comprehensive recovery interfaces, progress-stage mapping, confirmation flows, diagnostics, or configuration. Keep the existing backend safety, evidence integrity, durable saved versions, spending controls, and truthful status. Do not promise a Resume capability that does not exist. Prefer one primary Generate action, one plain busy/error message, and saved versions. Any extra user-visible control requires a concrete present-day need, not anticipation of hypothetical complaints.
+
+For launch, implement and test the common paths (idle, generating, success, failure, saved version access) and one regression ensuring interrupted jobs don't silently retry uncertain provider calls. More detailed state-by-state scenarios below are conditional guidance **only if the corresponding behavior already exists**, not a mandate to implement each variant. A complex resume/restart user interface is explicitly **deferred** unless essential to prevent actual data loss or unsafe repeated charges.
+
 ## Decision and rationale
 
 The current dialog exposes engineering implementation details as user-facing controls, including evidence batches, reduction groups, section counters, hundreds of possible calls, megabyte caps, and a generic "Discard progress and restart" action. The owner could not understand what the checkpoint meant or what would be lost. This fails acceptance. User-facing controls must communicate intent and consequence, not internal pipeline states.
@@ -40,9 +46,9 @@ Prevent conflicting actions and duplicate jobs. Do not imply that closing the di
 
 ### 3. Interrupted and **provably resumable**
 
-Only offer **Resume generation** if there is a durable checkpoint with an explicitly supported safe continuation path. Explain: "Paper generation was interrupted. Completed work was saved. Resume from the saved point or start over."
+**Do not add Resume for launch merely because internal checkpoints exist.** If an existing, reliable Resume flow is retained, only offer it when there is a durable checkpoint with an explicitly supported safe continuation path. Explain: "Paper generation was interrupted. Completed work was saved. Resume from the saved point or start over."
 
-Offer secondary **Start over…** / **Discard unfinished work…** only in this state, not continuously. Require confirmation specifying exactly what draft/checkpoint data are discarded, whether any provider calls may be repeated, and that *completed saved versions will be kept*. If the implementation cannot make that guarantee, stop and escalate the semantic gap rather than inventing one.
+Do not introduce a secondary **Start over…** / **Discard unfinished work…** control for launch unless it solves a demonstrated stuck-job condition. If retained from existing functionality, show it only in this state, not continuously. Require confirmation specifying exactly what draft/checkpoint data are discarded, whether any provider calls may be repeated, and that *completed saved versions will be kept*. If the implementation cannot make that guarantee, stop and escalate the semantic gap rather than inventing one.
 
 If a dispatched provider request has unknown completion or billing status, show that uncertainty and advise inspecting provider usage before initiating potentially additional calls. Do not automatically retry that request. Do not call a full restart "resume".
 
@@ -70,6 +76,16 @@ List each with title, version number, timestamp, and only actually available act
 - Avoid ambiguous language such as "checkpoint", "reduction group", "calls left", "progress discarded", "expanded multi-section authoring" in ordinary UI.
 - Do not implement a hidden "Advanced options" drawer containing those same controls.
 
+## Minimal launch acceptance (required)
+
+1. An ordinary user immediately understands how to generate a paper; no Advanced options, checkpoint counters, expanded authoring or implementation-specific terminology.
+2. During generation, the dialog displays truthful activity without fake progress, extra controls, or duplicate job submission.
+3. Completed saved versions remain accessible and are never destroyed by generating another version.
+4. A failure/interruption is reported plainly, without fake Resume promises or automatic replay of uncertain provider calls; existing server-side safety and billing controls remain intact.
+5. Browser check at desktop and mobile widths plus focused regression and repository verification; owner performs manual UI signoff.
+
+The broader matrix below is **reference guidance for behavior that already exists**, not a requirement to implement every recovery branch before launch.
+
 ## Acceptance matrix
 
 1. **Idle with no saved papers:** one primary Generate action; no checkpoint/count/advanced controls.
@@ -91,4 +107,4 @@ Before implementation, inspect the current actual backend job/checkpoint semanti
 - What exactly does "Discard progress and restart" remove today, and what does it preserve?
 - Is the expanded multi-section checkbox merely implementation mode, or a materially different output/cost product choice?
 
-Then implement the smallest safe UI change consistent with verified semantics. **Ask coordinator before inventing a new user-visible behavior or changing backend guarantees.** Report any gap as open rather than weakening acceptance. Commit on the named branch, push, update PR/handoff with a concise before/after behavior explanation and real-Chrome tests. No self-merge. Manual owner signoff is required for this UI.
+Then implement the smallest safe UI change consistent with verified semantics. **Do not build out every reference scenario or spend this iteration polishing speculative edge cases.** **Ask coordinator before inventing a new user-visible behavior or changing backend guarantees.** Report any gap as open rather than weakening acceptance. Commit on the named branch, push, update PR/handoff with a concise before/after behavior explanation and real-Chrome tests. No self-merge. Manual owner signoff is required for this UI.
