@@ -24,7 +24,7 @@ jobs:
     env:
       CI: "true"
       SIGMA_CLOUD_AUTH_ENABLED: "false"
-      SIGMA_OUTCOME_SCREENSHOT_DIR: ${{ runner.temp }}/sigma-outcome-acceptance
+      SIGMA_OUTCOME_SCREENSHOT_DIR: /tmp/sigma-outcome-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +54,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: outcome-browser-screenshots
-          path: ${{ runner.temp }}/sigma-outcome-acceptance/sigma-increment13-*.png
+          path: /tmp/sigma-outcome-acceptance/sigma-increment13-*.png
           if-no-files-found: warn
           retention-days: 14
