@@ -44,7 +44,15 @@ def examine():
                 "has_execution_provenance": bool(link.get("execution_id")),
                 "identifies_observed_counterexample": (
                     "counterexample" in next_test.lower()
-                    and all(\n                        json.dumps(value) in next_test\n                        for value in observation.get("witness", {}).values()\n                        if isinstance(value, bool)\n                    )\n                    and (\n                        "residual" not in observation.get("witness", {})\n                        or str(observation["witness"]["residual"]) in next_test\n                    )
+                    and all(
+                        json.dumps(value) in next_test
+                        for value in observation.get("witness", {}).values()
+                        if isinstance(value, bool)
+                    )
+                    and (
+                        "residual" not in observation.get("witness", {})
+                        or str(observation["witness"]["residual"]) in next_test
+                    )
                 ),
                 "requests_bounded_next_step": bool(link.get("next_investigator_step_id")),
             })
@@ -73,7 +81,8 @@ def main():
     args = parser.parse_args()
     data = examine()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    args.output.write_text(json.dumps(data, indent=2, sort_keys=True) + "
+")
     print("PASS archived causal observations; comparative quality remains undetermined")
 
 
