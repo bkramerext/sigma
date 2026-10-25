@@ -3160,9 +3160,12 @@ def _saved_followup_questions(
         source_session = item.get("session_id")
         source_artifact = item.get("id")
         if not (
-            isinstance(source_strategy, str) and source_strategy
-            and isinstance(source_session, str) and source_session
-            and isinstance(source_artifact, str) and source_artifact
+            isinstance(source_strategy, str)
+            and source_strategy
+            and isinstance(source_session, str)
+            and source_session
+            and isinstance(source_artifact, str)
+            and source_artifact
         ):
             continue
         key = (source_strategy, source_session, source_artifact)
