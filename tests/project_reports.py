@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from sigma.api import app, export_project_view
 from sigma.project_reports import render_report
 from sigma.projects import create_strategy, initialize_project
-from sigma.research_epistemics import verification_label
+from sigma.research_epistemics import execution_provenance, verification_label
 
 
 def fixture() -> dict:
@@ -346,7 +346,71 @@ def test_verification_presentation() -> None:
             assert data == original  # reports never migrate or rewrite the archive
 
 
+def test_computation_provenance_precedes_authored_claims() -> None:
+    data = fixture()
+    session = data["research_sessions"][0]
+    session["outcome"]["conclusion"] = "The agent claims we measured an effect."
+    original = deepcopy(data)
+
+    # No saved execution must be stated before the author's confident prose.
+    for output_format in ("txt", "html", "tex"):
+        report, _ = render_report(data, output_format)
+        assert "No persisted Python/SageMath execution records" in report
+        assert report.index("No persisted Python/SageMath execution records") < report.index(
+            "The agent claims we measured an effect."
+        )
+    assert data == original
+
+    success = {
+        "id": "execution-completed",
+        "runtime": "python",
+        "status": "completed",
+        "source": "print(42)",
+        "stdout": "42",
+    }
+    failed = {
+        "id": "execution-failed",
+        "runtime": "sagemath",
+        "status": "timeout",
+        "source": "expensive_test()",
+        "stderr": "Timed out",
+    }
+    session["artifacts"][0]["id"] = "artifact-source"
+    session["artifacts"][0]["investigator_output"] = {"python_execution": success}
+    session["steps"] = [
+        {"id": "step-success", "output": {"python_execution": success}},
+        {"id": "step-failure", "output": {"sage_execution": failed}},
+    ]
+    provenance = execution_provenance(session)
+    assert len(provenance["records"]) == 2
+    assert provenance["completed_count"] == 1
+    assert provenance["other_count"] == 1
+    completed = next(row for row in provenance["records"] if row["id"] == success["id"])
+    assert completed["artifact_ids"] == ["artifact-source"]
+    assert completed["step_ids"] == ["step-success"]
+    assert completed["source_recorded"] and completed["output_recorded"]
+    for output_format in ("txt", "html", "tex"):
+        report, _ = render_report(data, output_format)
+        assert report.index("Recorded computation provenance") < report.index(
+            "The agent claims we measured an effect."
+        )
+        assert "execution-completed" in report
+        assert "execution-failed" in report
+        assert "timeout" in report
+
+    # An execution ID with inconsistent saved statuses is never counted as success.
+    session["steps"].append(
+        {"id": "step-conflict", "output": {"python_execution": {**success, "status": "failed"}}}
+    )
+    assert execution_provenance(session)["completed_count"] == 0
+    session["steps"].append(
+        {"id": "step-no-id", "output": {"python_execution": {"status": "completed"}}}
+    )
+    assert execution_provenance(session)["unidentified_count"] == 1
+
+
 def main() -> None:
+    test_computation_provenance_precedes_authored_claims()
     test_verification_presentation()
     test_unequal_metric_groups()
     test_context_manifest_is_reported()
