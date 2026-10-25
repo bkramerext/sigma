@@ -39,8 +39,11 @@ documented unset-environment invocation passed that same scenario and the full
 suite. `uv run --with playwright python browser_checks/t79_assets.py` passed in
 real Google Chrome at 1440px and 390px for Home and a Sample Project; all image
 elements loaded, with no failed image requests or page errors. The isolated
-browser servers had cloud auth disabled in their process environment only; no
-`.env` or project data was changed. Screenshots are `/tmp/sigma-t79-home-1440.png`,
+browser backend used `SIGMA_PROJECTS_ROOT=/tmp/sigma-t79-projects` and cloud auth
+disabled in its process environment only; no `.env` or retained project data
+was changed. Three sample copies created by earlier browser-check attempts were
+removed; the final check wrote only under that temporary root. Screenshots are
+`/tmp/sigma-t79-home-1440.png`,
 `/tmp/sigma-t79-home-390.png`, `/tmp/sigma-t79-project-1440.png`, and
 `/tmp/sigma-t79-project-390.png`. The check establishes load/render continuity;
 no pixel-diff baseline was available.

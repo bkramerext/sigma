@@ -83,10 +83,12 @@ Verification
   errors. Screenshots: /tmp/sigma-t79-home-1440.png,
   /tmp/sigma-t79-home-390.png, /tmp/sigma-t79-project-1440.png,
   /tmp/sigma-t79-project-390.png.
-- The isolated local Chrome servers ran with cloud auth disabled in their
-  process environment so the authenticated local Home would render. No .env,
-  saved project data, image bytes or external provider/auth service was
-  changed or contacted.
+- The final isolated Chrome backend used
+  `SIGMA_PROJECTS_ROOT=/tmp/sigma-t79-projects`, with cloud auth disabled in
+  its process environment so local Home rendered. Three sample copies created
+  by earlier browser-check attempts were removed; the final check wrote only
+  under the temporary root. No `.env`, retained project data or image bytes
+  changed; no external provider/auth service was contacted.
 - Asset references were scanned in application code, CSS, docs, tickets,
   browser checks, scripts and Vite configuration. No image URLs were
   constructed dynamically beyond the Home background preloader, which was
