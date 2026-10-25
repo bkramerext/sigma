@@ -26,6 +26,11 @@ The detailed configuration and exact provisioning parameters live in [CLOUD_DEPL
 8. Start with `sudo systemctl enable --now sigma.service`. Check Caddy/API/frontend health, auth mode, private state mounts, logs and research sandbox isolation. Record actual endpoint results.
 9. Complete hosted acceptance before inviting users: two distinct Google identities, unauthorized access rejection, workspace isolation, bounded sponsored inference, Python/Sage, sessions/recovery, Markdown/TeX/PDF/report export, browser restart and data persistence. **Desktop browser is the release target; mobile-specific acceptance is out of scope.**
 
+For T134's repeatable two-identity privacy matrix, direct-reference probes,
+sign-out/sign-in transitions, no-mutation checks and sanitized evidence template,
+see [T134 hosted acceptance](T134_HOSTED_ACCEPTANCE.md). Do not run provider-backed
+checks without separate authorization. Local fixtures do not satisfy hosted acceptance.
+
 ## 2. Routine health and diagnosis
 
 Use read-only commands on host:

@@ -323,6 +323,7 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
             )
             assert b_strategy.status_code == 201
             strategy_id = b_strategy.json()["project"]["strategies"][0]["id"]
+            b_project_before_denials = (Path(b_path) / "project.json").read_bytes()
 
             # Actual execution service writes the record and binary artifact to
             # the owning project; the test runtime is deterministic and local.
@@ -413,6 +414,22 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 json={"path": b_path, "title": "Injected", "approach": "No"},
             )
             expect_hidden(cross_write)
+            # A rejected direct reference must not mutate the victim project,
+            # even when the caller guesses an existing strategy ID.
+            assert (Path(b_path) / "project.json").read_bytes() == b_project_before_denials
+            denied_strategy_remove = request(
+                user_a,
+                "POST",
+                "/api/projects/strategies/remove",
+                json={"path": b_path, "strategy_id": strategy_id},
+            )
+            expect_hidden(denied_strategy_remove)
+            assert (Path(b_path) / "project.json").read_bytes() == b_project_before_denials
+            owner_strategy = request(
+                user_b, "GET", "/api/projects/strategies", params={"path": b_path}
+            )
+            assert owner_strategy.status_code == 200
+            assert owner_strategy.json()["strategies"][0]["id"] == strategy_id
             limits = request(
                 user_a,
                 "PUT",
