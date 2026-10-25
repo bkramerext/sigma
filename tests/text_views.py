@@ -22,7 +22,7 @@ from sigma.projects import (
 from sigma.text_conversion import MAX_CONVERSION_RESPONSE_BYTES, convert_text
 from sigma.text_views import digest, inspect_text, save_source
 
-SOURCE = Path("samples/nonconsecutive-subset-sums/project.json")
+SOURCE = Path("samples/jesus-cannabis/project.json")
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 

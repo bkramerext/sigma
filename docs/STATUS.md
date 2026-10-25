@@ -72,6 +72,60 @@ increment: approximately 35 minutes. No browser surface changed. Matched live
 comparison, independent task/key review, runner isolation, pricing verification,
 blinded graders and owner authorization remain outstanding.
 
+## T89 ship-ready stock sample curation, increment 1 (2026-10-25)
+
+Started from fresh `gray/t89-stock-sample-curation` at current `main`
+`8562c89` after PR #115 merged, then merged `main` `950c810` into the branch
+without rewriting history; the `docs/STATUS.md` conflict was resolved with
+both this record and the new T114/main status preserved. Reframed the opening of all 17 sample briefs
+in conversational language while retaining their research questions, evidence
+requirements, and exit criteria. Added 12 bounded, human-authored starting
+strategies across seven samples: Algorithm Design, Constrained Binary Strings,
+Operation Narrow Passage, RH, Scientific Investigation, and both Warp Drive
+samples. Set Nonconsecutive Subset Sums, Operation Narrow Passage, and Warp
+Drive Engineering to Hard. Kept Jesus/cannabis difficulty unset for editorial
+review; Arrival remains in the current `Other` domain pending taxonomy review.
+
+Removed a direct answer spoiler from the active Maximum Regions starting path.
+Its full previous proof, strategy identity, and provider provenance remain
+unchanged in removed-strategy history; the active starter now guides the reader
+to find an upper bound and an attaining arrangement. No project IDs, session
+evidence, outcomes, original research text, or provenance were changed. The
+previous Maximum Regions strategy was archived rather than discarded. The five
+Subset Sums sessions remain deterministic fixtures, not provider research. No
+inference calls were made, and the proposed Maximum Regions → Operation Narrow
+Passage → RH authentic-session order is awaiting a separately approved spend
+cap. The cost model and provenance plan are in
+`evaluations/t89-stock-sample-curation-increment1.md`.
+
+**Acceptance matrix: PASS 8, FAIL 1, BLOCKED 1.** Editorial implementation,
+strategy guidance, metadata review, newcomer path, no-spend session proposal,
+identity/history preservation, ownership boundaries, and focused checks pass.
+The full-suite tooling assertion is FAIL; authentic stock sessions are blocked
+on a separate budget approval, and none were fabricated.
+
+Focused checks passed: `tests/recents.py` (17 samples, metadata, independent
+copying, archived Maximum Regions proof and non-spoiling starter),
+`tests/test_sample_copies.py` (9 tests), `tests/make_sample.py` (export/import
+with a real v5 legacy fixture), `tests/example_math.py`, and
+`tests/agentic.py`. Real Chrome `browser_checks/recents.py` passed against a
+fresh isolated UI and provider fixture (Samples/Recent, direct copy, strategy
+rendering, save, and source immutability). Ruff check/format, Pyright, frontend
+typecheck/build, and `git diff --check` passed.
+
+`./sigma test` ran and stopped at the known, unchanged
+`tests/tooling.py:177` mock expectation that `stop_servers` be called once; it
+was called zero times. Every later suite command was run individually under
+isolated temporary state and passed, including cloud/workspace/storage,
+deployment/host, UI registry, type checks, and production build. Therefore the
+full-suite result is **FAIL (existing tooling assertion)**, not a pass. No
+provider calls, live OAuth, or GCP resources were used. The active-branch
+acceptance detail and test evidence are in
+`evaluations/t89-stock-sample-curation-increment1.md`. Elapsed time from fresh
+branch creation through final PR-ready push: approximately 22 minutes
+(09:41–10:03 PDT, 2026-10-25).
+
+
 ## T89 stock sample catalog audit (2026-10-25)
 
 Gray started from current `main` `7a2f445` and inventoried all 17 shipped

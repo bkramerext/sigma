@@ -278,7 +278,9 @@ async def main() -> None:
             # not fields in a v5 project document.
             legacy_source = projects_root / "legacy-sample-source.sigma"
             legacy_source.mkdir(mode=0o700)
-            legacy_template = Path("samples/nonconsecutive-subset-sums/project.json")
+            # Keep an actual v5 stock project as the fixture. Nonconsecutive
+            # Subset Sums now carries explicit difficulty metadata in v8.
+            legacy_template = Path("samples/jesus-cannabis/project.json")
             legacy_before = legacy_template.read_bytes()
             shutil.copyfile(legacy_template, legacy_source / "project.json")
             legacy_export = export_project_view(str(legacy_source))

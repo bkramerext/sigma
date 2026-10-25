@@ -1,5 +1,6 @@
 """Sample catalog copies, recent-project behavior, collision safety, and API/CLI access."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -38,10 +39,39 @@ def check(root: Path, base: Path) -> None:
     assert sample_categories["Warp Drive Feasibility"] == "engineering"
     maximum_regions = next(item for item in catalog if item["id"] == "maximum-regions-by-lines")
     assert maximum_regions["difficulty"] == "easy"
+    assert maximum_regions["strategy_count"] == 1
+    maximum_raw = json.loads(
+        (ROOT / "samples" / "maximum-regions-by-lines" / "project.json").read_bytes()
+    )
+    archived_solution = next(
+        strategy for strategy in maximum_raw["strategies"] if strategy["removed_at"]
+    )
+    active_starter = next(
+        strategy for strategy in maximum_raw["strategies"] if not strategy["removed_at"]
+    )
+    assert archived_solution["provenance"]["provider"] == "openai"
+    assert hashlib.sha256(archived_solution["approach"].encode()).hexdigest() == (
+        "74b756da7105ba842adfb2bde8d6f88349b4c4010555cefc9d30b147983db9f4"
+    )
+    assert "R(n) = 1 + n(n + 1)/2" in archived_solution["summary"]
+    assert "R(n) = 1 + n(n + 1)/2" not in active_starter["approach"]
+    assert "upper bound" in active_starter["approach"]
     binary_counting = next(
         item for item in catalog if item["id"] == "counting-constrained-binary-strings"
     )
     assert binary_counting["difficulty"] == "easy"
+    difficulty_by_id = {entry["id"]: entry["difficulty"] for entry in catalog}
+    assert difficulty_by_id["nonconsecutive-subset-sums"] == "hard"
+    assert difficulty_by_id["operation-narrow-passage"] == "hard"
+    assert difficulty_by_id["warp-drive-engineering"] == "hard"
+    strategy_counts = {entry["id"]: entry["strategy_count"] for entry in catalog}
+    assert strategy_counts["algorithm-design"] == 2
+    assert strategy_counts["counting-constrained-binary-strings"] == 1
+    assert strategy_counts["operation-narrow-passage"] == 2
+    assert strategy_counts["riemann-hypothesis-research"] == 4
+    assert strategy_counts["scientific-investigation"] == 2
+    assert strategy_counts["warp-drive-engineering"] == 2
+    assert strategy_counts["warp-drive-physics"] == 2
     assert {entry["investigation_type"] for entry in catalog} >= {
         "mathematical",
         "engineering",
