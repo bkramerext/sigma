@@ -1,20 +1,22 @@
-# SIGMA Cloud Deployment Ticket Index
+# SIGMA Cloud Deployment Checklist
 
-Source of truth for implementation steps under [Cloud master issue #98](https://github.com/bkramerext/sigma/issues/98). Numbered **T126–T137** in SIGMA's existing T sequence. These are **repository tickets**, separate from GitHub issues. Check the linked tickets for evidence and requirements. See [Operations Runbook](../docs/OPERATION_RUNBOOK.md) for recurring actions. **Desktop-only release acceptance; mobile testing is out of scope.**
+[Cloud master issue #98](https://github.com/bkramerext/sigma/issues/98) · [Operations Runbook](../docs/OPERATION_RUNBOOK.md) · desktop-only deployment acceptance.
 
-| Step | Ticket | Lead | Status |
+**Owner legend:** 👤 Brian (GCP console, authorization, credentials and final launch); 🔴 Red Codex (hosting/backend); ⚪ Gray Codex (backup/operations); 🟢 Green Codex (desktop-browser acceptance); 🔵 Blue Codex (research dependency only, otherwise on iteration sequence); **Coordinator** = ChatGPT (PR review, integration and acceptance).
+
+| Ticket | Deliverable | Responsible owner | Status |
 |---|---|---|---|
-| 1 | [GCP project/access](t126.md) | Coordinator | In progress (project confirmation outstanding) |
-| 2 | [VM, disk, static IP](t127.md) | Red | Pending hosted acceptance |
-| 3 | [Host/rootless sandbox](t128.md) | Red | Pending hosted acceptance |
-| 4 | [Compose deployment/state](t129.md) | Red | Pending hosted acceptance |
-| 5 | [DuckDNS/HTTPS](t130.md) | Red | Pending hosted acceptance |
-| 6 | [Production Google OAuth](t131.md) | Red/Green | Pending hosted acceptance |
-| 7 | [Research/Python/Sage parity](t132.md) | Red/Blue | Pending hosted acceptance |
-| 8 | [Desktop reports/TeX/PDF](t133.md) | Green/Gray | Pending hosted acceptance |
-| 9 | [Real two-user isolation](t134.md) | Gray/Green | Pending hosted acceptance |
-| 10 | [Snapshot/restore drill](t135.md) | Gray | Pending hosted acceptance |
-| 11 | [Monitoring/reboot/rollback](t136.md) | Gray/Red | Pending hosted acceptance |
-| 12 | [Hosted go/no-go](t137.md) | Coordinator | Pending hosted acceptance |
+| [T126](t126.md) | GCP project, trial, access | 👤 Brian + Coordinator | In progress |
+| [T127](t127.md) | VM, dedicated disk, static IP, network/IAM | 👤 **Brian** (console actions); 🔴 Red technical guidance | **Next** |
+| [T128](t128.md) | Host bootstrap, rootless Docker and preflight | 🔴 Red | Blocked by T127 |
+| [T129](t129.md) | Compose app, health and durable state | 🔴 Red | Blocked by T128 |
+| [T130](t130.md) | DuckDNS and HTTPS | 🔴 Red; 👤 Brian DNS account changes | Blocked by T127/T129 |
+| [T131](t131.md) | Hosted Google OAuth, sign-in | 🔴 Red backend + 🟢 Green browser; 👤 Brian OAuth console/secret | Blocked by T129/T130 |
+| [T132](t132.md) | Hosted inference, sessions, Python/Sage | 🔴 Red; 🔵 Blue only for specific research blocker; 👤 Brian live access/authorization | Blocked by hosted app |
+| [T133](t133.md) | Desktop projects, Outcomes, reports, TeX/PDF | 🟢 Green | Blocked by T131/T132 |
+| [T134](t134.md) | Two-account workspace/privacy acceptance | ⚪ Gray + 🟢 Green; 👤 Brian test account | Blocked by T131 |
+| [T135](t135.md) | Backup policy and verified restore | ⚪ **Gray** | **Assigned: prepare now; actual restore after T129** |
+| [T136](t136.md) | Monitoring, restart, reboot, rollback | ⚪ Gray + 🔴 Red | Blocked by T129/T135 |
+| [T137](t137.md) | Launch go/no-go | Coordinator + 👤 Brian | Blocked by hosted acceptance |
 
-Status must be updated with observed evidence as work completes. Code merged locally does not imply live GCE acceptance. Coordinator owns any scope/acceptance change and final go/no-go. Existing GitHub tickets #88/#99/#66 and #98 remain authoritative for their broader requirements.
+These are repository tickets in the existing T sequence, not GitHub issue numbers. **Codex workers cannot relax acceptance requirements or mark blocked steps complete without observed evidence.** Owner action must be distinguished from worker implementation. Update statuses and evidence as tasks complete. Mobile-specific acceptance is out of scope.
