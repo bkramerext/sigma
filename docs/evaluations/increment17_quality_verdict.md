@@ -23,3 +23,9 @@ Neither an automated text rule nor a structural archive audit is a mathematical 
 - **Multi-agent advantage:** not demonstrated by the current archive; no matched-budget self-review arm exists.
 
 **Do not mark the overarching research-quality gate as passed.** This evidence warrants targeted product fixes and a later genuine experiment if resources permit, not further scripted demonstration or premature simplification. Increment 17 is a milestone, not necessarily the last research increment.
+
+## Corrective action against current main (October 25)
+
+Current main already contains `_saved_followup_questions` with frozen-context provenance checks and automatic transfer into a new session's first Investigator question. Its existing tests exercise actual subsequent dispatch, precedence of approved continuations, and tampered/truncated source rejection. Therefore the archived generic reset describes the earlier captured run; **it must not be represented as an outstanding current-main engine regression without a new reproduction**. No redundant changes to the research engine are introduced by this PR.
+
+Current main also already renders recorded computation provenance *before* agent-authored Outcome prose. This PR strengthens that guard with an explicit **zero saved local computations** warning, where the recorded metric or saved provenance confirms none. It does not rewrite historical conclusions or claim to perform semantic verification. The archived scripted misleading sentence remains as an honest negative control. Browser acceptance and full verification are required because the display changed.
