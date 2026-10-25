@@ -110,9 +110,7 @@ def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
         if step_id and step_id not in row["step_ids"]:
             row["step_ids"].append(step_id)
         row["source_recorded"] |= isinstance(value.get("source"), str)
-        row["output_recorded"] |= any(
-            key in value for key in ("stdout", "stderr", "artifacts")
-        )
+        row["output_recorded"] |= any(key in value for key in ("stdout", "stderr", "artifacts"))
 
     def collect_fields(value: Any, artifact_id: str = "", step_id: str = "") -> None:
         if not isinstance(value, dict):
@@ -120,21 +118,21 @@ def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
         for field, runtime in (("python_execution", "python"), ("sage_execution", "sagemath")):
             collect(value.get(field), runtime, artifact_id, step_id)
 
-    for artifact in (record.get("artifacts") or []):
+    for artifact in record.get("artifacts") or []:
         if isinstance(artifact, dict):
             identifier = artifact.get("id")
             collect_fields(
                 artifact.get("investigator_output"),
                 artifact_id=identifier if isinstance(identifier, str) else "",
             )
-    for step in (record.get("steps") or []):
+    for step in record.get("steps") or []:
         if isinstance(step, dict):
             identifier = step.get("id")
             collect_fields(
                 step.get("output"),
                 step_id=identifier if isinstance(identifier, str) else "",
             )
-    for branch in (record.get("strategy_runs") or []):
+    for branch in record.get("strategy_runs") or []:
         if isinstance(branch, dict):
             collect_fields(branch.get("pending_investigation"))
 
