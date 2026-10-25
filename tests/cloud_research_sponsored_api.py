@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -256,6 +258,76 @@ def main() -> None:
                 assert duplicate.status_code == 200, duplicate.text
                 assert duplicate.json()["id"] == session_id
                 assert len(provider_calls) == 6
+
+                # Verify the actual owner-facing export boundary after research,
+                # not only the session status endpoint. Then read it again from
+                # a fresh application process to cover hosted workspace restart.
+                exported = client.get("/api/projects/export", params={"path": path})
+                assert exported.status_code == 200, exported.text
+                export_data = exported.json()
+                assert export_data["project"]["id"] == project_id
+                assert len(export_data["research_sessions"]) == 1
+                exported_session = export_data["research_sessions"][0]
+                assert exported_session["id"] == session_id
+                assert exported_session["status"] == "ended"
+                assert exported_session["outcome"]["assessment"]
+                assert exported_session["outcome"]["verification_label"] in {
+                    "Incomplete",
+                    "Unknown",
+                }
+                report = client.get(
+                    "/api/projects/export/report", params={"path": path, "format": "txt"}
+                )
+                assert report.status_code == 200, report.text
+                assert report.headers["content-type"].startswith("text/plain")
+                assert "Outcome" in report.text and "Verification" in report.text
+
+                restart_environment = os.environ.copy()
+                restart_environment["PYTHONPATH"] = os.pathsep.join(
+                    (
+                        str(Path(__file__).resolve().parent),
+                        restart_environment.get("PYTHONPATH", ""),
+                    )
+                ).rstrip(os.pathsep)
+                restarted_read = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        """
+import sys
+from fastapi.testclient import TestClient
+import cloud_workspace_test_app
+with TestClient(cloud_workspace_test_app.app) as reopened:
+    reopened.headers.update({"X-Test-Subject": "cloud-a", "X-Test-Email": "a@example.test"})
+    path, expected_session_id, expected_project_id = sys.argv[1:]
+    session = reopened.get("/api/projects/research-sessions/" + expected_session_id, params={"path": path})
+    assert session.status_code == 200, session.text
+    value = session.json()
+    assert value["status"] == "ended" and value["outcome"]["assessment"]
+    exported = reopened.get("/api/projects/export", params={"path": path})
+    assert exported.status_code == 200, exported.text
+    data = exported.json()
+    assert data["project"]["id"] == expected_project_id
+    assert len(data["research_sessions"]) == 1
+    assert data["research_sessions"][0]["id"] == expected_session_id
+    report = reopened.get("/api/projects/export/report", params={"path": path, "format": "txt"})
+    assert report.status_code == 200, report.text
+    assert "Outcome" in report.text and "Verification" in report.text
+print("PASS fresh-process research, Outcome and report recovery")
+""",
+                        path,
+                        session_id,
+                        project_id,
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=restart_environment,
+                )
+                assert restarted_read.returncode == 0, restarted_read.stderr
+                assert "PASS fresh-process research, Outcome and report recovery" in (
+                    restarted_read.stdout
+                )
 
                 budget = client.get(
                     "/api/cloud-research/budget",
