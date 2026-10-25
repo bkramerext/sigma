@@ -14,19 +14,7 @@ For more background on the research approach and its underlying rationale, see [
 
 ## SIGMA in use
 
-<!-- SIGMA Home screenshot pending from Brian. Do not substitute another image. -->
-
-*SIGMA Home screenshot pending from Brian.*
-
 Create a project or start from a sample, write or generate strategies, then choose strategies for a research session. Investigator and Skeptic roles work through bounded steps; SIGMA saves findings, objections, optional computation, and unresolved questions so you can review and continue the work. You remain in control of starting, pausing, stopping, and evaluating investigations.
-
-### Riemann Hypothesis investigation
-
-The Riemann Hypothesis sample is an open research problem, not a claimed proof. SIGMA is intended to make the work inspectable: conclusions remain tied to saved arguments, objections, computations, and open questions.
-
-<!-- Riemann Hypothesis investigation screenshot pending from Brian. Do not substitute another image. -->
-
-*Riemann Hypothesis investigation screenshot pending from Brian.*
 
 ## Run SIGMA locally
 

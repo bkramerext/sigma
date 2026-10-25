@@ -4,8 +4,9 @@
 
 Rewrote the newcomer README with a local quick start, optional AI/API-key
 configuration, a separate optional local Google administrator bootstrap, and
-links to the main product and engineering guides. Brian's Home and RH screenshots
-are pending; the README keeps two separate, clearly labeled placeholders.
+links to the main product and engineering guides. The owner deferred Home and
+RH screenshots until after cloud launch; README contains no screenshot
+placeholders or substitute images.
 Setup and bootstrap details were checked against `./sigma setup`,
 `src/sigma/ui.py`, `src/sigma/local_config.py`, and the local Google sign-in
 section of `CLOUD_DEPLOYMENT.md`.
