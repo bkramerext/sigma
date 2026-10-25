@@ -3840,3 +3840,23 @@ clipboard output. `browser_checks/project_create_contract.py` and
 `/tmp/sigma-copy-buttons-mobile.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
 ./sigma test`, frontend typecheck/build, and `git diff --check` passed. No paid
 provider calls or cloud changes.
+## AI paper disclosure and preflight explanation (2026-10-25)
+
+The TeX authoring dialog now explains that SIGMA uses the complete recorded
+research history, distinguishes findings from conjectures, identifies gaps, and
+produces an AI-generated paper that has not been independently verified. Model,
+usage, and generation bounds remain visible. The deterministic TeX assembler
+adds an attribution beneath the title and author, followed by an “About this
+paper” section before the introduction. These additions are independent of the
+authoring prompt and therefore travel with the saved TeX and compiled PDF;
+existing evidence references, warnings, and obligations remain assembled as
+before.
+
+Focused regression coverage checks the disclosure text and ordering in the
+assembled and archived TeX, plus the dialog language and retained model/bounds
+in real Chrome. `uv run python tests/papers.py`, the real-Chrome
+`browser_checks/t45_long_paper.py`, and `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed. The first full-suite attempt caught only Ruff formatting
+in the new assertions; after formatting, the complete suite passed, including
+frontend typecheck and production build. No paid provider calls or cloud
+changes.
