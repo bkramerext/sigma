@@ -2104,11 +2104,156 @@ type CloudResearchBudget = {
   unknown_provider_attempts: number;
 };
 
+function AboutArchitecture() {
+  const descriptions = {
+    project: 'The overarching question being investigated. A project contains multiple research strategies and preserves their findings.',
+    strategyA: 'A particular angle into the problem, not a proposed answer. Several strategies may be needed, and unsuccessful approaches can still produce useful findings.',
+    strategyB: 'A particular angle into the problem, not a proposed answer. Several strategies may be needed, and unsuccessful approaches can still produce useful findings.',
+    strategyC: 'A particular angle into the problem, not a proposed answer. Several strategies may be needed, and unsuccessful approaches can still produce useful findings.',
+    session: 'An individual attempt to investigate one or more strategies. Sessions preserve the work and results, allowing strategies to be revisited.',
+    investigator: 'An AI agent that develops reasoning, explores hypotheses, and can write code to test ideas.',
+    skeptic: "An AI agent that challenges the Investigator's reasoning, examines evidence, and identifies errors or unresolved questions.",
+    evidence: 'The record of findings, objections, code execution, and unresolved questions remains available to guide future research.',
+  } as const;
+  type DiagramNode = keyof typeof descriptions;
+  const [activeNode, setActiveNode] = useState<DiagramNode | null>(null);
+  const nodeRefs = useRef<Partial<Record<DiagramNode, HTMLButtonElement>>>({});
+  const tooltip = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<number | null>(null);
+  const pointerType = useRef('');
+  const tooltipId = 'about-diagram-tooltip';
+  function cancelHide() {
+    if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  }
+  function scheduleHide() {
+    cancelHide();
+    hideTimer.current = window.setTimeout(() => setActiveNode(null), 130);
+  }
+  function revealNode(key: DiagramNode) {
+    cancelHide();
+    setActiveNode(key);
+    requestAnimationFrame(() => document.getElementById(tooltipId)?.scrollIntoView({ block: 'nearest' }));
+  }
+  useLayoutEffect(() => {
+    const tip = tooltip.current;
+    if (!activeNode || !tip) return;
+    const pointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && (target.closest('[data-about-diagram-node]') || tip.contains(target))) return;
+      setActiveNode(null);
+    };
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setActiveNode(null);
+      }
+    };
+    document.addEventListener('pointerdown', pointerDown, true);
+    document.addEventListener('keydown', keyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', pointerDown, true);
+      document.removeEventListener('keydown', keyDown, true);
+    };
+  }, [activeNode]);
+  useEffect(() => () => cancelHide(), []);
+  function node(key: DiagramNode, title: string, subtitle: string, tone: 'copper' | 'blue') {
+    return <div className="about-diagram-node-wrap"><button
+      ref={element => { if (element) nodeRefs.current[key] = element; else delete nodeRefs.current[key]; }}
+      type="button"
+      className={`about-diagram-node about-diagram-node--${tone}`}
+      data-about-diagram-node={key}
+      aria-describedby={activeNode === key ? tooltipId : undefined}
+      aria-expanded={activeNode === key}
+      onPointerDown={event => { pointerType.current = event.pointerType; }}
+      onPointerEnter={event => { if (event.pointerType === 'mouse') revealNode(key); }}
+      onPointerLeave={event => { if (event.pointerType === 'mouse') scheduleHide(); }}
+      onFocus={() => { if (pointerType.current !== 'touch') revealNode(key); }}
+      onBlur={() => scheduleHide()}
+      onClick={event => {
+        const touch = pointerType.current === 'touch' || (event.detail > 0 && window.matchMedia('(hover: none)').matches);
+        pointerType.current = '';
+        if (touch) {
+          if (activeNode === key) setActiveNode(null);
+          else revealNode(key);
+        }
+      }}
+    >
+      <span className="about-diagram-node-title">{title}</span>
+      <span className="about-diagram-node-subtitle">{subtitle}</span>
+      <span className="about-diagram-node-hint" aria-hidden="true">i</span>
+    </button>{activeNode === key && <div ref={tooltip} id={tooltipId} className="about-diagram-tooltip" data-tone={key === 'investigator' || key === 'skeptic' ? 'blue' : 'copper'} role="tooltip" onPointerEnter={cancelHide} onPointerLeave={scheduleHide}>{descriptions[key]}</div>}</div>;
+  }
+  return <section className="about-architecture" aria-labelledby="about-architecture-heading">
+    <h3 id="about-architecture-heading">How SIGMA Works: Multi-Agentic Research</h3>
+    <div className="about-research-flow">
+      <div className="about-flow-project">{node('project', 'Research Project', 'The overarching hard question', 'copper')}</div>
+      <div className="about-flow-connector about-flow-connector--branch"><span>Branches into several research directions</span><i aria-hidden="true"/></div>
+      <div className="about-strategy-group" aria-label="Project strategies">
+        <div className="about-strategy-cards">
+          {node('strategyA', 'Strategy A', 'One research direction', 'copper')}
+          {node('strategyB', 'Strategy B', 'Another research direction', 'copper')}
+          {node('strategyC', 'Strategy C', 'A further direction', 'copper')}
+        </div>
+      </div>
+      <div className="about-flow-connector about-flow-connector--session"><i aria-hidden="true"/><span>A strategy is investigated through a session</span></div>
+      <div className="about-session-frame">
+        <div className="about-session-heading">{node('session', 'Research Session', 'An investigation of selected strategies', 'copper')}</div>
+        <div className="about-agent-cycle">
+          <div className="about-agent-pair">
+            {node('investigator', 'Investigator', 'Develop ideas and test hypotheses', 'blue')}
+            <span className="about-agent-forward" aria-hidden="true"><span>Investigation</span></span>
+            {node('skeptic', 'Skeptic', 'Challenge reasoning and examine evidence', 'blue')}
+          </div>
+          <svg className="about-review-loop" viewBox="0 0 400 36" role="img" aria-label="Skeptic review can lead to further investigation">
+            <defs><linearGradient id="about-loop-metal" x1="0" x2="1"><stop stopColor="#71b7eb"/><stop offset=".52" stopColor="#b9dff8"/><stop offset="1" stopColor="#71b7eb"/></linearGradient><marker id="about-loop-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#71b7eb" strokeWidth="1.4"/></marker></defs>
+            <path d="M385 2 C385 30 15 30 15 2" fill="none" stroke="url(#about-loop-metal)" strokeWidth="1.5" markerEnd="url(#about-loop-arrow)"/>
+          </svg>
+          <p className="about-cycle-caption">Research may continue through further investigation and review cycles.</p>
+        </div>
+      </div>
+      <div className="about-flow-connector about-flow-connector--evidence"><i aria-hidden="true"/><span>Work is saved for later review</span></div>
+      <div className="about-flow-evidence">{node('evidence', 'Saved Evidence & Outcome', 'Findings, objections, code execution, and open questions', 'copper')}</div>
+    </div>
+    <p className="about-architecture-caption">SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find.</p>
+  </section>;
+}
+
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    closeButton.current?.focus();
+  }, []);
+  return <dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
+    <div className="about-dialog-content">
+      <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
+      <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
+      <h3>Key Features</h3>
+      <section className="about-feature"><h4>Multi-Strategy Exploration</h4><p>Hard problems often need more than one approach. Each strategy explores a particular angle, rather than proposing an answer. Strategies can be tested, revised, or combined as the research develops. Even failed approaches can teach us something useful.</p></section>
+      <section className="about-feature"><h4>Multiple Research Agents</h4><p>Different agents investigate ideas, challenge assumptions, and look for weaknesses in the reasoning.</p></section>
+      <section className="about-feature"><h4>Research History</h4><p>SIGMA keeps a record of strategies, research sessions, experiments, and findings so earlier work isn't lost. Failed approaches remain available for review and further investigation.</p></section>
+      <section className="about-feature"><h4>Research That Builds on Earlier Work</h4><p>Researchers can use earlier findings to guide later investigations, including findings that ruled out an approach. SIGMA does not automatically combine discoveries across strategies.</p></section>
+      <section className="about-feature"><h4>Human Guidance</h4><p>Researchers can provide feedback, revise strategies, and choose which directions to pursue.</p></section>
+      <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
+      <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
+      <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
+      <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
+      <AboutArchitecture/>
+    </div>
+  </dialog>;
+}
+
 function Home({ initialPath, onOpen }: {
   initialPath: string; onOpen: (view: ProjectView) => void;
 }) {
   const cloud = useCloudIdentity();
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
@@ -2146,6 +2291,10 @@ function Home({ initialPath, onOpen }: {
     const trigger = entry === 'open' ? openButton : newButton;
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
   }
+  function closeAbout() {
+    setAboutOpen(false);
+    requestAnimationFrame(() => aboutButton.current?.focus());
+  }
   function launchCreditStreak() {
     const nameId = ++nextCreditStreak.current;
     const modelsId = ++nextCreditStreak.current;
@@ -2170,7 +2319,11 @@ function Home({ initialPath, onOpen }: {
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
       {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Administrator Settings</a>}
+<<<<<<< HEAD
       <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/><AboutAction/></div>
+=======
+      <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/><button type="button" ref={aboutButton} className="cloud-text-button home-about-button" onClick={() => setAboutOpen(true)}>About</button></div>
+>>>>>>> 2c9499b (Add About research architecture diagram)
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
@@ -2185,6 +2338,7 @@ function Home({ initialPath, onOpen }: {
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
+      {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     </div>
   </div>;
 }

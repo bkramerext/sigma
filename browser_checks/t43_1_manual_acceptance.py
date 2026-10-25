@@ -98,6 +98,118 @@ def main() -> None:
             page.route("**/api/**", deterministic_home_data)
             page.goto(URL)
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
+            about_button = page.get_by_role("button", name="About")
+            for width, height in ((1440, 900), (390, 844)):
+                page.set_viewport_size({"width": width, "height": height})
+                header_controls = [
+                    page.locator(".home-topline .project-google-signin"),
+                    page.locator(".home-topline .api-connection > summary"),
+                    about_button,
+                ]
+                header_boxes = [control.bounding_box() for control in header_controls]
+                assert all(header_boxes), (width, header_boxes)
+                for index, box in enumerate(header_boxes):
+                    assert box["x"] >= 0 and box["x"] + box["width"] <= width, (width, box)
+                    for other in header_boxes[index + 1 :]:
+                        overlaps = (
+                            box["x"] < other["x"] + other["width"]
+                            and box["x"] + box["width"] > other["x"]
+                            and box["y"] < other["y"] + other["height"]
+                            and box["y"] + box["height"] > other["y"]
+                        )
+                        assert not overlaps, (width, box, other)
+                about_button.click()
+                about = page.get_by_role("dialog", name="About SIGMA")
+                expect(about).to_be_visible()
+                expect(about.locator(".about-intro")).to_have_text(
+                    "SIGMA is a research workbench for exploring answers to hard questions from different angles."
+                )
+                expect(about.locator(".about-dialog-content > .about-terms")).to_have_text(
+                    "Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate."
+                )
+                for feature in (
+                    "Multi-Strategy Exploration",
+                    "Multiple Research Agents",
+                    "Research History",
+                    "Research That Builds on Earlier Work",
+                    "Human Guidance",
+                    "Python and SageMath Execution",
+                    "Evidence and Uncertainty",
+                    "Reports and Exports",
+                    "Experimental LaTeX Paper Generation",
+                ):
+                    expect(about.get_by_role("heading", name=feature, exact=True)).to_be_visible()
+                expect(about).to_contain_text("SageMath execution has not yet been independently verified.")
+                expect(about).to_contain_text("does not independently verify mathematical proofs")
+                bounds = about.bounding_box()
+                assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width, (width, bounds)
+                assert about.evaluate("e => e.scrollWidth <= e.clientWidth")
+                about.evaluate("e => e.scrollTop = e.scrollHeight")
+                page.wait_for_timeout(100)
+                page.screenshot(path=f"/tmp/sigma-about-diagram-{width}.png")
+                about.evaluate("e => e.scrollTop = 0")
+                expect(about.get_by_role("heading", name="How SIGMA Works: Multi-Agentic Research")).to_be_visible()
+                expect(about.locator(".about-architecture-caption")).to_have_text(
+                    "SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find."
+                )
+                tooltip_cases = (
+                    ("project", "The overarching question being investigated."),
+                    ("strategyA", "A particular angle into the problem, not a proposed answer."),
+                    ("strategyB", "A particular angle into the problem, not a proposed answer."),
+                    ("strategyC", "A particular angle into the problem, not a proposed answer."),
+                    ("session", "An individual attempt to investigate one or more strategies."),
+                    ("investigator", "An AI agent that develops reasoning, explores hypotheses"),
+                    ("skeptic", "An AI agent that challenges the Investigator's reasoning"),
+                    ("evidence", "The record of findings, objections, code execution, and unresolved questions"),
+                )
+                for node_name, description in tooltip_cases:
+                    diagram_node = about.locator(f'[data-about-diagram-node="{node_name}"]')
+                    expect(diagram_node).to_be_visible()
+                    diagram_node.hover()
+                    tip = page.get_by_role("tooltip")
+                    expect(tip).to_contain_text(description)
+                    expect(diagram_node).not_to_have_attribute("title")
+                    expect(diagram_node).to_have_attribute("aria-describedby", "about-diagram-tooltip")
+                    expected_tone = "blue" if node_name in ("investigator", "skeptic") else "copper"
+                    expect(tip).to_have_attribute("data-tone", expected_tone)
+                    tip_box = tip.bounding_box()
+                    assert tip_box and tip_box["x"] >= 0 and tip_box["y"] >= 0, (width, node_name, tip_box)
+                    assert tip_box["x"] + tip_box["width"] <= width
+                    assert tip_box["y"] + tip_box["height"] <= height
+                    if node_name == "project":
+                        page.screenshot(path=f"/tmp/sigma-about-tooltip-{width}.png")
+                page.keyboard.press("Escape")
+                expect(page.get_by_role("tooltip")).to_have_count(0)
+                page.mouse.move(0, 0)
+                page.wait_for_timeout(160)
+                # Tab from the dialog's focused Close action to the first diagram node.
+                page.get_by_role("button", name="Close", exact=True).focus()
+                page.keyboard.press("Tab")
+                expect(about.locator('[data-about-diagram-node="project"]')).to_be_focused()
+                expect(page.get_by_role("tooltip")).to_contain_text("The overarching question being investigated.")
+                expect(about.locator('[data-about-diagram-node="project"]')).to_have_attribute(
+                    "aria-describedby", "about-diagram-tooltip"
+                )
+                page.keyboard.press("Escape")
+                expect(page.get_by_role("tooltip")).to_have_count(0)
+                expect(about).to_be_visible()
+                page.keyboard.press("Escape")
+                expect(about).to_have_count(0)
+                expect(about_button).to_be_focused()
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), width
+            touch_context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+            touch_page = touch_context.new_page()
+            touch_page.route("**/api/**", deterministic_home_data)
+            touch_page.goto(URL)
+            touch_page.get_by_role("button", name="About").tap()
+            touch_about = touch_page.get_by_role("dialog", name="About SIGMA")
+            touch_node = touch_about.locator('[data-about-diagram-node="strategyB"]')
+            touch_node.tap()
+            touch_tip = touch_page.get_by_role("tooltip")
+            expect(touch_tip).to_contain_text("A particular angle into the problem, not a proposed answer.")
+            touch_node.tap()
+            expect(touch_tip).to_have_count(0)
+            touch_context.close()
             status_response = page.request.get(API + "/api/cloud-auth/status")
             assert status_response.ok
             real_status = status_response.json()
@@ -363,7 +475,8 @@ def main() -> None:
             assert not popup_errors, popup_errors
             print(
                 "PASS T43.1 Chrome: real disabled local auth diagnosis, responsive setup/credits, "
-                "legacy Recent category recovery, connected ChatGPT actions, and cancel styling"
+                "legacy Recent category recovery, connected ChatGPT actions, About diagram hover/focus/touch, "
+                "and cancel styling"
             )
         finally:
             browser.close()
