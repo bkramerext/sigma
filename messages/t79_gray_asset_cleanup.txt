@@ -1,0 +1,106 @@
+T79 handoff — unused images and concise asset names
+====================================================
+
+Branch: gray/t79-unused-images
+Base: origin/main at 617570b (fetched at start of this assignment)
+Issue: https://github.com/bkramerext/sigma/issues/79
+PR: pending creation after commit/push; requested state is R4R, do not merge.
+
+Inventory and decisions
+-----------------------
+
+Runtime assets with editable sources in assets/ and served files in
+frontend/public/:
+
+- home-atmosphere.svg — loaded by frontend/src/style.css as the Home overlay.
+- home-background-copper.png — current, zeta-bearing Home background; loaded by
+  CSS and the Home sizing preloader. Kept byte-for-byte; Vite copies it from
+  assets/ to frontend/public/.
+- home-slogan-copper.png — loaded on Home; Vite copies the source to public/.
+- project-header.png — loaded for the Project header.
+- workspace-logo.png — loaded for the Home/workspace brand; Vite copies it.
+
+Intentional design/source references in assets/ without runtime public copies:
+
+- home-project-reference.png — approved Home/project composition reference.
+- strategies-reference.png — approved Strategy Pool design reference.
+- workspace-reference.png — approved workspace design reference.
+
+These references remain useful for future editing and comparison, despite no
+runtime filename references. `frontend/public/lean-logo.svg` and
+`frontend/public/chatgpt-logo-black.svg` are live UI/provider assets and are
+retained. Their source is external to assets/ in the existing repository layout.
+
+Deletion (separate from renames)
+--------------------------------
+
+- assets/sigma-home-background.png — removed. Code, CSS and runtime UI do not
+  load it; the only active reference was the stale Vite startup copy. The
+  current Home uses the copper background above, which retains the zeta art.
+  This image was the retired earlier Home background recorded in tickets/t4.md
+  and tickets/t4.1.md. Its ignored/generated frontend/public counterpart was
+  removed from the working tree; it was not a tracked public asset. Vite no
+  longer recreates that unused public copy.
+
+Filename mapping
+----------------
+
+- assets/sigma-atmosphere.svg → assets/home-atmosphere.svg
+- assets/sigma-home-background-copper.png → assets/home-background-copper.png
+- assets/sigma-home-and-project-pages.png → assets/home-project-reference.png
+- assets/sigma-project-header.png → assets/project-header.png
+- assets/sigma-slogan-copper-approved.png → assets/home-slogan-copper.png
+- assets/sigma-strategies-reference.png → assets/strategies-reference.png
+- assets/sigma-workspace-logo.png → assets/workspace-logo.png
+- assets/sigma-workspace-reference.png → assets/workspace-reference.png
+- Matching tracked files in frontend/public/ were renamed consistently for
+  atmosphere, Home background, Project header, Home slogan and workspace logo.
+- Retired assets/sigma-home-background.png → removed (no replacement; current
+  approved Home background is home-background-copper.png).
+
+All eight renamed source files have SHA-256 hashes identical to their prior
+origin/main blobs. Each tracked public counterpart also has the same SHA-256 as
+its renamed source. References were updated in frontend code/CSS, Vite config,
+browser_checks/header.py, tickets/t4.md, tickets/t4.1.md, tickets/t5.md,
+tickets/t7.md, tickets/t13.md and docs/STATUS.md. The Vite list now copies only
+the three active source/public pairs it previously generated. The deleted
+legacy filename remains in the historical T4 ticket text to describe what that
+older assignment specified; T79 records its retirement here and in STATUS.
+
+Verification
+------------
+
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — passed all test
+  scenarios, Ruff, formatting, Pyright, frontend typecheck and production
+  build. The initial plain `./sigma test` stopped in tests/tooling.py under the
+  checkout's bootstrap-admin environment; the documented unset-variable run
+  passed that same tooling scenario and the complete suite.
+- `uv run --with playwright python browser_checks/t79_assets.py` — passed in
+  real Google Chrome for Home and a Sample Project at desktop 1440px and mobile
+  390px. All img elements loaded; no image response >=400 or browser page
+  errors. Screenshots: /tmp/sigma-t79-home-1440.png,
+  /tmp/sigma-t79-home-390.png, /tmp/sigma-t79-project-1440.png,
+  /tmp/sigma-t79-project-390.png.
+- The isolated local Chrome servers ran with cloud auth disabled in their
+  process environment so the authenticated local Home would render. No .env,
+  saved project data, image bytes or external provider/auth service was
+  changed or contacted.
+- Asset references were scanned in application code, CSS, docs, tickets,
+  browser checks, scripts and Vite configuration. No image URLs were
+  constructed dynamically beyond the Home background preloader, which was
+  updated. Historical T4 text is the remaining archival mention of the
+  removed legacy filename.
+- No pixel-diff baseline was available. The retained source/public bytes are
+  unchanged, and real Chrome rendered both routes at desktop/mobile widths.
+
+Uncertainties / coordinator notes
+---------------------------------
+
+- The user-provided repository guidance asks for docs/PROJECT.md,
+  docs/DECISIONS.md, docs/HUMAN-AI-INTERACTION.md and an active assignment in
+  docs/assignments/. Those files/directories do not exist on fetched origin/main.
+- The upstream issue asks not to remove editable/reference artwork; all three
+  unserved design references were retained. The only deleted image was an
+  earlier full-size Home background explicitly superseded by the current
+  copper/zeta background in the running UI.
+- No direct contact with other Codex workers occurred. No merge performed.

@@ -115,7 +115,7 @@ with sync_playwright() as playwright:
     expect(page.get_by_role("heading", name=TITLE)).to_be_visible()
     art = header.locator(".project-header-art img")
     assert art.evaluate("e => [e.naturalWidth, e.naturalHeight]") == [1774, 887]
-    assert art.get_attribute("src") == "/sigma-project-header.png"
+    assert art.get_attribute("src") == "/project-header.png"
     close = header.get_by_role("button", name="Back to home", exact=True)
     controls = header.locator(".header-controls")
     model_control = controls.get_by_role("button", name=re.compile("^Model"))

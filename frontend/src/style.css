@@ -127,7 +127,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page { max-width: none; min-height: 100dvh; margin: 0; padding: 0; background: #030915; color: #e5f2ff; overflow: hidden; position: relative; isolation: isolate; }
 .home-shell { position: relative; min-height: 100dvh; }
 .home-atmosphere { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; background: radial-gradient(ellipse 75% 55% at 82% 4%, #13315275, transparent 70%), radial-gradient(ellipse 65% 55% at 90% 100%, #0d32576e, transparent 74%), linear-gradient(130deg, #030915, #061225 70%, #030915); }
-.home-atmosphere::before { content: ""; position: absolute; inset: 0; background: url('/sigma-atmosphere.svg') right center / auto 100% no-repeat; opacity: .94; animation: atmosphere-reveal 2.6s ease-out both; }
+.home-atmosphere::before { content: ""; position: absolute; inset: 0; background: url('/home-atmosphere.svg') right center / auto 100% no-repeat; opacity: .94; animation: atmosphere-reveal 2.6s ease-out both; }
 .home-atmosphere::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #030915 0%, #030915ee 19%, #0309157d 46%, transparent 78%); }
 .home-content { width: min(100%, 1200px); margin: 0 auto; padding: 26px clamp(24px, 5vw, 72px) 70px; position: relative; }
 .home-page .site-header { align-items: center; padding-bottom: clamp(72px, 13vh, 150px); }
@@ -171,7 +171,7 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 
 /* ASN-4: fixed approved Home art. Never substitute the split-screen concept image. */
 .home-page { background: #020711; }
-.home-atmosphere { position: fixed; inset: 0; background: #020711 url('/sigma-home-background-copper.png') center top / cover no-repeat; }
+.home-atmosphere { position: fixed; inset: 0; background: #020711 url('/home-background-copper.png') center top / cover no-repeat; }
 .home-atmosphere::before, .home-atmosphere::after { content: none; }
 .home-content { width: 100%; min-height: 100dvh; padding: 0 clamp(26px, 5.4vw, 90px) 72px 0; }
 .home-page .home-topline { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; height: 52px; padding: 26px 0; }

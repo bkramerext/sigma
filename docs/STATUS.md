@@ -1,5 +1,47 @@
 # SIGMA status
 
+## T79: unused image cleanup and asset names (2026-10-25)
+
+Removed the retired `assets/sigma-home-background.png`, which was no longer
+loaded by the UI and was copied only to an unused `frontend/public/` path. The
+current zeta-bearing Home art remains byte-for-byte intact as
+`assets/home-background-copper.png` and `frontend/public/home-background-copper.png`.
+Renamed active assets and retained design references to short role-based names;
+all runtime source/public counterparts have matching SHA-256 hashes. The
+workspace, project header, atmosphere and slogan art are unchanged. The
+Vite startup copy list now names only runtime files it copies.
+
+Renames: `sigma-atmosphere.svg` → `home-atmosphere.svg`,
+`sigma-home-background-copper.png` → `home-background-copper.png`,
+`sigma-home-and-project-pages.png` → `home-project-reference.png`,
+`sigma-project-header.png` → `project-header.png`,
+`sigma-slogan-copper-approved.png` → `home-slogan-copper.png`,
+`sigma-strategies-reference.png` → `strategies-reference.png`,
+`sigma-workspace-logo.png` → `workspace-logo.png`, and
+`sigma-workspace-reference.png` → `workspace-reference.png`.
+
+Inventory: runtime source assets are the Home atmosphere, Home background,
+Home slogan, Project header and workspace logo; their public counterparts are
+kept in sync (the Vite copy step generates the background, slogan and workspace
+logo). `home-project-reference.png`, `strategies-reference.png` and
+`workspace-reference.png` are intentionally retained editable/design references
+with no runtime copies. `lean-logo.svg` and `chatgpt-logo-black.svg` are
+provider/product UI assets in `frontend/public/` with live frontend references.
+
+Verification: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build.
+The initial plain `./sigma test` stopped at `tests/tooling.py` because local
+bootstrap-admin configuration selected a different startup branch; the
+documented unset-environment invocation passed that same scenario and the full
+suite. `uv run --with playwright python browser_checks/t79_assets.py` passed in
+real Google Chrome at 1440px and 390px for Home and a Sample Project; all image
+elements loaded, with no failed image requests or page errors. The isolated
+browser servers had cloud auth disabled in their process environment only; no
+`.env` or project data was changed. Screenshots are `/tmp/sigma-t79-home-1440.png`,
+`/tmp/sigma-t79-home-390.png`, `/tmp/sigma-t79-project-1440.png`, and
+`/tmp/sigma-t79-project-390.png`. The check establishes load/render continuity;
+no pixel-diff baseline was available.
+
 ## Blue Increment 7: saved reasoning and adversarial continuity (2026-10-25)
 
 On cumulative PR #80, the Skeptic guidance now reviews the current claim against actually supplied prior steps rather than demanding a complete proof rewrite each cycle. Bounded prior-session extracts include saved reasoning arguments and reviews, with truncation and retraction signals. A Skeptic cannot mark an obligation addressed solely by a retracted, reasoning-truncated or absent older source. This checks source availability, not mathematical truth.
@@ -1514,7 +1556,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
   const cloud = useCloudIdentity();
   return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
-      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
+      <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/project-header.png' : '/workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork && close && <div className="project-back-row project-art-back-row">
         <button className="project-back" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home" data-tooltip-disabled><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg></button>
         <button className="project-back-label" type="button" onClick={close.action} disabled={close.busy} aria-label="Back to home caption" data-tooltip-disabled>Back to home</button>
@@ -2132,7 +2174,7 @@ function Home({ initialPath, onOpen }: {
     };
     background.addEventListener('load', updateScale);
     window.addEventListener('resize', updateScale);
-    background.src = '/sigma-home-background-copper.png';
+    background.src = '/home-background-copper.png';
     if (background.complete) updateScale();
     return () => {
       background.removeEventListener('load', updateScale);
@@ -2178,7 +2220,7 @@ function Home({ initialPath, onOpen }: {
         </div>
         <HomeCatalog onOpen={onOpen}/>
       </section>}
-      <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
+      <img className="home-slogan" src="/home-slogan-copper.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
       <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
