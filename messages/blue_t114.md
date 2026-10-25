@@ -2,7 +2,7 @@
 
 **Branch:** `blue/t114`  
 **Base:** `main` at `8562c89` (rebased after T89 merged during this increment)
-**PR:** pending creation
+**PR:** [#116](https://github.com/bkramerext/sigma/pull/116), open for independent review; not merged
 **Elapsed:** approximately 35 minutes
 **Provider calls / spend / cloud provisioning:** 0 / $0 / none
 

@@ -47,7 +47,8 @@ its use as verified independent-discovery evidence. Deterministic archived
 sessions and fixtures remain separate from live trials.
 
 Added a proposed paired protocol and USD $48 / 96-call hard-ceiling sheet in
-[the issue 114 evaluation record](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
+[the issue 114 evaluation record](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md)
+([PR #116](https://github.com/bkramerext/sigma/pull/116)).
 The existing offline manifest and audit now check per-call and aggregate input
 and output token budgets. Twenty-four synthetic records passed the dry-run;
 the readiness report still blocks live work for absent isolation, model,
