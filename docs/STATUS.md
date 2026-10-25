@@ -1,5 +1,26 @@
 # SIGMA status
 
+## Session Outcome Markdown toggle visibility (2026-10-24)
+
+Scoped the Session Outcome Markdown toggle fix to its SVG mark. The mark's
+paths now explicitly inherit the toggle's current color, and its 24px footprint
+is fixed so global button and shared text-view styling cannot collapse or hide
+it. The existing copper hover/active treatment and action labels remain in
+place; toggling between rendered Markdown and source text is unchanged.
+
+**Verification:** `uv run --with playwright python
+browser_checks/t17_8_saved_session.py` passed in real Chrome at 1440px and
+390px. It checked visible SVG paths, copper hover/active states, keyboard focus,
+rendered/source action labels and `aria-pressed`, no horizontal overflow, and
+the archived outcome. Screenshots: `/tmp/sigma-t17-8-markdown-toggle-1440.png`
+and `/tmp/sigma-t17-8-markdown-toggle-390.png`; no provider calls were made.
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+formatting, Pyright, frontend typecheck and production build. Plain `./sigma
+test` first stopped in `tests/tooling.py` because the shell-provided bootstrap
+email changed that fixture's expected launcher cleanup path. The broader
+`browser_checks/a17_research.py` check remains blocked before reaching Outcome
+by its stale “Open Counting Constrained Binary Strings” Samples selector.
+
 ## T43.1 third-pass operator acceptance fixes (2026-10-24)
 
 Implemented on `gray/t43-1-operator-followups`, based on current `main`
