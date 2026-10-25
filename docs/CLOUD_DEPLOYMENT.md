@@ -19,7 +19,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Registered DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Selected/registered; IP assignment and DNS verification pending |
 | GCE VM | `sigma-gce-01`, Ubuntu 24.04 LTS amd64, `e2-standard-4`, `us-west1-b` | Planned; no live resource ID confirmed |
 | Boot disk | 100 GiB `pd-standard` | Planned |
-| State disk | `sigma-state`, **30 GiB** `pd-balanced`, independently retained, `auto-delete=no` | Further lean sizing recommendation on 2026-10-25, pending operator confirmation and creation |
+| State disk | `sigma-state`, 30 GB `pd-balanced`, zonal `us-west1-b`, blank disk, Google-managed encryption; no backup schedule | Operator reports created 2026-10-25; pending table verification and VM attachment with `auto-delete=no` |
 | Static external IPv4 | `sigma-web-ip`, `us-west1`, Premium tier | Planned; actual IPv4 pending |
 | Network | `sigma-vpc` custom VPC; `sigma-us-west1` subnet; proposed `10.42.0.0/24` | Planned; CIDR approval pending |
 | Ingress | IAP SSH `35.235.240.0/20` to TCP 22 only; public TCP 80/443 deferred until launch gates | Planned |
