@@ -157,6 +157,9 @@ def main() -> None:
                     },
                 )
                 assert traversal.status_code in {400, 404}, traversal.text
+            with patch.dict(os.environ, env):
+                workspace_a = cloud_workspaces.workspace_for_subject("persistent-subject-a")
+                workspace_b = cloud_workspaces.workspace_for_subject("persistent-subject-b")
             stop(process)
             process = launch()
             with Client(base_url=api, headers=headers_a) as client_a:
@@ -192,11 +195,29 @@ def main() -> None:
                 restored_recent = client_a.get("/api/projects/recent")
                 assert restored_recent.status_code == 200
                 restored_path = restored_recent.json()["projects"][0]["path"]
+                assert (
+                    Path(restored_path)
+                    .resolve()
+                    .is_relative_to((restored / "workspaces" / workspace_a.workspace_id).resolve())
+                ), f"restored Recent path was not rebased: {restored_path}"
                 restored_open = client_a.get(
                     "/api/projects/inspect", params={"path": restored_path}
                 )
                 assert restored_open.status_code == 200, restored_open.text
                 assert restored_open.json()["project"]["id"] == project["id"]
+                with patch.dict(os.environ, env):
+                    restored_workspace_a = cloud_workspaces.workspace_for_subject(
+                        "persistent-subject-a"
+                    )
+                    restored_workspace_b = cloud_workspaces.workspace_for_subject(
+                        "persistent-subject-b"
+                    )
+                assert restored_workspace_a.workspace_id == workspace_a.workspace_id
+                assert restored_workspace_b.workspace_id == workspace_b.workspace_id
+                assert (
+                    restored_workspace_a.path
+                    == (restored / "workspaces" / workspace_a.workspace_id).resolve()
+                )
             with Client(base_url=api, headers=headers_b) as client_b:
                 assert (
                     client_b.get(
@@ -293,10 +314,42 @@ def main() -> None:
                 ROOT / "samples/nonconsecutive-subset-sums/project.json"
             ).read_bytes() == original
             assert list(local_projects.iterdir()) == []
+            stub_bin = base / "command-stubs"
+            stub_bin.mkdir(mode=0o700)
+            docker_log = base / "docker-args"
+            (stub_bin / "mountpoint").write_text(
+                '#!/bin/sh\n[ "$2" = "$SIGMA_TEST_MOUNTED_PATH" ]\n',
+                encoding="utf-8",
+            )
+            (stub_bin / "docker").write_text(
+                f'#!/bin/sh\nprintf "%s\\n" "$@" > "{docker_log}"\n',
+                encoding="utf-8",
+            )
+            (stub_bin / "chown").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            (stub_bin / "sudo").write_text(
+                '#!/bin/sh\n[ "$1" = env ] || exit 2\nshift\nexec env "$@"\n',
+                encoding="utf-8",
+            )
+            for stub in stub_bin.iterdir():
+                stub.chmod(0o700)
+            production_env = os.environ.copy()
+            production_env.update(
+                {
+                    "PATH": str(stub_bin) + os.pathsep + os.environ["PATH"],
+                    "SIGMA_TEST_MOUNTED_PATH": str(base / "mounted-state"),
+                }
+            )
+            production_command = [
+                str(stub_bin / "sudo"),
+                "env",
+                "SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env",
+                f"SIGMA_STATE_DISK_MOUNT={base / 'not-mounted'}",
+                str(ROOT / "deploy/start-gce.sh"),
+            ]
             missing_mount = subprocess.run(
-                [str(ROOT / "deploy/start-gce.sh")],
+                production_command,
                 cwd=ROOT,
-                env={**os.environ, "SIGMA_STATE_DISK_MOUNT": str(base / "not-mounted")},
+                env=production_env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -305,6 +358,25 @@ def main() -> None:
             )
             assert missing_mount.returncode != 0
             assert "not mounted" in missing_mount.stdout
+            assert not docker_log.exists(), "Compose launched without the state disk"
+
+            mounted = base / "mounted-state"
+            mounted.mkdir(mode=0o700)
+            production_command[3] = f"SIGMA_STATE_DISK_MOUNT={mounted}"
+            startup = subprocess.run(
+                production_command,
+                cwd=ROOT,
+                env=production_env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            assert startup.returncode == 0, startup.stdout
+            docker_args = docker_log.read_text(encoding="utf-8").splitlines()
+            assert docker_args[docker_args.index("--env-file") + 1] == "/etc/sigma/deploy.env"
+            assert docker_args[-2:] == ["up", "-d"]
             corrupted = base / "corrupted-disk"
             shutil.copytree(root, corrupted)
             corrupted.chmod(0o700)
@@ -355,7 +427,9 @@ def main() -> None:
             if process is not None:
                 stop(process)
         print(
-            "PASS persistent_disk: two-subject project/recent/export isolation, backend restart, full-root backup/restore, fail-closed roots, unchanged stock sample and LOCAL project directory"
+            "PASS persistent_disk: two-subject project/recent/export isolation, backend restart, "
+            "relocated-root Recent/ownership preservation, full-root backup/restore, fail-closed "
+            "roots and GCE startup, unchanged stock sample and LOCAL project directory"
         )
 
 

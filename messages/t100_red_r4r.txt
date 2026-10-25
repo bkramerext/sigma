@@ -32,3 +32,18 @@ Provider calls, OAuth exchanges, GCP resources, and inference charges: zero.
 
 Elapsed at handoff: approximately 25 minutes. No blocking implementation issue;
 the Compose v2 and real GCE mount checks remain environment-limited and explicit.
+
+Adversarial review follow-up (2026-10-25): production startup commands in
+`docs/CLOUD_DEPLOYMENT.md` now route through `deploy/start-gce.sh`, with
+`/etc/sigma/deploy.env` as the script default. The exact `sudo env ...
+start-gce.sh` argument shape is exercised using an isolated sudo shim and fake
+mountpoint/docker commands: missing mount exits without invoking Docker; a
+mounted fixture forwards `/etc/sigma/deploy.env` and `up -d`. Relocated-root
+restore coverage now asserts both Recent path rebasing and unchanged owner
+workspace IDs for subjects A and B. Focused `tests/storage.py`, Ruff, format and
+Pyright passed; a serial `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed all steps before the final sudo-shim test-only refinement, which was
+then rechecked with the focused storage test.
+
+Follow-up branch commit: recorded separately from this initial handoff on
+`red/t100`.

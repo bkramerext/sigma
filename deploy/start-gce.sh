@@ -24,7 +24,7 @@ chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$disk/auth"
 export SIGMA_STATE_DISK_MOUNT="$disk"
 exec docker compose \
   --project-name sigma \
-  --env-file "${SIGMA_DEPLOY_ENV_FILE:-deploy/.env}" \
+  --env-file "${SIGMA_DEPLOY_ENV_FILE:-/etc/sigma/deploy.env}" \
   -f deploy/compose.yaml \
   -f deploy/compose.gce.yaml \
   up -d

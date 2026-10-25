@@ -19,8 +19,11 @@ and backend image retained auth data through restart and container recreation.
 Negative root, symlink, permissions, traversal, corrupt mapping, and missing
 mount checks passed. The local Docker installation lacks Compose v2, so merged
 Compose configuration and a real GCE disk mount are unverified; YAML parsing
-and the guard's missing-mount check passed. See `messages/t100_red_r4r.txt` for
-the complete handoff and commit details.
+and the guard's missing-mount check passed. Production startup now uses the
+guarded host script from the deployment runbook, with `/etc/sigma/deploy.env` as
+its default env file; the exact env-file handoff and refusal to invoke Docker on
+a missing mount are covered in `tests/storage.py`. See
+`messages/t100_red_r4r.txt` for the complete handoff and commit details.
 
 ## T84 detailed command-specific CLI help (2026-10-25)
 

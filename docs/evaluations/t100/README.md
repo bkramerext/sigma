@@ -57,7 +57,9 @@ The GCE override maps the mounted host disk's `auth/` directory to
 that mount as `SIGMA_STORAGE_ROOT`. Start or recreate the service with:
 
 ```sh
-SIGMA_STATE_DISK_MOUNT=/srv/sigma-state deploy/start-gce.sh
+sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
+  SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
+  /opt/sigma/current/deploy/start-gce.sh
 ```
 
 The script rejects symlink mount/state paths, checks `mountpoint` before
