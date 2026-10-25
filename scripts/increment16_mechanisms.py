@@ -56,6 +56,45 @@ def examine():
                 ),
                 "requests_bounded_next_step": bool(link.get("next_investigator_step_id")),
             })
+    # Independent structural oracle for the graph witness, not role prose.
+    graph_rows = [r for r in actual_rows if r.get("scenario") == "graph"]
+    assert len(graph_rows) == 1
+    graph_links = [c for c in graph_rows[0]["chain"] if c.get("reported_effect") == "counterexample"]
+    assert len(graph_links) == 1
+    graph_observation = json.loads(graph_links[0]["observation"])
+    graph_witness = graph_observation["witness"]
+    edges = [tuple(e) for e in graph_witness["edges_before"]]
+    proposed_edge = tuple(graph_witness["insert"])
+    assert proposed_edge[::-1] not in edges  # naive reverse-edge rule accepts it
+    adjacency = {i: [] for i in range(graph_observation["n"])}
+    for a, b in edges:
+        adjacency[a].append(b)
+    def reachable(start, target):
+        seen, pending = set(), [start]
+        while pending:
+            node = pending.pop()
+            if node == target:
+                return True
+            if node in seen:
+                continue
+            seen.add(node)
+            pending.extend(adjacency[node])
+        return False
+    assert reachable(proposed_edge[1], proposed_edge[0])  # forms a cycle
+    assert graph_witness["candidate_accepts"] is True
+    assert graph_witness["oracle_acyclic_after"] is False
+    graph_followup = graph_links[0]["next_test"].lower()
+    assert "reachability" in graph_followup
+    assert "recomputation" in graph_followup
+    subset_links = [
+        c for r in actual_rows if r.get("scenario") == "subset"
+        for c in r.get("chain", []) if c.get("reported_effect") == "counterexample"
+    ]
+    assert subset_links
+    for link in subset_links:
+        question = link["next_test"].lower()
+        assert "residual" in question and "phase" in question
+        assert "do not infer" in question  # retains global proof boundary
     assert grounded_followups
     assert all(
         row["has_execution_provenance"] and row["identifies_observed_counterexample"]
@@ -69,6 +108,8 @@ def examine():
             "n": n, "actual": actual, "predicted": predicted, "residual": actual - predicted
         },
         "grounded_counterexample_followups": grounded_followups,
+        "independent_graph_witness": {"reverse_edge_absent": True, "cycle_formed": True},
+        "followup_quality_boundaries": {"graph_requests_reachability": True, "subset_retains_global_proof_obligation": True},
         "autonomous_unscripted_tool_choice_verified": False,
         "matched_budget_single_role_quality_comparison": False,
         "new_model_calls": 0,
