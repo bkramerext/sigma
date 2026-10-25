@@ -1,5 +1,123 @@
 # SIGMA status
 
+## Green UI tickets #95 and #125 (2026-10-25)
+
+Implemented on one branch, `green/t95-t125-ui`, from current `main` at
+`6686e6f`. Before publication, merged updated `main` at `753b99a` (PR #134)
+without conflicts; its only change was `docs/OPERATION_RUNBOOK.md`. The work is
+split into reviewable commits:
+
+- **#95 paused-session clarity:** the paused lifecycle state now includes a
+  nearby explanation and next step. It classifies known context, duration,
+  budget, model/connection, project/strategy, restart, and manual-pause reasons
+  from `current_action`, `message`, and the latest typed failure/interruption
+  fields. Other recorded reasons remain visible verbatim; a missing reason is
+  explicitly described as unrecorded. Resume behavior and backend safeguards
+  are unchanged. Commits: `1effc46`, `486c8db`, `04b6a75`.
+- **#125 saved AI papers:** saved versions appear as a responsive card library
+  with title and date/version metadata, per-version TXT and PDF downloads, and
+  an inline-PDF new-tab action. Each card expands a collapsed-by-default view
+  of that exact saved draft using escaped React text. Removal has an inline
+  confirmation, deletes only the selected paper JSON/PDF, and immediately
+  updates the list. The TXT route emits the stored paper text as an attachment;
+  existing project-owner authorization protects reads and deletion. Commit:
+  `597afcd`.
+
+Real Chrome passed `browser_checks/paused_session_clarity.py` (manual pause,
+page close/reopen, visible explanation and next step, narrow viewport, safe
+resume) and `browser_checks/saved_paper_library.py` (fixture-authored version,
+TXT/PDF payloads and headers, actual inline-PDF popup, accessible expansion,
+mobile layout, cancellation and confirmed deletion). `tests/papers.py` and
+`tests/cloud_workspaces.py` passed. Frontend typecheck and production build,
+Ruff check/format, and Pyright (0 diagnostics) passed. The full `./sigma test`
+ran twice and stopped at the existing `tests/tooling.py:177` assertion that
+expects `stop_servers` once; it was called zero times. The paper and cloud
+ownership scenarios were then run directly and passed. The broad legacy
+`browser_checks/a17_research.py` also stops later at a stale `12/30 calls`
+expectation; its focused pause/reopen behavior passed before that assertion.
+No live or paid provider calls or cloud changes occurred. The browser paper
+check used only the deterministic local fixture; its one generation is fixture
+traffic.
+
+### Manual feedback follow-up (build 85a9efa)
+
+- The UI now calls every resumable interruption **Stopped**, including backend
+  guard states that remain `paused` internally for compatibility. Resume is
+  available when no other session is active. **Ended** remains terminal and
+  does not offer Resume. The stopped-session notice explains the cause and safe
+  next step; when no complete Investigator/Skeptic artifact exists, it also
+  states: “The session is stopped and has not saved a complete
+  Investigator/Skeptic finding. No answer to the project question is
+  established yet.”
+- Home Recent and Samples entries show **Runnable** only when the project has
+  an active, enabled strategy. The label describes project readiness; AI
+  connection availability still applies.
+- About already closed on backdrop clicks; real-Chrome coverage now checks
+  dismissal and focus restoration.
+- Real Chrome passed the stopped-session reopen/resume check and the About
+  backdrop check. In the broader `browser_checks/recents.py`, the new Runnable
+  assertion passed, then the existing scroll-height assertion failed because
+  the sample scroller's `scrollHeight` equaled its `clientHeight` (1275).
+- A fresh `./sigma test` again reached the existing `tests/tooling.py:177`
+  `stop_servers` call-count failure. Focused `tests/recents.py`, frontend
+  typecheck/build, Ruff, and Pyright passed.
+
+### Home session activity feedback
+
+Replaced the strategy-eligibility label in Home with inline `· Running` metadata
+only for a persisted research session whose status is `running`. Sample
+projects no longer claim to be Runnable or Not runnable. `tests/recents.py`
+checks both running and stopped session states. Real Chrome verified the
+metadata sentence omits Running for a stopped record and displays
+`1 strategy · Medium difficulty · Running` for a running record. The broader
+recents browser check passed this new assertion, then hit the existing sample
+scroll-height assertion; a second run with only that unrelated assertion
+bypassed reached the subsequent flaky Back-to-Home detached-element timeout.
+
+I inspected `projects/test2.sigma` directly: its latest saved research session
+is `ended`, and its earlier session is `stopped` with no running branches or
+steps. It is therefore correct for test2 not to show Running at this moment.
+The full `./sigma test` remains blocked by the unrelated existing
+`tests/tooling.py:177` `stop_servers` call-count assertion. Frontend production
+build, targeted Ruff and Pyright checks, and the focused recents backend test
+passed. No provider calls were made.
+
+After the user reported a newly started run missing from an already-open Home
+page, I found Recent had only fetched once on mount. It now refreshes visible
+Recent metadata every two seconds (and on focus/visibility return), so an open
+Home page reflects session starts and stops. Real Chrome
+`browser_checks/home_running_status.py` passed the persisted stopped → running
+→ stopped transition without reloading. The local app server was restarted
+after the test2 run had ended so its backend loaded the updated response field.
+
+The user then requested saved AI paper cards match the session-row disclosure
+pattern. Each saved version now has an adjacent disclosure arrow and title,
+date/version metadata with Remove on that line, and vertically stacked TeX/PDF
+actions on the right that remain visible while expanded. The TeX action now
+downloads the saved `.tex` source used to compile the PDF through a dedicated
+authenticated route; the older plain-text route remains available. Real Chrome
+`browser_checks/saved_paper_library.py` passed the TeX/PDF download, inline PDF,
+collapsed/expanded layout and action visibility, metadata/remove alignment,
+mobile layout, and confirmed deletion checks against a fresh local fixture.
+
+### Integrated T95/T125 handoff (2026-10-25)
+
+Merged current `main` at `8c3741a`, keeping both the Green UI history and T134
+cloud isolation preparation in this status file. `tests/cloud_workspaces.py`
+auto-merged; its newer cross-owner no-mutation assertions and the saved-paper
+read/download/delete authorization coverage are present together. Removed the
+redundant raw `RecentProject.running` field and its status-only assertions;
+Home and the API now rely on T92's recovery-aware `research_running` value. The
+Home Chrome fixture holds a worker lock while asserting Running, matching a
+live session rather than a stale persisted status.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps.
+Focused real Chrome checks passed for stopped-session guidance/resume,
+live Home Running updates, the saved-paper library, and the simplified LaTeX
+dialog. Cloud workspace and recents backend suites passed independently. All
+browser/provider paths used deterministic local fixtures; no paid calls or
+hosted identities were used. GitHub Actions will be verified on the pushed
+integrated head before R4R.
 ## T134 cloud isolation and privacy acceptance preparation (2026-10-25)
 
 On branch `gray/t134-cloud-isolation`, based on current `main` at `19e5bd7`,
@@ -126,13 +244,32 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
 
 ## Current owner follow-ups (2026-10-25)
 
-- TeX authoring: removed the extra white browser confirmation for long-form
-  generation; provider-use bounds are still visible in the dialog. Generate
-  becomes “Cancel generation” in place while running. Failed generation leaves
-  its error visible and restores an enabled Generate action for retry.
-- Project header: About matches Home's compact style in normal and hover states
-  and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
-  responsive.
+- LaTeX dialog launch simplification from `tickets/t95-t125-latex-dialog-ux-spec.md`
+  (owner revision `cf47e1c`): removed the expanded-authoring toggle, pipeline
+  bounds, checkpoint counters and ordinary restart control. The server chooses
+  one-shot or long-form authoring automatically; compatible saved work still
+  resumes when the user explicitly generates. A concise Start over action is
+  available only when changed evidence/settings make existing work unusable;
+  its consequence and possible provider usage are stated beside it. Generation
+  now uses one primary action and plain activity/success/failure messages. An
+  interrupted or failed dispatched request warns that provider completion or
+  usage may be unknown and is never automatically retried. Saved versions and
+  their TeX/PDF actions are unchanged.
+- `tests/papers.py` passed, including the API disconnect cancellation/no
+  publication regression. Real Chrome `browser_checks/t45_long_paper.py` and
+  `browser_checks/saved_paper_library.py` passed with deterministic local
+  fixtures at desktop/mobile widths. They verified automatic long-form
+  selection, no silent retry after a simulated failure, simple activity and
+  success feedback, saved versions and PDF access, plus the existing saved-row
+  layout, yellow Remove action, left-aligned downloads, TeX/PDF downloads, and
+  confirmed deletion. Frontend
+  production build passed. The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+  ./sigma test` passed all steps. No live or paid provider calls were made.
+- Project header: About matches Home's compact style in normal and hover states.
+  The desktop 3×2 pills are grouped by column: Difficulty/About,
+  Model/Thinking, and Google/ChatGPT. The group now sits closer to the upper
+  right with half-sized grid gaps; real Chrome confirmed the position and
+  grouping. Narrow layout stays responsive.
 - Real-Chrome checks now cover direct long-form start without a browser prompt,
   failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
   About placement/style. `browser_checks/t45_long_paper.py` and
@@ -141,6 +278,13 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
   Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
   All checks used local deterministic fixtures; no paid provider calls or cloud
   changes.
+- After syncing current `main` (`19e5bd7`), `./sigma test` passed all steps,
+  including the frontend production build. Real Chrome
+  `browser_checks/saved_paper_library.py` and `browser_checks/t45_long_paper.py`
+  passed against deterministic local fixtures. The recents test now tolerates
+  project initialization creating its research-session directory. The long
+  paper browser fixture uses a unique project title so repeated runs do not
+  collide with prior local fixture data.
 
 Screenshots: `docs/evaluations/t45-paper-dialog/` and
 `docs/evaluations/project-about-pill/`.

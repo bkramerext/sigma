@@ -4,6 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -36,7 +37,7 @@ with sync_playwright() as playwright:
         route.fulfill(response=response)
 
     page.route("**/api/**", forward)
-    page.goto("http://127.0.0.1:5173/")
+    page.goto(UI_ORIGIN + "/")
     page.get_by_role("button", name="New", exact=True).hover()
     expect(page.get_by_role("tooltip")).to_have_text("Create a project")
     page.get_by_role("button", name="Open", exact=True).hover()
@@ -49,8 +50,13 @@ with sync_playwright() as playwright:
     open_dialog.get_by_role("heading", name="Open Project", exact=True).evaluate(
         "h => { const cancel = h.nextElementSibling; if (!cancel || !cancel.matches('button.entry-cancel') || cancel.getBoundingClientRect().left < h.getBoundingClientRect().right) throw new Error('Cancel must flow immediately after the Open Project title'); }"
     )
-    assert open_cancel.bounding_box()["y"] < open_dialog.get_by_role("button", name="Open Project", exact=True).bounding_box()["y"]
-    expect(open_dialog.locator(".entry-dialog-actions").get_by_role("button", name="Cancel")).to_have_count(0)
+    assert (
+        open_cancel.bounding_box()["y"]
+        < open_dialog.get_by_role("button", name="Open Project", exact=True).bounding_box()["y"]
+    )
+    expect(
+        open_dialog.locator(".entry-dialog-actions").get_by_role("button", name="Cancel")
+    ).to_have_count(0)
     open_cancel.click()
     expect(open_dialog).to_have_count(0)
     samples_tab = page.get_by_role("tab", name="Samples", exact=True)
@@ -70,12 +76,22 @@ with sync_playwright() as playwright:
     expect(samples_panel.get_by_text("Did Jesus Use Cannabis?")).to_be_visible()
     expect(
         samples_panel.get_by_role("button", name="Open Maximum Regions Formed by Lines").locator(
-            "small span"
+            "small span:first-child"
         )
     ).to_have_text("1 strategy · Easy difficulty")
+    assert (
+        "Runnable"
+        not in samples_panel.get_by_role(
+            "button", name="Open Maximum Regions Formed by Lines"
+        ).inner_text()
+    )
     sample_title_box = samples_panel.locator(".sample-open strong").first.bounding_box()
     sample_meta_box = samples_panel.locator(".sample-open small span").first.bounding_box()
-    assert sample_title_box and sample_meta_box and abs(sample_title_box["x"] - sample_meta_box["x"]) < 1
+    assert (
+        sample_title_box
+        and sample_meta_box
+        and abs(sample_title_box["x"] - sample_meta_box["x"]) < 1
+    )
     sample_type = samples_panel.locator(".sample-open strong").first.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
@@ -181,10 +197,33 @@ with sync_playwright() as playwright:
     recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(recent_meta).to_contain_text("strategies · ")
     expect(recent_meta).to_contain_text("Hard difficulty")
+    expect(recent_meta).not_to_contain_text("Running")
+    project_data = json.loads(Path(path, "project.json").read_text())
+    session_id = str(uuid4())
+    session_file = Path(path, "research-sessions", f"{session_id}.json")
+    session_file.parent.mkdir(exist_ok=True)
+    session_file.write_text(
+        json.dumps(
+            {
+                "id": session_id,
+                "project_id": project_data["id"],
+                "project_path": str(Path(path).resolve()),
+                "status": "running",
+            }
+        )
+    )
+    expect(recent_meta).to_contain_text(" · Running")
+    session_file.write_text(session_file.read_text().replace('"running"', '"stopped"'))
+    expect(recent_meta).not_to_contain_text("Running")
+    assert first_copy.locator("xpath=../..").locator(".home-runnable-state").count() == 0
     assert "Mathematics" not in recent_meta.inner_text()
     recent_title_box = first_copy.bounding_box()
     recent_meta_box = recent_meta.bounding_box()
-    assert recent_title_box and recent_meta_box and abs(recent_title_box["x"] - recent_meta_box["x"]) < 1
+    assert (
+        recent_title_box
+        and recent_meta_box
+        and abs(recent_title_box["x"] - recent_meta_box["x"]) < 1
+    )
     recent_meta_style = recent_meta.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )

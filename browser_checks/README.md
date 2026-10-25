@@ -105,6 +105,13 @@ that copy in Recents, source-file immutability, and 1280x720, 390x844 and
 320x700 layouts. Captures are `/tmp/sigma-samples-*.png`.
 `settings.py` remains the shared-form persistence/focus regression.
 
+For live session activity in the Home Recent metadata, start a fresh
+`provider_fixture:app` on port 8001 and the normal UI on port 5173, then run
+`uv run --with playwright python browser_checks/home_running_status.py`.
+This real-Chrome check creates a disposable sample copy, changes only its
+fixture session record, and verifies that `· Running` appears and disappears
+without reloading Home. It makes no provider calls.
+
 ## A13 project header
 
 With a fresh `provider_fixture:app` on port 8001 and the normal UI on 5173, run

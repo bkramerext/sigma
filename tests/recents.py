@@ -187,6 +187,22 @@ def check(root: Path, base: Path) -> None:
         assert not research_sessions.has_active_session(active.path)
 
     actual = recent_projects()["projects"]
+    running_project = created[-1]
+    session_id = str(uuid4())
+    session_dir = Path(running_project.path) / "research-sessions"
+    session_dir.mkdir(exist_ok=True)
+    session_path = session_dir / f"{session_id}.json"
+    session_path.write_text(
+        json.dumps(
+            {
+                "id": session_id,
+                "project_id": running_project.project.id,
+                "project_path": running_project.path,
+                "status": "running",
+            }
+        )
+    )
+    session_path.write_text(session_path.read_text().replace('"running"', '"stopped"'))
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])
     ]
