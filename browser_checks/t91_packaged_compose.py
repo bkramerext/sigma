@@ -10,9 +10,12 @@ requests.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
+import secrets
+import shutil
 import subprocess
 import tempfile
 import time
@@ -21,6 +24,7 @@ from pathlib import Path
 import httpx
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import expect, sync_playwright
+from pypdf import PdfReader
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = os.environ.get("SIGMA_T91_BASE_URL", "http://localhost:18080").rstrip("/")
@@ -41,10 +45,69 @@ MATRIX = {
     "workspace survives backend container recreation": "NOT RUN",
     "user B denied user A project and saved evidence": "NOT RUN",
     "real Google OAuth": "SKIPPED — simulated sessions only; no OAuth exchange",
-    "compiled PDF download": "SKIPPED — no saved PDF fixture; generation would require provider work",
+    "real Tectonic PDF compilation and authenticated download": "NOT RUN",
+    "malformed TeX fails without publishing a PDF": "NOT RUN",
+    "saved TeX, PDF, report and session evidence survive backend recreation": "NOT RUN",
+    "backup restores into fresh storage with identities and hashes intact": "NOT RUN",
+    "restored workspace remains isolated from user B": "NOT RUN",
     "persistent_disk storage backend from T100": "SKIPPED — this run uses Compose's default local storage configuration",
     "inference generation from T99": "SKIPPED — this workflow is read/edit/export only; no provider calls",
 }
+
+COMPOSE = shutil.which("docker-compose")
+if not COMPOSE:
+    COMPOSE = "docker"
+    COMPOSE_PREFIX = ["compose"]
+else:
+    COMPOSE_PREFIX = []
+
+BASE_COMPOSE = ROOT / "deploy/compose.yaml"
+RESTORE_VOLUME = f"{PROJECT}_t91-restore-{os.getpid()}"
+OVERRIDE_FILE: Path | None = None
+
+SEED_COMPILED_PAPER = r"""
+import hashlib, json, sys
+from datetime import UTC, datetime
+from sigma import papers
+path, project_id, paper_id = sys.argv[1:]
+tex = r'''\documentclass{article}
+\begin{document}
+T91 packaged recovery acceptance.
+The durable evidence value is 17.
+\end{document}
+'''
+pdf = papers._compile_pdf(tex)
+assert pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
+record = {
+    "paper_id": paper_id,
+    "project_id": project_id,
+    "created_at": datetime.now(UTC).isoformat(),
+    "snapshot_sha256": "b" * 64,
+    "draft": {"title": "T91 Packaged Recovery Paper"},
+    "validation_warnings": [],
+    "generation": {"fixture": "deterministic; no provider calls"},
+    "source": {"fixture": "T91 durable source"},
+    "tex_source": tex,
+}
+papers._save(path, record, pdf)
+before = set(papers._paper_dir(path).iterdir())
+try:
+    papers._compile_pdf(r"\documentclass{article}\begin{document}\T91MalformedControlSequence\end{document}")
+except RuntimeError as error:
+    message = str(error)
+    assert "Tectonic could not compile" in message and "No PDF was downloaded" in message
+else:
+    raise AssertionError("malformed TeX unexpectedly compiled")
+after = set(papers._paper_dir(path).iterdir())
+assert after == before, "failed compilation published a paper artifact"
+stored = papers.get_paper(path, paper_id)
+stored_pdf = papers.get_pdf(path, paper_id)
+assert stored["tex_source"] == tex
+assert hashlib.sha256(stored_pdf).hexdigest() == stored["pdf_sha256"]
+print(json.dumps({"paper_id": paper_id, "tex_sha256": hashlib.sha256(tex.encode()).hexdigest(),
+                  "pdf_sha256": hashlib.sha256(pdf).hexdigest(), "pdf_bytes": len(pdf),
+                  "malformed_error": message}))
+"""
 
 SEED_SESSIONS = r"""
 import json, secrets
@@ -84,17 +147,72 @@ def compose(*args: str) -> subprocess.CompletedProcess[str]:
         "env",
         "-u",
         "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
-        "docker",
-        "compose",
+        COMPOSE,
+        *COMPOSE_PREFIX,
         "--project-name",
         PROJECT,
         "--env-file",
         COMPOSE_ENV,
         "-f",
-        str(ROOT / "deploy/compose.yaml"),
-        *args,
+        str(BASE_COMPOSE),
     ]
+    if OVERRIDE_FILE:
+        command.extend(("-f", str(OVERRIDE_FILE)))
+    command.extend(args)
     return subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
+
+
+def backup_volume(source: str, archive: Path) -> None:
+    archive.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{source}:/source:ro",
+            "-v",
+            f"{archive.parent}:/backup",
+            "alpine:3.21",
+            "sh",
+            "-ec",
+            "tar -C /source -cf /backup/state.tar .",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def restore_volume(archive: Path, destination: str) -> None:
+    subprocess.run(
+        ["docker", "volume", "create", destination], check=True, capture_output=True, text=True
+    )
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{archive.parent}:/backup:ro",
+            "-v",
+            f"{destination}:/restore",
+            "alpine:3.21",
+            "sh",
+            "-ec",
+            "tar -C /restore -xf /backup/state.tar",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def write_restore_override(path: Path) -> None:
+    path.write_text(
+        f"volumes:\n  sigma-state:\n    external: true\n    name: {RESTORE_VOLUME}\n",
+        encoding="utf-8",
+    )
 
 
 def seed_users() -> list[dict[str, str]]:
@@ -115,6 +233,7 @@ def api_get(user: dict[str, str], endpoint: str, **params: str) -> httpx.Respons
 
 
 def main() -> None:
+    global OVERRIDE_FILE
     if not Path(CHROME).is_file():
         MATRIX["packaged Compose SPA/API and stock sample catalog"] = (
             "FAIL — installed Chrome executable not found"
@@ -283,24 +402,54 @@ def main() -> None:
             assert "T91 Packaged Chrome Copy" in report
             assert "Open proof obligations" in report
             assert "Verification status" in report
+            report_digest = hashlib.sha256(report_file.read_bytes()).hexdigest()
             expect(dialog).to_be_hidden()
             papers_response = api_get(user_a, "/api/projects/papers", path=path)
             assert papers_response.status_code == 200, papers_response.text
-            papers = papers_response.json()["papers"]
-            downloadable = next((paper for paper in papers if paper.get("pdf_available")), None)
-            if downloadable:
-                pdf_result = page_a.evaluate(
-                    "async ({path,id}) => {const r=await fetch('/api/projects/papers/' + id + '/pdf?' + new URLSearchParams({path})); const b=new Uint8Array(await r.arrayBuffer()); return {status:r.status,magic:String.fromCharCode(...b.slice(0,5)),size:b.length}}",
-                    {"path": path, "id": downloadable["paper_id"]},
+            papers_response.json()["papers"]
+            paper_id = secrets.token_hex(16)
+            try:
+                seed_result = compose(
+                    "exec",
+                    "-T",
+                    "backend",
+                    "python",
+                    "-c",
+                    SEED_COMPILED_PAPER,
+                    path,
+                    project_id,
+                    paper_id,
                 )
-                assert (
-                    pdf_result["status"] == 200
-                    and pdf_result["magic"] == "%PDF-"
-                    and pdf_result["size"] > 1000
-                ), pdf_result
-                MATRIX["compiled PDF download"] = (
-                    f"PASS — saved PDF downloaded ({pdf_result['size']} bytes)"
-                )
+            except subprocess.CalledProcessError as error:
+                raise RuntimeError(
+                    f"Packaged PDF fixture failed: {error.stderr or error.stdout}"
+                ) from error
+            compiled = json.loads(seed_result.stdout.strip().splitlines()[-1])
+            pdf_response = api_get(user_a, f"/api/projects/papers/{paper_id}/pdf", path=path)
+            assert pdf_response.status_code == 200, pdf_response.text
+            assert pdf_response.headers.get("content-type", "").startswith("application/pdf")
+            assert "attachment" in pdf_response.headers.get("content-disposition", "")
+            pdf = pdf_response.content
+            assert hashlib.sha256(pdf).hexdigest() == compiled["pdf_sha256"]
+            assert pdf.startswith(b"%PDF-") and pdf.rstrip().endswith(b"%%EOF")
+            reader = PdfReader(io.BytesIO(pdf), strict=True)
+            assert len(reader.pages) == 1
+            assert "T91 packaged recovery acceptance" in reader.pages[0].extract_text()
+            assert compiled["pdf_bytes"] > 1000
+            paper_record_response = api_get(user_a, f"/api/projects/papers/{paper_id}", path=path)
+            assert paper_record_response.status_code == 200, paper_record_response.text
+            paper_record = paper_record_response.json()
+            assert (
+                paper_record["tex_source"]
+                and hashlib.sha256(paper_record["tex_source"].encode()).hexdigest()
+                == compiled["tex_sha256"]
+            )
+            MATRIX["real Tectonic PDF compilation and authenticated download"] = (
+                f"PASS — Tectonic PDF validated and authenticated download matched SHA-256 {compiled['pdf_sha256']} ({compiled['pdf_bytes']} bytes)"
+            )
+            MATRIX["malformed TeX fails without publishing a PDF"] = (
+                "PASS — explicit Tectonic failure; no paper files appeared"
+            )
             MATRIX["saved sessions, outcomes, and report download"] = (
                 "PASS (5 saved sessions; Mixed outcome, cited research artifact, and HTML report downloaded)"
             )
@@ -327,8 +476,12 @@ def main() -> None:
                 path=path,
             )
             assert denied_session.status_code == 404, denied_session.text
+            denied_pdf = api_get(user_b, f"/api/projects/papers/{paper_id}/pdf", path=path)
+            assert denied_pdf.status_code == 404, denied_pdf.text
+            denied_paper = api_get(user_b, f"/api/projects/papers/{paper_id}", path=path)
+            assert denied_paper.status_code == 404, denied_paper.text
             MATRIX["user B denied user A project and saved evidence"] = (
-                "PASS (Recent omits project; inspect, export, and session/evidence APIs return 404)"
+                "PASS (Recent omits project; inspect, export, session and PDF APIs return 404)"
             )
 
             # Force a new backend container while both Chrome contexts retain
@@ -370,10 +523,154 @@ def main() -> None:
             assert after_restart["strategies"][0]["title"] == "T91 Durable Strategy"
             status_after_restart = api_get(user_a, "/api/cloud-auth/status").json()
             assert status_after_restart["authenticated"] is True, status_after_restart
+            after_restart_paper = api_get(
+                user_a, f"/api/projects/papers/{paper_id}", path=path
+            ).json()
+            assert after_restart_paper["tex_source"] == paper_record["tex_source"]
+            after_restart_pdf = api_get(user_a, f"/api/projects/papers/{paper_id}/pdf", path=path)
+            assert hashlib.sha256(after_restart_pdf.content).hexdigest() == compiled["pdf_sha256"]
+            after_restart_session = api_get(
+                user_a, f"/api/projects/research-sessions/{session_id}", path=path
+            ).json()
+            assert after_restart_session["id"] == detail["id"]
+            assert after_restart_session["outcome"] == detail["outcome"]
+            assert after_restart_session["artifacts"] == detail["artifacts"]
+            after_restart_report = api_get(
+                user_a, "/api/projects/export/report", path=path, format="html"
+            )
+            assert after_restart_report.status_code == 200, after_restart_report.text
+            assert hashlib.sha256(after_restart_report.content).hexdigest() == report_digest
             assert hashlib.sha256(SAMPLE.read_bytes()).hexdigest() == source_digest
             assert not page_errors, page_errors
             MATRIX["workspace survives backend container recreation"] = (
-                "PASS (same session, project/strategy IDs and edits reopened)"
+                "PASS (project/strategy/session IDs, outcomes/evidence, TeX/PDF and report hash survived)"
+            )
+
+            MATRIX["saved TeX, PDF, report and session evidence survive backend recreation"] = (
+                f"PASS — TeX SHA-256 {compiled['tex_sha256']}; PDF SHA-256 unchanged; session evidence equal; report SHA-256 {report_digest} unchanged"
+            )
+
+            MATRIX["backup restores into fresh storage with identities and hashes intact"] = (
+                "RUNNING"
+            )
+            volumes = subprocess.run(
+                [
+                    "docker",
+                    "volume",
+                    "ls",
+                    "-q",
+                    "--filter",
+                    f"label=com.docker.compose.project={PROJECT}",
+                    "--filter",
+                    "label=com.docker.compose.volume=sigma-state",
+                ],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.splitlines()
+            assert len(volumes) == 1, f"expected one source state volume, got {volumes}"
+            source_volume = volumes[0]
+            backup_dir = Path(tempfile.mkdtemp(prefix="sigma-t91-recovery-"))
+            backup_dir.chmod(0o700)
+            archive = backup_dir / "state.tar"
+            compose("stop", "backend")
+            backup_volume(source_volume, archive)
+            # A failed extraction is a failed restore: it must raise and must
+            # never be included in a PASS result.
+            invalid_archive = backup_dir / "invalid.tar"
+            invalid_archive.write_bytes(b"not a tar archive")
+            failed_volume = f"{RESTORE_VOLUME}-failed"
+            subprocess.run(
+                ["docker", "volume", "create", failed_volume],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            failed_result = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-v",
+                    f"{invalid_archive.parent}:/backup:ro",
+                    "-v",
+                    f"{failed_volume}:/restore",
+                    "alpine:3.21",
+                    "sh",
+                    "-ec",
+                    "tar -C /restore -xf /backup/invalid.tar",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert failed_result.returncode != 0, "invalid backup was reported as restored"
+            subprocess.run(
+                ["docker", "volume", "rm", failed_volume],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            restore_volume(archive, RESTORE_VOLUME)
+            OVERRIDE_FILE = backup_dir / "compose-restore.yaml"
+            write_restore_override(OVERRIDE_FILE)
+            compose("up", "-d", "--force-recreate", "backend")
+            deadline = time.monotonic() + 90
+            while time.monotonic() < deadline:
+                try:
+                    status = api_get(user_a, "/api/cloud-auth/status").json()
+                    if status.get("ready"):
+                        break
+                except (httpx.HTTPError, ValueError):
+                    pass
+                time.sleep(1)
+            else:
+                raise RuntimeError("backend did not become ready on restored storage")
+            restored_owner = api_get(user_a, "/api/projects/inspect", path=path)
+            assert restored_owner.status_code == 200, restored_owner.text
+            restored_project = restored_owner.json()["project"]
+            assert restored_project["id"] == project_id
+            assert restored_project["strategies"][0]["id"] == strategy_ids[0]
+            restored_paper = api_get(user_a, f"/api/projects/papers/{paper_id}", path=path)
+            assert restored_paper.status_code == 200, restored_paper.text
+            assert restored_paper.json()["tex_source"] == paper_record["tex_source"]
+            restored_pdf = api_get(user_a, f"/api/projects/papers/{paper_id}/pdf", path=path)
+            assert hashlib.sha256(restored_pdf.content).hexdigest() == compiled["pdf_sha256"]
+            restored_session = api_get(
+                user_a, f"/api/projects/research-sessions/{session_id}", path=path
+            )
+            assert restored_session.status_code == 200, restored_session.text
+            restored_detail = restored_session.json()
+            assert restored_detail["id"] == detail["id"]
+            assert restored_detail["outcome"] == detail["outcome"]
+            assert restored_detail["artifacts"] == detail["artifacts"]
+            restored_report = api_get(
+                user_a, "/api/projects/export/report", path=path, format="html"
+            )
+            assert hashlib.sha256(restored_report.content).hexdigest() == report_digest
+            assert api_get(user_b, "/api/projects/inspect", path=path).status_code == 404
+            assert (
+                api_get(user_b, f"/api/projects/papers/{paper_id}/pdf", path=path).status_code
+                == 404
+            )
+            assert (
+                api_get(user_b, "/api/projects/export/report", path=path, format="html").status_code
+                == 404
+            )
+            assert (
+                api_get(
+                    user_b, f"/api/projects/research-sessions/{session_id}", path=path
+                ).status_code
+                == 404
+            )
+            MATRIX["backup restores into fresh storage with identities and hashes intact"] = (
+                f"PASS — fresh volume; project/session/paper IDs preserved; PDF SHA-256 {compiled['pdf_sha256']}; HTML report SHA-256 {report_digest}"
+            )
+            MATRIX["restored workspace remains isolated from user B"] = (
+                "PASS — restored project, PDF, and session evidence return 404"
+            )
+            MATRIX["failed restores do not report success"] = (
+                "PASS — invalid tar extraction returned nonzero; only verified owner checks marked restore PASS"
             )
         finally:
             browser.close()

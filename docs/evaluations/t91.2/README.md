@@ -1,0 +1,48 @@
+# T91.2 packaged PDF and disaster-recovery acceptance
+
+## Result
+
+Acceptance executed against freshly built amd64 production-packaged backend and
+frontend images using the local Compose edge, a disposable Docker volume, and
+real Chrome 156. The backend image contains its pinned Tectonic 0.15.0 binary.
+All test data was synthetic/deterministic and used simulated authenticated
+sessions. No Google OAuth exchange, inference call, paid service, or GCP resource
+was used.
+
+### PASS / FAIL / BLOCKED matrix
+
+| Acceptance item | Result | Evidence |
+| --- | --- | --- |
+| Actual packaged Tectonic compiles saved TeX | PASS | `tectonic` in the packaged backend compiled the saved source; strict `pypdf` parsing read one page and extracted “T91 packaged recovery acceptance”. |
+| Authenticated API PDF download | PASS | Owner got `application/pdf` attachment; API bytes matched saved SHA-256 `8e4604f8e35a87f0592ca802170aa86d0398364617e146bb2b1f3d421e28a5c9` (4,782 bytes). |
+| Malformed TeX failure/no partial PDF | PASS | Undefined TeX control sequence returned the explicit Tectonic compilation failure; paper archive entries were identical before and after. |
+| Container recreation preserves TeX/PDF/report/session evidence | PASS | Forced backend recreation retained project, strategy and session identities, session outcome/artifacts, TeX source, PDF digest, and deterministic HTML report digest `284295274a8c1fd2e678b1983c0ea3256638f5f3971e9d6d864cc9f26d9dbcfa`. |
+| Backup/restore into fresh storage | PASS | Stopped backend, tar-backed the complete auth/workspace volume, restored into a new named volume, then checked owner project, session and paper IDs and report/PDF hashes through the packaged API. |
+| Cross-user isolation after restore | PASS | Simulated user B received 404 for owner's project, paper/PDF, report, and session evidence. |
+| Failed restore is not called success | PASS | Invalid archive extraction returned nonzero; restore PASS was assigned only after valid restore plus owner/content/hash assertions. |
+| Real Google OAuth / GCP / mounted persistent disk | BLOCKED (cloud-only) | No OAuth exchange, GCP host, Red-owned mount/bootstrap/systemd, or T100 persistent-disk run was attempted. |
+| Paid/live inference | BLOCKED (excluded) | Deterministic session/archive fixtures; no inference was requested. |
+
+## Commands and environment
+
+- `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config ./deploy/validate-local.sh` —
+  PASS, packaged images built and full Chrome acceptance completed. The temporary
+  Docker CLI configuration exposed installed standalone Compose and Buildx
+  plugins while preserving the local Colima context; no repository Docker config
+  was changed.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — full suite, result
+  PASS: all scenarios, Ruff, formatting, Pyright, frontend typecheck and
+  production build.
+- `python3 -m py_compile browser_checks/t91_packaged_compose.py` — PASS.
+- `git diff --check` — PASS.
+
+The packaged workflow uses Docker's local Compose volume backend, not a mounted
+GCE disk or `SIGMA_STORAGE_BACKEND=persistent_disk`. PDF compiler, download,
+restart, and backup/restore acceptance are real local packaged runs, but do not
+prove GCE disk attachment, production rootless daemon operation, actual OAuth,
+public TLS, cloud backup policy, or recovery objectives.
+
+Full suite passed all scenarios, Ruff, format, Pyright, frontend typecheck, and
+production build. Total assignment elapsed time was approximately 15 minutes
+(about 08:57–09:12 PDT, 2026-10-25). Commit and PR identifiers are reported in
+the repository handoff and final response.

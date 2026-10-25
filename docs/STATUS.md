@@ -1,5 +1,37 @@
 # SIGMA status
 
+## T91.2 packaged PDF and disaster-recovery acceptance (2026-10-25)
+
+Started on fresh branch `gray/t91.2-packaged-pdf-recovery` from current `main`
+`5fa536b`. Extended the packaged Compose / real-Chrome check with real Tectonic
+0.15.0 compilation from a saved TeX source inside the backend image, strict PDF
+parsing and extracted-content checks, authenticated API download/hash comparison,
+malformed-TeX failure/no-publication checks, backend container recreation, and
+full auth/workspace-volume backup to a new disposable Docker volume. The restore
+check compares owner project/strategy/session/paper identities, TeX and PDF
+hashes, session outcomes/evidence, and deterministic HTML report hash. A second
+simulated user remains denied after restore. Invalid tar extraction returns
+nonzero and cannot mark the restore accepted.
+
+**Acceptance matrix for the five requested criteria: PASS 5, FAIL 0, BLOCKED 0.** The packaged
+workflow also reports PASS for its existing UI/report/persistence checks; three
+cloud/provider checks are explicitly SKIPPED. Details, hashes and exact commands: [T91.2 evidence](evaluations/t91.2/README.md).
+The packaged run's PDF was 4,782 bytes, SHA-256
+`8e4604f8e35a87f0592ca802170aa86d0398364617e146bb2b1f3d421e28a5c9`; the
+restored HTML report SHA-256 was
+`284295274a8c1fd2e678b1983c0ea3256638f5f3971e9d6d864cc9f26d9dbcfa`.
+No paid inference, Google OAuth exchange, GCP resource, or rootless host
+acceptance was used. GCE disk attachment, Red-owned bootstrap/mount/systemd,
+public TLS/OAuth, and persistent-disk-on-GCE remain cloud-only limitations.
+
+Validation passed: `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
+./deploy/validate-local.sh` (fresh amd64 backend/frontend builds and packaged
+Chrome matrix); `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build);
+Ruff check/format for the browser acceptance script; `python3 -m py_compile
+browser_checks/t91_packaged_compose.py`; and `git diff --check`. Assignment elapsed time was approximately 15 minutes (08:57–09:12 PDT,
+2026-10-25). Commit SHA and PR are added when published.
+
 ## T41 — Sponsored cloud inference verification (2026-10-23)
 
 Added deterministic sponsored-inference API coverage through the production

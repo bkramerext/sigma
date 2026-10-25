@@ -88,7 +88,7 @@ if [[ -f "$chrome" ]] && command -v uv >/dev/null 2>&1; then
   SIGMA_T91_COMPOSE_PROJECT="$project" \
   SIGMA_T91_COMPOSE_ENV="$environment" \
   SIGMA_T91_CHROME="$chrome" \
-  uv run --with playwright python "$root/browser_checks/t91_packaged_compose.py"
+  uv run --with playwright --with pypdf python "$root/browser_checks/t91_packaged_compose.py"
 else
   echo "[SKIPPED] Real Chrome packaged-workflow matrix: requires installed Chrome and uv."
 fi
