@@ -42,7 +42,10 @@ def main() -> None:
                 dialog = page.get_by_role("dialog", name="About SIGMA")
                 expect(dialog).to_be_visible()
                 page.screenshot(path=f"/tmp/sigma-about-collapsed-{width}.png", full_page=False)
-                for label in ("About SIGMA", "Key Features", "How SIGMA Works: Multi-Agentic Research"):
+                expect(dialog.locator(".about-intro")).to_be_visible()
+                expect(dialog.locator(".about-terms")).to_be_visible()
+                expect(dialog.locator("details")).to_have_count(2)
+                for label in ("Key Features", "How SIGMA Works: Multi-Agentic Research"):
                     region = dialog.locator("details").filter(has=page.locator("summary", has_text=label))
                     expect(region).to_have_count(1)
                     expect(region).not_to_have_attribute("open", "")

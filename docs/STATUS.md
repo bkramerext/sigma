@@ -5573,18 +5573,19 @@ presentation. No live or paid provider calls were made.
 
 ## About dialog disclosure and architecture refinement (2026-10-24)
 
-The existing About dialog now presents three independent, initially collapsed
-regions: About SIGMA, Key Features, and How SIGMA Works: Multi-Agentic Research.
-The detailed architecture stays inside the existing dialog and retains its
+The SIGMA introduction and terminology now appear directly beneath the About
+dialog heading. Key Features and How SIGMA Works: Multi-Agentic Research remain
+independent, initially collapsed regions. The detailed architecture stays
+inside the existing dialog and retains its
 strategy, session, hover/focus/touch descriptions, and responsive copper/blue
 visual language. Touch help remains open after a tap even though the tap first
 moves keyboard focus. The Home credit capitalization remains Title Case.
 
 **Verification:** `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5196 uv run --with
 playwright python browser_checks/about_dialog_acceptance.py` passed in installed
-Chrome at 1440px, 390px, and 320px, plus touch at 390px. It checked the three
-independent disclosures, strategy and session expansion, hover/focus/touch
-help, dismiss behavior, viewport overflow, and the Title Case credit styling.
+Chrome at 1440px, 390px, and 320px, plus touch at 390px. It checked the visible introduction, the two independent disclosures, strategy
+and session expansion, hover/focus/touch help, dismiss behavior, viewport
+overflow, and the Title Case credit styling.
 Screenshots: `/tmp/sigma-about-collapsed-1440.png`, `-390.png`, and `-320.png`; expanded counterparts are `/tmp/sigma-about-expanded-1440.png`, `-390.png`, and `-320.png`.
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including
 backend scenarios, Ruff, Pyright, frontend typecheck, and production build.

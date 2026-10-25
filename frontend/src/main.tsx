@@ -1987,13 +1987,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
     <div className="about-dialog-content">
-      <details className="about-disclosure">
-        <summary>About SIGMA</summary>
-        <div className="about-disclosure-content">
-          <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
-          <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
-        </div>
-      </details>
+      <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
+      <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
       <details className="about-disclosure">
         <summary>Key Features</summary>
         <div className="about-disclosure-content">
