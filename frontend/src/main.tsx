@@ -1799,6 +1799,13 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         </div>
       </details>
       <p className="about-boundary">Model-generated reasoning and computations need human review. SIGMA does not independently verify proofs. Connected models, optional computation, paper generation, and hosted features depend on your environment and configuration.</p>
+      <details className="about-disclosure about-source-disclosure">
+        <summary>Source code &amp; license</summary>
+        <div className="about-disclosure-content">
+          <p>GitHub repository: <a href="https://github.com/bkramerext/sigma" target="_blank" rel="noopener noreferrer">github.com/bkramerext/sigma</a></p>
+          <p>License: <a href="https://github.com/bkramerext/sigma/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">Apache 2.0</a></p>
+        </div>
+      </details>
     </div>
   </dialog>;
 }
