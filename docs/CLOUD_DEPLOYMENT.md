@@ -35,6 +35,8 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 
 **Operator IAM checkpoint (2026-10-25):** The human operator confirmed their existing role is **Owner** on `sigma-research-prod`. Dedicated `roles/compute.osAdminLogin`, `roles/iap.tunnelResourceAccessor`, and runtime service-account-level `roles/iam.serviceAccountUser` grants are not yet verified. Preserve existing owner role during provisioning; review privileges after setup.
 
+**IAM verification (2026-10-25):** Operator screenshot shows named human account assigned Owner, Compute OS Admin Login, and IAP-secured Tunnel User in `sigma-research-prod`. Default Compute Engine service account retains Editor; do not attach it to SIGMA VM. Dedicated runtime service account attachment and its `iam.serviceAccountUser` grant remain to be verified.
+
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
 
 ## Contents
