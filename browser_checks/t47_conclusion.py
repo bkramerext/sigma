@@ -191,6 +191,16 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 ),
             )
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            latex_button = page.get_by_role("button", name="LaTeX research paper")
+            expect(latex_button).to_be_visible()
+            latex_button.hover()
+            latex_hover = latex_button.evaluate(
+                "el => ({width: el.getBoundingClientRect().width, "
+                "height: el.getBoundingClientRect().height, "
+                "backgroundImage: getComputedStyle(el).backgroundImage})"
+            )
+            assert latex_hover["width"] == 34 and latex_hover["height"] == 34, latex_hover
+            assert "gradient" in latex_hover["backgroundImage"], latex_hover
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )
