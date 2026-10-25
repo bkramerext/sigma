@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 from typing import Any, cast
 
-from sigma.research_epistemics import argument_availability, verification_label
+from sigma.research_epistemics import argument_availability, execution_provenance, verification_label
 
 
 def _value(value: Any) -> str:
@@ -106,6 +106,34 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             f"Outcome: {_value(outcome.get('label') or outcome.get('assessment'))}",
             f"Strategy: {_value(session.get('strategy_title'))}",
             f"Started: {_value(session.get('started_at') or session.get('created_at'))}",
+            "",
+        ]
+        # Show independently persisted execution facts before any authored narrative.
+        # A model's conclusion may claim measurements that never ran.
+        provenance = execution_provenance(session)
+        lines += [
+            "Recorded computation provenance",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            provenance["note"],
+            f"Persisted executions: {len(provenance['records'])} identified; "
+            f"{provenance['unidentified_count']} without an ID; "
+            f"{provenance['completed_count']} with unambiguous completed status.",
+        ]
+        for execution in provenance["records"]:
+            refs = "; ".join(
+                [f"artifact {value}" for value in execution["artifact_ids"]]
+                + [f"step {value}" for value in execution["step_ids"]]
+            ) or "no owning artifact/step reference recorded"
+            lines.append(
+                f"Execution {_value(execution['id'])}: {_value(execution['runtime'])} · "
+                f"status {' / '.join(execution['statuses'])} · {refs}; "
+                f"source {'recorded' if execution['source_recorded'] else 'unavailable'}, "
+                f"output {'recorded' if execution['output_recorded'] else 'unavailable'}"
+            )
+        lines += [
+            "",
+            "Authored conclusion below is agent-reported; a recorded execution does not "
+            "independently validate its interpretation.",
             "",
         ]
         if outcome.get("summary"):
