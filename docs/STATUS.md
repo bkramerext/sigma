@@ -65,7 +65,8 @@ credential-prefix check, a keyword-built dictionary, and non-executable
 shebangs (13 findings in the audited paths). Format checks now include
 deployment and support scripts: 105 files passed at the initial audit. After
 syncing current main, the gate also covers the new Increment 17 audit script
-and current-main readiness script; 107 files now pass. The audit found 20 files that
+and current-main readiness script; 107 files now pass. The audit found 20
+files that
 Ruff would reformat across the broader support paths; the six offline
 evaluation/support scripts are formatted, while 13 legacy browser checks and
 one evaluation exporter remain lint-gated without bulk formatting churn. CI is
@@ -74,7 +75,7 @@ before the full suite.
 
 After the initial branch was created, main advanced through PR #122 to
 `cf7dcb024996b95a0913c75438c6d17c4c065299`, then through PR #112 to
-`f5388d8`, and through PRs #123/#126 to `f73a749`. Both updates were merged into the T117 branch, preserving Green's
+`f5388d8`, and through PRs #123/#126 to `f73a749`. All four updates were merged into the T117 branch, preserving Green's
 frontend changes. The PR #122 deterministic CLI-level BLOCKED test remains
 alongside the Ubuntu FAIL/1 fixture. CI run #431 exposed that the newly merged
 Increment 17 audit script had an invalid shebang for its non-executable mode
@@ -84,10 +85,9 @@ zero new paid calls. CI also caught an executable bit on current-main
 `scripts/increment15_readiness.py` without a shebang. Removed that bit because
 the workflow invokes it with Python. Both were narrow quality-gate fixes with
 no logic changes. The synchronized branch full local suite passed, including
-Ruff over 107 files, Pyright, frontend typecheck and production build. Ubuntu
-Actions run #436 passed at prior code head `fabf591`; a new CI run for the final
-synchronized head is pending. Elapsed time through the final local run was
-approximately 40 minutes. Actual Ubuntu package
+Ruff over 107 files, Pyright, frontend typecheck and production build. Ubuntu Actions run #443 passed on final code head `48be67f`, including the
+focused safety/lifecycle checks and full repository verification. Elapsed time
+through final CI completion was approximately 45 minutes. Actual Ubuntu package
 installation, systemd setup, rootless Docker, and installer execution remain
 unverified and were not attempted.
 
@@ -100,8 +100,8 @@ provider calls, GCP resources, installer execution, or real-browser checks
 occurred. T117 changed no product UI; Green's main-branch UI changes remain
 present. The merge sync also took current main versions of two overlapping
 protocol scripts; those are outside the T117 diff and stay separate from the
-postponed stock-session implementation. Ubuntu host/systemd/rootless-Docker behavior remains limited to safe
-fixtures; Ubuntu CI validates regressions without running the installer or
+postponed stock-session implementation. Ubuntu host/systemd/rootless-Docker
+behavior remains limited to safe fixtures; Ubuntu CI validates regressions without running the installer or
 requiring root.
 
 ## Issue 114 first increment (2026-10-25)

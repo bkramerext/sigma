@@ -16,7 +16,8 @@ on Ubuntu 24.04 at head fabf591ff366ba0971c1acb3eee29fc582f73338. The latest
 main sync added an executable bit to `scripts/increment15_readiness.py`
 without a shebang; that bit was removed because the workflow calls it through
 Python. The full suite then passed locally (Ruff: 107 files, Pyright, frontend
-typecheck and build). CI for final head 83c5e25 is pending.
+typecheck and build). Ubuntu Actions run #443 passed on final code head 48be67f, including focused
+host/lifecycle checks and the full repository suite.
 
 Implemented:
 - Extracted the Ubuntu 24.04 identity guard to deploy/gce_host_guard.sh. Its
@@ -50,4 +51,4 @@ Executed and passed:
 
 No provider calls, GCP resources, installer execution, or real-browser checks.
 Actual Ubuntu package/systemd/rootless-Docker host acceptance remains
-unverified. Total elapsed time was approximately 40 minutes.
+unverified. Total elapsed time was approximately 45 minutes.
