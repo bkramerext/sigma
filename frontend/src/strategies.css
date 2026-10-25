@@ -318,6 +318,12 @@
 .workspace-page .research-session-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 4px 24px; color: #c4d0da; }
 .workspace-page .research-session-facts p { margin: 3px 0; }
 .workspace-page .research-session-message { color: #e7c08d; }
+.workspace-page .research-pause-guidance { margin: 12px 0; padding: 10px 12px; border-left: 2px solid #b78658; background: #15130f; color: #e2d4c2; }
+.workspace-page .research-pause-guidance strong { color: #f1c996; }
+.workspace-page .research-pause-guidance p { margin: 5px 0 0; overflow-wrap: anywhere; }
+.workspace-page .outcome-conclusion-format-note { margin: 4px 0 10px; padding: 7px 10px; border-left: 2px solid #746044; background: #101820; color: #b9c4cc; font-size: 12px; line-height: 1.5; }
+.workspace-page .outcome-conclusion-format-note p { margin: 0; }
+.workspace-page .outcome-conclusion-format-note ul { margin: 5px 0 0; padding-left: 18px; }
 .workspace-page .research-continuation-context { margin: 12px 0; color: #c4d0da; }
 .workspace-page .research-continuation-context summary { color: #e4c39c; cursor: pointer; }
 .workspace-page .research-continuation-context ol { margin: 8px 0; padding-left: 22px; }
