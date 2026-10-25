@@ -3493,3 +3493,23 @@ test logs, synthetic-test diagnostics and provenance are in
 `docs/evaluations/increment_5/`. The blind unscripted quality gate is proposed
 there but awaits explicit paid-provider authorization. No PDF/AI-paper quality,
 unprompted reasoning advantage or general mathematical proof is claimed.
+
+## T91 — production-shaped local Compose smoke (2026-10-25)
+
+Ran `./deploy/validate-local.sh` against the tree at
+`579a2069090bd972232c88ec8b5515485d81b0b2` (whose code base is current `main`
+`f3bae10af63eeb781b549bd610100ba75f6a3633`). Docker Engine 29.5.2 on the
+Colima Linux VM and Compose 5.6.1 built the locked backend and frontend images,
+started the local Compose stack, served the SPA and API through its edge,
+reported hosted auth enabled/ready, and confirmed auth SQLite persistence after
+backend restart and container recreation. The script exited 0 with
+`Local deployment smoke passed`. It removed its temporary stack, volumes, and
+dummy secret files. No Google or provider endpoints were called. Compose was
+installed through Homebrew; Docker plugin discovery used a temporary CLI
+config, leaving the existing Docker config unchanged.
+
+This verifies the local production-shaped package and its basic persistence
+path. It is not a clean-machine README onboarding/browser acceptance run, live
+Google OAuth, sponsored inference, GCE startup, rootless-daemon isolation,
+public HTTPS, backup restore, or cloud deployment approval. Those remain
+separate acceptance items in T91 and the cloud runbook.
