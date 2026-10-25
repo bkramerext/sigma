@@ -44,7 +44,7 @@ def examine():
                 "has_execution_provenance": bool(link.get("execution_id")),
                 "identifies_observed_counterexample": (
                     "counterexample" in next_test.lower()
-                    and str(observation.get("witness", {}).get("residual", "missing")) in next_test
+                    and all(\n                        json.dumps(value) in next_test\n                        for value in observation.get("witness", {}).values()\n                        if isinstance(value, bool)\n                    )\n                    and (\n                        "residual" not in observation.get("witness", {})\n                        or str(observation["witness"]["residual"]) in next_test\n                    )
                 ),
                 "requests_bounded_next_step": bool(link.get("next_investigator_step_id")),
             })
