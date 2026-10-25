@@ -4,17 +4,29 @@
 
 SIGMA grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
 
+The central proposition must withstand scrutiny: **does persistent, multi-agent investigation produce better-supported, more useful research than a simpler AI assistant operating with comparable resources?** That advantage has not been established. Testing it is part of SIGMA's purpose. And we're prepared to simplify SIGMA if the answer is no.
+
 SIGMA is a local research workspace for turning a difficult question into a set of trackable approaches, bounded AI research sessions, experiments, and inspectable evidence. It helps you keep the useful parts of an investigation together: what was tried, what the agents challenged, what the experiments showed, and what is still unresolved.
 
 SIGMA can use AI to help investigate a question, but it does not establish that an answer is correct. Model agreement and computational results are evidence to inspect, not mathematical proof. The Riemann Hypothesis sample is an open problem, not a claimed solution.
 
+For more background on the research approach and its underlying rationale, see [Product Rationale](docs/PRODUCT_RATIONALE.md).
+
 ## SIGMA in use
 
-<!-- Screenshot pending from the project owner. Do not substitute another image. -->
+<!-- SIGMA Home screenshot pending from Brian. Do not substitute another image. -->
 
-*Screenshot will be added here when supplied by the project owner.*
+*SIGMA Home screenshot pending from Brian.*
 
 Create a project or start from a sample, write or generate strategies, then choose strategies for a research session. Investigator and Skeptic roles work through bounded steps; SIGMA saves findings, objections, optional computation, and unresolved questions so you can review and continue the work. You remain in control of starting, pausing, stopping, and evaluating investigations.
+
+### Riemann Hypothesis investigation
+
+The Riemann Hypothesis sample is an open research problem, not a claimed proof. SIGMA is intended to make the work inspectable: conclusions remain tied to saved arguments, objections, computations, and open questions.
+
+<!-- Riemann Hypothesis investigation screenshot pending from Brian. Do not substitute another image. -->
+
+*Riemann Hypothesis investigation screenshot pending from Brian.*
 
 ## Run SIGMA locally
 
@@ -82,4 +94,6 @@ This capability is optional. See [Research Python Execution](docs/RESEARCH_PYTHO
 
 Run `./sigma --help` for CLI commands. The offline project checks are available with `./sigma test`.
 
-One last thing: SIGMA is built through human-directed, AI-assisted software development, sometimes called “vibe coding.”
+## How SIGMA is built
+
+SIGMA is developed through human-directed, AI-assisted software engineering (sometimes informally called “vibe coding”). Brian sets product direction and evaluates the running application; ChatGPT and Codex contribute design, implementation, testing, and review. [WOLF](WOLF.md) describes this collaboration.
