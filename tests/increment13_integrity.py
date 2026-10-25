@@ -9,14 +9,27 @@ from sigma.research_epistemics import execution_provenance
 def main() -> None:
     data = {
         "project": {"title": "Offline integrity", "problem": "Evidence?", "strategies": []},
-        "research_sessions": [{
-            "session_number": 1, "status": "ended", "strategy_title": "Bounded",
-            "outcome": {"conclusion": "MODEL CLAIM NOT INDEPENDENTLY VALIDATED"},
-            "artifacts": [{"id": "finding", "investigator_output": {"python_execution": {
-                "id": "reported-only", "runtime": "python", "status": "completed"
-            }}}],
-            "steps": [],
-        }],
+        "research_sessions": [
+            {
+                "session_number": 1,
+                "status": "ended",
+                "strategy_title": "Bounded",
+                "outcome": {"conclusion": "MODEL CLAIM NOT INDEPENDENTLY VALIDATED"},
+                "artifacts": [
+                    {
+                        "id": "finding",
+                        "investigator_output": {
+                            "python_execution": {
+                                "id": "reported-only",
+                                "runtime": "python",
+                                "status": "completed",
+                            }
+                        },
+                    }
+                ],
+                "steps": [],
+            }
+        ],
         "agentic_runs": [],
     }
     session = data["research_sessions"][0]
@@ -30,9 +43,12 @@ def main() -> None:
         assert warning in report
         assert report.index(warning) < report.index("MODEL CLAIM NOT INDEPENDENTLY VALIDATED")
     assert data == original
-    session["steps"] = [{"id": "dispute", "output": {"python_execution": {
-        "id": "reported-only", "status": "failed"
-    }}}]
+    session["steps"] = [
+        {
+            "id": "dispute",
+            "output": {"python_execution": {"id": "reported-only", "status": "failed"}},
+        }
+    ]
     conflicted = execution_provenance(session)
     assert conflicted["completed_count"] == 0
     assert conflicted["completed_without_recorded_io_count"] == 0
