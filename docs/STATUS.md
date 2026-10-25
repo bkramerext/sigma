@@ -36,6 +36,8 @@ access the snapshot-capable GCE identity through metadata, and a separate
 isolated recovery host/disk. Snapshot scheduling and successful creation alone
 do not establish recoverability. Preparation took approximately 30 minutes;
 commit and PR details are recorded in the handoff.
+Review PR: [#142](https://github.com/bkramerext/sigma/pull/142); implementation
+commit at handoff: `ac1a59422ecf104791cd77f8b2ad0cabc2750412`.
 
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 

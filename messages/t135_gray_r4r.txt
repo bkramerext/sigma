@@ -2,7 +2,7 @@
 
 - Ticket: T135 — Cloud Backup and Restore.
 - Branch: `gray/t135-cloud-backup-restore`, based on `origin/main` `ffb008f`.
-- PR: pending creation.
+- PR: [#142](https://github.com/bkramerext/sigma/pull/142) (open, unmerged).
 - Preparation elapsed time: approximately 30 minutes.
 
 ## Implemented
