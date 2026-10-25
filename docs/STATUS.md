@@ -1,5 +1,35 @@
 # SIGMA status
 
+## T89 stock sample catalog audit (2026-10-25)
+
+Gray started from current `main` `7a2f445` and inventoried all 17 shipped
+samples against their canonical project records, saved evidence and PR #74's
+17-sample Chrome study. The audit records current domain/difficulty, problem,
+strategies, stock sessions/outcomes, educational purpose, and a KEEP/REVISE/
+CONSOLIDATE proposal with before/after rationale. Sixteen samples have no
+saved stock session; Nonconsecutive Subset Sums has five deterministic fixture
+sessions, all mixed with unresolved general proof obligations. PR #74's
+historical Maximum Regions provider export is kept distinct from stock sample
+history. No sample was removed, consolidated, or substantively rewritten; RH
+remains the flagship. Owner decisions are listed in
+`evaluations/t89-stock-sample-catalog.md`.
+
+The only data correction is `counting-constrained-binary-strings`: migrated its
+sample document from schema 6 to supported schema 8 and set its clearly
+elementary recurrence exercise to Easy. `tests/recents.py` now pins the
+17-entry catalog count and verifies that metadata through catalog loading and
+an independent copied project. Focused recents, copy-independence (9 tests),
+sample-export, and deterministic math checks passed.
+
+`./sigma test` reached `tests/tooling.py` and failed at its existing mocked
+`stop_servers` assertion. The same focused failure reproduces unchanged on
+`origin/main` `7a2f445` in a detached worktree. Every command after that point
+in the suite was run individually and passed, including cloud/storage checks,
+Ruff check/format, Pyright, frontend typecheck and production build. Thus the
+full suite is **not reported as passing**; this known baseline failure is
+outside the T89 diff. No real provider calls were made. The browser coverage
+is PR #74's reported study, not a new T89 Chrome run.
+
 ## T91.2 packaged PDF and disaster-recovery acceptance (2026-10-25)
 
 Started on fresh branch `gray/t91.2-packaged-pdf-recovery` from current `main`

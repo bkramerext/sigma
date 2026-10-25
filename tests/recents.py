@@ -25,7 +25,7 @@ from sigma.samples import open_sample_project, sample_projects
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
-    assert len(catalog) >= 2
+    assert len(catalog) == 17
     assert {entry["title"] for entry in catalog} >= {
         "Nonconsecutive Subset Sums Modulo 3",
         "Did Jesus Use Cannabis?",
@@ -38,6 +38,10 @@ def check(root: Path, base: Path) -> None:
     assert sample_categories["Warp Drive Feasibility"] == "engineering"
     maximum_regions = next(item for item in catalog if item["id"] == "maximum-regions-by-lines")
     assert maximum_regions["difficulty"] == "easy"
+    binary_counting = next(
+        item for item in catalog if item["id"] == "counting-constrained-binary-strings"
+    )
+    assert binary_counting["difficulty"] == "easy"
     assert {entry["investigation_type"] for entry in catalog} >= {
         "mathematical",
         "engineering",
@@ -57,7 +61,7 @@ def check(root: Path, base: Path) -> None:
         assert len(sample_projects()["projects"]) == 6
     assert not list(root.iterdir())
 
-    selected = next(item for item in catalog if item["investigation_type"] == "mathematical")
+    selected = binary_counting
     source_path = ROOT / "samples" / selected["id"] / "project.json"
     first = open_sample_project(selected["id"])
     assert first.path == str(root / f"{selected['id']}.sigma")
