@@ -3118,6 +3118,7 @@ def _finding_source_readiness(finding: dict[str, Any]) -> dict[str, Any]:
 
     def normalize(value: str) -> str:
         return " ".join(value.casefold().split())
+
     declared_set = {normalize(item) for item in declared if isinstance(item, str)}
     reviewed_set = {normalize(item) for item in reviewed if isinstance(item, str)}
     assumption_status = (
