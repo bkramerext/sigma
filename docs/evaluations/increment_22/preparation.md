@@ -13,17 +13,27 @@ the next Investigator work, compared with a strong same-model single-agent
 conversation that explicitly critiques and revises its own work. This is one
 exploratory case, not a general superiority or cross-session-persistence claim.
 
-Use one newly authored finite scheduling instance, not a stock project or
-benchmark item. The task will include a compact set of precedence constraints,
-resource eligibility, durations, and a proposed scheduling heuristic. The
-question will require the model to assess the claim, produce or reject a
-schedule, expose a counterexample or proof obligation, and revise its approach.
-Before either arm runs, freeze the exact task bytes and an independently written
-exhaustive checker that enumerates feasible schedules and verifies the reported
-objective. Keep the checker and expected answer out of both model contexts.
-Record authorship and likely contamination; because this is a custom instance,
-the instance is unfamiliar by construction, while scheduling concepts are not.
-Do not use the result to claim domain novelty.
+Use the newly authored two-machine, seven-job nonpreemptive scheduling problem
+in [`task.json`](task.json), not a stock project or benchmark item. It gives
+durations, machine eligibility, two precedence relations and a valid proposed
+schedule claimed to be optimal. That concrete overclaim creates an opportunity
+to reject an attractive but suboptimal answer and revise the plan. The task is
+an authored finite instance; workshop scheduling is a familiar topic, and no
+domain novelty is claimed. Its small size is intended to make exact checking
+practical while still requiring resource-order reasoning.
+
+Before either arm ran, [`checker.py`](checker.py) was written to validate the
+proposed schedule and enumerate every eligible machine assignment and machine
+order, rejecting cyclic precedence orders and computing each acyclic order's
+earliest feasible makespan by longest paths. It checked 2,016 assignment/order
+cases. The proposed schedule is valid with makespan 13; exhaustive enumeration
+finds a minimum of 10, with M1 order D-F-G and M2 order A-B-E-C. A separate
+hand-checkable lower bound is that D, F and G are M1-only and require 10 total
+machine-time units. The checker and this answer must be kept out of both model
+contexts. Freeze/hash the task and checker before calls; the providers receive
+only the task question, job data and proposed schedule. The eventual exports
+must retain full role work, objections and any failed path even if neither arm
+finds the 10-unit schedule.
 
 The SIGMA arm is a real saved project and research session with the production
 Investigator/Skeptic cycle and Outcome. The baseline is one persistent

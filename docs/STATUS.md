@@ -4375,6 +4375,13 @@ self-critique baseline against the actual two-cycle, four-call SIGMA session.
 No stock task is reused. This remains an exploratory single-case comparison,
 not a longitudinal or general-superiority claim.
 
+The authored seven-job/two-machine task and independent exhaustive checker are
+preserved with hashes in [`increment_22/evidence/offline-manifest.json`](evaluations/increment_22/evidence/offline-manifest.json).
+The checker validates the proposed 13-unit schedule and enumerates 2,016
+machine assignments/orders, finding an exact 10-unit minimum; M1-only jobs
+also provide a direct matching lower bound. This is a validated offline oracle,
+not provider research evidence, and its answer is withheld from model contexts.
+
 The candidate run is OpenAI API-key billing, `gpt-6.1-sol`, high reasoning,
 standard tier, with no tools/search/retries/fallback; four calls per arm, 1,024
 output tokens per call, 12,000 input / 16,096 total usage tokens per arm, 15
