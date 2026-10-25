@@ -1,53 +1,68 @@
-# Blue Increment 22 offline preparation handoff
+# Blue Increment 22 offline-preparation handoff
 
 **Issue:** [#146](https://github.com/bkramerext/sigma/issues/146)  
 **PR:** [#150](https://github.com/bkramerext/sigma/pull/150) — R4R  
 **Branch:** `blue/increment-22-issue-146` → `main`  
 **Starting main:** `19e5bd7`; reconciled current main `8c3741a` without conflicts  
-**Head:** `731da459d04070d82af40bea882f7528304a5017`
+**Final SHA:** `3fc249de22361e41925bcccdd4c8537a35ef1058`
 
-## Work completed
+## Prepared comparison
 
-- Read issue #146 in full and the required repository guidance/current status.
-- Audited the prior Increment 21 readiness result and SIGMA's actual research
-  call, output, duration and estimated-cost settings.
-- Authored a custom seven-job/two-machine scheduling task, separate exhaustive
-  checker and retained offline result/hash manifest. The proposed schedule is
-  valid at makespan 13. Enumeration of all 2,016 eligible machine assignment
-  and order cases gives minimum 10; M1-only workload supplies an independent
-  lower bound of 10.
-- Prepared a four-call-per-arm comparison: actual saved SIGMA Investigator /
-  Skeptic session versus a persistent four-call single-agent self-critique
-  baseline. The same task/configuration and comparable calls, output, time,
-  tools and spend caps are proposed. Scoring covers correctness, valid
-  objections, change to subsequent work, evidence survival, unsupported claims,
-  costs and elapsed time.
-- Identified an execution gate: SIGMA's default total token limit is derived
-  from a large request-context byte bound; it is not the proposed cumulative
-  input ceiling. Its local cost budget is an estimate based on observed usage,
-  not by itself an invoice-level hard spending ceiling. No provider call may be
-  sent until the cumulative budget guard and provider-side spend control are
-  demonstrated and the owner approves the exact run.
+- The authored seven-job/two-machine scheduling problem and independent
+  exhaustive checker are retained under `docs/evaluations/increment_22/`. The
+  proposed schedule is valid at makespan 13. All 2,016 eligible machine
+  assignment/order cases were checked; the exact optimum is 10, with a matching
+  lower bound from M1-only jobs D/F/G.
+- The frozen arms are a real SIGMA Investigator/Skeptic portfolio session and
+  one persistent single-agent self-review conversation. They share the same
+  task, OpenAI API model `gpt-6.1-sol`, high reasoning, standard service tier,
+  maximum four calls, 1,024 output tokens/call, 200,000 reserved input tokens,
+  4,096 output tokens, $0.55 local cost cap, and 15-minute arm limit. At most
+  two offline Python/Sage computations are allowed per arm. The baseline has
+  four turns: initial analysis, self-critique, revision, and final critique.
+- Prompts, checker, scoring rubric, settings and procedure have a frozen
+  SHA-256 manifest at `docs/evaluations/increment_22/evidence/`.
 
-## Checks and evidence
+## Guard and clipping evidence
 
-- `./sigma test` — PASS twice, including once after reconciling current `main`;
-  deterministic/offline fixtures only.
-- `python3 docs/evaluations/increment_22/checker.py` — PASS; 2,016 cases.
-- `git diff --check` — PASS.
-- Provider calls: 0. Spend: $0. No live project/session or export was created.
-- No real-browser check was relevant to the documentation/oracle preparation.
-- No Cloud deployment changes and no Increment 23 work.
+The persisted research ledger reserves exact serialized request bytes plus an
+8,192-token structural allowance, full per-call output ceiling, call count and
+conservative cost before any SIGMA HTTP request. It settles only against
+reported usage. Unknown/in-flight calls retain the full reservation and block
+future dispatch. The baseline adapter uses the same ledger. Offline tests
+exercise both, including refusal before dispatch, unknown/in-flight holds,
+four-call ceiling calculation, and the SIGMA production session path's saved
+reservation IDs/bytes and settlement. Four maximum input reservations plus
+4,096 output tokens imply $0.54096 per arm / $1.08192 combined at the checked
+upper input cache-write and output prices.
 
-## Approval requested
+SIGMA now retains a provider `max_output_tokens` partial response and usage as
+an **incomplete** result. It is not counted as an incorrect answer and is not
+retried. The 1,024 output ceiling includes reasoning tokens. Without the live
+trial, meaningful completion at high reasoning cannot be empirically verified.
 
-See the exact proposal and conditions in
-[`docs/evaluations/increment_22/preparation.md`](../docs/evaluations/increment_22/preparation.md).
-The proposal is OpenAI API `gpt-6.1-sol`, high reasoning, standard tier,
-API-key billing, no tools/search/retries/fallback or extended cache retention;
-four calls per arm, 1,024 output tokens per call, 48,000 input / 52,096 total
-usage tokens per arm, 15 minutes per arm, $0.55 estimated-cost reserve per
-arm, and a proposed $0.35 OpenAI project hard spend limit. The token maxima
-imply $0.32192 total at current short-cache-write/output rates. Provider hard
-limits can slightly overshoot, so this is a backstop. The pre-dispatch token
-guard is not implemented or demonstrated yet; no live execution occurred.
+## Verification and authorization
+
+- `./sigma test` — PASS, including backend research suite, budget/clipping
+  regressions, Ruff, formatting, Pyright, frontend typecheck and production
+  build.
+- `git diff --check` and frozen SHA-256 manifest check — PASS.
+- Existing Chrome settings fixture check did not initialize its expected
+  API-key state; it opened with “ChatGPT sign-in · Google sign-in required” and
+  failed its initial fixture-status assertion. No provider request was made.
+- GitHub Actions run listing for the final SHA returned no workflow run at the
+  time checked.
+- Provider calls: 0. Spend: $0. No SIGMA trial session or export exists yet.
+- No Cloud changes, Increment 23 work, or self-merge.
+
+**Authorization request:** May I run this one comparison using OpenAI API
+API-key billing only, `gpt-6.1-sol`, high reasoning, standard tier, no external
+tools/search/retries/fallback or extended cache retention; four calls per arm,
+1,024 output tokens per call, 200,000 reserved input and 4,096 output tokens
+per arm, 15 minutes per arm / 45 minutes overall, and $0.55 local pre-dispatch
+cost ceiling per arm? Before any provider request, please explicitly authorize
+the one trial and confirm the OpenAI project hard spend limit is set and
+verified at $1.10. The provider-side limit can lag and slightly overshoot.
+The output cap's adequacy for high-reasoning completion remains an empirical
+question; clipping is preserved as incomplete, never scored as a wrong answer,
+and never retried. No live calls or spend will happen before approval.
