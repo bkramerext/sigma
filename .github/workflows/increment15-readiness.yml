@@ -20,6 +20,7 @@ jobs:
         run: |
           python scripts/increment15_readiness.py --output /tmp/increment15-readiness.json
           python scripts/increment15_offline_pairs.py --output /tmp/increment15-offline-pairs.json
+          python scripts/increment15_retrospective.py --output /tmp/increment15-retrospective.json
           python - <<'PY'
           import json
           with open('/tmp/increment15-readiness.json', encoding='utf-8') as f:
