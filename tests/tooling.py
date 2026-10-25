@@ -51,6 +51,7 @@ def check_failures() -> None:
         completed = [item.args[0] for item in run.call_args_list]
         assert any("tests/gce_host.py" in command for command in completed)
         assert any("tests/state_backup.py" in command for command in completed)
+        assert any("tests/host_monitor.py" in command for command in completed)
         assert any(command[-2:] == ["run", "typecheck"] for command in completed)
         assert not any("increment15_offline_pairs.py" in command for command in completed)
         assert not any(command[-2:] == ["run", "build"] for command in completed)
