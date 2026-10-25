@@ -34,15 +34,15 @@
 
 **Assessment at checkpoint:**
 - **MET (implementation inspected):** An explicit persisted-execution ledger now precedes authored Conclusion in the UI and all report formats; provenance derives from saved records, not from model prose; duplicate IDs are not double-counted.
-- **UNVERIFIED (CI pending):** Full test suite and frontend build on final exact head, until GitHub Actions finishes. No local or paid provider run was performed.
+- **MET (CI on exact application/test head):** GitHub Actions [run 40186939037](https://github.com/bkramerext/sigma/actions/runs/40186939037) passed the full `./sigma test` suite on `4b1ec2b`, including Ruff, Pyright, offline session tests, report formats and frontend build. No local or paid provider run was performed. A subsequent documentation-only audit update does not change implementation; inspect the latest branch-head CI before merge.
 - **UNVERIFIED (semantic claim verification):** The inventory does not prove that a specific conclusion is justified by a recorded computation. It is intentionally not a natural-language entailment checker. Human readers must inspect source/output and claim scope.
 - **UNVERIFIED (research benefit):** No blinded unscripted, matched-budget baseline or usability evaluation.
 
-**Time and cost:** Began approximately 2026-10-25 03:44 Pacific; source/test implementation checkpoint at approximately 03:48 Pacific (~4 minutes), excluding GitHub runner time and subsequent CI correction/review. No Codex, live model-provider call, or cloud resource was used. The incremental complexity is one small shared read projection, one read-order prelude, and report rendering; no new research agent or workflow.
+**CI corrections and duration:** First complete CI [40186260112](https://github.com/bkramerext/sigma/actions/runs/40186260112) exposed Ruff import/implicit-concatenation violations; second full CI [40186468185](https://github.com/bkramerext/sigma/actions/runs/40186468185) exposed Ruff formatting; third full CI [40186702144](https://github.com/bkramerext/sigma/actions/runs/40186702144) exposed a Pyright `str | bytes` narrowing error in the new report tests. Each failure was diagnosed from actual GitHub logs and corrected, not ignored. CI [40186939037](https://github.com/bkramerext/sigma/actions/runs/40186939037) then passed at `4b1ec2b`. Began 2026-10-25 approximately 03:44 Pacific; verified by 04:01 Pacific (~17 minutes including coordination, remote CI waits and corrections). No Codex, live model-provider call, or cloud resource was used; GitHub CI consumed ordinary runner minutes. The incremental complexity is one small shared read projection, one read-order prelude, and report rendering; no new research agent or workflow.
 
 ## Remaining work (not yet complete)
 
-- **Increment 9 — IMPLEMENTED, CI PENDING:** Provenance-first Outcome/report with explicit persisted execution inventory. Research usefulness and semantic entailment remain UNVERIFIED.
+- **Increment 9 — MET (engineering):** Provenance-first Outcome/report with explicit persisted execution inventory; exact application/test head passed CI. Research usefulness and semantic entailment remain UNVERIFIED.
 - **Increment 10 — UNMET:** Domain-general assumption and evidence-readiness boundaries, selected only after auditing actual deficiencies and complexity.
 - **Increment 11 — UNMET:** Cross-domain offline continuation controls with different epistemic standards, including science, history, and scenario work; no scripted fixture should be described as autonomous judgment.
 - **Increment 12 — UNMET:** Final cumulative CI/reproducibility and quality review, matched-budget blind gate *design* without unauthorized paid execution, clean PR and integration recommendation.
