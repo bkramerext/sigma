@@ -1,30 +1,25 @@
-# Increment 14 freeze and execution safety runbook
+# Increment 14 freeze and execution runbook
 
-## State and scope
+**Engineering draft only. Not frozen. No paid inference authorized.** The authoritative design and proposed shakedown are in [T114 revision 2](../T114_MATCHED_BUDGET_PREREGISTRATION.md).
 
-**ENGINEERING DRAFT, NOT FROZEN, NOT AUTHORIZED FOR LIVE INFERENCE.**
-PR #90 carries the first six concrete tasks and the validator. No live inference, benchmarks or spending have occurred. This work is independent of any Riemann Hypothesis session.
+## Offline prepare/check
 
-## Prepare/check
+1. Run `python scripts/increment14_protocol.py --output /tmp/sigma-increment14-draft-manifest.json`. Default is three repeats, 36 pairs, 72 arm runs; all repeats/variants remain clustered in six task units.
+2. Run `python tests/increment14_protocol.py`, `python tests/increment14_audit.py`, and `python scripts/increment15_offline_pairs.py --output /tmp/sigma-increment15-offline-pairs.json`. These use synthetic records only.
+3. Inspect `scripts/increment14_blinding.py` test artifacts and max-boundary controls. Freeze the six common JSON fields and limits before any provider output.
+4. Obtain external curator provenance/contamination signoff. Replace contaminated/ambiguous tasks before freeze and regenerate all hashes. The curator must not see model outputs.
+5. Demonstrate allowlist isolation and that scorer packets contain only common normalized artifacts, anonymous IDs and required task packets. Keep arm mapping and keys outside both arm and scorer access. Have independent graders review scoring anchors and blind synthetic controls.
+6. Freeze task bytes, answer keys, prompts, provider/model revision, API tier, generation settings, caps, random seed/order, normalizer digest, exclusions (protocol failure only; never outcome-based), scoring, statistical analysis and stop conditions. Timestamp/sign before outputs.
+7. Obtain separate owner authorization for the exact provider/account/model/caps. No approval in issue #118 authorizes a paid call.
 
-1. Run `python scripts/increment14_protocol.py --output /tmp/sigma-increment14-draft-manifest.json` from the repository root, on a clean pinned commit.
-2. Confirm exactly six cases, 12 unique task/variant packets, two arm runs per paired comparison, deterministic seed, and hashes. Preserve the generated manifest as review artifact; do not commit a manifest with secret blinding mapping.
-3. An independent reviewer checks all packets for ambiguity, ceiling effects and answer leakage. If revised, regenerate hashes and restart pre-registration; never revise based on observed model output.
-4. Store blinded runner allocation and key material outside agent-accessible storage; implement an allowlist runner that transmits *only* the selected question, evidence and global instructions. Disable repository/web access unless explicitly fixed and mirrored in both arms.
-5. Freeze task bytes, evaluator checks, arm prompts, model/version, tool access, budget caps, order seed, all exclusions and exact scoring thresholds. Timestamp/sign manifest before any output is observed.
-6. Dry-check artifact parsing and budget cutoffs on synthetic fake transcripts only. Dry-check evaluator arm blinding and keep original scorer entries.
-7. Obtain user approval identifying model, provider, billing account, per-run maximum and total dollar cap. **Do not initiate Increment 15 before this approval.**
+## Cost control and stop
 
-## Identical aggregate resource envelopes
+For the proposed scored study, per-arm ceilings are 48,000 input / 16,000 output tokens, four calls, one local deterministic tool call, 600 seconds and $0.55. At the currently listed OpenAI standard `gpt-6.1-sol` rates ($2/M input, $10/M output), the uncached token-ceiling estimate is $0.256 per arm; $0.55 is the per-arm hard cap. Across 72 arms, hard caps total $39.60. Recheck prices and provider revision at approval; if the exact cap cannot be enforced, do not run.
 
-Required config: model provider and exact version; temperature, reasoning effort and all supported generation settings; maximum aggregate input/output/reasoning tokens across *all* calls per arm; maximum model calls per arm; tool-use count/time; wall-clock ceiling; and total dollar ceiling. Same evidence, task, search privileges and compute access. Baseline must self-critique and revise at least once within identical ceilings, without intentionally weakened prompts. Document when platform overhead differs. Unobservable reasoning tokens require explicit comparability caveat.
+For the separate one-pair shakedown: direct OpenAI Responses API, exact model `gpt-6.1-sol`, standard tier, two calls per arm, 12,000 input / 4,000 output tokens per arm, 300 seconds and $0.55 per arm; $1.25 total hard cap. Its current uncached token-ceiling estimate is $0.128 total. No tools, web, fallback, automatic retries, or alternate billing. Any model mismatch, clipping/schema issue outside the shared contract, missing provenance/usage, key leak, unexpected tool/retry, wall/cost cap risk or arm contract mismatch stops the run. Preserve partial records; do not retry.
 
-Billing estimate formula per arm: (input_cap/1e6 × provider_input_price + output_cap/1e6 × provider_output_price + tool_budget), plus separately itemized reasoning charges if any. Compute proposed worst-case ceiling: 24 arm runs for one replicate × per-arm worst case, plus known provider overhead, retry reserve and tax. **Prices must be checked at approval time**; none are asserted here. Abort a run before crossing its agreed ceiling; never silently retry or enlarge it.
+Prices and assumptions are documented with the official [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) in T114. Dollar figures are planning estimates, not permission to spend.
 
-## Proposed decision rules (not statistically decisive)
+## Reporting
 
-Primary: paired weighted mean gain >= 0.40/4, at least two distinct domains won, no increase in critical integrity failures, median cost and latency overhead each <= 25%. All other cases: **no demonstrated advantage**. Publish each pair, including failures and abstentions, plus uncertainty and variance. With 12 paired comparisons, do not imply a robust generalizable result, and do not treat repeated variants as independent domain evidence. If actual observed billings differ, report raw efficiency rather than forcing mandatory token consumption.
-
-## Approval checkpoint
-
-The user will review the merge-ready protocol and separately authorize provider/model/account and total spend cap. Until then, Increment 14 is an engineering-only ready-for-review artifact, not a completed freeze nor an approved experiment. Increment 15 is explicitly blocked.
+Publish every pair and failure, all raw/normalized digests, truncation metadata, scorer-level ratings and guesses, costs and wall time. Report the 36 paired differences but calculate uncertainty over six task-cluster means (`n=6`), with a t interval and task-level sign-flip sensitivity only. Do not claim general superiority or persistence. Issue #119 separately designs the longitudinal persistence test.

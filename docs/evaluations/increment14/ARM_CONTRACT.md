@@ -1,34 +1,27 @@
-# Increment 14 arm contract (pre-freeze candidate)
+# Increment 14 arm and output contract (pre-freeze candidate)
 
-**Purpose:** Make the comparison operational without altering SIGMA's production prompts or research engine. This contract is not evidence that either arm wins and must be frozen before seeing live outputs.
+The authoritative protocol is [T114 revision 2](../T114_MATCHED_BUDGET_PREREGISTRATION.md). This file summarizes the operational contract; neither document authorizes inference.
 
-## Shared user task packet
+## Shared task and final artifact
 
-Every arm receives exactly the allowlisted JSON fields produced by `scripts/increment14_agent_packet.py`: `instruction`, `question`, `evidence`. No rubric, evaluator reference, scoring dimensions, prior arm outputs, arm assignment, or execution order may enter model-visible context. Tool permissions and underlying data are identical per task. Where an arm cannot support an identical tool, disable the tool for both or invalidate the pair.
+Every arm receives the exact allowlisted JSON fields `instruction`, `question`, and `evidence`. No key, rubric, score dimension, arm assignment, execution order, project history, other-arm output, repository or network access is allowed.
+
+Both arms must return one JSON object with exactly: `conclusion` (2,000 chars), `reasoning` (3,000), `challenge` (2,500), `evidence` (2,000), `uncertainty` (1,500), and `next_test` (1,000). Apply the same normalizer and clipping rule to both. Store raw provider bytes and native validation/truncation metadata for audit, then create a scorer packet with only the normalized fields and a random anonymous ID. Never send arm code, role labels, call trace, paired counterpart or run costs to graders.
+
+The common structure does not itself guarantee language-level blindness. Remove explicit role/arm identifiers deterministically and ask graders to guess arm plus confidence after scoring. Report the guesses. Do not exclude guessed or clipped artifacts.
 
 ## SIGMA arm
 
-Use the unmodified production Investigator/Skeptic prompts and session implementation at the pinned experiment commit. Do not inject task-specific counterexamples, hints, outcomes, or scoring criteria. Count every Investigator and Skeptic model call, including retries, toward the **aggregate** task budget. Retain complete immutable input/output and tool transcripts with provider usage and elapsed time.
+Freeze the production Investigator/Skeptic workflow and use two cycles, at most four calls. Do not inject task hints or scoring criteria. Map final structured role records into the six common fields. Keep exact requests/responses and each `potential_truncation_fields` value. A scorer-visible omission marker is added for any common-field clipping; upstream schema truncation remains a reported incomplete outcome. It does not justify dropping the pair.
 
-## Strong single-role baseline
+## Single-role arm
 
-The baseline performs deliberate investigation, substantive internal criticism, and revision, not a single-pass answer. All stages use the **same model and total aggregate caps** as SIGMA. A proposed neutral instruction (subject to independent pre-output review):
+Use one persistent conversation with up to four calls to investigate, deliberately challenge its central claims, revise, and produce the exact same six-field JSON. It sees only its own turns. Freeze its prompt before any live output; no tuning from these tasks.
 
-> Work as a careful researcher. First develop the most defensible answer the evidence supports, including alternative explanations and constraints. Then deliberately challenge your own central claims: search for counterexamples, unsupported steps, missing sources, and decisive objections. Revise the answer to address those objections, clearly distinguish established results from conjecture and report uncertainty. If available evidence cannot settle an issue, identify one bounded discriminating next test. Never claim to have run tools or consulted sources you did not actually use.
+## Matched controls
 
-The baseline may split its token allocation across multiple calls to preserve an independent self-critique stage. Do not force wasted calls if it has completed a satisfactory response. The baseline cannot see SIGMA's intermediate work; SIGMA cannot see baseline work. Prompt tuning from observed benchmark answers is prohibited.
+Pin exact provider/model revision, API tier, supported generation settings and state policy. Per arm: 4 calls, 48,000 input tokens, 16,000 output tokens, 64,000 total tokens, one local deterministic tool call at most, 600 seconds and a fixed dollar cap. No web or external retrieval. Failed calls count and automatic retries are disabled. Same task/evidence and identical tool permissions. Preserve actual usage/cost rather than forcing equal consumption.
 
-## Hard comparison controls
+## Blinding and invalidity
 
-- Exact provider/model/version, model settings, allowed tool APIs, starting evidence, and aggregate model calls/tokens/wall-time/spending ceilings are frozen identically.
-- The same allowance is not a claim of identical *realized* spend or latency; retain both and report efficiency.
-- Model-specific hidden reasoning use must be measured when the provider exposes it; otherwise flag inability to verify this aspect of equal resource use.
-- A model call rejected for budget overrun is recorded as a failure, not silently retried.
-- Blinded final scoring is separated from arm-internal traces; machine audit may retain arm labels under evaluator-inaccessible access control.
-- A valid pilot requires a separate runner integrity demonstration that evaluator files and other arm transcripts are unavailable to either arm. The agent-packet allowlist **alone** does not demonstrate this.
-
-## Pre-output adversarial checklist
-
-Independent reviewers must check: whether the baseline prompt is strong enough; whether SIGMA receives model-visible hidden state beyond task allowance; whether multi-call accounting includes retries and failed requests; whether exact model settings match; whether the task packets are identical; whether grader blinding is enforced; and whether any tool can retrieve evaluation keys.
-
-The experiment remains **not frozen, not authorized for paid calls**. A positive result on six short synthetic tasks can at most motivate larger unseen replication and longitudinal evaluation, not settle multi-agent value.
+The runner creates scorer-only packets without execution metadata and randomizes order independently per grader. The identity map is held by a separate custodian, not in the scoring workspace. An independent curator reviews task/key provenance and contamination before freeze; graders are independent of the author, curator, implementation and run. Preserve every failed, clipped, guessed, interrupted or otherwise invalid record. Protocol violations block a superiority conclusion; they do not trigger post-hoc replacement.

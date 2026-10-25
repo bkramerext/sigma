@@ -5,18 +5,28 @@ No provider calls. Rejects absent, duplicated, asymmetric or unblinded records.
 
 from __future__ import annotations
 
+import importlib.util
 import math
+import statistics
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
-DIMENSIONS = (
-    "correctness",
-    "objection_uptake",
-    "evidence_integrity",
-    "calibration",
-    "next_experiment",
+_BLINDING_SPEC = importlib.util.spec_from_file_location(
+    "increment14_blinding", Path(__file__).with_name("increment14_blinding.py")
 )
-WEIGHTS = (0.30, 0.20, 0.20, 0.15, 0.15)
+assert _BLINDING_SPEC and _BLINDING_SPEC.loader
+_BLINDING = importlib.util.module_from_spec(_BLINDING_SPEC)
+_BLINDING_SPEC.loader.exec_module(_BLINDING)
+
+DIMENSIONS = (
+    "task_outcome",
+    "reasoning_validity",
+    "calibration",
+    "evidence_quality",
+    "useful_next_test",
+)
+WEIGHTS = (0.35, 0.30, 0.15, 0.10, 0.10)
 
 
 def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -48,6 +58,10 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
         raise ValueError("Duplicate manifest pair")
     seen: dict[tuple[str, str, int], dict[str, dict[str, Any]]] = defaultdict(dict)
     total_cost = 0.0
+    schema_truncation_fields = 0
+    schema_validation_errors = 0
+    non_uncertain_guesses = 0
+    correct_arm_guesses = 0
     for r in records:
         key = (r["task_id"], r["variant"], r["replicate"])
         arm = r["arm_code"]
@@ -55,6 +69,11 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
             raise ValueError("Unknown or repeated run")
         if r["packet_sha256"] != pairs[key]["packet_sha256"]:
             raise ValueError("Task packet mismatch")
+        assignment = pairs[key].get("arm_assignment")
+        if not isinstance(assignment, dict) or set(assignment) != {"A", "B"}:
+            raise ValueError("Missing isolated arm assignment map")
+        if assignment.get(arm) != r.get("executed_arm"):
+            raise ValueError("Executed arm does not match the sealed assignment map")
         if (
             r["model_provider"] != caps["model_provider"]
             or r["model_exact_version"] != caps["model_exact_version"]
@@ -110,6 +129,32 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
             raise ValueError("Per-call output usage does not match aggregate")
         if not r.get("transcript_sha256") or not r.get("tool_audit_sha256"):
             raise ValueError("Missing audit trail")
+        for field in ("schema_truncation_fields", "schema_validation_errors"):
+            if not isinstance(r.get(field), list) or any(
+                not isinstance(value, str) for value in r[field]
+            ):
+                raise ValueError(f"Missing or malformed {field}")
+        schema_truncation_fields += len(r["schema_truncation_fields"])
+        schema_validation_errors += len(r["schema_validation_errors"])
+        submission = r.get("normalized_submission")
+        if (
+            not isinstance(submission, dict)
+            or submission.get("schema") != "sigma-blind-submission-v1"
+        ):
+            raise ValueError("Missing common normalized submission")
+        if set(submission) != {"schema", *_BLINDING.FIELDS, "clipped_fields"}:
+            raise ValueError("Invalid common submission shape")
+        if r.get("submission_sha256") != _BLINDING.digest_submission(submission):
+            raise ValueError("Normalized submission digest mismatch")
+        if any(
+            not isinstance(submission[field], str) or len(submission[field]) > limit
+            for field, limit in _BLINDING.FIELDS.items()
+        ):
+            raise ValueError("Normalized submission violates shared output limits")
+        if not isinstance(submission["clipped_fields"], list) or any(
+            field not in _BLINDING.FIELDS for field in submission["clipped_fields"]
+        ):
+            raise ValueError("Invalid clipping metadata")
         score = r["scores"]
         if set(score) != set(DIMENSIONS):
             raise ValueError("Missing or unknown score dimension")
@@ -118,6 +163,11 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
             for d in DIMENSIONS
         ):
             raise ValueError("Invalid blind score")
+        check_scorer_reviews(r.get("scorer_reviews"))
+        for review in r["scorer_reviews"]:
+            if review["arm_guess"] != "uncertain":
+                non_uncertain_guesses += 1
+                correct_arm_guesses += review["arm_guess"] == r["executed_arm"]
         if "arm_identity" in r or "system_role" in r or r.get("scorer_saw_arm_identity"):
             raise ValueError("Unblinded scoring record")
         seen[key][arm] = r
@@ -130,6 +180,14 @@ def check_trial_records(manifest: dict[str, Any], records: list[dict[str, Any]])
         "pairs": len(pairs),
         "cost_usd": total_cost,
         "integrity_failures": sum(bool(r.get("critical_integrity_failure")) for r in records),
+        "clipped_submissions": sum(
+            bool(r["normalized_submission"]["clipped_fields"]) for r in records
+        ),
+        "schema_truncation_fields": schema_truncation_fields,
+        "schema_validation_errors": schema_validation_errors,
+        "blinding_guess_accuracy": (
+            correct_arm_guesses / non_uncertain_guesses if non_uncertain_guesses else None
+        ),
     }
 
 
@@ -137,3 +195,133 @@ def weighted_score(scores: dict[str, int]) -> float:
     if set(scores) != set(DIMENSIONS):
         raise ValueError("Invalid score dimensions")
     return sum(scores[d] * w for d, w in zip(DIMENSIONS, WEIGHTS))
+
+
+def check_scorer_reviews(reviews: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate two independently identified, blinded artifact reviews."""
+    if not isinstance(reviews, list) or len(reviews) != 2:
+        raise ValueError("Exactly two independent scorer reviews are required")
+    grader_ids: set[str] = set()
+    scores: list[float] = []
+    guesses: dict[str, int] = {"sigma": 0, "single_role": 0, "uncertain": 0}
+    for review in reviews:
+        if not isinstance(review, dict) or set(review) != {
+            "grader_id",
+            "scores",
+            "task_key_pass",
+            "arm_guess",
+            "guess_confidence",
+        }:
+            raise ValueError("Invalid scorer review shape")
+        grader_id = review["grader_id"]
+        if not isinstance(grader_id, str) or not grader_id or grader_id in grader_ids:
+            raise ValueError("Scorers must have distinct identities")
+        grader_ids.add(grader_id)
+        if not isinstance(review["task_key_pass"], bool):
+            raise TypeError("Invalid task-key pass endpoint")
+        guess = review["arm_guess"]
+        if guess not in guesses:
+            raise ValueError("Invalid post-score arm guess")
+        confidence = review["guess_confidence"]
+        if (
+            not isinstance(confidence, int)
+            or isinstance(confidence, bool)
+            or not 0 <= confidence <= 3
+        ):
+            raise ValueError("Invalid arm-guess confidence")
+        score = review["scores"]
+        if set(score) != set(DIMENSIONS) or any(
+            not isinstance(score[d], int) or isinstance(score[d], bool) or not 0 <= score[d] <= 4
+            for d in DIMENSIONS
+        ):
+            raise ValueError("Invalid scorer dimensions")
+        guesses[guess] += 1
+        scores.append(weighted_score(score))
+    return {
+        "scorer_count": 2,
+        "weighted_scores": scores,
+        "task_key_passes": sum(bool(r["task_key_pass"]) for r in reviews),
+        "arm_guesses": guesses,
+    }
+
+
+def task_cluster_summary(
+    paired_differences: list[dict[str, Any]],
+    *,
+    outcome_field: str = "sigma_minus_single_role",
+) -> dict[str, Any]:
+    """Summarize repeats/variants within six tasks; tasks, not pairs, are n."""
+    by_task: dict[str, list[float]] = defaultdict(list)
+    for item in paired_differences:
+        value = item[outcome_field]
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
+            raise ValueError("Invalid paired difference")
+        by_task[str(item["task_id"])].append(float(value))
+    if len(by_task) != 6 or any(not values for values in by_task.values()):
+        raise ValueError("Cluster summary requires all six underlying tasks")
+    task_means = {task: statistics.mean(values) for task, values in sorted(by_task.items())}
+    values = list(task_means.values())
+    mean = statistics.mean(values)
+    sd = statistics.stdev(values)
+    # Two-sided 95% Student-t critical value with five task-level degrees of freedom.
+    half_width = 2.5705818356 * sd / math.sqrt(6)
+    sign_flip_extreme = 0
+    observed = abs(mean)
+    for mask in range(1 << 6):
+        permuted = statistics.mean(
+            value if mask & (1 << index) else -value for index, value in enumerate(values)
+        )
+        if abs(permuted) >= observed - 1e-12:
+            sign_flip_extreme += 1
+    return {
+        "independent_units": 6,
+        "within_task_pair_count": len(paired_differences),
+        "task_cluster_means": task_means,
+        "mean_task_effect": mean,
+        "task_level_sd": sd,
+        "task_level_95pct_t_interval": [mean - half_width, mean + half_width],
+        "task_level_sign_flip_two_sided_p_sensitivity": sign_flip_extreme / 64,
+        "interpretation": "exploratory; six tasks do not support broad generalization",
+    }
+
+
+def paired_score_differences(
+    manifest: dict[str, Any], records: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Compute per-pair mean-score effects after the private map is unsealed."""
+    pairs = {(p["task_id"], p["variant"], p["replicate"]): p for p in manifest.get("pairs", [])}
+    grouped: dict[tuple[str, str, int], dict[str, tuple[float, float]]] = defaultdict(dict)
+    for record in records:
+        key = (record["task_id"], record["variant"], record["replicate"])
+        pair = pairs.get(key)
+        if pair is None:
+            raise ValueError("Run is absent from the frozen pair manifest")
+        assignment = pair.get("arm_assignment", {})
+        arm = assignment.get(record.get("arm_code"))
+        if arm not in {"sigma", "single_role"}:
+            raise ValueError("Cannot analyze without the sealed arm map")
+        reviews = check_scorer_reviews(record.get("scorer_reviews"))
+        if arm in grouped[key]:
+            raise ValueError("Duplicate arm score in pair")
+        grouped[key][arm] = (
+            statistics.mean(reviews["weighted_scores"]),
+            reviews["task_key_passes"] / reviews["scorer_count"],
+        )
+    if set(grouped) != set(pairs) or any(
+        set(scores) != {"sigma", "single_role"} for scores in grouped.values()
+    ):
+        raise ValueError("Cannot analyze incomplete pairs")
+    return [
+        {
+            "task_id": key[0],
+            "variant": key[1],
+            "replicate": key[2],
+            "sigma_minus_single_role": scores["sigma"][0] - scores["single_role"][0],
+            "task_key_pass_rate_diff": scores["sigma"][1] - scores["single_role"][1],
+        }
+        for key, scores in sorted(grouped.items())
+    ]

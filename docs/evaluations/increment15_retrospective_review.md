@@ -1,5 +1,10 @@
 # Increment 15: retrospective evidence review using existing SIGMA work
 
+**Historical protocol reference:** The former 12-pair/24-record setup was
+revised by issue #118 / T114 revision 2. The current proposal uses 36 pairs and
+72 arm runs while retaining six independent task clusters; it remains
+unfrozen and unauthorized.
+
 **Decision:** User declined additional paid inference. Do not request it again or initiate model calls that require new spending. Use archived evidence and deterministic zero-cost controls. This is an **observational retrospective**, not the randomized matched-budget Increment 14 pilot. Do not label it as one.
 
 ## Evidence classification
