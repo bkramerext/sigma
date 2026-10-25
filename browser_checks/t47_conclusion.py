@@ -186,6 +186,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )
+            # Start in Advanced Outcome explicitly, independent of a historical project default.
+            settings = page.get_by_role("button", name="Project settings", exact=True)
+            settings.click()
+            dialog = page.get_by_role("dialog", name="Settings")
+            dialog.get_by_role("tab", name="Preferences").click()
+            detail_setting = dialog.get_by_role(
+                "checkbox", name="Show advanced Outcome details"
+            )
+            if not detail_setting.is_checked():
+                detail_setting.check()
+                dialog.get_by_role("button", name="Save", exact=True).click()
+                expect(dialog).to_be_hidden()
+            else:
+                dialog.get_by_role("button", name="Cancel", exact=True).click()
             for session in sessions:
                 row = page.locator(f'li[data-session-id="{session["id"]}"]')
                 expect(row).to_be_visible(timeout=15000)
