@@ -3115,7 +3115,8 @@ def _finding_source_readiness(finding: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(reviewed, list) and isinstance(skeptic, dict):
         reviewed = skeptic.get("assumptions_reviewed")
     reviewed = reviewed if isinstance(reviewed, list) else []
-    normalize = lambda value: " ".join(value.casefold().split())
+    def normalize(value: str) -> str:
+        return " ".join(value.casefold().split())
     declared_set = {normalize(item) for item in declared if isinstance(item, str)}
     reviewed_set = {normalize(item) for item in reviewed if isinstance(item, str)}
     assumption_status = (
