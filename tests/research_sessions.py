@@ -6524,7 +6524,7 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         branches = {row["strategy_id"]: row for row in next_session["strategy_runs"]}
         assert branches[strategy.id]["current_question"] == question
         assert branches[other.id]["current_question"].startswith("Advance this strategy")
-        source = branches[strategy.id]["question_source"]
+        source = branches[strategy.id]["initial_question_source"]
         assert source["artifact_id"] == artifact["id"]
         assert source["session_id"] == ended["id"]
         assert source["status"] == "model_suggested_unverified"
@@ -6556,7 +6556,7 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
                 str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
             )
             assert override["current_question"] == approved[strategy.id]["question"]
-            assert "question_source" not in override
+            assert "initial_question_source" not in override
             await research_sessions.control_session(str(path), override["id"], "stop")
         assert (path / "research-sessions" / f"{ended['id']}.json").read_bytes() == original_bytes
 
