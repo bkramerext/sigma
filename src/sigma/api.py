@@ -827,6 +827,7 @@ def text_source_view(body: TextSourceRequest):
 class TextConversionRequest(OpenRequest):
     scope: str
     strategy_id: str | None = None
+    session_id: str | None = Field(default=None, max_length=36)
     target: str
     expected_digest: str
     expected_binding: str | None = None

@@ -8,6 +8,7 @@ import re
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sigma import cloud_research, cloud_workspaces
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
 from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
@@ -62,8 +63,14 @@ async def convert_text(
 ) -> dict:
     try:
         return await _convert_text(
-            path, scope, target, strategy_id, expected_digest, expected_binding,
-            expected_project_id, session_id
+            path,
+            scope,
+            target,
+            strategy_id,
+            expected_digest,
+            expected_binding,
+            expected_project_id,
+            session_id,
         )
     except TimeoutError as exc:
         raise ProjectError("Text conversion timed out; source text was kept") from exc
@@ -180,7 +187,24 @@ async def _convert_text(
                 payload["input"] = [{"role": "user", "content": context}]
                 headers["Accept"] = "text/event-stream"
             guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+            attempt = None
             try:
+                if cloud_workspaces.enabled():
+                    if (
+                        binding["identity"] != "cloud_service_api_key"
+                        or binding["mode"] != "api_key"
+                        or not binding["token"]
+                    ):
+                        raise ProjectError("Sponsored cloud inference is not configured.")
+                    attempt = cloud_research.start_provider_attempt(
+                        view.project.id,
+                        path,
+                        config["model"],
+                        payload,
+                        8000,
+                    )
+                if attempt is not None:
+                    attempt.dispatched = True
                 async with (
                     asyncio.timeout(CALL_SECONDS),
                     httpx.AsyncClient(
@@ -247,6 +271,7 @@ async def _convert_text(
                             raw = {}
                         if response.status_code != 200:
                             failure(response.status_code, raw, binding["mode"], guard)
+                cloud_research.settle_provider_attempt(attempt, raw)
                 if (
                     not isinstance(raw, dict)
                     or raw.get("status") != "completed"
@@ -282,6 +307,8 @@ async def _convert_text(
                 raise ProjectError(
                     "Could not reach OpenAI for conversion; source text was kept"
                 ) from exc
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise ProjectError(str(exc)) from exc
             except (ValueError, KeyError, TypeError, AttributeError, ValidationError) as exc:
                 if isinstance(exc, ValidationError):
                     detail = "; ".join(
@@ -294,6 +321,12 @@ async def _convert_text(
                 raise ProjectError(
                     f"Provider returned malformed conversion output ({detail}); source text was kept"
                 ) from exc
+            finally:
+                if attempt is not None:
+                    try:
+                        cloud_research.finish_provider_attempt(attempt)
+                    except cloud_research.CloudResearchUnavailable:
+                        pass
             body = result.body
             if (
                 not body.strip()
