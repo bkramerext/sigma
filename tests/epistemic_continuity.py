@@ -16,12 +16,11 @@ from research_sessions import (
     REAL_CLIENT,
     investigation,
     provider_response,
-    setup,
     skeptic,
     wait_for,
 )
 
-from sigma import research_sessions
+from sigma import continuations, research_sessions
 from sigma.api import export_project_view
 from sigma.project_reports import render_report
 from sigma.projects import create_strategy, initialize_project, inspect_project
@@ -84,14 +83,26 @@ def skeptic_step(cycle: int, source_ids: list[str], response: str) -> dict:
     return value
 
 
+def scripted_response(result: dict, capture: list[dict]) -> httpx.Response:
+    payload = provider_response(result)
+    wire = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    capture[-1]["response_bytes"] = len(wire)
+    return httpx.Response(200, content=wire, headers={"content-type": "application/json"})
+
+
 def export(path: Path, destination: Path, slug: str) -> dict:
     audit = export_project_view(str(path))
     filename = destination / f"{slug}.audit.json"
     filename.write_text(json.dumps(audit, ensure_ascii=False, separators=(",", ":")) + "\n")
-    files = [filename]
+    state = destination / f"{slug}.current-understanding.json"
+    state.write_text(
+        json.dumps(current_understanding(str(path)), ensure_ascii=False, indent=2) + "\n"
+    )
+    files = [filename, state]
     for fmt in ("txt", "html", "tex"):
         report, _ = render_report(audit, fmt)
         target = destination / f"{slug}.report.{fmt}"
+        assert isinstance(report, str)
         target.write_text(report)
         files.append(target)
     return {
@@ -100,7 +111,7 @@ def export(path: Path, destination: Path, slug: str) -> dict:
         "session_ids": [item["id"] for item in audit["research_sessions"]],
         "files": [
             {
-                "path": str(item),
+                "path": item.name,
                 "bytes": item.stat().st_size,
                 "sha256": hashlib.sha256(item.read_bytes()).hexdigest(),
             }
@@ -110,7 +121,23 @@ def export(path: Path, destination: Path, slug: str) -> dict:
 
 
 async def parity_project(path: Path, capture: list[dict]) -> dict:
-    view, strategy, credential, config = await setup(path)
+    view = initialize_project(
+        path,
+        "Parity continuation control",
+        "Which bounded claims about n(n+1)+k follow from a saved parity lemma? State the supported scope and remaining cases.",
+    )
+    strategy = create_strategy(
+        path,
+        "Carry the parity lemma",
+        "Establish n(n+1) is even, then test specific even perturbations using that saved step.",
+    ).project.strategies[0]
+    credential = {
+        "identity": "fixture-account",
+        "mode": "api_key",
+        "token": "fixture-token",
+        "status": "connected",
+    }
+    config = {"available": True, "model": "gpt-6.1-sol", "reasoning_effort": "high"}
     limits = research_sessions.get_limits(str(path))
     limits.update(research_rounds=2, model_calls=4)
     research_sessions.save_limits(str(path), limits)
@@ -122,7 +149,15 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
         body = json.loads(request.content)
         context = json.loads(body["input"])
         role = body["text"]["format"]["name"]
-        capture.append({"phase": phase, "role": role, "body": body})
+        capture.append(
+            {
+                "phase": phase,
+                "role": role,
+                "body": body,
+                "request_bytes": len(request.content),
+                "request_sha256": hashlib.sha256(request.content).hexdigest(),
+            }
+        )
         cycle = context["cycle"]
         if phase == "first":
             if role == "research_investigator" and cycle == 1:
@@ -154,6 +189,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
                 )
             else:
                 assert role == "research_skeptic" and cycle == 2
+                assert isinstance(first_artifact_id, str)
                 assert first_artifact_id in context["context_artifact_ids"]
                 assert context["prior_artifacts"][0]["reasoning_steps"][0]["argument"].startswith(
                     "Consecutive integers"
@@ -165,6 +201,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
                     "The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.",
                 )
         elif phase == "later_session":
+            assert isinstance(first_artifact_id, str)
             if role == "research_investigator":
                 prior = next(
                     item
@@ -188,6 +225,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
                 )
         else:
             assert role == "research_investigator"
+            assert isinstance(first_artifact_id, str)
             assert first_artifact_id not in context["prior_session_artifact_ids"]
             assert first_artifact_id not in context["context_artifact_ids"]
             result = investigator_step(
@@ -196,7 +234,7 @@ async def parity_project(path: Path, capture: list[dict]) -> dict:
                 "An unrelated source is claimed as support.",
                 [first_artifact_id],
             )
-        return httpx.Response(200, json=provider_response(result))
+        return scripted_response(result, capture)
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -364,6 +402,9 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
     limits.update(research_rounds=1 if withheld else 2, model_calls=2 if withheld else 4)
     research_sessions.save_limits(str(path), limits)
     phase = "initial"
+    followup: dict | None = None
+    fork: dict | None = None
+    witness_id: str | None = None
 
     async def handler(request):
         body = json.loads(request.content)
@@ -375,9 +416,60 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
                 "phase": phase,
                 "role": role,
                 "body": body,
+                "request_bytes": len(request.content),
+                "request_sha256": hashlib.sha256(request.content).hexdigest(),
             }
         )
         cycle = context["cycle"]
+        if phase == "fork":
+            assert isinstance(witness_id, str)
+            assert cycle == 1
+            packet = context["approved_continuation"]
+            source = next(row for row in packet["sources"] if row["artifact_id"] == witness_id)
+            assert source["artifact"]["id"] == witness_id
+            assert (
+                source["artifact"]["investigator_output"]["python_execution"]["status"]
+                == "completed"
+            )
+            reviews = [
+                {
+                    "artifact_id": row["artifact_id"],
+                    "uptake": "considered",
+                    "treatment": "negative_constraint"
+                    if row["artifact_id"] == witness_id
+                    else "unverified_input",
+                    "rationale": "Carry the saved witness with its bounded scope; no theorem follows from this finite run.",
+                    "next_test": "",
+                }
+                for row in packet["sources"]
+            ]
+            if role == "research_investigator":
+                result = graph_investigator(1, None, witness_id)
+                result["claim"] = (
+                    "The saved three-vertex counterexample rules out the local reverse-edge-only guard."
+                )
+                result["method"] = (
+                    "OFFLINE SCRIPT: propose a reachability condition respecting the approved negative source."
+                )
+                result["reasoning_steps"][0]["argument"] = (
+                    "The approved source contains a completed three-vertex witness against the old guard; "
+                    "it does not establish the proposed general repair."
+                )
+                result["reasoning_steps"][0]["epistemic_status"] = "computation"
+            else:
+                result = skeptic_step(
+                    1,
+                    [witness_id],
+                    "The approved bounded counterexample constrains this branch; the general repair remains open.",
+                )
+                result["solution_claim"] = (
+                    "The local guard is refuted by an approved saved witness; a repaired general rule remains unproved."
+                )
+                result["next_question"] = (
+                    "Derive a general reachability condition and check edge cases."
+                )
+            result["continuation_reviews"] = reviews
+            return scripted_response(result, capture)
         if phase == "followup":
             assert cycle == 1
             prior = context["prior_session_findings"]
@@ -402,10 +494,14 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
                     [witness["id"]],
                     "The saved witness constrains the next test; a failed earlier run did not refute the guard.",
                 )
+                result["solution_claim"] = (
+                    "The saved three-vertex witness refutes the immediate-reverse-edge-only guard; "
+                    "a general reachability repair is still unproved."
+                )
                 result["next_question"] = (
                     "Prove or falsify reachability from v to u as the insertion condition."
                 )
-            return httpx.Response(200, json=provider_response(result))
+            return scripted_response(result, capture)
         if role == "research_investigator":
             if withheld:
                 result = graph_investigator(1, None)
@@ -438,7 +534,7 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
                     execution,
                     next_test="Test the reachability guard and retain the general proof duty.",
                 )
-        return httpx.Response(200, json=provider_response(result))
+        return scripted_response(result, capture)
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -476,6 +572,33 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
             assert (
                 path / "research-sessions" / f"{initial['id']}.json"
             ).read_bytes() == initial_bytes
+            witness_id = initial["artifacts"][1]["id"]
+            assert isinstance(witness_id, str)
+            preview = continuations.proposal(str(path), strategy.id)
+            assert any(row["artifact_id"] == witness_id for row in preview["sources"])
+            mandatory_ids: list[str] = []
+            for row in preview["sources"]:
+                if row["mandatory"]:
+                    assert isinstance(row["artifact_id"], str)
+                    mandatory_ids.append(row["artifact_id"])
+            selected = list(dict.fromkeys([*mandatory_ids, witness_id]))
+            approval = continuations.Approval(
+                parent_strategy_id=strategy.id,
+                title="Reachability repair after a bounded counterexample",
+                question="Use the approved three-vertex negative witness to test the reachability repair; leave the arbitrary-size proof open.",
+                source_artifact_ids=selected,
+                preview_digest=preview["preview_digest"],
+            )
+            fork_strategy = continuations.approve(str(path), approval).project.strategies[-1]
+            phase = "fork"
+            started = await research_sessions.start_session(
+                str(path), fork_strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            fork = await wait_for(path, started["id"])
+            assert fork["status"] == "ended" and len(fork["artifacts"]) == 1
+            assert (
+                path / "research-sessions" / f"{initial['id']}.json"
+            ).read_bytes() == initial_bytes
     audit = export_project_view(str(path))
     session = audit["research_sessions"][0]
     if withheld:
@@ -489,15 +612,17 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
             "0 executions" in item["value"] for item in session["outcome"]["metrics"]["operational"]
         )
         report, _ = render_report(audit, "txt")
+        assert isinstance(report, str)
         assert "Only a bounded computational observation" in report
         assert "Python runs by status: 0 executions" in report
     else:
-        assert len(audit["research_sessions"]) == 2
+        assert len(audit["research_sessions"]) == 3
         assert any(
             "failed" in item["value"] and "completed" in item["value"]
             for item in session["outcome"]["metrics"]["operational"]
         )
         report, _ = render_report(audit, "txt")
+        assert isinstance(report, str)
         assert "reverse-edge-only guard has a bounded counterexample" in report
         assert "Python runs by status: 1 completed, 1 failed" in report
     state = current_understanding(str(path))
@@ -506,7 +631,9 @@ async def graph_project(path: Path, capture: list[dict], *, withheld: bool) -> d
     return {
         "project_id": view.project.id,
         "initial_session_id": initial["id"],
-        "followup_session_id": followup["id"] if not withheld else None,
+        "followup_session_id": followup["id"] if followup else None,
+        "fork_session_id": fork["id"] if fork else None,
+        "approved_negative_source_id": witness_id,
         "execution_ids": [
             artifact["investigator_output"]["python_execution"]["id"]
             for artifact in initial["artifacts"]
@@ -560,7 +687,15 @@ async def invalid_source_project(
         body = json.loads(request.content)
         context = json.loads(body["input"])
         role = body["text"]["format"]["name"]
-        capture.append({"project": f"parity-{kind}", "role": role, "body": body})
+        capture.append(
+            {
+                "project": f"parity-{kind}",
+                "role": role,
+                "body": body,
+                "request_bytes": len(request.content),
+                "request_sha256": hashlib.sha256(request.content).hexdigest(),
+            }
+        )
         if role == "research_investigator":
             assert source_artifact_id in context["prior_session_artifact_ids"]
             source = next(
@@ -596,7 +731,7 @@ async def invalid_source_project(
                     "rationale": "The old source supposedly settles this obligation without a fresh derivation.",
                 }
             ]
-        return httpx.Response(200, json=provider_response(result))
+        return scripted_response(result, capture)
 
     with (
         patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
@@ -663,6 +798,15 @@ async def main() -> None:
                 "transport": "offline scripted provider; normal SIGMA session dispatch and persistence; graph-present uses actual local Docker Python",
                 "live_provider_calls": 0,
                 "actual_provider_cost_usd": 0,
+                "scripted_usage_fields_are_not_billing_evidence": True,
+                "source_sha256": {
+                    "src/sigma/research_sessions.py": hashlib.sha256(
+                        Path(research_sessions.__file__).read_bytes()
+                    ).hexdigest(),
+                    "tests/epistemic_continuity.py": hashlib.sha256(
+                        Path(__file__).read_bytes()
+                    ).hexdigest(),
+                },
                 "projects": [
                     export(root / "parity.sigma", output, "parity"),
                     export(root / "parity-retracted.sigma", output, "parity-retracted"),
@@ -678,9 +822,22 @@ async def main() -> None:
                     "graph_withheld": withheld,
                 },
                 "captured_provider_requests": "provider-requests.jsonl",
+                "transport_observations": {
+                    "role_calls": len(capture),
+                    "request_wire_bytes": sum(item["request_bytes"] for item in capture),
+                    "response_json_bytes": sum(item["response_bytes"] for item in capture),
+                },
+                "sandbox_programs": {
+                    "initial_operational_failure_sha256": hashlib.sha256(
+                        ERROR.encode()
+                    ).hexdigest(),
+                    "bounded_graph_counterexample_sha256": hashlib.sha256(
+                        GRAPH_FIRST.encode()
+                    ).hexdigest(),
+                },
                 "synthetic_controls": [
-                    "parity-retracted: source artifact is a deliberately marked isolated copy",
-                    "parity-truncated: source reasoning argument was lengthened only in an isolated copy",
+                    "parity-retracted: source artifact is a deliberately marked isolated copy of parity with the same project ID",
+                    "parity-truncated: source reasoning argument was lengthened only in an isolated copy of parity with the same project ID",
                 ],
             }
             (output / "provider-requests.jsonl").write_text(

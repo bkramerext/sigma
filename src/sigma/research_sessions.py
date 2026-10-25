@@ -3758,13 +3758,6 @@ async def _call(
             for item in context.get(group, [])
             if isinstance(item, dict) and isinstance(item.get("id"), str)
         }
-        closure_sources.update(
-            {
-                item["artifact_id"]: item
-                for item in context.get("other_strategy_evidence", [])
-                if isinstance(item, dict) and isinstance(item.get("artifact_id"), str)
-            }
-        )
         if isinstance(packet, dict):
             closure_sources.update(
                 {
@@ -3809,13 +3802,15 @@ async def _call(
                 and not review["basis_step_ids"]
                 and not any(
                     isinstance(source := closure_sources.get(artifact_id), dict)
-                    and not source.get("extract_truncated_fields")
+                    and "reasoning_steps" not in source.get("extract_truncated_fields", [])
                     and not source.get("retracted_by_artifact_ids")
+                    and isinstance(source.get("reasoning_steps"), list)
+                    and bool(source["reasoning_steps"])
                     for artifact_id in review["basis_artifact_ids"]
                 )
             ):
                 raise ProjectError(
-                    "An addressed obligation needs a complete, unretracted supplied artifact or the current Investigator step"
+                    "An addressed obligation needs a complete, unretracted supplied reasoning artifact or the current Investigator step"
                 )
     else:
         supplied_failures = set(context.get("prior_session_failure_attempt_ids", []))
