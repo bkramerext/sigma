@@ -1128,6 +1128,9 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
             "assumptions_reviewed": ["Assumption 1"],
             "coordinator_decision": completed["artifacts"][0]["coordinator_decision"],
             "next_question": completed["artifacts"][0]["next_question"],
+            "skeptic_output": {
+                "next_question": completed["artifacts"][0]["skeptic_output"]["next_question"],
+            },
             "session_id": completed["id"],
             "session_number": completed["session_number"],
             "strategy_id": strategy.id,
