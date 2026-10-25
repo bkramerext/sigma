@@ -57,6 +57,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 
 **Live VM status (2026-10-25):** Operator reports `sigma-gce-01` appears with green running status in VM instances and external IPv4 `136.66.128.82`. Attached disk identity/deletion rule, VM detailed settings, and IAP SSH remain to be verified.
 
+**Disk attachment verification (2026-10-25):** Operator confirmed `sigma-state` attached to running `sigma-gce-01`, 30 GB, read/write, deletion rule **Keep disk**. Guest filesystem identity, mount, restart persistence, and IAP SSH are not yet verified.
+
 ## Before any operation
 
 1. Identify the GCP project, `us-west1-b` zone, VM `sigma-gce-01`, disk `sigma-state`, public hostname, and current `SIGMA_RELEASE`. Confirm these against **live GCP**, not just this document.
