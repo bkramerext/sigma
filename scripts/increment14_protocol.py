@@ -62,10 +62,19 @@ def manifest(seed: int, repetitions: int) -> dict:
             "task_file_sha256": sha256(TASKS.read_bytes()),
             "canonical_tasks_sha256": sha256(canonical_bytes(data)),
             "pairs": pairs,
+            # Proposed ceilings only. Provider/model selection, a priced estimate,
+            # protocol freeze, and owner authorization remain separate gates.
             "model_provider": None, "model_exact_version": None,
-            "per_arm_token_cap": None, "per_arm_model_call_cap": None,
-            "per_arm_tool_call_cap": None, "per_arm_wall_seconds": None,
-            "per_arm_usd_cap": None, "total_usd_cap": None,
+            "per_arm_token_cap": 64000,
+            "per_arm_input_token_cap": 48000,
+            "per_arm_output_token_cap": 16000,
+            "per_call_input_token_cap": 12000,
+            "per_call_output_token_cap": 4000,
+            "per_arm_model_call_cap": 4,
+            "per_arm_tool_call_cap": 1,
+            "per_arm_wall_seconds": 600,
+            "per_arm_usd_cap": 2.00,
+            "total_usd_cap": 2.00 * 2 * len(pairs),
             "user_approved": False, "freeze_approved": False}
 
 
