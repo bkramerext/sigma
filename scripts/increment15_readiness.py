@@ -43,7 +43,8 @@ def main() -> None:
         "model_version_configured": bool(
             manifest["model_provider"] and manifest["model_exact_version"]
         ),
-        "cost_cap_configured": manifest["total_usd_cap"] is not None,
+        "proposed_total_usd_cap": manifest["total_usd_cap"],
+        "cost_enforcement_demonstrated": False,
         "runner_isolation_demonstrated": False,
         "baseline_and_sigma_run_adapter_tested": False,
         "two_independent_blind_graders_ready": False,

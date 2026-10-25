@@ -30,7 +30,8 @@ def dry_run() -> dict:
     packets = load("packets15", "scripts/increment14_agent_packet.py")
     audit = load("audit15", "scripts/increment14_audit.py")
     planned = protocol.manifest(140017, 3)
-    # These local placeholder caps have NO authorization significance.
+    # These model identifiers are fixture labels and have NO authorization
+    # significance. Keep the frozen protocol ceilings unchanged in the audit.
     frozen = dict(
         planned,
         status="FROZEN",
@@ -38,16 +39,6 @@ def dry_run() -> dict:
         user_approved=True,
         model_provider="offline-fixture",
         model_exact_version="offline-only",
-        per_arm_token_cap=200,
-        per_arm_input_token_cap=100,
-        per_arm_output_token_cap=100,
-        per_call_input_token_cap=100,
-        per_call_output_token_cap=100,
-        per_arm_model_call_cap=2,
-        per_arm_tool_call_cap=0,
-        per_arm_wall_seconds=60,
-        per_arm_usd_cap=0,
-        total_usd_cap=0,
     )
     records = []
     for pair in planned["pairs"]:
@@ -69,6 +60,7 @@ def dry_run() -> dict:
                 "variant": pair["variant"],
                 "replicate": pair["replicate"],
                 "arm_code": arm,
+                "schedule_position": len(records),
                 "executed_arm": pair["arm_assignment"][arm],
                 "packet_sha256": digest,
                 "model_provider": "offline-fixture",
@@ -129,30 +121,41 @@ def dry_run() -> dict:
         try:
             audit.check_trial_records(changed_manifest, altered)
         except (ValueError, KeyError):
+            rejected_mutations.append(None)
             return
         raise AssertionError("Unsafe experiment record was accepted")
 
+    rejected_mutations: list[None] = []
     must_reject(lambda m, r: r.pop())
     must_reject(lambda m, r: r.append(deepcopy(r[0])))
     must_reject(lambda m, r: r[0].update(packet_sha256="other-packet"))
-    must_reject(lambda m, r: r[0].update(model_calls=3))
-    must_reject(lambda m, r: r[0].update(total_tokens=201))
-    must_reject(lambda m, r: r[0].update(input_tokens=101, total_tokens=101))
-    must_reject(lambda m, r: r[0].update(output_tokens=101, total_tokens=101))
+    must_reject(lambda m, r: r[0].update(model_calls=5))
+    must_reject(lambda m, r: r[0].update(total_tokens=64001))
+    must_reject(lambda m, r: r[0].update(input_tokens=48001, total_tokens=48001))
+    must_reject(lambda m, r: r[0].update(output_tokens=16001, total_tokens=16001))
     must_reject(lambda m, r: r[0].update(input_tokens=1))
     must_reject(
         lambda m, r: r[0].update(
-            call_usage=[{"input_tokens": 101, "output_tokens": 0}],
+            call_usage=[{"input_tokens": 12001, "output_tokens": 0}],
             model_calls=1,
-            input_tokens=101,
-            total_tokens=101,
+            input_tokens=12001,
+            total_tokens=12001,
         )
     )
-    must_reject(lambda m, r: r[0].update(cost_usd=0.01))
+    must_reject(lambda m, r: r[0].update(cost_usd=0.56))
     must_reject(lambda m, r: r[0].update(transcript_sha256=""))
     must_reject(lambda m, r: r[0].update(scorer_saw_arm_identity=True))
     must_reject(lambda m, r: m.update(user_approved=False))
     must_reject(lambda m, r: m.update(status="DRAFT_NOT_FROZEN"))
+    must_reject(lambda m, r: m.update(schema_version=2))
+    must_reject(lambda m, r: m["pairs"].pop())
+    must_reject(lambda m, r: m["pairs"][0].update(replicate=99))
+    must_reject(lambda m, r: m.update(seed=140018))
+    must_reject(lambda m, r: m.update(per_arm_output_token_cap=16001))
+    must_reject(lambda m, r: m.update(protocol_script_sha256="tampered"))
+    must_reject(lambda m, r: r[1].update(schedule_position=r[0]["schedule_position"]))
+    must_reject(lambda m, r: m.update(audit_script_sha256="tampered"))
+    must_reject(lambda m, r: m.update(evaluator_key_sha256="tampered"))
 
     result = audit.check_trial_records(frozen, records)
     if result != {
@@ -180,6 +183,7 @@ def dry_run() -> dict:
         "spend_usd": 0,
         "records": len(records),
         "pairs": result["pairs"],
+        "unsafe_mutations_rejected": len(rejected_mutations),
         "audit_passed": True,
         "real_runner_isolation_verified": False,
         "live_pilot_authorized": False,

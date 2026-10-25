@@ -4439,3 +4439,33 @@ that review whether its presentation satisfies newcomer selection. Gray/Green
 own the About/documentation implementation. The proposed warp-drive
 pathway/consolidation remains an owner decision; both sample identities remain
 preserved pending that decision.
+
+## Round 2 Increment 21 — matched-budget evaluation readiness audit (2026-10-25)
+
+Audited the T114 Revision 2 design, merged T118 protocol implementation (PR
+#123), six task packets, agent allowlist, normalizer, record auditor, offline
+pair generator and readiness gate. The protocol remains proposed, unfrozen,
+unexecuted and unauthorized; the task/answer set still needs independent
+curation, the real SIGMA and strong single-role adapters are not tested, model
+input isolation and independent grading are not established, and actual
+matched settings/cost enforcement are not verified. The current SIGMA-to-common
+artifact projection can omit citations, computation feedback, objections and
+open obligations. The audit now requires schedule-position records matching
+the randomized manifest, but cannot authenticate them against an actual runner.
+These fairness and schedule issues require pre-freeze resolution. The existing design is
+within-session only (`n=6` task clusters), not evidence about persistence or
+superiority.
+
+A zero-cost adversarial probe showed the generic auditor accepted a six-pair
+manifest where the protocol requires 36. The version-3 default audit now checks
+the full six-task × two-variant × three-repeat matrix, task/packet/protocol/
+agent/audit/key/scoring hashes, assignment and declared schedule positions, and
+fixed caps before accepting records. Its unit fixture opts into partial-
+manifest mode explicitly; 23 synthetic manifest/record mutations
+are rejected by the offline dry run. The remaining live gates are documented
+in [the Increment 21 readiness audit](evaluations/increment_21/readiness-audit.md)
+and reproducible machine outputs/hashes are retained in
+[evidence](evaluations/increment_21/evidence/). Focused protocol/audit/dry-run,
+readiness and retrospective checks passed. The full `./sigma test` passed after
+installing locked frontend dependencies. No provider calls or cost occurred;
+no comparative result is claimed.
