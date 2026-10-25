@@ -3156,10 +3156,16 @@ def _saved_followup_questions(
     for item in supplied_findings:
         if not isinstance(item, dict):
             continue
-        key_parts = (item.get("strategy_id"), item.get("session_id"), item.get("id"))
-        if not all(isinstance(part, str) and part for part in key_parts):
+        source_strategy = item.get("strategy_id")
+        source_session = item.get("session_id")
+        source_artifact = item.get("id")
+        if not (
+            isinstance(source_strategy, str) and source_strategy
+            and isinstance(source_session, str) and source_session
+            and isinstance(source_artifact, str) and source_artifact
+        ):
             continue
-        key = (key_parts[0], key_parts[1], key_parts[2])
+        key = (source_strategy, source_session, source_artifact)
         if key in supplied:
             ambiguous.add(key)
         else:
@@ -3196,8 +3202,15 @@ def _saved_followup_questions(
                 continue
             seen.add(strategy_id)
             artifact_id = artifact.get("id")
+            session_id = session.get("id")
+            if not (
+                isinstance(strategy_id, str)
+                and isinstance(session_id, str)
+                and isinstance(artifact_id, str)
+            ):
+                continue
             # Do not silently use history omitted from the frozen role context.
-            key = (strategy_id, session.get("id"), artifact_id)
+            key = (strategy_id, session_id, artifact_id)
             saved_extract = supplied.get(key)
             if saved_extract is None or key in ambiguous:
                 continue
