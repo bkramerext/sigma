@@ -920,6 +920,31 @@ secret files, and the rootless socket, so full Compose startup is deliberately
 after all launch gates. VM creation, disk mount, Docker installation, and
 image builds can complete before DNS propagation/OAuth/secret approval.
 
+For offline review of the packaged deployment, run `./sigma test` and inspect
+the fully interpolated Compose configuration on a machine with Docker Compose
+v2. Supply disposable local-only secret files and an env file based on
+`deploy/env.example`; do not copy production credentials into a development
+machine. The production-only GCE overlay must resolve `sigma-state` to
+`/srv/sigma-state/auth`, and all three service healthchecks must be present.
+`deploy/validate-local.sh` additionally builds and starts an isolated local
+Compose stack, exercising SPA/API readiness and SQLite survival across
+backend restart and container recreation; it requires a running Docker engine
+and never demonstrates GCE mount identity or hosted acceptance.
+
+```sh
+./sigma test
+docker compose --env-file "$LOCAL_DEPLOY_ENV_FILE" \
+  -f deploy/compose.yaml -f deploy/compose.gce.yaml config --quiet
+```
+
+On the provisioned host, use the guarded systemd start and the health, mount,
+ownership and public API probes in [Operation Runbook: Routine health and
+diagnosis](OPERATION_RUNBOOK.md#2-routine-health-and-diagnosis). Do not run
+Compose `up` directly for production. Actual deployed SHA, mounted disk proof,
+restart/container-recreation persistence, and public endpoint results must be
+recorded after Brian's T127 resource handoff; local validation is not a
+substitute for those observations.
+
 ### Selected hostname, production OAuth, secrets, public ingress, launch
 
 Each action below needs explicit operator approval:
