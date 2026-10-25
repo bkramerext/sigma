@@ -1,5 +1,26 @@
 # SIGMA status
 
+## T86 README validation (2026-10-25)
+
+Rewrote the newcomer README with a local quick start, optional AI/API-key
+configuration, a separate optional local Google administrator bootstrap, and
+links to the main product and engineering guides. The owner deferred Home and
+RH screenshots until after cloud launch; README contains no screenshot
+placeholders or substitute images.
+Setup and bootstrap details were checked against `./sigma setup`,
+`src/sigma/ui.py`, `src/sigma/local_config.py`, and the local Google sign-in
+section of `CLOUD_DEPLOYMENT.md`.
+
+`./sigma setup` passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed all scenarios, Ruff, formatting, Pyright, frontend typecheck, and
+production build. An actual local `./sigma start` reached ready state; frontend
+and API health URLs returned HTTP 200, and `./sigma shutdown` completed. The
+checkout contained Google OAuth client settings but no bootstrap email in that
+launch environment, so the observed run stayed in local single-user mode and
+printed its existing configuration warning. Credentialed Google sign-in was
+not exercised. The updated T86 assigns WOLF drafting to ChatGPT after Brian
+approves its outline; Gray's work on this branch is limited to the README.
+
 ## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
 
 Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
