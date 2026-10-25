@@ -1,5 +1,40 @@
 # SIGMA status
 
+## T136 monitoring and recovery preparation (2026-10-25)
+
+On branch `gray/t136-cloud-ops-recovery`, based on current `main` at
+`690fff6`, added an independent read-only 15-minute systemd host monitor and
+installer without changing Red's host/application units. It requires the exact
+`/srv/sigma-state` mount and verifies the mounted block device resolves to
+`google-sigma-state` before reading capacity. It detects low free space/inodes,
+failed dependencies and unhealthy Compose containers, backup failure/staleness,
+missing last-success READY snapshots, and fewer than 14 managed READY points.
+Failures include safe actionable details in the local journal and a critical
+journal event; no remote alert path is configured. Added a guarded release
+rollback helper requiring explicit verified-backup and schema-compatibility
+assertions; it changes only `SIGMA_RELEASE`, keeps volumes/state untouched, and
+restarts the prior release when candidate preflight/start/health checks fail.
+
+Updated the operator runbook with install/diagnosis, reboot validation,
+reservation semantics, rollback requirements, failure limitations and live
+acceptance gaps. T136 status remains **offline preparation only**. The hosted
+reboot/restart test, actual disk thresholds and identity, production monitoring
+timer, external alerting, 14-point snapshot inventory, HTTPS/app checks and
+compatible code rollback have not been exercised. No GCP resources, snapshots,
+IAM, production state or live services were touched. No browser check applies to
+this infrastructure-only change.
+
+Validation: `./sigma test` passed all offline scenarios, Ruff, format, Pyright
+(0 diagnostics), frontend typecheck and build. The focused monitor suite passed
+8 cases during that full run and passed 9 cases in the final focused rerun;
+shell syntax and `git diff --check` passed. `systemd-analyze` is unavailable on
+this macOS host, so unit verification is pending on Ubuntu/GCE. Starlette/httpx
+deprecation warnings are pre-existing. Actual hosted acceptance must still
+verify monitor installation, READY retention, reboot recovery, auth/workspace/
+artifact/accounting continuity, rollback compatibility and approved alert
+routing. Coordinator handoff and dependencies are in the linked T136 message
+file and PR.
+
 ## T135 backup and restore preparation (2026-10-25)
 
 On branch `gray/t135-cloud-backup-restore` based on `origin/main` at

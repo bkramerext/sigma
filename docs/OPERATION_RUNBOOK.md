@@ -40,13 +40,76 @@ sudo journalctl -u sigma.service -n 100 --no-pager
 
 Verify public HTTPS, `/api` routing and application health with the documented probe, not only process status. Redact tokens, personal data and request bodies from captured logs. For failure classify DNS/TLS, VM/network, disk mount, Docker/rootless socket, service, OAuth, secret access, quota, provider or persistent state before restarting.
 
+### Automated host and backup checks (T136)
+
+After T128/T129 host setup and the T135 scheduler are installed, configure the
+owner-approved `/etc/sigma/backup.env` and install Gray's independent,
+read-only monitor:
+
+```sh
+sudo /opt/sigma/current/deploy/install-host-monitor.sh
+sudo systemctl start sigma-monitor.service
+sudo systemctl status sigma-monitor.timer --no-pager
+sudo journalctl -u sigma-monitor.service -n 100 --no-pager
+```
+
+The timer runs at boot and every 15 minutes. It checks the state mount, free
+filesystem capacity (minimum 15%) and inodes (minimum 5%), Docker/systemd
+dependencies, backend/frontend healthchecks and edge container state, backup
+failure and freshness markers (successful point within 26 hours), and at least
+14 managed `READY` recovery points. Any failure returns nonzero and includes a
+specific next action. Output excludes raw command output, request bodies,
+workspace names, credentials and user data. The failure unit records a critical
+system journal entry; this is **local detection, not a remote pager**. Until an
+owner approves an external alert path, an operator reviews results at least
+daily. The monitor uses the existing approved backup project setting and does
+not create or delete GCP resources.
+The installer leaves the timer enabled if its initial check fails (for example,
+before 14 recovery points exist); treat this as unresolved host failure, not
+installation acceptance.
+
+```sh
+sudo systemctl show sigma-monitor.service -p Result -p ExecMainStatus
+sudo journalctl -u sigma-monitor.service -u sigma-monitor-failure.service --since today --no-pager
+sudo df -h /srv/sigma-state
+sudo df -i /srv/sigma-state
+sudo systemctl status sigma-backup.timer sigma-backup.service --no-pager
+sudo cat /var/lib/sigma-backup/last-success
+sudo test ! -e /var/lib/sigma-backup/last-failure
+```
+
+Do not clear failure markers or lower thresholds to obtain a green result. For
+capacity failures, stop admitting new research and arrange approved disk
+expansion; do not remove workspaces, SQLite databases, artifacts, snapshots or
+Docker volumes. For backup failures, inspect service journals, mount identity,
+IAM and `READY` point inventory. Restore a current successful point, then
+restore the 14-point retention invariant.
+
 ## 3. Restart service / recover after VM reboot
 
 1. Check state disk mount and preflight first; **do not start** if storage is absent or permissions differ.
 2. `sudo systemctl restart sigma.service`; check `systemctl status`, logs, HTTPS and app health.
 3. Verify existing saved project, sessions, paper artifacts, Google subject mapping and usage ledger remain intact.
 4. Treat interrupted provider calls as **uncertain** and retain pending reservations. Never replay billable requests or edit the usage ledger to make the UI look healthy.
-5. For VM reboot, verify the disk mount, sandbox daemon and `sigma.service` started in correct order; redo steps 2–4.
+5. For VM reboot, check ordering and recovery before reopening traffic:
+
+   ```sh
+   sudo systemctl status 'srv-sigma\x2dstate.mount' docker.service sigma-sandbox.service sigma.service --no-pager
+   findmnt /srv/sigma-state
+   sudo /usr/local/libexec/sigma/gce_preflight.py --json
+   sudo systemctl status sigma-backup.timer sigma-monitor.timer --no-pager
+   sudo systemctl start sigma-monitor.service
+   sudo journalctl -b -u 'srv-sigma\x2dstate.mount' -u sigma-sandbox.service -u sigma.service --no-pager
+   ```
+
+   Require the expected persistent disk/UUID, preflight exit 0, active Docker
+   and rootless sandbox services, active `sigma.service`, healthy backend and
+   frontend, running edge and passing monitor. Verify public HTTPS/API, known
+   authorized test identities, workspace boundaries, saved project/research
+   artifacts, usage totals and pending/unknown reservations against pre-reboot
+   evidence. Never release/replay an interrupted reservation to make totals
+   look clean; provider outcome may be uncertain. Record deployed SHA and boot
+   ID. Local unit/container checks are not hosted acceptance.
 
 ## 4. Application release / update
 
@@ -248,10 +311,32 @@ RPO guarantee. No RTO is claimed. A successful snapshot is not restore evidence.
 
 ## 7. Rollback code (not data)
 
-1. Preserve backups, current images and prior release SHA; stop service.
-2. Restore the earlier compatible `SIGMA_RELEASE` and images **without deleting volumes**. Do not roll software back across an incompatible schema migration.
-3. Run preflight and restart service; verify identities, saved projects, outstanding reservations and exports.
-4. If data/schema are incompatible, pause rollout and follow the explicit restore/cutover procedure, with owner authorization. Record incident, evidence and outcome.
+1. Identify the current and target SHAs. Confirm target images exist locally, a
+   recent recovery point is verified, the rollback is compatible with current
+   data/schema, and no backup is running. If compatibility is unknown, stop and
+   escalate; a code rollback never rewinds SQLite or provider charges.
+2. Run the guarded helper with explicit operator assertions:
+
+   ```sh
+   sudo /opt/sigma/current/deploy/rollback-gce-release.sh PREVIOUS_40_CHAR_SHA \
+     --backup-verified --schema-compatible
+   ```
+
+   It refuses an unmounted disk, unsafe deploy env, active backup, invalid SHA,
+   missing locally tagged images or failed host preflight. It saves the current
+   root-only deploy env under `/var/lib/sigma/releases/`, atomically changes
+   only `SIGMA_RELEASE`, restarts through systemd, and waits up to two minutes
+   for backend/frontend healthchecks and running edge. On preflight/startup or
+   health failure it restores the prior env and attempts to restart the prior
+   release. It never invokes `down`, deletes images, changes the state disk or
+   edits database state.
+3. Regardless of helper result, verify public HTTPS/API, auth identity,
+   workspace isolation, projects/artifacts, usage totals and pending
+   reservations. Preserve output and journals; keep both release env records
+   and images through incident review.
+4. If data/schema are incompatible, pause rollout and use the separate-disk
+   restore/cutover process with owner authorization and a declared data-loss
+   window. No code rollback or container healthcheck proves recoverability.
 
 ## 8. Operational access and user incidents
 

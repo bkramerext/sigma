@@ -16,7 +16,7 @@
 | [T133](t133.md) | Desktop projects, Outcomes, reports, TeX/PDF | 🟢 Green | Blocked by T131/T132 |
 | [T134](t134.md) | Two-account workspace/privacy acceptance | ⚪ Gray + 🟢 Green; 👤 Brian test account | Blocked by T131 |
 | [T135](t135.md) | Backup policy and verified restore | ⚪ **Gray** | **[Offline preparation PR #142](https://github.com/bkramerext/sigma/pull/142); hosted acceptance after T127/T129 and owner-approved backup IAM** |
-| [T136](t136.md) | Monitoring, restart, reboot, rollback | ⚪ Gray + 🔴 Red | Blocked by T129/T135 |
+| [T136](t136.md) | Monitoring, restart, reboot, rollback | ⚪ Gray + 🔴 Red | Offline preparation PR in review; live acceptance blocked by T129/T135 and host/release verification |
 | [T137](t137.md) | Launch go/no-go | Coordinator + 👤 Brian | Blocked by hosted acceptance |
 
 These are repository tickets in the existing T sequence, not GitHub issue numbers. **Codex workers cannot relax acceptance requirements or mark blocked steps complete without observed evidence.** Owner action must be distinguished from worker implementation. Update statuses and evidence as tasks complete. Mobile-specific acceptance is out of scope.

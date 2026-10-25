@@ -360,6 +360,17 @@ never substitute its rootful daemon for the GCE acceptance.
   remains blocked until a provisioned disk, owner-approved IAM and isolated
   recovery host are available. The snapshot estimate is a budget assumption,
   not evidence of retention or recovery.
+- **Host monitoring and rollback preparation (T136):**
+  `deploy/install-host-monitor.sh` installs a separate 15-minute read-only
+  systemd monitor without changing Red's host/app units. It checks mount,
+  capacity/inodes, Compose health, backup marker age/failure and managed READY
+  snapshot count; failures are actionable in the local journal. This does not
+  configure external paging. `deploy/rollback-gce-release.sh` switches only
+  the release SHA after explicit backup/schema-compatible operator assertions,
+  local image checks and preflight; it preserves named volumes and attempts to
+  restore the prior release on failure. Reboot, real alert delivery, compatible
+  rollback and state verification still require the live GCE deployment and
+  owner-authorized operational evidence.
 - **Update:** Review the diff and image digests; retain current tagged images.
   Set `SIGMA_RELEASE` to the candidate commit, build backend/frontend, rebuild
   sandbox images if their source/dependencies changed, run local checks, take a
