@@ -1,5 +1,25 @@
 # SIGMA status
 
+## T86 README validation (2026-10-25)
+
+Rewrote the newcomer README with a local quick start, optional AI/API-key
+configuration, a separate optional local Google administrator bootstrap, and
+links to the main product and engineering guides. The owner-provided screenshot
+is pending from Brian; the README keeps the requested explicit placeholder.
+Setup and bootstrap details were checked against `./sigma setup`,
+`src/sigma/ui.py`, `src/sigma/local_config.py`, and the local Google sign-in
+section of `CLOUD_DEPLOYMENT.md`.
+
+`./sigma setup` passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed all scenarios, Ruff, formatting, Pyright, frontend typecheck, and
+production build. An actual local `./sigma start` reached ready state; frontend
+and API health URLs returned HTTP 200, and `./sigma shutdown` completed. The
+checkout contained Google OAuth client settings but no bootstrap email in that
+launch environment, so the observed run stayed in local single-user mode and
+printed its existing configuration warning. Credentialed Google sign-in was
+not exercised. WOLF remains unchanged pending Brian's approval of its outline,
+as required by T86.
+
 ## Blue Increment 7: saved reasoning and adversarial continuity (2026-10-25)
 
 On cumulative PR #80, the Skeptic guidance now reviews the current claim against actually supplied prior steps rather than demanding a complete proof rewrite each cycle. Bounded prior-session extracts include saved reasoning arguments and reviews, with truncation and retraction signals. A Skeptic cannot mark an obligation addressed solely by a retracted, reasoning-truncated or absent older source. This checks source availability, not mathematical truth.
