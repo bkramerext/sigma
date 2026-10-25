@@ -3080,6 +3080,59 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
+def _finding_source_readiness(finding: dict[str, Any]) -> dict[str, Any]:
+    """Describe what a bounded saved source contains, not whether its claim is true.
+
+    Model-reviewed assumptions and steps are still unverified. An incomplete
+    extract must not quietly stand in for its complete original.
+    """
+    truncated = finding.get("extract_truncated_fields", [])
+    truncated = truncated if isinstance(truncated, list) else ["unknown"]
+    retracted = bool(finding.get("retracted_by_artifact_ids"))
+    steps = finding.get("reasoning_steps")
+    if retracted:
+        state = "withdrawn"
+    elif truncated:
+        state = "incomplete_extract"
+    elif isinstance(steps, list) and steps:
+        reviewed = all(
+            isinstance(step, dict)
+            and isinstance(step.get("argument"), str)
+            and bool(step["argument"].strip())
+            and isinstance(step.get("review"), dict)
+            and step["review"].get("disposition") == "accepted"
+            and not step["review"].get("objection")
+            for step in steps
+        )
+        state = "model_reviewed_steps" if reviewed else "unresolved_steps"
+    else:
+        state = "narrative_unverified"
+
+    declared = finding.get("assumptions")
+    declared = declared if isinstance(declared, list) else []
+    skeptic = finding.get("skeptic_output")
+    reviewed = finding.get("assumptions_reviewed")
+    if not isinstance(reviewed, list) and isinstance(skeptic, dict):
+        reviewed = skeptic.get("assumptions_reviewed")
+    reviewed = reviewed if isinstance(reviewed, list) else []
+    normalize = lambda value: " ".join(value.casefold().split())
+    declared_set = {normalize(item) for item in declared if isinstance(item, str)}
+    reviewed_set = {normalize(item) for item in reviewed if isinstance(item, str)}
+    assumption_status = (
+        "none_declared"
+        if not declared_set
+        else "model_reviewed"
+        if declared_set <= reviewed_set and "assumptions" not in truncated
+        else "requires_review"
+    )
+    return {
+        "state": state,
+        "assumptions": assumption_status,
+        "original_in_context": False,
+        "independently_verified": False,
+    }
+
+
 def _saved_followup_questions(
     records: list[dict[str, Any]],
     strategy_ids: list[str],
@@ -3093,7 +3146,7 @@ def _saved_followup_questions(
     """
     selected = set(strategy_ids)
     supplied = {
-        (item.get("strategy_id"), item.get("id"))
+        (item.get("strategy_id"), item.get("id")): item
         for item in supplied_findings
         if isinstance(item, dict)
     }
@@ -3122,7 +3175,15 @@ def _saved_followup_questions(
             seen.add(strategy_id)
             artifact_id = artifact.get("id")
             # Do not silently use history omitted from the frozen role context.
-            if (strategy_id, artifact_id) not in supplied:
+            saved_extract = supplied.get((strategy_id, artifact_id))
+            if saved_extract is None:
+                continue
+            # Carry a question only if its material scope was not shortened.
+            # Truncated reasoning steps alone do not invalidate a next test.
+            truncated = saved_extract.get("extract_truncated_fields", [])
+            if not isinstance(truncated, list) or any(
+                field in truncated for field in ("assumptions", "next_question", "evidence_status")
+            ):
                 continue
             if artifact.get("retracted_by_artifact_ids"):
                 continue
@@ -4960,6 +5021,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
                     isinstance(note, str) and len(note.strip()) > limit for note in skeptic[key]
                 ):
                     result["extract_truncated_fields"].append(f"skeptic_output.{key}")
+    result["source_readiness"] = _finding_source_readiness(result)
     return result
 
 
@@ -7347,6 +7409,7 @@ def _prior_session_findings_index(
                 computation = _peer_python_evidence(artifact, field, session.get("project_path"))
                 if computation is not None:
                     finding[field] = computation
+            finding["source_readiness"] = _finding_source_readiness(finding)
             priority = (
                 0
                 if artifact.get("id") in (obligation_source_ids or set())
