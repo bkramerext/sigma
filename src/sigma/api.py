@@ -848,6 +848,7 @@ class ProjectSettingsRequest(BaseModel):
     ai_model: str
     reasoning_effort: str
     difficulty: str | None
+    show_advanced_outcome_details: bool | None = None
 
 
 class UpdateProjectRequest(ProjectSettingsRequest):
@@ -865,8 +866,9 @@ def update_project_view(body: UpdateProjectRequest):
             body.investigation_type,
             body.ai_model,
             body.reasoning_effort,
-            body.expected.model_dump(),
+            body.expected.model_dump(exclude_none=True),
             difficulty=body.difficulty,
+            show_advanced_outcome_details=body.show_advanced_outcome_details,
         )
     )
 

@@ -128,8 +128,7 @@ def main():
         )
         assert packet["question"] == new.approach
         # Real context builder receives cross-strategy originals and exact IDs.
-        context = _agent_context(
-            {
+        dispatch_record = {
                 "id": "context-test",
                 "project_path": path,
                 "project_id": view.project.id,
@@ -140,15 +139,24 @@ def main():
                 "current_question": new.approach,
                 "artifacts": [],
                 "steps": [],
-                "prior_session_findings": [],
+                "prior_session_findings": [
+                    {"id": "unselected-parent-artifact", "strategy_id": parent.id, "claim_or_question": "This was only available, not approved."},
+                    {"id": "own-previous-artifact", "strategy_id": new.id, "claim_or_question": "Own prior attempt remains available."},
+                ],
                 "prior_session_failures": [],
                 "approved_continuations": packets,
-            },
-            "investigator",
-            1,
-        )
+                "research_context_version": 2,
+            }
+        context = _agent_context(dispatch_record, "investigator", 1)
         assert context["approved_continuation"] == packet
-        assert set(context["prior_session_artifact_ids"]) == set(mandatory + [gap])
+        assert set(context["prior_session_artifact_ids"]) == set(mandatory + [gap, "own-previous-artifact"])
+        assert "unselected-parent-artifact" not in json.dumps(context)
+        with patch.object(engine, "EXPERIMENTAL_EXACT_TEXT_POOL", True):
+            pooled_context = _agent_context(dispatch_record, "investigator", 1)
+        assert pooled_context["approved_continuation"] != packet
+        assert c.expand_dispatch_packet(pooled_context["approved_continuation"]) == packet
+        assert len(json.dumps(pooled_context)) < len(json.dumps(context))
+        assert "unselected-parent-artifact" not in json.dumps(pooled_context)
         assert len({s["source"]["strategy_id"] for s in packet["sources"]}) == 2
         asyncio.run(review_contract(context))
         fresh_records, _ = read_session_snapshot(path)

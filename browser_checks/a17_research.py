@@ -164,6 +164,21 @@ with sync_playwright() as playwright:
             disclosure.click()
         expect(session.locator(".session-row-content")).to_be_visible()
 
+    def enable_advanced_outcome(path):
+        result = page.evaluate(
+            """async path => {
+              const opened = await (await fetch('/api/projects/open', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path})})).json();
+              const p = opened.project;
+              const fields = ['title','problem','investigation_type','ai_model','reasoning_effort','difficulty','show_advanced_outcome_details'];
+              const expected = Object.fromEntries(fields.map(key => [key, p[key] ?? (key === 'show_advanced_outcome_details' ? false : null)]));
+              const response = await fetch('/api/projects/update', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path, ...expected, expected, show_advanced_outcome_details:true})});
+              return {status:response.status, body:await response.json()};
+            }""",
+            path,
+        )
+        assert result["status"] == 200, result
+        page.goto(f"{browser_base_url}/project?{urlencode({'path': path})}")
+
     page.goto(browser_base_url)
     home_credit = page.locator(".home-art-credit")
     expect(
@@ -356,7 +371,7 @@ with sync_playwright() as playwright:
         < 3
     )
     expect(settings.locator(".settings-footer")).to_have_count(0)
-    expect(settings.get_by_role("tab", name="Main")).to_have_attribute("aria-selected", "true")
+    expect(settings.get_by_role("tab", name="Research")).to_have_attribute("aria-selected", "true")
     settings.get_by_role("tab", name="Limits").focus()
     page.keyboard.press("ArrowRight")
     expect(settings.get_by_role("tab", name="Limits")).to_have_attribute("aria-selected", "true")
@@ -514,6 +529,7 @@ with sync_playwright() as playwright:
     expect(connection_dialog).to_be_hidden()
     expect(connection.locator("summary")).to_be_focused()
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    enable_advanced_outcome(path)
     workspace_title = f"A17.1 Workspace {uuid4().hex[:8]}"
     project_file = Path(path) / "project.json"
     result = page.evaluate(
@@ -856,7 +872,7 @@ with sync_playwright() as playwright:
     assert "Saved findings and criticism" in fork_text
     assert "Open obligations:" in fork_text
     fork_form.get_by_role("button", name="Cancel", exact=True).click()
-    open_outcome_section(first_session, "Provenance")
+    open_outcome_section(first_session, "Session history and provenance")
     events = research.get_by_label("Recent session activity")
     expect(events.locator("li").last).to_contain_text(
         "All strategy branches finished or the shared call budget was exhausted"
@@ -882,7 +898,7 @@ with sync_playwright() as playwright:
     page.reload()
     restored_session = page.locator("li[data-session-id]").first
     open_session(restored_session)
-    prior_context = open_outcome_section(restored_session, "Provenance")
+    prior_context = open_outcome_section(restored_session, "Session history and provenance")
     expect(prior_context).to_be_visible()
     expect(prior_context).to_contain_text("Prior session sources")
     expect(prior_context).to_contain_text("Session #0 · Prior fixture strategy · Artifact 2")
@@ -898,7 +914,7 @@ with sync_playwright() as playwright:
         page.locator("li[data-session-id]").first.locator(".session-row-content")
     ).to_be_visible()
     open_outcome_section(
-        page.locator("li[data-session-id]").first, "Citations, Evidence & Obligations"
+        page.locator("li[data-session-id]").first, "Citations, evidence & obligations"
     )
     expect(page.locator(".research-artifacts li")).to_have_count(6)
     restored = page.evaluate(
@@ -1105,19 +1121,14 @@ with sync_playwright() as playwright:
         for pair in first_session.locator(".outcome-label-value").all()
     )
     subsection_summaries = first_session.locator(".outcome-subsection > summary")
-    expect(subsection_summaries).to_have_count(5)
-    expect(subsection_summaries).to_contain_text(
-        [
-            "Status",
-            "Strategy Assessments",
-            "Metrics",
-            "Provenance",
-            "Citations, Evidence & Obligations",
-        ]
-    )
+    labels = [item.strip() for item in subsection_summaries.all_inner_texts()]
+    assert labels[:4] == ["Conclusion", "Reasoning / proof", "Citations, evidence & obligations", "Metrics"], labels
+    assert "Status" in labels and "Strategy Assessments" in labels and "Session history and provenance" in labels
+    assert first_session.locator(".outcome-conclusion").get_attribute("open") is not None
     for section in first_session.locator(".outcome-subsection").all():
-        assert section.get_attribute("open") is None, section.inner_text()
-    status_detail = first_session.locator(".outcome-subsection").nth(0)
+        if "Conclusion" not in section.locator(":scope > summary").inner_text():
+            assert section.get_attribute("open") is None, section.inner_text()
+    status_detail = open_outcome_section(first_session, "Status")
     status_summary = status_detail.locator(":scope > summary")
     status_summary.focus()
     status_summary.press("Enter")
@@ -1133,7 +1144,7 @@ with sync_playwright() as playwright:
     assert metrics_detail.locator("table").count() == 0
     metric_value = metrics_detail.locator(".outcome-label-value dd").first.inner_text().strip()
     assert metric_value and metric_value != "—", metric_value
-    provenance_detail = open_outcome_section(first_session, "Provenance")
+    provenance_detail = open_outcome_section(first_session, "Session history and provenance")
     expect(provenance_detail).to_contain_text("Session ID")
     provenance_detail.get_by_text("Model call attempts", exact=True).wait_for()
     context_used = provenance_detail.locator(".context-used-disclosure").first
@@ -1208,7 +1219,7 @@ with sync_playwright() as playwright:
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
-    evidence_detail = open_outcome_section(first_session, "Citations, Evidence & Obligations")
+    evidence_detail = open_outcome_section(first_session, "Citations, evidence & obligations")
     artifact_section = evidence_detail.locator("section.research-artifacts")
     artifact_markdown_toggle = artifact_section.get_by_role(
         "button", name="Render research artifacts as Markdown"
@@ -1440,6 +1451,7 @@ with sync_playwright() as playwright:
     ).click()
     page.wait_for_url("**/project?*")
     max_regions_path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    enable_advanced_outcome(max_regions_path)
     max_regions_strategy = page.locator("li[data-strategy-id]").first
     max_regions_strategy.locator(".strategy-row-disclosure").click()
     page.get_by_role("button", name="Start a new research session", exact=True).click()
@@ -1454,7 +1466,7 @@ with sync_playwright() as playwright:
         "Contributed to solution"
     )
     expect(max_assessments.locator(".outcome-assessment-list")).to_contain_text("Artifact 1")
-    max_evidence = open_outcome_section(max_session, "Citations, Evidence & Obligations")
+    max_evidence = open_outcome_section(max_session, "Citations, evidence & obligations")
     expect(max_evidence.locator(".solution-review")).to_contain_text("R(n) = 1 + n(n+1)/2")
     page.mouse.move(1435, 895)
     page.wait_for_timeout(150)
@@ -1476,22 +1488,12 @@ with sync_playwright() as playwright:
     )
     markdown_outcome = max_session.locator(".outcome-markdown")
     expect(markdown_outcome.locator(".katex").first).to_be_visible()
-    for label in (
-        "Conditional on:",
-        "Solution claim:",
-        "Argument:",
-        "Assumptions:",
-        "Proof obligations considered:",
-        "Evidence:",
-        "Verification:",
-        "Caveats",
-    ):
-        expect(markdown_outcome).to_contain_text(label)
+    expect(markdown_outcome).to_contain_text("For every integer")
     expect(max_session.locator(".outcome-general")).to_have_count(0)
     assert len(provider_calls) == calls_before_math_toggle
     max_session.get_by_role("button", name="Show plain outcome text").click()
-    max_evidence = open_outcome_section(max_session, "Citations, Evidence & Obligations")
-    expect(max_evidence.locator(".solution-review")).to_contain_text("Solution claim:")
+    max_evidence = open_outcome_section(max_session, "Citations, evidence & obligations")
+    expect(max_session.locator(".outcome-reasoning-subsection")).to_contain_text("Solution claim:")
     expect(max_session.locator(".outcome-markdown")).to_have_count(0)
     maximum_strategy = page.locator("li[data-strategy-id]").first
     maximum_strategy.get_by_role("button", name="Disable", exact=True).click()
@@ -1666,16 +1668,16 @@ with sync_playwright() as playwright:
     if session_disclosure.get_attribute("aria-expanded") != "true":
         session_disclosure.click()
     expect(max_session.locator(".session-row-content")).to_be_visible()
-    expect(max_session.locator(".outcome-general .outcome-summary-text")).to_contain_text(
+    expect(max_session.locator(".outcome-conclusion")).to_contain_text(
         "No outcome summary was recorded."
     )
     max_session.get_by_role("button", name="Render outcome as Markdown").click()
     expect(max_session.locator(".outcome-markdown")).to_contain_text(
         "No outcome summary was recorded."
     )
-    expect(max_session.locator(".outcome-markdown")).to_contain_text("Solution claim:")
+    expect(max_session.locator(".outcome-markdown")).not_to_contain_text("Solution claim:")
     max_session.get_by_role("button", name="Show plain outcome text").click()
-    expect(max_session.locator(".outcome-general .outcome-summary-text")).to_contain_text(
+    expect(max_session.locator(".outcome-conclusion")).to_contain_text(
         "No outcome summary was recorded."
     )
     legacy_outcome["enabled"] = False

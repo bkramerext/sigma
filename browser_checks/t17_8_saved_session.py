@@ -187,6 +187,54 @@ with tempfile.TemporaryDirectory(prefix="sigma-t17-8-browser-") as temporary:
             expect(outcome).to_contain_text("Closed form")
             expect(outcome).to_contain_text("Sources:")
             expect(outcome).to_contain_text("Convincing but unverified")
+            markdown_toggle = outcome.get_by_role("button", name="Render outcome as Markdown")
+            expect(markdown_toggle).to_be_visible()
+            expect(markdown_toggle).to_have_attribute("aria-pressed", "false")
+            expect(markdown_toggle).to_have_attribute("title", "Render outcome as Markdown")
+            icon = markdown_toggle.locator("svg.markdown-logo")
+            expect(icon).to_be_visible()
+            assert icon.locator("path").count() == 2
+            icon_geometry = icon.evaluate(
+                "e => [...e.querySelectorAll('path')].map(p => { const b=p.getBBox(), s=getComputedStyle(p); return [b.width, b.height, s.fill]; })"
+            )
+            assert all(
+                width > 0 and height > 0 and fill != "none" for width, height, fill in icon_geometry
+            ), icon_geometry
+            markdown_toggle.hover()
+            assert (
+                markdown_toggle.locator("svg.markdown-logo path").first.evaluate(
+                    "e => getComputedStyle(e).fill"
+                )
+                == "rgb(241, 197, 141)"
+            )
+            markdown_toggle.focus()
+            page.keyboard.press("Tab")
+            page.keyboard.press("Shift+Tab")
+            expect(markdown_toggle).to_be_focused()
+            assert markdown_toggle.evaluate("e => getComputedStyle(e).outlineStyle") == "solid"
+            markdown_toggle.click()
+            source_toggle = outcome.get_by_role("button", name="Show plain outcome text")
+            expect(source_toggle).to_have_attribute("aria-pressed", "true")
+            expect(source_toggle).to_have_attribute("title", "Show plain outcome text")
+            assert (
+                source_toggle.locator("svg.markdown-logo path").first.evaluate(
+                    "e => getComputedStyle(e).fill"
+                )
+                == "rgb(241, 197, 141)"
+            )
+            source_toggle.click()
+            expect(
+                outcome.get_by_role("button", name="Render outcome as Markdown")
+            ).to_have_attribute("aria-pressed", "false")
+            for width, height in ((1440, 1000), (390, 844)):
+                page.set_viewport_size({"width": width, "height": height})
+                expect(markdown_toggle).to_be_visible()
+                bounds = markdown_toggle.bounding_box()
+                assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                page.screenshot(
+                    path=f"/tmp/sigma-t17-8-markdown-toggle-{width}.png", full_page=True
+                )
             outcome.get_by_text("Citations, Evidence & Obligations", exact=True).click()
             artifacts = session_row.get_by_role("region", name="Research artifacts")
             expect(artifacts).to_be_visible()

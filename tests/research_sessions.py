@@ -612,6 +612,8 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         "session_id": started["id"],
         "strategy_id": strategy.id,
         "cycle": 1,
+        "runtime_name": "python",
+        "step_id": next(step["id"] for step in finished["steps"] if step["role"] == "investigator"),
     }
     assert [role for role, _ in contexts] == [
         "research_investigator",
@@ -2648,6 +2650,23 @@ def test_outcome_classification():
     )
 
 
+def test_session_listing_ignores_sequence_metadata(path: Path):
+    view = initialize_project(path, "Sequence metadata", "Keep session numbering separate.")
+    directory = Path(view.path) / "research-sessions"
+    directory.mkdir()
+    (directory / "sequence.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "project_id": view.project.id,
+                "project_path": str(project_path(view.path)),
+                "next_session_number": 1,
+            }
+        )
+    )
+    assert research_sessions.list_sessions(view.path) == []
+
+
 def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
     view = initialize_project(
         path,
@@ -2908,7 +2927,8 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
     legacy["outcome"].pop("conclusion", None)
     research_sessions._save(view.path, legacy)
     legacy_public = research_sessions._public(research_sessions._read(view.path, legacy["id"]))
-    assert "No Conclusion was saved" in legacy_public["outcome"]["conclusion"]
+    assert legacy_public["outcome"]["conclusion"] is None
+    assert legacy_public["outcome"]["summary"] == legacy["outcome"]["summary"]
     # A positive research finding does not rewrite a later execution failure.
     positive_but_failed = research_sessions._outcome(
         {
@@ -6356,7 +6376,10 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
                         "cannot be assessed as a complete argument from this record"
                         not in outcome["summary"]
                     )
-                    assert "saved narrative is available" in public["outcome"]["conclusion"]
+                    # Historical summaries remain available without being
+                    # misattributed as an agent-authored Conclusion.
+                    assert public["outcome"]["conclusion"] is None
+                    assert public["outcome"]["summary"]
                 assert record == before
     # Absence and partial work remain distinct from a recorded candidate narrative.
     partial = deepcopy(original)
@@ -6524,6 +6547,7 @@ def main():
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()
+        test_session_listing_ignores_sequence_metadata(root / "session-sequence-metadata.sigma")
         test_outcome_conclusions_are_bounded_honest_and_synthesized(
             root / "outcome-conclusion.sigma"
         )

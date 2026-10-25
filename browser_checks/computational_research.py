@@ -21,7 +21,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "docs/evaluations/increment_4"
+OUT = Path(os.environ.get("SIGMA_COMPUTATION_OUTPUT_DIR", ROOT / "docs/evaluations/increment_4"))
 EXPORTS = OUT / "exports"
 EXPORTS.mkdir(parents=True, exist_ok=True)
 SCRATCH = Path(tempfile.mkdtemp(prefix="sigma-blue-computational-")).resolve()

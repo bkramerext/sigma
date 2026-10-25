@@ -57,6 +57,9 @@ MAX_OBLIGATION_SOURCE_ARTIFACTS = 32
 MAX_RESEARCH_RESPONSE_BYTES = 1_000_000
 MAX_SESSION_INTERVENTIONS = 24
 MAX_REJECTED_INTERVENTIONS = 8
+# Internal experiment only. Literal frozen sources remain the shipped dispatch
+# format until an unscripted comparison establishes that aliasing is understood.
+EXPERIMENTAL_EXACT_TEXT_POOL = False
 CALL_TIMEOUT = 15 * 60
 PREFLIGHT_TIMEOUT = 30
 DEFAULT_LIMITS = {
@@ -2600,7 +2603,11 @@ def _all(path: str) -> list[dict[str, Any]]:
             continue
         try:
             raw = json.loads(file.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and raw.get("project_path") == str(project_path(path)):
+            if (
+                isinstance(raw, dict)
+                and isinstance(raw.get("id"), str)
+                and raw.get("project_path") == str(project_path(path))
+            ):
                 records.append(raw)
         except (OSError, ValueError):
             continue
@@ -2695,11 +2702,12 @@ def _public(record: dict[str, Any]) -> dict[str, Any]:
     if isinstance(saved_conclusion, str):
         outcome["conclusion"] = saved_conclusion
     else:
-        outcome["conclusion"] = (
-            "### Historical session\n\n"
-            "No Conclusion was saved for this session. Its existing outcome summary and detailed evidence remain available below.\n\n"
-            + outcome["argument_availability"]["label"]
-        )
+        # Keep an absent historical Conclusion absent. Presentation layers can
+        # label the saved summary without misrepresenting it as agent-authored.
+        outcome["conclusion"] = None
+        saved_summary = saved_outcome.get("summary") if isinstance(saved_outcome, dict) else None
+        if isinstance(saved_summary, str) and saved_summary.strip():
+            outcome["summary"] = saved_summary
     outcome["metrics"] = _outcome_metrics(record, outcome)
     result["outcome"] = outcome
     assessments = record.get("strategy_assessments")
@@ -3795,7 +3803,15 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
     packet = record.get("approved_continuations", {}).get(record.get("strategy_id"))
     if packet:
         # Full frozen source artifacts, not live filesystem lookups during a call.
-        by_id = {item["id"]: item for item in prior_session_findings}
+        # A continuation's own earlier runs remain available. Other strategies'
+        # historical artifacts enter this branch only through explicit approval.
+        # This matters in a multi-strategy session where the frozen historical
+        # index was assembled for every selected branch together.
+        by_id = {
+            item["id"]: item
+            for item in prior_session_findings
+            if item.get("strategy_id") == record.get("strategy_id")
+        }
         for source in packet["sources"]:
             artifact = source["artifact"]
             by_id[artifact["id"]] = {
@@ -4055,6 +4071,7 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         context["approved_continuation"] = (
             compact_dispatch_packet(packet)
             if record.get("research_context_version", 1) >= 2
+            and EXPERIMENTAL_EXACT_TEXT_POOL
             else packet
         )
         context["context_manifest"]["sources"].append(
@@ -6583,19 +6600,13 @@ async def _execute_pending_python(
             session_id=session_id,
             strategy_id=strategy_id,
             cycle=cycle,
-            **(
-                {
-                    "runtime_name": runtime_name,
-                    "step_id": next(
-                        step["id"]
-                        for step in reversed(record["steps"])
-                        if step.get("strategy_id") == strategy_id
-                        and step.get("cycle") == cycle
-                        and step.get("role") == "investigator"
-                    ),
-                }
-                if runtime_name != "python"
-                else {}
+            runtime_name=runtime_name,
+            step_id=next(
+                step["id"]
+                for step in reversed(record["steps"])
+                if step.get("strategy_id") == strategy_id
+                and step.get("cycle") == cycle
+                and step.get("role") == "investigator"
             ),
         )
     )
