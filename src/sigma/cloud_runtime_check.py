@@ -1,4 +1,4 @@
-"""Opt-in Python/Sage, isolation, TeX, and durable artifact smoke check.
+"""Opt-in Python/Sage, isolation, TeX, and artifact-integrity smoke check.
 
 Run on a host that can access the dedicated rootless Docker socket. The
 --allow-nonrootless-dev option is for local Docker Desktop/Colima validation;
@@ -106,14 +106,15 @@ SIGMA cloud runtime acceptance. Exact arithmetic: $1+2+3=6$.
         pdf = papers._compile_pdf(tex, timeout_seconds=90)
         if not pdf.startswith(b"%PDF-"):
             raise AssertionError("Tectonic did not produce a PDF")
+        snapshot, snapshot_sha256 = papers._snapshot(str(project))
         identifier = uuid4().hex
         record = {
             "schema_version": 1,
             "paper_id": identifier,
             "project_id": project_view.project.id,
             "created_at": "2026-10-25T00:00:00+00:00",
-            "snapshot_sha256": hashlib.sha256(b"runtime-smoke-evidence").hexdigest(),
-            "snapshot": {"sources": [{"id": "runtime-smoke", "data": {"status": "completed"}}]},
+            "snapshot_sha256": snapshot_sha256,
+            "snapshot": snapshot,
             "draft": {"title": "Runtime acceptance"},
             "tex_source": tex,
             "validation_warnings": [],
@@ -124,15 +125,20 @@ SIGMA cloud runtime acceptance. Exact arithmetic: $1+2+3=6$.
         papers._save(str(project), record, pdf)
         saved_paper = papers.get_paper(str(project), identifier)
         saved_pdf = papers.get_pdf(str(project), identifier)
+        saved_snapshot_sha256 = hashlib.sha256(papers._json(saved_paper["snapshot"])).hexdigest()
         if (
             saved_paper["tex_source"] != tex
-            or saved_paper["snapshot"] != record["snapshot"]
+            or saved_paper["snapshot"] != snapshot
+            or saved_paper["snapshot_sha256"] != snapshot_sha256
+            or saved_snapshot_sha256 != saved_paper["snapshot_sha256"]
             or saved_pdf != pdf
             or not saved_paper["pdf_available"]
         ):
             raise AssertionError("TeX, evidence snapshot, or PDF did not persist intact")
         results["paper"] = {
             "paper_id": identifier,
+            "snapshot_sha256": saved_snapshot_sha256,
+            "snapshot_integrity_verified": True,
             "tex_bytes": len(tex.encode()),
             "pdf_bytes": len(pdf),
             "pdf_sha256": hashlib.sha256(pdf).hexdigest(),

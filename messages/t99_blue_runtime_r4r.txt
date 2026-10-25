@@ -9,6 +9,7 @@ MET
 - Backend Docker image now includes official Tectonic 0.15.0 x86_64 Linux musl binary, pinned by artifact SHA-256 `dfb82876f2986862996e564fa507a9e576e0c1e3bee63c2c1bd677c2543e6407`.
 - New paper versions retain exact `tex_source` next to existing frozen evidence snapshot and hash-checked PDF. Existing paper workspace/persistence code is unchanged.
 - Added `python -m sigma.cloud_runtime_check` for rootless daemon assertion, real Python/Sage runs, isolation probes, durable execution artifact retrieval, real TeX compilation and paper artifact round-trip.
+- The paper smoke uses `papers._snapshot()` on the saved project, hashes that package with the same canonical `papers._json()` serializer used by the paper service, and recomputes the digest from the reloaded snapshot to verify it matches the stored `snapshot_sha256`.
 - No Red cloud storage implementation or sponsored inference admission/accounting was modified.
 
 Observed commands/results
@@ -21,6 +22,12 @@ Observed commands/results
 - `uv run --locked --no-sync pyright src/sigma/papers.py src/sigma/cloud_runtime_check.py` — 0 errors/warnings.
 - `./sigma setup` — passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — all scenarios passed, including Ruff, formatting, Pyright, frontend typecheck and production build.
 - No Google Cloud resource, paid provider call, or inference charge occurred.
+
+PR #101 review follow-up: the former placeholder evidence hash was replaced by
+the actual canonical digest check described above. Rerunning the smoke passed;
+it reported snapshot SHA-256 `b3220233d5ec34c9eb268a2ea5d398b68f0cdd11457aa3121beaab801a0364a6`
+and `snapshot_integrity_verified: true`, alongside successful Python, Sage,
+artifact, TeX and PDF checks.
 
 UNVERIFIED / follow-up
 - Local daemon reported `daemon_rootless: false` (Colima). This is explicitly permitted only by the local development flag and does not verify the production rootless boundary.

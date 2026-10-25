@@ -20,7 +20,10 @@ Observed locally on Colima: both images completed against their resolved image
 IDs; both reported UID 65532, blocked the disposable host-secret probe and
 network probe, and round-tripped `runtime-evidence.json`. TeX compiled to a
 5,747-byte PDF; the paper archive returned byte-identical TeX, evidence
-snapshot, and PDF. Separately, the built cloud backend image reported Tectonic
+snapshot, and PDF. The smoke computes the SHA-256 from the real saved-project
+snapshot using the paper service's canonical JSON encoding, then recomputes it
+from the reloaded snapshot and compares it with the stored digest. Separately,
+the built cloud backend image reported Tectonic
 0.15.0 and compiled a real 4,160-byte PDF under the backend's non-root/read-only
 container settings. Local Docker reported `daemon_rootless: false`; actual
 rootless daemon execution and host-boundary attacks remain **UNVERIFIED** until
