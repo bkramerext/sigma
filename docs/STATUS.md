@@ -4612,8 +4612,8 @@ validated its exact 10-unit optimum across 2,016 assignment/order cases; all
 11 offline cumulative-budget tests passed. The real-Chrome Home running-status
 check passed against a fresh local fixture. One initial browser attempt used
 an already-populated project root and failed its fresh-fixture assumption; the
-isolated rerun passed. GitHub Actions for the final pushed SHA remain to be
-checked. No provider calls or spending occurred. The trial is not authorized,
+isolated rerun passed. On pushed SHA `bd02868`, GitHub Actions passed: full `SIGMA verification`,
+Research Outcome browser acceptance, and T92 Recent Projects browser acceptance. No provider calls or spending occurred. The trial is not authorized,
 and no Increment 23 work or Cloud deployment operation was started.
 
 ## Issue 118 — harden within-session blind comparison (2026-10-25)
