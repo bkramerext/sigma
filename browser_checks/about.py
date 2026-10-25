@@ -80,12 +80,16 @@ with sync_playwright() as playwright:
         source = dialog.locator("details.about-source-disclosure")
         expect(source.locator("summary")).to_have_text("Source code & license")
         assert source.get_attribute("open") is None
+        source.locator("summary").click()
         expect(source.get_by_role("link", name="github.com/bkramerext/sigma")).to_have_attribute(
             "href", "https://github.com/bkramerext/sigma"
         )
         expect(source.get_by_role("link", name="Apache 2.0")).to_have_attribute(
             "href", "https://github.com/bkramerext/sigma/blob/main/LICENSE"
         )
+        source.locator("summary").click()
+        assert source.get_attribute("open") is None
+        page.wait_for_timeout(50)
 
     def assert_interactions(dialog):
         toggle = dialog.locator(".about-session-toggle")
@@ -177,6 +181,7 @@ with sync_playwright() as playwright:
 
     button, dialog = open_about()
     assert_dialog_fits(1440)
+    dialog.get_by_role("button", name="Close", exact=True).focus()
     page.keyboard.press("Tab")
     expect(dialog.get_by_role("button", name="Explain Research Project")).to_be_focused()
     page.keyboard.press("Escape")

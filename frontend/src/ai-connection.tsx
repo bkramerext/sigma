@@ -266,21 +266,24 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, home
   }, [open]);
   const status = ai.connecting ? 'connecting' : ai.initialLoading ? 'checking' : ai.healthError ? 'stale' : ai.info?.status ?? 'unknown';
   const label = ai.connecting ? 'Connecting…' : ai.initialLoading ? 'Checking AI…' : ai.healthError && ai.info?.status !== 'unavailable' ? 'AI status unavailable' : ai.info?.label ?? 'Connect AI';
+  const pillStatus = projectHeader && ai.initialLoading ? ai.info?.status ?? 'unknown' : status;
   const serviceFunded = cloudFunding?.target === 'hosted';
   const localGoogleRequired = projectHeader && cloudFunding?.target === 'local' && !cloudFunding.authorized;
   const projectHeaderLabel = serviceFunded
     ? 'ChatGPT · SIGMA service'
     : localGoogleRequired
       ? homeHeader ? 'Connect to ChatGPT' : 'ChatGPT sign-in · Google sign-in required'
-      : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
+      : pillStatus === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
         ? 'ChatGPT connected'
-        : status === 'connected' && ai.info?.mode === 'api_key'
+        : pillStatus === 'connected' && ai.info?.mode === 'api_key'
           ? 'OpenAI API connected'
-          : `ChatGPT sign-in · ${label}`;
+          : ai.initialLoading
+            ? homeHeader ? 'Connect to ChatGPT' : 'ChatGPT sign-in'
+            : `ChatGPT sign-in · ${label}`;
   const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${status}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
+  return <details ref={disclosure} className={`api-connection${projectHeader ? ' project-chatgpt-signin' : ''}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary aria-label={projectHeader ? `${visibleLabel}; open AI connection settings` : 'AI connection settings'} data-tooltip-disabled={projectHeader ? '' : undefined} aria-haspopup="dialog" aria-expanded={open} aria-disabled={interactionDisabled} tabIndex={interactionDisabled ? -1 : 0} onClick={event => { if (interactionDisabled) event.preventDefault(); }}><span className={`connection-dot connection-${pillStatus}${dotActive ? ' connection-active' : ''}`} aria-hidden="true"/><span role="status">{visibleLabel}</span></summary>
     {open && createPortal(<>
     <div className="connection-backdrop" onPointerDown={event => { if (event.target === event.currentTarget) { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.querySelector('summary')?.focus()); } }}/>
     <div ref={panel} className="connection-details" role="dialog" aria-modal="true" aria-label="AI connection settings" tabIndex={-1} style={position ? { top: position.top, right: position.right } : undefined}>

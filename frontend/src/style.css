@@ -292,9 +292,14 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 /* Compact Home project navigation. The artwork is independent of this column. */
 .home-page .home-projects {
   width: min(520px, calc(100% - 56px));
-  margin-left: clamp(26px, 5.4vw, 90px);
+  margin-left: clamp(13px, 2.7vw, 45px);
   position: relative;
   z-index: 1;
+}
+@media (min-width: 901px) {
+  .home-page .home-projects {
+    margin-top: calc(clamp(13px, 2.7vw, 45px) - 114px);
+  }
 }
 .home-page .home-projects-heading {
   display: flex;

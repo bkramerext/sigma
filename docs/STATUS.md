@@ -245,6 +245,19 @@ browser_checks/about.py`, frontend typecheck and `git diff --check` passed as
 well. The collapsed overview retains its compact height; the expanded dialog
 uses the available viewport height and scrolls when its content exceeds it.
 
+### Home header and Projects alignment follow-up
+
+The Home and Project ChatGPT pills keep a short stable label during the initial
+AI status request, and their dot does not enter the checking style. The request,
+connection state, and error handling still run normally. Home Projects now uses
+half its prior left inset; on desktop its top and left insets match. Narrow
+layouts keep Projects below the account pills to avoid overlap. Real Chrome
+`browser_checks/header.py` passed, including a held initial connection response
+and geometry checks at 1280px and 390px. The full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite, browser-check
+Ruff/format, frontend typecheck and `git diff --check` passed. No provider calls
+or cloud changes were made.
+
 ## Outcome presentation and Project Settings (2026-10-24)
 
 Added project-scoped `show_advanced_outcome_details`, defaulting off. Simple mode

@@ -26,6 +26,31 @@ with sync_playwright() as playwright:
     page.set_default_timeout(10000)
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+    page.add_init_script(
+        """
+        (() => {
+          const realFetch = window.fetch.bind(window);
+          window.__headerConnectionPending = null;
+          window.__releaseHeaderConnection = () => {
+            const release = window.__headerConnectionPending;
+            window.__headerConnectionPending = null;
+            release?.();
+          };
+          let holdInitialConnection = sessionStorage.getItem('header-connection-held') !== 'yes';
+          window.fetch = (input, init) => {
+            const url = typeof input === 'string' ? input : input.url;
+            if (holdInitialConnection && url.startsWith('/api/ai/connection?')) {
+              holdInitialConnection = false;
+              sessionStorage.setItem('header-connection-held', 'yes');
+              return new Promise((resolve, reject) => {
+                window.__headerConnectionPending = () => realFetch(input, init).then(resolve, reject);
+              });
+            }
+            return realFetch(input, init);
+          };
+        })();
+        """
+    )
 
     def forward(route):
         route.fulfill(
@@ -89,6 +114,26 @@ with sync_playwright() as playwright:
     )
     page.goto(UI_ORIGIN + "/")
     expect(page.locator(".home-slogan")).to_be_visible()
+    page.wait_for_function("window.__headerConnectionPending !== null")
+    home_pill = page.locator(".home-topline .api-connection")
+    expect(home_pill.locator('[role="status"]')).to_have_text("Connect to ChatGPT")
+    expect(home_pill.locator(".connection-dot")).not_to_have_class(
+        re.compile("connection-checking")
+    )
+    assert "checking" not in home_pill.locator("summary").get_attribute("aria-label").lower()
+    page.evaluate("window.__releaseHeaderConnection()")
+    for width, height in ((1280, 800), (390, 844)):
+        page.set_viewport_size({"width": width, "height": height})
+        projects_box = page.locator(".home-projects").bounding_box()
+        topline_box = page.locator(".home-topline").bounding_box()
+        assert projects_box and topline_box
+        if width >= 901:
+            assert abs(projects_box["x"] - projects_box["y"]) < 1
+            assert abs(projects_box["x"] - min(45, max(13, width * 0.027))) < 1
+        else:
+            assert projects_box["x"] < 26
+            assert projects_box["y"] >= topline_box["y"] + topline_box["height"] - 1
+    page.set_viewport_size({"width": 1280, "height": 800})
     home_actions = page.locator(".home-projects-heading")
     home_open = home_actions.get_by_role("button", name="Open", exact=True)
     home_new = home_actions.get_by_role("button", name="New", exact=True)
@@ -137,18 +182,24 @@ with sync_playwright() as playwright:
     expect(google_signin.locator(".connection-dot")).to_have_css(
         "background-color", "rgb(117, 177, 140)"
     )
-    assert google_signin.locator(".connection-dot").evaluate(
-        "e => getComputedStyle(e).animationName"
-    ) == "none"
+    assert (
+        google_signin.locator(".connection-dot").evaluate("e => getComputedStyle(e).animationName")
+        == "none"
+    )
     assert google_signin.evaluate("e => e.matches('button')")
     auth_requests: list[str] = []
-    page.on("request", lambda request: auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None)
+    page.on(
+        "request",
+        lambda request: (
+            auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None
+        ),
+    )
     google_signin.click(force=True)
     assert not auth_requests
-    expect(page.get_by_role("dialog", name="Connect your Google account")).to_be_visible()
+    expect(page.get_by_role("dialog", name="Google account")).to_be_visible()
     expect(page.get_by_text("header-reviewer@example.org", exact=True)).to_be_visible()
     page.keyboard.press("Escape")
-    expect(page.get_by_role("dialog", name="Connect your Google account")).to_have_count(0)
+    expect(page.get_by_role("dialog", name="Google account")).to_have_count(0)
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
     model_box = model_control.bounding_box()
@@ -281,10 +332,12 @@ with sync_playwright() as playwright:
         assert "connection-connected" in pill.locator(".connection-dot").get_attribute("class")
     else:
         assert pill.locator('[role="status"]').inner_text() in {
-            "ChatGPT sign-in · Checking AI…",
+            "ChatGPT sign-in",
             "ChatGPT sign-in · AI status unavailable",
             f"ChatGPT sign-in · {connection.get('label', 'Connect AI')}",
         }
+    assert "checking" not in pill.get_attribute("aria-label").lower()
+    assert "connection-checking" not in pill.locator(".connection-dot").get_attribute("class")
     assert model_control.evaluate("e => getComputedStyle(e).textAlign") == "center"
     assert model_control.evaluate("e => getComputedStyle(e).alignItems") == "center"
     assert model_control.evaluate("e => getComputedStyle(e).justifyContent") == "center"
@@ -355,7 +408,10 @@ with sync_playwright() as playwright:
         chatgpt_box = pill.bounding_box()
         assert model_box and thinking_box and google_box and chatgpt_box
         assert model_box["y"] < thinking_box["y"] and google_box["y"] < chatgpt_box["y"]
-        assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
+        if width > 700:
+            assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
+        else:
+            assert google_box["x"] < model_box["x"] and chatgpt_box["x"] < thinking_box["x"]
         page.screenshot(path=f"/tmp/sigma-a23-model-controls-{width}.png", full_page=True)
         if width >= 1100:
             assert workspace_box["y"] <= 140, (
