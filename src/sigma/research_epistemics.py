@@ -118,21 +118,21 @@ def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
         for field, runtime in (("python_execution", "python"), ("sage_execution", "sagemath")):
             collect(value.get(field), runtime, artifact_id, step_id)
 
-    for artifact in record.get("artifacts", []):
+    for artifact in (record.get("artifacts") or []):
         if isinstance(artifact, dict):
             identifier = artifact.get("id")
             collect_fields(
                 artifact.get("investigator_output"),
                 artifact_id=identifier if isinstance(identifier, str) else "",
             )
-    for step in record.get("steps", []):
+    for step in (record.get("steps") or []):
         if isinstance(step, dict):
             identifier = step.get("id")
             collect_fields(
                 step.get("output"),
                 step_id=identifier if isinstance(identifier, str) else "",
             )
-    for branch in record.get("strategy_runs", []):
+    for branch in (record.get("strategy_runs") or []):
         if isinstance(branch, dict):
             collect_fields(branch.get("pending_investigation"))
 
