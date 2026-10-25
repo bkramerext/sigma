@@ -1,0 +1,393 @@
+{
+  "version": 1,
+  "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+  "session_count": 3,
+  "project_status": "not_determined",
+  "scope_note": "Latest saved local reviews by strategy. Project completion and independent correctness are not inferred.",
+  "findings": [
+    {
+      "id": "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3:38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+      "text": "The cited local parity step holds; the larger characterization remains open.",
+      "investigated_claim": "For every integer n, n(n+1) is even.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "session_number": 1,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "available": true
+      },
+      "review_ref": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5/objective_review",
+      "review_status": "partial",
+      "status": "partial_reported",
+      "verification": "Incomplete",
+      "local_scope": "unconditional",
+      "strategy_title": "Carry the parity lemma",
+      "strategy_text": "Establish n(n+1) is even, then test specific even perturbations using that saved step.",
+      "assumptions": [],
+      "objections": [
+        "Check boundary case 1"
+      ],
+      "evidence_kind": "Offline scripted role derivation; no independent verifier or computation.",
+      "related_by": []
+    },
+    {
+      "id": "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3:156ccc93-1c53-4af7-8b5e-16febd55e684",
+      "text": "The cited local parity step holds; the larger characterization remains open.",
+      "investigated_claim": "For every integer n, n(n+1)+2 is even.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "session_number": 1,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "artifact_sequence": 2,
+        "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "available": true
+      },
+      "review_ref": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684/objective_review",
+      "review_status": "partial",
+      "status": "partial_reported",
+      "verification": "Incomplete",
+      "local_scope": "unconditional",
+      "strategy_title": "Carry the parity lemma",
+      "strategy_text": "Establish n(n+1) is even, then test specific even perturbations using that saved step.",
+      "assumptions": [],
+      "objections": [
+        "Check boundary case 2"
+      ],
+      "evidence_kind": "Offline scripted role derivation; no independent verifier or computation.",
+      "related_by": []
+    },
+    {
+      "id": "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:38e6dfad-ee05-4cc8-8bef-b776b2bd82d4:0bc26ede-c29e-4e63-9951-c90de72caf9e",
+      "text": "The cited local parity step holds; the larger characterization remains open.",
+      "investigated_claim": "For every integer n, n(n+1)+4 is even.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "session_number": 2,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "available": true
+      },
+      "review_ref": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e/objective_review",
+      "review_status": "partial",
+      "status": "partial_reported",
+      "verification": "Incomplete",
+      "local_scope": "unconditional",
+      "strategy_title": "Carry the parity lemma",
+      "strategy_text": "Establish n(n+1) is even, then test specific even perturbations using that saved step.",
+      "assumptions": [],
+      "objections": [
+        "Check boundary case 1"
+      ],
+      "evidence_kind": "Offline scripted role derivation; no independent verifier or computation.",
+      "related_by": []
+    }
+  ],
+  "current_finding_ids": [
+    "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:38e6dfad-ee05-4cc8-8bef-b776b2bd82d4:0bc26ede-c29e-4e63-9951-c90de72caf9e"
+  ],
+  "obligations": [
+    {
+      "id": "0dbe22fcd8fa878ac787a883f7591deb83cd4e9523ee71e9f5fc4b23df3b9187",
+      "text": "Characterize broader perturbations without assuming this local lemma solves the project.",
+      "kind": "obligation",
+      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "artifact_sequence": 2,
+          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "session_number": 2,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "ba19af1c6f3473f2674e292f554ad7f328bf92caded6220b301a7c803f53148d",
+      "text": "Broader perturbation classification is not established.",
+      "kind": "obligation",
+      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "artifact_sequence": 2,
+          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "session_number": 2,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "b733c79fd97ec8c12c6426d03a2a877f52c29cf48aaf6d56aec7178d0b4c899d",
+      "text": "Check boundary case 1",
+      "kind": "obligation",
+      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "artifact_sequence": 2,
+          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "session_number": 2,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "f779c05f183a500d16a7200621a89e7eeb47adf4087ca9b48bc93da811d98e60",
+      "text": "Check boundary case 2",
+      "kind": "obligation",
+      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "session_number": 1,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "artifact_sequence": 2,
+          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "available": true
+        },
+        {
+          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "session_number": 2,
+          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    }
+  ],
+  "next_investigations": [
+    {
+      "obligation_id": "0dbe22fcd8fa878ac787a883f7591deb83cd4e9523ee71e9f5fc4b23df3b9187",
+      "question": "Characterize broader perturbations without assuming this local lemma solves the project.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "session_number": 2,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "ba19af1c6f3473f2674e292f554ad7f328bf92caded6220b301a7c803f53148d",
+      "question": "Broader perturbation classification is not established.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "session_number": 2,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "b733c79fd97ec8c12c6426d03a2a877f52c29cf48aaf6d56aec7178d0b4c899d",
+      "question": "Check boundary case 1",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "session_number": 2,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "f779c05f183a500d16a7200621a89e7eeb47adf4087ca9b48bc93da811d98e60",
+      "question": "Check boundary case 2",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "session_number": 2,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    }
+  ],
+  "changes": [
+    {
+      "kind": "later_finding_available",
+      "text": "The cited local parity step holds; the larger characterization remains open.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "session_number": 2,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "available": true
+      },
+      "earlier": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "session_number": 1,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "artifact_sequence": 2,
+        "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "available": true
+      },
+      "caution": "Later saved review; no supersession or correction is inferred. Inspect both records."
+    },
+    {
+      "kind": "later_finding_available",
+      "text": "The cited local parity step holds; the larger characterization remains open.",
+      "source": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "session_number": 1,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "artifact_sequence": 2,
+        "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "available": true
+      },
+      "earlier": {
+        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "session_number": 1,
+        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+        "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "available": true
+      },
+      "caution": "Later saved review; no supersession or correction is inferred. Inspect both records."
+    }
+  ],
+  "failures": [
+    {
+      "session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+      "session_number": 3,
+      "status": "failed",
+      "note": "Research reasoning cited an artifact not supplied in this call's context"
+    },
+    {
+      "session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+      "session_number": 3,
+      "strategy_id": "f3fbd6c5-1d10-412e-b37a-261ad959bda0",
+      "status": "failed",
+      "note": "Research reasoning cited an artifact not supplied in this call's context"
+    }
+  ],
+  "limitations": [
+    "Local saved findings do not establish that the project is solved. Agent reviews and computations are not independent verification.",
+    "Latest reviewed findings are shown by strategy; different wording does not establish contradiction, equivalence or supersession."
+  ]
+}

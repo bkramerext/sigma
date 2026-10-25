@@ -1,0 +1,493 @@
+DAG insertion control
+=====================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: Does checking only for the immediate reverse edge keep a DAG acyclic after insertion? Find a bounded counterexample or report what remains unresolved.
+
+Project ID: 48676efc-03dd-47e4-95ed-a655142e5965
+
+Research type: Other
+
+Difficulty: Medium
+
+Strategies
+----------
+Test the local guard (saved)
+~~~~~~~~~~~~~~~~~~~~
+Test a three-vertex witness, then investigate a reachability repair and proof duty.
+
+Reachability repair after a bounded counterexample (saved)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Use the approved three-vertex negative witness to test the reachability repair; leave the arbitrary-size proof open.
+
+Research sessions
+-----------------
+Session #1
+Execution status: ended
+Outcome: Mixed · partial progress, unresolved
+Strategy: Test the local guard
+Started: 2026-10-25T09:09:19.070931+00:00
+
+Outcome summary: The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.
+
+Conclusion
+~~~~~~~~~~
+### Partial finding
+
+The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.
+
+Only the actual saved execution status and output are observed.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Finite checks cannot prove the arbitrary-size claim.
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Replace failing code with a bounded three-vertex graph witness search.
+- General proof and complexity remain open.
+- Check boundary case 1
+- Test the reachability guard and retain the general proof duty.
+- Check boundary case 2
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Finite checks cannot prove the arbitrary-size claim.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+**Evidence:** Artifact 1, Artifact 2
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+Outcome caveats:
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Finite checks cannot prove the arbitrary-size claim.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+Verification: Incomplete
+Structured argument steps are recorded; review their evidence and objections.
+
+Outcome metrics
+~~~~~~~~~~~~~~~
+Operational metrics
+~~~~~~~~~~~~~~~~~~~
+Participating agents: Investigator, Skeptic
+Model calls by status: 4 dispatched · 4 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable
+Tokens · input / output / cached / total: 480 / 320 / 80 / 800
+Wall-clock / agent call time: 1s wall · Investigator 0s across 2 call(s) · Skeptic 0s across 2 call(s)
+Python runs by status: 1 completed, 1 failed
+SageMath runs by status: 0 executions
+Artifacts and storage: 2 finding(s) · 1 Python file(s) (259 B) · session record 115,429 B
+Provider failures / retries: 0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries
+Estimated monetary cost: $0.004008 estimated (rates checked 2026-10-23)
+
+Research-quality metrics
+~~~~~~~~~~~~~~~~~~~~~~~~
+Strategies investigated: Test the local guard
+Research cycles: 2 completed / 2 started
+Outcome classification: Mixed · partial progress, unresolved
+Verification status: Incomplete
+Open proof obligations: 8 · Prove the general insertion invariant and complexity.; Prove the arbitrary-size insertion condition and characterize update cost. (+6 more)
+Evidence-backed conclusions: 2 conclusion(s) · 2 cited finding(s)
+Strategy contribution: productive: 1
+Unresolved objections: 1 · Finite checks cannot prove the arbitrary-size claim.
+
+Claim scope: unconditional
+Solution claim: The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.
+Argument: Only the actual saved execution status and output are observed.
+Skeptic response: OFFLINE SCRIPT interpreting actual saved output: {"checks": 29, "n": 3, "scope": "local insertion criterion only; no dynamic complexity result", "test": "reverse_edge_only_cycle_guard", "witness": {"candidate_accepts": true, "edges_before": [[0, 2], [1, 0]], "insert": [2, 1], "oracle_acyclic_after": false}}
+Assumptions reviewed: Not recorded
+Proof obligations considered: Prove the general insertion invariant and complexity.
+Still open: Prove the arbitrary-size insertion condition and characterize update cost.; Replace failing code with a bounded three-vertex graph witness search.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.; Test the reachability guard and retain the general proof duty.; Check boundary case 2
+Solution evidence references: ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c; 54f7fd27-f2be-4497-b0e7-5b602184b308
+Unresolved objections: Finite checks cannot prove the arbitrary-size claim.
+Resolved review notes: None recorded
+
+Skeptic objection: Check boundary case 2
+Saved verification code: incomplete
+
+Reviewed reasoning
+~~~~~~~~~~~~~~~~~
+Step 1: Candidate graph test
+Epistemic status: conjecture
+A previous failure is operational only; the next code changes to enumerate actual candidate insertions.
+Research artifact: 54f7fd27-f2be-4497-b0e7-5b602184b308
+Source artifacts: ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c
+Skeptic disposition: accepted
+Skeptic rationale: The scripted review retains the exact execution scope and the unsolved general invariant.
+
+Strategy finding: Test the local guard · partial
+Strategy execution status: ended
+Strategy failure detail: Stop budget exhausted
+Claim: The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.
+Source artifacts: ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c; 54f7fd27-f2be-4497-b0e7-5b602184b308
+Step 1: Candidate graph test (conjecture)
+A previous failure is operational only; the next code changes to enumerate actual candidate insertions.
+Skeptic review: accepted · The scripted review retains the exact execution scope and the unsolved general invariant.
+Objection: Check boundary case 2
+Open obligation: Prove the arbitrary-size insertion condition and characterize update cost.
+Open obligation: Replace failing code with a bounded three-vertex graph witness search.
+Open obligation: General proof and complexity remain open.
+Open obligation: Check boundary case 1
+Open obligation: Finite checks cannot prove the arbitrary-size claim.
+Open obligation: Test the reachability guard and retain the general proof duty.
+Open obligation: Check boundary case 2
+
+Strategy Assessments
+--------------------
+Test the local guard · Productive: The saved derivation advances the objective through the linked strategy. [Evidence: ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c; 54f7fd27-f2be-4497-b0e7-5b602184b308]
+
+Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: A bounded graph experiment is proposed; no result is known until execution is saved.
+Method: OFFLINE SCRIPT: compare immediate reverse-edge checking with actual acyclicity on a bounded graph.
+Assumptions: Not recorded
+Evidence status: Offline scripted role output; actual local execution, if any, is separate evidence.
+Skeptic response: OFFLINE SCRIPT interpreting actual saved output: WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "<research>", line 1, in <module>
+RuntimeError: Deliberate evaluator failure before producing any observation
+Objections: Check boundary case 1
+Decision: revise
+Open obligations: Prove the arbitrary-size insertion condition and characterize update cost.; Replace failing code with a bounded three-vertex graph witness search.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.
+Next question: Replace failing code with a bounded three-vertex graph witness search.
+
+Artifact 2 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: A bounded graph experiment is proposed; no result is known until execution is saved.
+Method: OFFLINE SCRIPT: compare immediate reverse-edge checking with actual acyclicity on a bounded graph.
+Assumptions: Not recorded
+Evidence status: Offline scripted role output; actual local execution, if any, is separate evidence.
+Skeptic response: OFFLINE SCRIPT interpreting actual saved output: {"checks": 29, "n": 3, "scope": "local insertion criterion only; no dynamic complexity result", "test": "reverse_edge_only_cycle_guard", "witness": {"candidate_accepts": true, "edges_before": [[0, 2], [1, 0]], "insert": [2, 1], "oracle_acyclic_after": false}}
+Objections: Check boundary case 2
+Decision: stop_budget_exhausted
+Open obligations: Prove the arbitrary-size insertion condition and characterize update cost.; Replace failing code with a bounded three-vertex graph witness search.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.; Test the reachability guard and retain the general proof duty.; Check boundary case 2
+Next question: Not recorded
+
+Agent context selection
+~~~~~~~~~~~~~~~~~~~~~~~
+Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.
+Step 2af05956-afb1-48cf-a34f-d94c24073cd1 · investigator: 0 selected, 0 current-session artifacts omitted, 4739 UTF-8 bytes
+Obligation ledger dispositions: unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+Step 56ebfb55-b37b-49d5-ac40-1915d2eb83e9 · skeptic: 0 selected, 0 current-session artifacts omitted, 8289 UTF-8 bytes
+Obligation ledger dispositions: unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+- selected current_investigator_obligation: ["2af05956-afb1-48cf-a34f-d94c24073cd1"] · current Investigator step is the source; disposition remains unverified
+Step cb26a474-8069-42cd-ac3d-aeffd73885d8 · investigator: 1 selected, 0 current-session artifacts omitted, 16242 UTF-8 bytes
+Obligation ledger dispositions: unresolved 5, addressed 0, superseded 0, retracted 0, unknown 0
+- selected current_session_material_evidence: ["ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c"] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history
+- selected project_strategy_snapshot: ["42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+Step 01c7d13a-fe5e-4b94-99fd-426ee6568ae7 · skeptic: 1 selected, 0 current-session artifacts omitted, 22994 UTF-8 bytes
+Obligation ledger dispositions: unresolved 5, addressed 0, superseded 0, retracted 0, unknown 0
+- selected current_session_material_evidence: ["ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c"] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history
+- selected project_strategy_snapshot: ["42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+- selected current_investigator_obligation: ["cb26a474-8069-42cd-ac3d-aeffd73885d8"] · current Investigator step is the source; disposition remains unverified
+
+Terminal reason: stop_budget_exhausted
+
+Session #2
+Execution status: ended
+Outcome: Mixed · partial progress, unresolved
+Strategy: Test the local guard
+Started: 2026-10-25T09:09:20.410246+00:00
+
+Outcome summary: The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.
+
+Conclusion
+~~~~~~~~~~
+### Partial finding
+
+The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.
+
+The saved witness constrains the next test; a failed earlier run did not refute the guard.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- General proof and complexity remain open.
+- Check boundary case 1
+- Replace failing code with a bounded three-vertex graph witness search.
+- Finite checks cannot prove the arbitrary-size claim.
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Test the reachability guard and retain the general proof duty.
+- Check boundary case 2
+- Broader perturbation classification is not established.
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+**Evidence:** Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+Outcome caveats:
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+Verification: Incomplete
+Structured argument steps are recorded; review their evidence and objections.
+
+Outcome metrics
+~~~~~~~~~~~~~~~
+Operational metrics
+~~~~~~~~~~~~~~~~~~~
+Participating agents: Investigator, Skeptic
+Model calls by status: 2 dispatched · 2 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable
+Tokens · input / output / cached / total: 240 / 160 / 40 / 400
+Wall-clock / agent call time: 0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)
+Python runs by status: 0 executions
+SageMath runs by status: 0 executions
+Artifacts and storage: 1 finding(s) · 0 Python file(s) (0 B) · session record 82,167 B
+Provider failures / retries: 0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries
+Estimated monetary cost: $0.002004 estimated (rates checked 2026-10-23)
+
+Research-quality metrics
+~~~~~~~~~~~~~~~~~~~~~~~~
+Strategies investigated: Test the local guard
+Research cycles: 1 completed / 1 started
+Outcome classification: Mixed · partial progress, unresolved
+Verification status: Incomplete
+Open proof obligations: 8 · Broader perturbation classification is not established.; General proof and complexity remain open. (+6 more)
+Evidence-backed conclusions: 1 conclusion(s) · 1 cited finding(s)
+Strategy contribution: productive: 1
+Unresolved objections: 0 · None recorded
+
+Claim scope: unconditional
+Solution claim: The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.
+Argument: The saved witness constrains the next test; a failed earlier run did not refute the guard.
+Skeptic response: OFFLINE SCRIPT: The saved witness constrains the next test; a failed earlier run did not refute the guard.
+Assumptions reviewed: Not recorded
+Proof obligations considered: Broader perturbation classification is not established.
+Still open: General proof and complexity remain open.; Check boundary case 1; Replace failing code with a bounded three-vertex graph witness search.; Finite checks cannot prove the arbitrary-size claim.; Prove the arbitrary-size insertion condition and characterize update cost.; Test the reachability guard and retain the general proof duty.; Check boundary case 2; Broader perturbation classification is not established.
+Solution evidence references: ea9db587-e0db-46f9-895d-c56f9ac1fb00
+Unresolved objections: None recorded
+Resolved review notes: None recorded
+
+Skeptic objection: Check boundary case 1
+Saved verification code: incomplete
+
+Reviewed reasoning
+~~~~~~~~~~~~~~~~~
+Step 1: Candidate graph test
+Epistemic status: conjecture
+A previous failure is operational only; the next code changes to enumerate actual candidate insertions.
+Research artifact: ea9db587-e0db-46f9-895d-c56f9ac1fb00
+Source artifacts: 54f7fd27-f2be-4497-b0e7-5b602184b308
+Skeptic disposition: accepted
+Skeptic rationale: The saved witness constrains the next test; a failed earlier run did not refute the guard.
+
+Strategy finding: Test the local guard · partial
+Strategy execution status: ended
+Strategy failure detail: Stop budget exhausted
+Claim: The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.
+Source artifacts: ea9db587-e0db-46f9-895d-c56f9ac1fb00
+Step 1: Candidate graph test (conjecture)
+A previous failure is operational only; the next code changes to enumerate actual candidate insertions.
+Skeptic review: accepted · The saved witness constrains the next test; a failed earlier run did not refute the guard.
+Objection: Check boundary case 1
+Open obligation: General proof and complexity remain open.
+Open obligation: Check boundary case 1
+Open obligation: Replace failing code with a bounded three-vertex graph witness search.
+Open obligation: Finite checks cannot prove the arbitrary-size claim.
+Open obligation: Prove the arbitrary-size insertion condition and characterize update cost.
+Open obligation: Test the reachability guard and retain the general proof duty.
+Open obligation: Check boundary case 2
+Open obligation: Broader perturbation classification is not established.
+
+Strategy Assessments
+--------------------
+Test the local guard · Productive: The saved derivation advances the objective through the linked strategy. [Evidence: ea9db587-e0db-46f9-895d-c56f9ac1fb00]
+
+Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: The saved counterexample rejects the old guard; next investigate the reachability condition.
+Method: OFFLINE SCRIPT: use the exact saved witness as a negative constraint; no new computation is claimed.
+Assumptions: Not recorded
+Evidence status: Offline scripted role output; actual local execution, if any, is separate evidence.
+Skeptic response: OFFLINE SCRIPT: The saved witness constrains the next test; a failed earlier run did not refute the guard.
+Objections: Check boundary case 1
+Decision: stop_budget_exhausted
+Open obligations: General proof and complexity remain open.; Check boundary case 1; Replace failing code with a bounded three-vertex graph witness search.; Finite checks cannot prove the arbitrary-size claim.; Prove the arbitrary-size insertion condition and characterize update cost.; Test the reachability guard and retain the general proof duty.; Check boundary case 2; Broader perturbation classification is not established.
+Next question: Not recorded
+
+Agent context selection
+~~~~~~~~~~~~~~~~~~~~~~~
+Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.
+Step 80f1b4a0-46a4-4baa-99d7-104e51d6d0ac · investigator: 0 selected, 0 current-session artifacts omitted, 24969 UTF-8 bytes
+Obligation ledger dispositions: unresolved 7, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+- selected prior_session_finding: ["54f7fd27-f2be-4497-b0e7-5b602184b308", "ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c"] · bounded frozen prior-session extract; inspect linked original before relying on details
+- selected prior_session_obligation: ["c50db8258ebea5770c22883786677123254020029531603ce0b1709b9cdb2bc3", "288398be9f3cfd1849a406e48b023d87ffd4b26c05766d7906d6eafaf9600fca", "233e8fa21eca528bf67ec75ef260374c20cc51a24d1661886893aad334711f0a", "205a25b155cb2349a5f84fdd133e79d807aedb4a889f3454d93a83f4aedd9a54", "0cce4b6ec77caf8808fd18d9acbe73e7befbf5793c4195a5c69439372083d00b", "6540037027ed12440876c006615b4ab785e38241c001d251bd04907d814412c4", "388806a03498b0c632b77b6e3b15aee26b476741b14550652109c29786db3391"] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed
+Step a06ccc3b-d53d-45b5-8362-1edde34f169d · skeptic: 0 selected, 0 current-session artifacts omitted, 26308 UTF-8 bytes
+Obligation ledger dispositions: unresolved 7, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+- selected prior_session_finding: ["54f7fd27-f2be-4497-b0e7-5b602184b308", "ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c"] · bounded frozen prior-session extract; inspect linked original before relying on details
+- selected prior_session_obligation: ["c50db8258ebea5770c22883786677123254020029531603ce0b1709b9cdb2bc3", "288398be9f3cfd1849a406e48b023d87ffd4b26c05766d7906d6eafaf9600fca", "233e8fa21eca528bf67ec75ef260374c20cc51a24d1661886893aad334711f0a", "205a25b155cb2349a5f84fdd133e79d807aedb4a889f3454d93a83f4aedd9a54", "0cce4b6ec77caf8808fd18d9acbe73e7befbf5793c4195a5c69439372083d00b", "6540037027ed12440876c006615b4ab785e38241c001d251bd04907d814412c4", "388806a03498b0c632b77b6e3b15aee26b476741b14550652109c29786db3391"] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed
+- selected current_investigator_obligation: ["80f1b4a0-46a4-4baa-99d7-104e51d6d0ac"] · current Investigator step is the source; disposition remains unverified
+
+Terminal reason: stop_budget_exhausted
+
+Session #3
+Execution status: ended
+Outcome: Mixed · partial progress, unresolved
+Strategy: Reachability repair after a bounded counterexample
+Started: 2026-10-25T09:09:20.543842+00:00
+
+Outcome summary: The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.
+
+Conclusion
+~~~~~~~~~~
+### Partial finding
+
+The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.
+
+The approved bounded counterexample constrains this branch; the general repair remains open.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Broader perturbation classification is not established.
+- Check boundary case 1
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+**Evidence:** Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+#### Approved continuation and evidence uptake
+
+Sources were researcher-selected and delivered in frozen role contexts. Acknowledgment and plan change below are model-reported; neither certifies correctness or closes inherited proof obligations.
+Parent strategy: 42e7ce75-cb41-413e-914b-797bbcc1f01b. Approved question: Use the approved three-vertex negative witness to test the reachability repair; leave the arbitrary-size proof open.
+- Source 54f7fd27-f2be-4497-b0e7-5b602184b308 (session fc6e5571-54da-4d81-8cec-61cab11a9ee3): partial_reported; Incomplete
+Latest per-source role reports: investigator: considered (1); skeptic: considered (1)
+Full per-call rationales and previous dispositions remain in the detailed Outcome/session audit. No inherited duty is automatically resolved.
+
+Outcome caveats:
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+Verification: Incomplete
+Structured argument steps are recorded; review their evidence and objections.
+
+Outcome metrics
+~~~~~~~~~~~~~~~
+Operational metrics
+~~~~~~~~~~~~~~~~~~~
+Participating agents: Investigator, Skeptic
+Model calls by status: 2 dispatched · 2 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable
+Tokens · input / output / cached / total: 240 / 160 / 40 / 400
+Wall-clock / agent call time: 0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)
+Python runs by status: 0 executions
+SageMath runs by status: 0 executions
+Artifacts and storage: 1 finding(s) · 0 Python file(s) (0 B) · session record 78,520 B
+Provider failures / retries: 0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries
+Estimated monetary cost: $0.002004 estimated (rates checked 2026-10-23)
+
+Research-quality metrics
+~~~~~~~~~~~~~~~~~~~~~~~~
+Strategies investigated: Reachability repair after a bounded counterexample
+Research cycles: 1 completed / 1 started
+Outcome classification: Mixed · partial progress, unresolved
+Verification status: Incomplete
+Open proof obligations: 3 · Broader perturbation classification is not established.; Prove the arbitrary-size insertion condition and characterize update cost. (+1 more)
+Evidence-backed conclusions: 1 conclusion(s) · 1 cited finding(s)
+Strategy contribution: not used: 1 · productive: 1
+Unresolved objections: 0 · None recorded
+
+Claim scope: unconditional
+Solution claim: The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.
+Argument: The approved bounded counterexample constrains this branch; the general repair remains open.
+Skeptic response: OFFLINE SCRIPT: The approved bounded counterexample constrains this branch; the general repair remains open.
+Assumptions reviewed: Not recorded
+Proof obligations considered: Broader perturbation classification is not established.
+Still open: Prove the arbitrary-size insertion condition and characterize update cost.; Broader perturbation classification is not established.; Check boundary case 1
+Solution evidence references: ba23f6c4-15a4-40eb-8d85-4334d98150e2
+Unresolved objections: None recorded
+Resolved review notes: None recorded
+
+Skeptic objection: Check boundary case 1
+Saved verification code: incomplete
+
+Reviewed reasoning
+~~~~~~~~~~~~~~~~~
+Step 1: Candidate graph test
+Epistemic status: computation
+The approved source contains a completed three-vertex witness against the old guard; it does not establish the proposed general repair.
+Research artifact: ba23f6c4-15a4-40eb-8d85-4334d98150e2
+Source artifacts: 54f7fd27-f2be-4497-b0e7-5b602184b308
+Skeptic disposition: accepted
+Skeptic rationale: The approved bounded counterexample constrains this branch; the general repair remains open.
+
+Strategy finding: Reachability repair after a bounded counterexample · partial
+Strategy execution status: ended
+Strategy failure detail: Stop budget exhausted
+Claim: The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.
+Source artifacts: ba23f6c4-15a4-40eb-8d85-4334d98150e2
+Step 1: Candidate graph test (computation)
+The approved source contains a completed three-vertex witness against the old guard; it does not establish the proposed general repair.
+Skeptic review: accepted · The approved bounded counterexample constrains this branch; the general repair remains open.
+Objection: Check boundary case 1
+Open obligation: Prove the arbitrary-size insertion condition and characterize update cost.
+Open obligation: Broader perturbation classification is not established.
+Open obligation: Check boundary case 1
+
+Strategy Assessments
+--------------------
+Test the local guard · Not used: No session artifact is linked to this strategy. [Evidence: No artifact references]
+Reachability repair after a bounded counterexample · Productive: The saved derivation advances the objective through the linked strategy. [Evidence: ba23f6c4-15a4-40eb-8d85-4334d98150e2]
+
+Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: The saved three-vertex counterexample rules out the local reverse-edge-only guard.
+Method: OFFLINE SCRIPT: propose a reachability condition respecting the approved negative source.
+Assumptions: Not recorded
+Evidence status: Offline scripted role output; actual local execution, if any, is separate evidence.
+Skeptic response: OFFLINE SCRIPT: The approved bounded counterexample constrains this branch; the general repair remains open.
+Objections: Check boundary case 1
+Decision: stop_budget_exhausted
+Open obligations: Prove the arbitrary-size insertion condition and characterize update cost.; Broader perturbation classification is not established.; Check boundary case 1
+Next question: Not recorded
+
+Agent context selection
+~~~~~~~~~~~~~~~~~~~~~~~
+Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.
+Step 9d98c91c-4045-4431-afb1-d42f941e501d · investigator: 0 selected, 0 current-session artifacts omitted, 21374 UTF-8 bytes
+Obligation ledger dispositions: unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["704733c4-1e1b-4736-9db6-d0b9fdbeb284", "42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+- selected prior_session_finding: ["54f7fd27-f2be-4497-b0e7-5b602184b308"] · bounded frozen prior-session extract; inspect linked original before relying on details
+- selected approved_continuation: ["54f7fd27-f2be-4497-b0e7-5b602184b308"] · researcher-approved evidence; delivery is not use or proof
+Step d04286a9-f1d3-4a78-92ca-0709910a9a76 · skeptic: 0 selected, 0 current-session artifacts omitted, 23669 UTF-8 bytes
+Obligation ledger dispositions: unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["704733c4-1e1b-4736-9db6-d0b9fdbeb284", "42e7ce75-cb41-413e-914b-797bbcc1f01b"] · bounded portfolio overview for strategy and domain context
+- selected prior_session_finding: ["54f7fd27-f2be-4497-b0e7-5b602184b308"] · bounded frozen prior-session extract; inspect linked original before relying on details
+- selected current_investigator_obligation: ["9d98c91c-4045-4431-afb1-d42f941e501d"] · current Investigator step is the source; disposition remains unverified
+- selected approved_continuation: ["54f7fd27-f2be-4497-b0e7-5b602184b308"] · researcher-approved evidence; delivery is not use or proof
+
+Terminal reason: stop_budget_exhausted
+
+Agentic runs
+------------
+No agentic runs are recorded.

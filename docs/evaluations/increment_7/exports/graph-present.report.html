@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DAG insertion control — Research Report</title><style>
+      *{box-sizing:border-box}
+      :root{color-scheme:light;--ink:#23313b;--muted:#65737d;--navy:#0b1b29;--blue:#24485e;--copper:#b77943;--line:#dbe2e5;--paper:#fff;--canvas:#edf1f2}
+      body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.72 Georgia,"Iowan Old Style","Palatino Linotype",serif}
+      .report{width:min(960px,calc(100% - 40px));margin:42px auto;background:var(--paper);border:1px solid #d6dfe2;border-radius:12px;box-shadow:0 18px 60px #18304018;overflow:hidden}
+      .report-header{position:relative;padding:52px 68px 46px;background:linear-gradient(125deg,#0a1927,#183348 72%,#24475c);border-bottom:4px solid var(--copper);color:#f7f2ea}
+      .report-header:after{position:absolute;right:68px;bottom:22px;width:76px;height:1px;background:linear-gradient(90deg,transparent,#d7a36d);content:""}
+      .report-kicker{margin:0 0 16px;color:#e3b37d;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase}
+      h1{max-width:760px;margin:0;color:#fff8ee;font:400 clamp(2rem,4vw,3rem)/1.12 Georgia,"Iowan Old Style",serif;letter-spacing:-.025em;overflow-wrap:anywhere}
+      .report-subtitle{margin:18px 0 0;color:#bfd0d9;font:13px/1.5 system-ui,sans-serif;letter-spacing:.04em}
+      .report-content{padding:12px 68px 64px}
+      .report-section{padding:24px 0 12px;border-bottom:1px solid var(--line)}
+      .report-section:last-child{border-bottom:0}
+      .report-heading{color:var(--navy);font-family:Georgia,"Iowan Old Style",serif;font-weight:400;line-height:1.25}
+      h2.report-heading{margin:0 0 22px;padding:0 0 13px;border-bottom:1px solid var(--line);font-size:1.65rem;letter-spacing:-.015em}
+      h2.report-heading:before{display:block;width:34px;height:3px;margin:0 0 13px;background:var(--copper);content:""}
+      h3.report-heading,.report-record-heading{margin:28px 0 10px;color:var(--blue);font:600 1.08rem/1.4 system-ui,sans-serif;overflow-wrap:anywhere}
+      h3.report-heading{padding-bottom:8px;border-bottom:1px solid #e7ecee}
+      .report-session{margin:26px 0 34px;padding:0 22px 20px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,#fbfcfc,#fff);box-shadow:0 3px 12px #18304008}
+      .report-session-header{display:block;margin:0 -22px 20px;padding:16px 20px 17px;border-bottom:1px solid var(--line);border-left:3px solid var(--copper);border-radius:9px 9px 0 0;background:#f4f6f6}
+      .report-session .report-record-heading{margin:0 0 14px;color:var(--navy);font:600 1.18rem/1.3 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 24px;margin:0}
+      .report-outcome-metrics{margin:8px 0 18px;font:13px/1.5 system-ui,sans-serif}
+      .report-outcome-metrics div{margin:8px 0;overflow-wrap:anywhere}
+      .report-outcome-metrics dt{color:var(--muted);font-weight:600}
+      .report-outcome-metrics dd{margin:2px 0 0}
+      .report-session-fact{min-width:0}
+      .report-session-fact-wide{grid-column:1/-1}
+      .report-session-fact dt{margin:0 0 3px;color:var(--muted);font:700 10px/1.4 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+      .report-session-value{margin:0;color:var(--ink);font:500 13px/1.5 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-value.report-status-ended{color:#426d5a}
+      .report-session-value.report-status-active{color:#825b28}
+      .report-session-value.report-outcome-positive{color:#286447;font-weight:700}
+      .report-session-value.report-outcome-negative{color:#9b403c;font-weight:700}
+      .report-session-value.report-outcome-mixed{color:#825b28;font-weight:700}
+      .report-subheading{margin:25px 0 9px;padding-top:14px;border-top:1px solid #e7ecee;color:#775532;font:700 .74rem/1.4 system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+      .report-artifact-heading{margin:28px 0 8px;padding-top:12px;border-top:1px solid var(--line);color:var(--blue);font:600 .95rem/1.45 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-paragraph,.report-field{margin:10px 0;overflow-wrap:anywhere}
+      .report-field strong{display:inline-block;margin-right:.35em;color:#5b4937;font:700 .76em/1.5 system-ui,sans-serif;letter-spacing:.06em}
+      .report-note{margin:0 0 24px;padding:14px 18px;border-left:3px solid #6d94a5;background:#f1f6f7;color:#455762;font:13px/1.6 system-ui,sans-serif}
+      p{orphans:3;widows:3}
+      ul{margin:10px 0 18px;padding-left:1.4em}
+      li{margin:.4em 0;padding-left:.2em}
+      li::marker{color:var(--copper)}
+      code{padding:.12em .35em;border:1px solid #e2e7e9;border-radius:4px;background:#f4f6f6;color:#274052;font: .88em/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+      .report-math{color:#183a50;font:italic 1.06em Georgia,serif;white-space:normal}
+      .table-scroll{max-width:100%;margin:18px 0 24px;overflow-x:auto;border:1px solid var(--line);border-radius:7px}
+      table{width:100%;border-collapse:collapse;font:13px/1.55 system-ui,sans-serif}
+      .report-assessment-table{min-width:680px;table-layout:fixed}
+      .report-assessment-table col:nth-child(1){width:17%}
+      .report-assessment-table col:nth-child(2){width:15%}
+      .report-assessment-table col:nth-child(3){width:44%}
+      .report-assessment-table col:nth-child(4){width:24%}
+      th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+      th{background:var(--navy);color:#f1c58d;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+      tbody tr:nth-child(even){background:#f6f8f8}
+      tbody tr:last-child td{border-bottom:0}
+      @media(max-width:640px){.report{width:100%;margin:0;border:0;border-radius:0;box-shadow:none}.report-header{padding:36px 25px 32px}.report-header:after{right:25px}.report-content{padding:8px 25px 40px}.report-section{padding-top:20px}.report-session{padding:0 16px 14px}.report-session-header{margin-inline:-16px;padding-inline:16px}.report-session-meta{gap:10px 14px}.report-session-fact-wide{grid-column:1/-1}h2.report-heading{font-size:1.45rem}}
+      @media print{body{background:#fff;color:#111;font-size:10.5pt}.report{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;overflow:visible}.report-header{padding:0 0 20pt;background:#fff;color:#111;border-bottom:2pt solid #a76d3d;print-color-adjust:exact;-webkit-print-color-adjust:exact}.report-header:after{display:none}.report-kicker{color:#76502f}.report-header h1{color:#111;font-size:25pt}.report-subtitle{color:#555}.report-content{padding:0}.report-section{padding:18pt 0 8pt;break-inside:auto}.report-session{break-inside:auto;border-color:#aaa;background:#fff}.report-heading,.report-record-heading,.report-subheading,.report-artifact-heading{break-after:avoid}.report-note,.report-record-heading,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.table-scroll{overflow:visible;border:0}table{font-size:9pt}th{background:#e8edf0;color:#162d3b}.report-record-heading{break-after:avoid}}
+    </style></head><body><main class="report"><header class="report-header"><p class="report-kicker">SIGMA · Research report</p><h1>DAG insertion control</h1><p class="report-subtitle">Project record and research evidence</p></header><div class="report-content"><section class="report-section">
+<h2 class="report-heading">Project</h2>
+<p class="report-note"><strong>Interpretation:</strong> Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.</p>
+<p class="report-field"><strong>Research problem:</strong> Does checking only for the immediate reverse edge keep a DAG acyclic after insertion? Find a bounded counterexample or report what remains unresolved.</p>
+<p class="report-field"><strong>Project ID:</strong> 48676efc-03dd-47e4-95ed-a655142e5965</p>
+<p class="report-field"><strong>Research type:</strong> Other</p>
+<p class="report-field"><strong>Difficulty:</strong> Medium</p>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Strategies</h2>
+<h3 class="report-heading">Test the local guard (saved)</h3>
+<p class="report-paragraph">Test a three-vertex witness, then investigate a reachability repair and proof duty.</p>
+<h3 class="report-heading">Reachability repair after a bounded counterexample (saved)</h3>
+<p class="report-paragraph">Use the approved three-vertex negative witness to test the reachability repair; leave the arbitrary-size proof open.</p>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Research sessions</h2>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #1</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value report-status-ended">ended</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value report-outcome-mixed">Mixed · partial progress, unresolved</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Test the local guard</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:09:19.070931+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Partial finding
+
+The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.
+
+Only the actual saved execution status and output are observed.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Finite checks cannot prove the arbitrary-size claim.
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Replace failing code with a bounded three-vertex graph witness search.
+- General proof and complexity remain open.
+- Check boundary case 1
+- Test the reachability guard and retain the general proof duty.
+- Check boundary case 2
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Finite checks cannot prove the arbitrary-size claim.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+<strong>Evidence:</strong> Artifact 1, Artifact 2
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>Agent-reported evidence is unverified; agreement is not independent verification.</li><li>The saved argument remains incomplete; no solution is claimed.</li><li>Finite checks cannot prove the arbitrary-size claim.</li><li>Open obligations remain; inspect the saved artifacts before relying on this result.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps are recorded; review their evidence and objections.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>4 dispatched · 4 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>480 / 320 / 80 / 800</dd></div><div><dt>Wall-clock / agent call time</dt><dd>1s wall · Investigator 0s across 2 call(s) · Skeptic 0s across 2 call(s)</dd></div><div><dt>Python runs by status</dt><dd>1 completed, 1 failed</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>2 finding(s) · 1 Python file(s) (259 B) · session record 115,429 B</dd></div><div><dt>Provider failures / retries</dt><dd>0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>$0.004008 estimated (rates checked 2026-10-23)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Test the local guard</dd></div><div><dt>Research cycles</dt><dd>2 completed / 2 started</dd></div><div><dt>Outcome classification</dt><dd>Mixed · partial progress, unresolved</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>8 · Prove the general insertion invariant and complexity.; Prove the arbitrary-size insertion condition and characterize update cost. (+6 more)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>2 conclusion(s) · 2 cited finding(s)</dd></div><div><dt>Strategy contribution</dt><dd>productive: 1</dd></div><div><dt>Unresolved objections</dt><dd>1 · Finite checks cannot prove the arbitrary-size claim.</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> unconditional</p>
+<p class="report-field"><strong>Solution claim:</strong> The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.</p>
+<p class="report-field"><strong>Argument:</strong> Only the actual saved execution status and output are observed.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT interpreting actual saved output: {&quot;checks&quot;: 29, &quot;n&quot;: 3, &quot;scope&quot;: &quot;local insertion criterion only; no dynamic complexity result&quot;, &quot;test&quot;: &quot;reverse_edge_only_cycle_guard&quot;, &quot;witness&quot;: {&quot;candidate_accepts&quot;: true, &quot;edges_before&quot;: [[0, 2], [1, 0]], &quot;insert&quot;: [2, 1], &quot;oracle_acyclic_after&quot;: false}}</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Prove the general insertion invariant and complexity.</p>
+<p class="report-field"><strong>Still open:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Replace failing code with a bounded three-vertex graph witness search.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.; Test the reachability guard and retain the general proof duty.; Check boundary case 2</p>
+<p class="report-field"><strong>Solution evidence references:</strong> ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c; 54f7fd27-f2be-4497-b0e7-5b602184b308</p>
+<p class="report-field"><strong>Unresolved objections:</strong> Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Skeptic objection:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<h3 class="report-heading">Reviewed reasoning</h3>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test</p>
+<p class="report-field"><strong>Epistemic status:</strong> conjecture</p>
+<p class="report-paragraph">A previous failure is operational only; the next code changes to enumerate actual candidate insertions.</p>
+<p class="report-field"><strong>Research artifact:</strong> 54f7fd27-f2be-4497-b0e7-5b602184b308</p>
+<p class="report-field"><strong>Source artifacts:</strong> ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c</p>
+<p class="report-field"><strong>Skeptic disposition:</strong> accepted</p>
+<p class="report-field"><strong>Skeptic rationale:</strong> The scripted review retains the exact execution scope and the unsolved general invariant.</p>
+<p class="report-field"><strong>Strategy finding:</strong> Test the local guard · partial</p>
+<p class="report-field"><strong>Strategy execution status:</strong> ended</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Stop budget exhausted</p>
+<p class="report-field"><strong>Claim:</strong> The local reverse-edge-only guard has a bounded counterexample; the general repaired rule is unproved.</p>
+<p class="report-field"><strong>Source artifacts:</strong> ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c; 54f7fd27-f2be-4497-b0e7-5b602184b308</p>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test (conjecture)</p>
+<p class="report-paragraph">A previous failure is operational only; the next code changes to enumerate actual candidate insertions.</p>
+<p class="report-field"><strong>Skeptic review:</strong> accepted · The scripted review retains the exact execution scope and the unsolved general invariant.</p>
+<p class="report-field"><strong>Objection:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Open obligation:</strong> Prove the arbitrary-size insertion condition and characterize update cost.</p>
+<p class="report-field"><strong>Open obligation:</strong> Replace failing code with a bounded three-vertex graph witness search.</p>
+<p class="report-field"><strong>Open obligation:</strong> General proof and complexity remain open.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Open obligation:</strong> Test the reachability guard and retain the general proof duty.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 2</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Test the local guard</td><td>Productive</td><td>The saved derivation advances the objective through the linked strategy.</td><td>ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c; 54f7fd27-f2be-4497-b0e7-5b602184b308</td></tr></tbody></table></div>
+<h4 class="report-artifact-heading">Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> A bounded graph experiment is proposed; no result is known until execution is saved.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: compare immediate reverse-edge checking with actual acyclicity on a bounded graph.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role output; actual local execution, if any, is separate evidence.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT interpreting actual saved output: WARNING: The requested image&#x27;s platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+Traceback (most recent call last):
+  File &quot;&lt;string&gt;&quot;, line 1, in &lt;module&gt;
+  File &quot;&lt;research&gt;&quot;, line 1, in &lt;module&gt;
+RuntimeError: Deliberate evaluator failure before producing any observation</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Decision:</strong> revise</p>
+<p class="report-field"><strong>Open obligations:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Replace failing code with a bounded three-vertex graph witness search.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Next question:</strong> Replace failing code with a bounded three-vertex graph witness search.</p>
+<h4 class="report-artifact-heading">Artifact 2 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> A bounded graph experiment is proposed; no result is known until execution is saved.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: compare immediate reverse-edge checking with actual acyclicity on a bounded graph.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role output; actual local execution, if any, is separate evidence.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT interpreting actual saved output: {&quot;checks&quot;: 29, &quot;n&quot;: 3, &quot;scope&quot;: &quot;local insertion criterion only; no dynamic complexity result&quot;, &quot;test&quot;: &quot;reverse_edge_only_cycle_guard&quot;, &quot;witness&quot;: {&quot;candidate_accepts&quot;: true, &quot;edges_before&quot;: [[0, 2], [1, 0]], &quot;insert&quot;: [2, 1], &quot;oracle_acyclic_after&quot;: false}}</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Decision:</strong> stop_budget_exhausted</p>
+<p class="report-field"><strong>Open obligations:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Replace failing code with a bounded three-vertex graph witness search.; General proof and complexity remain open.; Check boundary case 1; Finite checks cannot prove the arbitrary-size claim.; Test the reachability guard and retain the general proof duty.; Check boundary case 2</p>
+<p class="report-field"><strong>Next question:</strong> Not recorded</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 2af05956-afb1-48cf-a34f-d94c24073cd1 · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 4739 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li></ul>
+<p class="report-field"><strong>Step 56ebfb55-b37b-49d5-ac40-1915d2eb83e9 · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 8289 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected current_investigator_obligation: [&quot;2af05956-afb1-48cf-a34f-d94c24073cd1&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Step cb26a474-8069-42cd-ac3d-aeffd73885d8 · investigator:</strong> 1 selected, 0 current-session artifacts omitted, 16242 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 5, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected current_session_material_evidence: [&quot;ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c&quot;] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history</li><li>selected project_strategy_snapshot: [&quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li></ul>
+<p class="report-field"><strong>Step 01c7d13a-fe5e-4b94-99fd-426ee6568ae7 · skeptic:</strong> 1 selected, 0 current-session artifacts omitted, 22994 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 5, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected current_session_material_evidence: [&quot;ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c&quot;] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history</li><li>selected project_strategy_snapshot: [&quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected current_investigator_obligation: [&quot;cb26a474-8069-42cd-ac3d-aeffd73885d8&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Terminal reason:</strong> stop_budget_exhausted</p>
+</article>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #2</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value report-status-ended">ended</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value report-outcome-mixed">Mixed · partial progress, unresolved</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Test the local guard</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:09:20.410246+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Partial finding
+
+The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.
+
+The saved witness constrains the next test; a failed earlier run did not refute the guard.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- General proof and complexity remain open.
+- Check boundary case 1
+- Replace failing code with a bounded three-vertex graph witness search.
+- Finite checks cannot prove the arbitrary-size claim.
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Test the reachability guard and retain the general proof duty.
+- Check boundary case 2
+- Broader perturbation classification is not established.
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+<strong>Evidence:</strong> Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>Agent-reported evidence is unverified; agreement is not independent verification.</li><li>The saved argument remains incomplete; no solution is claimed.</li><li>Open obligations remain; inspect the saved artifacts before relying on this result.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps are recorded; review their evidence and objections.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>2 dispatched · 2 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>240 / 160 / 40 / 400</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>1 finding(s) · 0 Python file(s) (0 B) · session record 82,167 B</dd></div><div><dt>Provider failures / retries</dt><dd>0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>$0.002004 estimated (rates checked 2026-10-23)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Test the local guard</dd></div><div><dt>Research cycles</dt><dd>1 completed / 1 started</dd></div><div><dt>Outcome classification</dt><dd>Mixed · partial progress, unresolved</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>8 · Broader perturbation classification is not established.; General proof and complexity remain open. (+6 more)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>1 conclusion(s) · 1 cited finding(s)</dd></div><div><dt>Strategy contribution</dt><dd>productive: 1</dd></div><div><dt>Unresolved objections</dt><dd>0 · None recorded</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> unconditional</p>
+<p class="report-field"><strong>Solution claim:</strong> The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.</p>
+<p class="report-field"><strong>Argument:</strong> The saved witness constrains the next test; a failed earlier run did not refute the guard.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The saved witness constrains the next test; a failed earlier run did not refute the guard.</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Still open:</strong> General proof and complexity remain open.; Check boundary case 1; Replace failing code with a bounded three-vertex graph witness search.; Finite checks cannot prove the arbitrary-size claim.; Prove the arbitrary-size insertion condition and characterize update cost.; Test the reachability guard and retain the general proof duty.; Check boundary case 2; Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Solution evidence references:</strong> ea9db587-e0db-46f9-895d-c56f9ac1fb00</p>
+<p class="report-field"><strong>Unresolved objections:</strong> None recorded</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Skeptic objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<h3 class="report-heading">Reviewed reasoning</h3>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test</p>
+<p class="report-field"><strong>Epistemic status:</strong> conjecture</p>
+<p class="report-paragraph">A previous failure is operational only; the next code changes to enumerate actual candidate insertions.</p>
+<p class="report-field"><strong>Research artifact:</strong> ea9db587-e0db-46f9-895d-c56f9ac1fb00</p>
+<p class="report-field"><strong>Source artifacts:</strong> 54f7fd27-f2be-4497-b0e7-5b602184b308</p>
+<p class="report-field"><strong>Skeptic disposition:</strong> accepted</p>
+<p class="report-field"><strong>Skeptic rationale:</strong> The saved witness constrains the next test; a failed earlier run did not refute the guard.</p>
+<p class="report-field"><strong>Strategy finding:</strong> Test the local guard · partial</p>
+<p class="report-field"><strong>Strategy execution status:</strong> ended</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Stop budget exhausted</p>
+<p class="report-field"><strong>Claim:</strong> The saved three-vertex witness refutes the immediate-reverse-edge-only guard; a general reachability repair is still unproved.</p>
+<p class="report-field"><strong>Source artifacts:</strong> ea9db587-e0db-46f9-895d-c56f9ac1fb00</p>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test (conjecture)</p>
+<p class="report-paragraph">A previous failure is operational only; the next code changes to enumerate actual candidate insertions.</p>
+<p class="report-field"><strong>Skeptic review:</strong> accepted · The saved witness constrains the next test; a failed earlier run did not refute the guard.</p>
+<p class="report-field"><strong>Objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> General proof and complexity remain open.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Replace failing code with a bounded three-vertex graph witness search.</p>
+<p class="report-field"><strong>Open obligation:</strong> Finite checks cannot prove the arbitrary-size claim.</p>
+<p class="report-field"><strong>Open obligation:</strong> Prove the arbitrary-size insertion condition and characterize update cost.</p>
+<p class="report-field"><strong>Open obligation:</strong> Test the reachability guard and retain the general proof duty.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Open obligation:</strong> Broader perturbation classification is not established.</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Test the local guard</td><td>Productive</td><td>The saved derivation advances the objective through the linked strategy.</td><td>ea9db587-e0db-46f9-895d-c56f9ac1fb00</td></tr></tbody></table></div>
+<h4 class="report-artifact-heading">Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> The saved counterexample rejects the old guard; next investigate the reachability condition.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: use the exact saved witness as a negative constraint; no new computation is claimed.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role output; actual local execution, if any, is separate evidence.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The saved witness constrains the next test; a failed earlier run did not refute the guard.</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Decision:</strong> stop_budget_exhausted</p>
+<p class="report-field"><strong>Open obligations:</strong> General proof and complexity remain open.; Check boundary case 1; Replace failing code with a bounded three-vertex graph witness search.; Finite checks cannot prove the arbitrary-size claim.; Prove the arbitrary-size insertion condition and characterize update cost.; Test the reachability guard and retain the general proof duty.; Check boundary case 2; Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Next question:</strong> Not recorded</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 80f1b4a0-46a4-4baa-99d7-104e51d6d0ac · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 24969 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 7, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;54f7fd27-f2be-4497-b0e7-5b602184b308&quot;, &quot;ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected prior_session_obligation: [&quot;c50db8258ebea5770c22883786677123254020029531603ce0b1709b9cdb2bc3&quot;, &quot;288398be9f3cfd1849a406e48b023d87ffd4b26c05766d7906d6eafaf9600fca&quot;, &quot;233e8fa21eca528bf67ec75ef260374c20cc51a24d1661886893aad334711f0a&quot;, &quot;205a25b155cb2349a5f84fdd133e79d807aedb4a889f3454d93a83f4aedd9a54&quot;, &quot;0cce4b6ec77caf8808fd18d9acbe73e7befbf5793c4195a5c69439372083d00b&quot;, &quot;6540037027ed12440876c006615b4ab785e38241c001d251bd04907d814412c4&quot;, &quot;388806a03498b0c632b77b6e3b15aee26b476741b14550652109c29786db3391&quot;] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed</li></ul>
+<p class="report-field"><strong>Step a06ccc3b-d53d-45b5-8362-1edde34f169d · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 26308 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 7, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;54f7fd27-f2be-4497-b0e7-5b602184b308&quot;, &quot;ddfb7eb7-066d-4af2-8f11-ca57e0b66a1c&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected prior_session_obligation: [&quot;c50db8258ebea5770c22883786677123254020029531603ce0b1709b9cdb2bc3&quot;, &quot;288398be9f3cfd1849a406e48b023d87ffd4b26c05766d7906d6eafaf9600fca&quot;, &quot;233e8fa21eca528bf67ec75ef260374c20cc51a24d1661886893aad334711f0a&quot;, &quot;205a25b155cb2349a5f84fdd133e79d807aedb4a889f3454d93a83f4aedd9a54&quot;, &quot;0cce4b6ec77caf8808fd18d9acbe73e7befbf5793c4195a5c69439372083d00b&quot;, &quot;6540037027ed12440876c006615b4ab785e38241c001d251bd04907d814412c4&quot;, &quot;388806a03498b0c632b77b6e3b15aee26b476741b14550652109c29786db3391&quot;] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed</li><li>selected current_investigator_obligation: [&quot;80f1b4a0-46a4-4baa-99d7-104e51d6d0ac&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Terminal reason:</strong> stop_budget_exhausted</p>
+</article>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #3</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value report-status-ended">ended</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value report-outcome-mixed">Mixed · partial progress, unresolved</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Reachability repair after a bounded counterexample</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:09:20.543842+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Partial finding
+
+The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.
+
+The approved bounded counterexample constrains this branch; the general repair remains open.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Prove the arbitrary-size insertion condition and characterize update cost.
+- Broader perturbation classification is not established.
+- Check boundary case 1
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+<strong>Evidence:</strong> Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+#### Approved continuation and evidence uptake
+
+Sources were researcher-selected and delivered in frozen role contexts. Acknowledgment and plan change below are model-reported; neither certifies correctness or closes inherited proof obligations.
+Parent strategy: 42e7ce75-cb41-413e-914b-797bbcc1f01b. Approved question: Use the approved three-vertex negative witness to test the reachability repair; leave the arbitrary-size proof open.
+- Source 54f7fd27-f2be-4497-b0e7-5b602184b308 (session fc6e5571-54da-4d81-8cec-61cab11a9ee3): partial_reported; Incomplete
+Latest per-source role reports: investigator: considered (1); skeptic: considered (1)
+Full per-call rationales and previous dispositions remain in the detailed Outcome/session audit. No inherited duty is automatically resolved.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>Agent-reported evidence is unverified; agreement is not independent verification.</li><li>The saved argument remains incomplete; no solution is claimed.</li><li>Open obligations remain; inspect the saved artifacts before relying on this result.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps are recorded; review their evidence and objections.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>2 dispatched · 2 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>240 / 160 / 40 / 400</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>1 finding(s) · 0 Python file(s) (0 B) · session record 78,520 B</dd></div><div><dt>Provider failures / retries</dt><dd>0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>$0.002004 estimated (rates checked 2026-10-23)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Reachability repair after a bounded counterexample</dd></div><div><dt>Research cycles</dt><dd>1 completed / 1 started</dd></div><div><dt>Outcome classification</dt><dd>Mixed · partial progress, unresolved</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>3 · Broader perturbation classification is not established.; Prove the arbitrary-size insertion condition and characterize update cost. (+1 more)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>1 conclusion(s) · 1 cited finding(s)</dd></div><div><dt>Strategy contribution</dt><dd>not used: 1 · productive: 1</dd></div><div><dt>Unresolved objections</dt><dd>0 · None recorded</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> unconditional</p>
+<p class="report-field"><strong>Solution claim:</strong> The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.</p>
+<p class="report-field"><strong>Argument:</strong> The approved bounded counterexample constrains this branch; the general repair remains open.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The approved bounded counterexample constrains this branch; the general repair remains open.</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Still open:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Broader perturbation classification is not established.; Check boundary case 1</p>
+<p class="report-field"><strong>Solution evidence references:</strong> ba23f6c4-15a4-40eb-8d85-4334d98150e2</p>
+<p class="report-field"><strong>Unresolved objections:</strong> None recorded</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Skeptic objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<h3 class="report-heading">Reviewed reasoning</h3>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test</p>
+<p class="report-field"><strong>Epistemic status:</strong> computation</p>
+<p class="report-paragraph">The approved source contains a completed three-vertex witness against the old guard; it does not establish the proposed general repair.</p>
+<p class="report-field"><strong>Research artifact:</strong> ba23f6c4-15a4-40eb-8d85-4334d98150e2</p>
+<p class="report-field"><strong>Source artifacts:</strong> 54f7fd27-f2be-4497-b0e7-5b602184b308</p>
+<p class="report-field"><strong>Skeptic disposition:</strong> accepted</p>
+<p class="report-field"><strong>Skeptic rationale:</strong> The approved bounded counterexample constrains this branch; the general repair remains open.</p>
+<p class="report-field"><strong>Strategy finding:</strong> Reachability repair after a bounded counterexample · partial</p>
+<p class="report-field"><strong>Strategy execution status:</strong> ended</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Stop budget exhausted</p>
+<p class="report-field"><strong>Claim:</strong> The local guard is refuted by an approved saved witness; a repaired general rule remains unproved.</p>
+<p class="report-field"><strong>Source artifacts:</strong> ba23f6c4-15a4-40eb-8d85-4334d98150e2</p>
+<p class="report-field"><strong>Step 1:</strong> Candidate graph test (computation)</p>
+<p class="report-paragraph">The approved source contains a completed three-vertex witness against the old guard; it does not establish the proposed general repair.</p>
+<p class="report-field"><strong>Skeptic review:</strong> accepted · The approved bounded counterexample constrains this branch; the general repair remains open.</p>
+<p class="report-field"><strong>Objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Prove the arbitrary-size insertion condition and characterize update cost.</p>
+<p class="report-field"><strong>Open obligation:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 1</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Test the local guard</td><td>Not used</td><td>No session artifact is linked to this strategy.</td><td>No artifact references</td></tr><tr><td>Reachability repair after a bounded counterexample</td><td>Productive</td><td>The saved derivation advances the objective through the linked strategy.</td><td>ba23f6c4-15a4-40eb-8d85-4334d98150e2</td></tr></tbody></table></div>
+<h4 class="report-artifact-heading">Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> The saved three-vertex counterexample rules out the local reverse-edge-only guard.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: propose a reachability condition respecting the approved negative source.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role output; actual local execution, if any, is separate evidence.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The approved bounded counterexample constrains this branch; the general repair remains open.</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Decision:</strong> stop_budget_exhausted</p>
+<p class="report-field"><strong>Open obligations:</strong> Prove the arbitrary-size insertion condition and characterize update cost.; Broader perturbation classification is not established.; Check boundary case 1</p>
+<p class="report-field"><strong>Next question:</strong> Not recorded</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 9d98c91c-4045-4431-afb1-d42f941e501d · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 21374 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;704733c4-1e1b-4736-9db6-d0b9fdbeb284&quot;, &quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;54f7fd27-f2be-4497-b0e7-5b602184b308&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected approved_continuation: [&quot;54f7fd27-f2be-4497-b0e7-5b602184b308&quot;] · researcher-approved evidence; delivery is not use or proof</li></ul>
+<p class="report-field"><strong>Step d04286a9-f1d3-4a78-92ca-0709910a9a76 · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 23669 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;704733c4-1e1b-4736-9db6-d0b9fdbeb284&quot;, &quot;42e7ce75-cb41-413e-914b-797bbcc1f01b&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;54f7fd27-f2be-4497-b0e7-5b602184b308&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected current_investigator_obligation: [&quot;9d98c91c-4045-4431-afb1-d42f941e501d&quot;] · current Investigator step is the source; disposition remains unverified</li><li>selected approved_continuation: [&quot;54f7fd27-f2be-4497-b0e7-5b602184b308&quot;] · researcher-approved evidence; delivery is not use or proof</li></ul>
+<p class="report-field"><strong>Terminal reason:</strong> stop_budget_exhausted</p>
+</article>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Agentic runs</h2>
+<p class="report-paragraph">No agentic runs are recorded.</p>
+</section></div></main></body></html>

@@ -1,0 +1,58 @@
+PASS persisted parity step A → cycle step B → later session; exact source IDs, unchanged origin, foreign rejection
+PASS retracted and truncated source closures rejected through real Skeptic dispatch
+PASS graph real failed/completed execution, saved witness follow-up, withheld prose contradiction
+{
+  "parity": {
+    "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+    "first_session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+    "later_session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+    "foreign_session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+    "first_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+    "calls": 6,
+    "foreign_rejected_calls": 1,
+    "first_record_unchanged": true
+  },
+  "parity_retracted": {
+    "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+    "rejected_session_id": "c3aa3f44-0dbb-4617-83cc-08047fa364ae",
+    "tainted_source_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+    "kind": "retracted",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "parity_truncated": {
+    "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+    "rejected_session_id": "49518fd5-1476-4ed0-aefc-4824aedbde77",
+    "tainted_source_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+    "kind": "truncated",
+    "source_record_unchanged_after_rejected_call": true
+  },
+  "graph_present": {
+    "project_id": "48676efc-03dd-47e4-95ed-a655142e5965",
+    "initial_session_id": "fc6e5571-54da-4d81-8cec-61cab11a9ee3",
+    "followup_session_id": "148109cd-b4f0-40a9-b323-b6ef9bdfd57f",
+    "fork_session_id": "2b44eabf-ab8a-4276-a998-53f64149f881",
+    "approved_negative_source_id": "54f7fd27-f2be-4497-b0e7-5b602184b308",
+    "execution_ids": [
+      "985090ea-d02f-41be-9e80-6ed666c2e68c",
+      "dd666bdf-8c06-401a-8f6c-854b1b9fbe3a"
+    ],
+    "execution_statuses": [
+      "failed",
+      "completed"
+    ],
+    "current_finding_count": 4,
+    "initial_record_unchanged": true
+  },
+  "graph_withheld": {
+    "project_id": "98f210d9-4246-438d-9547-4fa82746dbd3",
+    "initial_session_id": "dc668640-39b6-4952-a305-e106ed25abe7",
+    "followup_session_id": null,
+    "fork_session_id": null,
+    "approved_negative_source_id": null,
+    "execution_ids": [],
+    "execution_statuses": [],
+    "current_finding_count": 1,
+    "initial_record_unchanged": true
+  }
+}
+exit_code=0

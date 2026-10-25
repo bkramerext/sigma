@@ -1,0 +1,260 @@
+{
+  "transport": "offline scripted provider; normal SIGMA session dispatch and persistence; graph-present uses actual local Docker Python",
+  "live_provider_calls": 0,
+  "actual_provider_cost_usd": 0,
+  "scripted_usage_fields_are_not_billing_evidence": true,
+  "source_sha256": {
+    "src/sigma/research_sessions.py": "0add08dc95898d1a93fe1b65d76e5732f39c6b9469a01e509a1a27c79a6783a6",
+    "tests/epistemic_continuity.py": "cfd9d0b7f34d2e63ac16e98960b3974b0f08410d647f1d812364c1546a12108e"
+  },
+  "projects": [
+    {
+      "slug": "parity",
+      "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+      "session_ids": [
+        "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "e311d294-08d2-4beb-9c12-847cd7b00fd7"
+      ],
+      "files": [
+        {
+          "path": "parity.audit.json",
+          "bytes": 279622,
+          "sha256": "92e6576a9c1a92855b2978594d1fb2b3fad0dc83681e5037e9cca59b1e6c9230"
+        },
+        {
+          "path": "parity.current-understanding.json",
+          "bytes": 17439,
+          "sha256": "44344a9f659f59bbba4e84a31395759cabbcab66cd1b62a8e612724311567f7b"
+        },
+        {
+          "path": "parity.report.txt",
+          "bytes": 23481,
+          "sha256": "9f9f1d58e290f9854fac158b485aa3d3bb9ea284f8ba2c5a55ea2ec7202ebda4"
+        },
+        {
+          "path": "parity.report.html",
+          "bytes": 42680,
+          "sha256": "66238507864c2b008dc841fe57ff817c4672c2eb90b189b4797c72faae5a7956"
+        },
+        {
+          "path": "parity.report.tex",
+          "bytes": 28412,
+          "sha256": "c2f01767ffb5a28754e6840dba882dd4efd3c72b5e42a856016b041ad442a1d2"
+        }
+      ]
+    },
+    {
+      "slug": "parity-retracted",
+      "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+      "session_ids": [
+        "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+        "c3aa3f44-0dbb-4617-83cc-08047fa364ae"
+      ],
+      "files": [
+        {
+          "path": "parity-retracted.audit.json",
+          "bytes": 383211,
+          "sha256": "b8fbab34fa17d8378d9da460b0f2064bce1026cf9b6075651bceb1e5e1f8da4b"
+        },
+        {
+          "path": "parity-retracted.current-understanding.json",
+          "bytes": 18014,
+          "sha256": "99c6cf3b20ae3c08efb7c409f734caaeefc4f111f14fff8c95522e3b2f598ec5"
+        },
+        {
+          "path": "parity-retracted.report.txt",
+          "bytes": 29897,
+          "sha256": "6f901591e62924f66677fdb230b5cba89f2cff94c4d7426be4e05938aee0b884"
+        },
+        {
+          "path": "parity-retracted.report.html",
+          "bytes": 51992,
+          "sha256": "d8ad5f482b994c8101a14178fd759849c97f80a92a868be077d4e34d2fb4ccec"
+        },
+        {
+          "path": "parity-retracted.report.tex",
+          "bytes": 35890,
+          "sha256": "f38f40d514a0d938f8a5b40aa0464d73ca08df18ca52aa6813189e7ca055efd0"
+        }
+      ]
+    },
+    {
+      "slug": "parity-truncated",
+      "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+      "session_ids": [
+        "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+        "49518fd5-1476-4ed0-aefc-4824aedbde77"
+      ],
+      "files": [
+        {
+          "path": "parity-truncated.audit.json",
+          "bytes": 388765,
+          "sha256": "f0195cee5e60ed481dfd43e612d91ab495441a4ee0b0bef00c9b6f84780bc7e3"
+        },
+        {
+          "path": "parity-truncated.current-understanding.json",
+          "bytes": 18014,
+          "sha256": "e243e6abe089cf0e1e6b677bff94eef3f1e2d040d015d50d2590ca629d126aa4"
+        },
+        {
+          "path": "parity-truncated.report.txt",
+          "bytes": 29897,
+          "sha256": "94ffa62e4cda35f9def2ebc39b9bc7898f153c8507cf3d97a158e435c499d2ee"
+        },
+        {
+          "path": "parity-truncated.report.html",
+          "bytes": 51992,
+          "sha256": "5119272001cd132a5bbb7e1e9d6a61bd7d760f68ba23ac9dbb0757073912ffe5"
+        },
+        {
+          "path": "parity-truncated.report.tex",
+          "bytes": 35890,
+          "sha256": "73f4b1600e93ab26ea34c9280743419482b3cad976c2eb550b637d9acb3a78b0"
+        }
+      ]
+    },
+    {
+      "slug": "graph-present",
+      "project_id": "48676efc-03dd-47e4-95ed-a655142e5965",
+      "session_ids": [
+        "fc6e5571-54da-4d81-8cec-61cab11a9ee3",
+        "148109cd-b4f0-40a9-b323-b6ef9bdfd57f",
+        "2b44eabf-ab8a-4276-a998-53f64149f881"
+      ],
+      "files": [
+        {
+          "path": "graph-present.audit.json",
+          "bytes": 493928,
+          "sha256": "7029dadb21c29a903986da3b1d0d45a88eae59b5547dba47d107524098fd1523"
+        },
+        {
+          "path": "graph-present.current-understanding.json",
+          "bytes": 33012,
+          "sha256": "e266d7545311c626b3b9591dbe8c560b529abd03ce3430de92b97447a5e28900"
+        },
+        {
+          "path": "graph-present.report.txt",
+          "bytes": 31987,
+          "sha256": "5843557ce2566f8b62a187e05bd9867885e53041cf5783f06887b95a4fb46f21"
+        },
+        {
+          "path": "graph-present.report.html",
+          "bytes": 53142,
+          "sha256": "62ce63ef1d3701fd4e634ee04431cdf55410c576d98ed1c993028aee54bed2c8"
+        },
+        {
+          "path": "graph-present.report.tex",
+          "bytes": 37509,
+          "sha256": "a49f049dbc5ba439a8ea3908c728358b7fae92d27e672c837b4afb9811e91a92"
+        }
+      ]
+    },
+    {
+      "slug": "graph-withheld",
+      "project_id": "98f210d9-4246-438d-9547-4fa82746dbd3",
+      "session_ids": [
+        "dc668640-39b6-4952-a305-e106ed25abe7"
+      ],
+      "files": [
+        {
+          "path": "graph-withheld.audit.json",
+          "bytes": 78610,
+          "sha256": "83424512700e97bcd3f473996f23a7d7d499454b8f30183ff78e8a8ac5032d7b"
+        },
+        {
+          "path": "graph-withheld.current-understanding.json",
+          "bytes": 10661,
+          "sha256": "da31af7d846385544b3fba98f51579bb99a887827a9401b754b41f973f2aa9b4"
+        },
+        {
+          "path": "graph-withheld.report.txt",
+          "bytes": 8468,
+          "sha256": "645983499f77d02e08405833eabc51d1901d921fae5dd5ea0b4229ea09ccd186"
+        },
+        {
+          "path": "graph-withheld.report.html",
+          "bytes": 20399,
+          "sha256": "0da9d07baa9e003643dd385aa66a8ef658be34594ea49950e77c07f17b3cabd6"
+        },
+        {
+          "path": "graph-withheld.report.tex",
+          "bytes": 10818,
+          "sha256": "086598d4e7d6dc1bfa860b8807222d623379b61e328b13169f36f03315f18c70"
+        }
+      ]
+    }
+  ],
+  "observations": {
+    "parity": {
+      "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+      "first_session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+      "later_session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+      "foreign_session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+      "first_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+      "calls": 6,
+      "foreign_rejected_calls": 1,
+      "first_record_unchanged": true
+    },
+    "parity_retracted": {
+      "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+      "rejected_session_id": "c3aa3f44-0dbb-4617-83cc-08047fa364ae",
+      "tainted_source_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+      "kind": "retracted",
+      "source_record_unchanged_after_rejected_call": true
+    },
+    "parity_truncated": {
+      "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+      "rejected_session_id": "49518fd5-1476-4ed0-aefc-4824aedbde77",
+      "tainted_source_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+      "kind": "truncated",
+      "source_record_unchanged_after_rejected_call": true
+    },
+    "graph_present": {
+      "project_id": "48676efc-03dd-47e4-95ed-a655142e5965",
+      "initial_session_id": "fc6e5571-54da-4d81-8cec-61cab11a9ee3",
+      "followup_session_id": "148109cd-b4f0-40a9-b323-b6ef9bdfd57f",
+      "fork_session_id": "2b44eabf-ab8a-4276-a998-53f64149f881",
+      "approved_negative_source_id": "54f7fd27-f2be-4497-b0e7-5b602184b308",
+      "execution_ids": [
+        "985090ea-d02f-41be-9e80-6ed666c2e68c",
+        "dd666bdf-8c06-401a-8f6c-854b1b9fbe3a"
+      ],
+      "execution_statuses": [
+        "failed",
+        "completed"
+      ],
+      "current_finding_count": 4,
+      "initial_record_unchanged": true
+    },
+    "graph_withheld": {
+      "project_id": "98f210d9-4246-438d-9547-4fa82746dbd3",
+      "initial_session_id": "dc668640-39b6-4952-a305-e106ed25abe7",
+      "followup_session_id": null,
+      "fork_session_id": null,
+      "approved_negative_source_id": null,
+      "execution_ids": [],
+      "execution_statuses": [],
+      "current_finding_count": 1,
+      "initial_record_unchanged": true
+    }
+  },
+  "captured_provider_requests": "provider-requests.jsonl",
+  "transport_observations": {
+    "role_calls": 21,
+    "request_wire_bytes": 674575,
+    "response_json_bytes": 34358
+  },
+  "sandbox_programs": {
+    "initial_operational_failure_sha256": "0d75f379eb49f02536fcd95ebf5a3732e3a7c4617db581a0ea22d324350d4e9c",
+    "bounded_graph_counterexample_sha256": "b61815ffc819011e972a823824c02a65e8e7b2d67badf5f17b6153c66aec1c92"
+  },
+  "synthetic_controls": [
+    "parity-retracted: source artifact is a deliberately marked isolated copy of parity with the same project ID",
+    "parity-truncated: source reasoning argument was lengthened only in an isolated copy of parity with the same project ID"
+  ]
+}
