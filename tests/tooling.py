@@ -20,6 +20,9 @@ def check_failures() -> None:
     assert _safe_independent_test_step(
         ["uv", "run", "--locked", "--no-sync", "python", "tests/gce_host.py"]
     )
+    assert _safe_independent_test_step(
+        ["uv", "run", "--locked", "--no-sync", "python", "tests/state_backup.py"]
+    )
     assert not _safe_independent_test_step(["bash", "deploy/install-gce-host.sh"])
     assert not _safe_independent_test_step(
         ["uv", "run", "--locked", "--no-sync", "python", "scripts/increment15_offline_pairs.py"]
@@ -47,6 +50,7 @@ def check_failures() -> None:
         assert run.call_count > 40
         completed = [item.args[0] for item in run.call_args_list]
         assert any("tests/gce_host.py" in command for command in completed)
+        assert any("tests/state_backup.py" in command for command in completed)
         assert any(command[-2:] == ["run", "typecheck"] for command in completed)
         assert not any("increment15_offline_pairs.py" in command for command in completed)
         assert not any(command[-2:] == ["run", "build"] for command in completed)
