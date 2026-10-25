@@ -14,7 +14,7 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 | Infrastructure project | `SIGMA Production`; ID `sigma-research-prod`; number `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
 | DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Registered; A record target not yet confirmed |
 | Zone and VM | `us-west1-b`; planned `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-4` | Provisioning pending |
-| Disk | Planned `sigma-state` 200 GiB `pd-balanced`, retained; boot 100 GiB `pd-standard` | Provisioning and UUID verification pending |
+| Disk | Planned `sigma-state` **100 GiB** `pd-balanced`, retained; boot 100 GiB `pd-standard` | Operator approved revised size 2026-10-25; provisioning and UUID verification pending |
 | Network | Planned `sigma-vpc`, subnet `sigma-us-west1`, proposed `10.42.0.0/24`, static IP name `sigma-web-ip` | CIDR and resource creation pending |
 | VM identity and access | Planned `sigma-runtime` service account, secret-scoped access; IAP SSH with OS Login | Creation and live IAM verification pending |
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; production project association unverified |
@@ -40,6 +40,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 - **Secret Manager:** Creating first OAuth secret deferred because Console form requires a version value. Neither secret reported created.
 - **Hostname:** `sigma-research.duckdns.org`, registered. Static IP and live DNS update pending.
 - **Not yet provisioned:** custom VPC/subnet, IAP SSH firewall, state disk, static IP, VM; live SSH and disk checks outstanding.
+
+**T127 cost adjustment (2026-10-25):** State disk reduced from 200 GiB to 100 GiB before creation, saving approximately $10/month. The existing provisioning examples mentioning 200 GiB are superseded for this resource and require reconciliation before use.
 
 ## Before any operation
 
