@@ -20,16 +20,17 @@ jobs:
         run: |
           python tests/increment14_protocol.py
           python tests/increment14_audit.py
-          python scripts/increment14_protocol.py --seed 140017 --replicates 1 --output /tmp/manifest-a.json
-          python scripts/increment14_protocol.py --seed 140017 --replicates 1 --output /tmp/manifest-b.json
+          python scripts/increment14_protocol.py --seed 140017 --replicates 3 --output /tmp/manifest-a.json
+          python scripts/increment14_protocol.py --seed 140017 --replicates 3 --output /tmp/manifest-b.json
           cmp /tmp/manifest-a.json /tmp/manifest-b.json
           python - <<'PY'
           import json
           m = json.load(open('/tmp/manifest-a.json', encoding='utf-8'))
-          assert m['paired_runs'] == 12
-          assert m['total_arm_runs'] == 24
+          assert m['paired_runs'] == 36
+          assert m['total_arm_runs'] == 72
+          assert m['independent_task_count'] == 6 and m['analysis_unit'] == 'task_cluster'
           assert not m['user_approved'] and not m['freeze_approved']
-          assert m['model_provider'] is None and m['total_usd_cap'] is None
-          assert len({(p['task_id'], p['variant'], p['replicate']) for p in m['pairs']}) == 12
+          assert m['model_provider'] is None and m['total_usd_cap'] == 39.6
+          assert len({(p['task_id'], p['variant'], p['replicate']) for p in m['pairs']}) == 36
           print('Offline protocol checks passed; no inference executed.')
           PY
