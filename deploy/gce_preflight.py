@@ -740,6 +740,15 @@ def _sandbox_uid() -> int:
         return -1
 
 
+def result_exit_code(results: list[Result]) -> int:
+    """Return failure when a check failed, blocked when readiness is incomplete."""
+    if any(result.status == "FAIL" for result in results):
+        return 1
+    if any(result.status == "BLOCKED" for result in results):
+        return 2
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=ENV_FILE)
@@ -752,11 +761,7 @@ def main() -> int:
     else:
         for result in results:
             print(f"{result.status}: {result.name} — {result.detail}")
-    if any(result.status == "FAIL" for result in results):
-        return 1
-    if any(result.status == "BLOCKED" for result in results):
-        return 2
-    return 0
+    return result_exit_code(results)
 
 
 if __name__ == "__main__":

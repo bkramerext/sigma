@@ -36,6 +36,45 @@ entries below and are not implied by local checks.
 The entries that follow are the retained chronological engineering and
 evaluation history; newer summaries do not replace or rewrite them.
 
+## Issue 117 — Release safety and test reliability (2026-10-25)
+
+Fixed the Ubuntu host-installer test hazard by extracting the non-mutative
+Ubuntu 24.04 identity guard into `deploy/gce_host_guard.sh`. Regression tests
+exercise quoted and unquoted Ubuntu IDs, Debian and Fedora, and statically
+verify the installer guard precedes package and filesystem operations. No test
+invokes the installer. The separate preflight exit-code report was traced to
+the test asserting `BLOCKED`/2 on a matching Ubuntu host with failed service
+checks; a controlled Ubuntu fixture confirms those results correctly report
+`FAIL`/1, while a Debian fixture reports `BLOCKED`/2.
+
+The recurring mocked `stop_servers` failure reproduced with the shell's
+exported `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` and passed when it was unset. The
+UI lifecycle test now clears that value and the paired OAuth settings in its
+test context. `sigma test` now runs all approved offline checks after ordinary
+failures, prints a complete failed-step summary, returns nonzero, skips the
+offline artifact writer and frontend build after an earlier failure, and
+rejects commands outside the known check set. `setup` remains fail-fast.
+
+Expanded Ruff lint to `deploy/`, `browser_checks/`, `scripts/`, and
+`docs/evaluations/`; it found and fixed import ordering, an unused import, a
+credential-prefix check, a keyword-built dictionary, and non-executable
+shebangs (13 findings in the audited paths). Format checks now include
+deployment and support scripts: 105 files pass. The audit found 20 files that
+Ruff would reformat across the broader support paths; the six offline
+evaluation/support scripts are formatted, while 13 legacy browser checks and
+one evaluation exporter remain lint-gated without bulk formatting churn. CI is
+pinned to Ubuntu 24.04 and runs host-safety and environment isolation checks
+before the full suite.
+
+Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
+scenarios, expanded Ruff lint, Ruff format, Pyright, frontend typecheck and
+production build); `tests/gce_host.py` (10 tests); `tests/tooling.py` with and
+without the inherited bootstrap variable; and `git diff --check`. The full
+suite's 24 synthetic Increment 15 records had zero model calls/cost. No
+provider calls, GCP resources, installer execution, or real-browser checks
+occurred. No UI code changed. Ubuntu host/systemd/rootless-Docker behavior
+remains limited to fixtures and pending the newly configured Ubuntu CI run.
+
 ## Issue 114 first increment (2026-10-25)
 
 Audited the Increment 6/14 blind plans and Increment 15 offline preparation,

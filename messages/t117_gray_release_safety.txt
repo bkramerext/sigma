@@ -1,0 +1,38 @@
+T117 — Gray release safety and test reliability handoff
+
+Status: R4R. Branch: gray/issue-117-release-safety. Base: main at
+22efbf8c867787b2105cc8444fca714e289021e9 (PR #120).
+
+Implemented:
+- Extracted the Ubuntu 24.04 identity guard to deploy/gce_host_guard.sh. Its
+  tests use quoted/unquoted Ubuntu, Debian, and Fedora fixtures and never run
+  deploy/install-gce-host.sh. A static assertion verifies installer ordering.
+- Reproduced the separate preflight exit-1 case with a controlled Ubuntu host
+  and failed read-only host checks. FAIL/1 is intentional there; unsupported
+  Debian returns BLOCKED/2. Replaced the host-dependent local preflight test
+  with a Debian fixture.
+- Reproduced tests/tooling.py's stop_servers assertion with the inherited
+  SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL and confirmed it passes when unset. The UI
+  lifecycle test now isolates bootstrap/OAuth environment values.
+- Made the test runner summarize failures and continue only approved
+  independent checks. The offline artifact writer and frontend build are
+  skipped after an earlier failure; unknown commands are refused. Setup stays
+  fail-fast.
+- Expanded Ruff lint to deploy, browser_checks, scripts, and docs/evaluations;
+  expanded format checks to deploy and scripts. Fixed audited lint defects and
+  formatted the support scripts. Legacy browser/evaluation formatting was not
+  bulk rewritten.
+- Pinned verification CI to ubuntu-24.04 and added focused host and lifecycle
+  checks before the aggregate run, including a non-root assertion.
+
+Executed and passed:
+- env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test (all scenarios,
+  expanded Ruff lint, Ruff format, Pyright, frontend typecheck/build).
+- uv run --locked --no-sync python tests/gce_host.py (10 tests).
+- uv run --locked --no-sync python tests/tooling.py with the inherited admin
+  environment, and again with SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL unset.
+- Ruff lint and format commands in the updated test runner; git diff --check.
+
+No provider calls, GCP resources, installer execution, or real-browser checks.
+The Ubuntu CI workflow is configured but its GitHub run is pending. Actual
+Ubuntu package/systemd/rootless-Docker host acceptance remains unverified.

@@ -6,12 +6,13 @@ Backend authorization and snapshot boundaries are covered by tests/cloud_demo.py
 No Google or model call is made.
 """
 
-import os
 import json
+import os
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import expect, sync_playwright
+
 from sigma.project_reports import render_report
 
 BASE_URL = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173")

@@ -4,7 +4,6 @@ import os
 
 from playwright.sync_api import expect, sync_playwright
 
-
 with sync_playwright() as p:
     browser = p.chromium.launch(
         executable_path=os.environ.get(

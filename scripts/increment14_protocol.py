@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 """Offline Increment 14 preregistration validator. Never invokes a model/provider."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,11 +11,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "docs/evaluations/increment14/tasks.json"
 EXPECTED = {"E1", "S1", "C1", "P1", "M1", "M2"}
-DOMAINS = {"experimental_design", "source_criticism", "constrained_engineering", "scenario_reasoning", "formal_mathematics"}
+DOMAINS = {
+    "experimental_design",
+    "source_criticism",
+    "constrained_engineering",
+    "scenario_reasoning",
+    "formal_mathematics",
+}
 
 
 def canonical_bytes(value: object) -> bytes:
-    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 def sha256(data: bytes) -> str:
@@ -30,14 +38,24 @@ def validate() -> dict:
     assert {x["id"] for x in data["tasks"]} == EXPECTED
     assert {x["domain"] for x in data["tasks"]} == DOMAINS
     for row in data["tasks"]:
-        assert set(row) == {"id", "domain", "question", "evidence_present", "evidence_withheld", "scoring_dimensions"}
+        assert set(row) == {
+            "id",
+            "domain",
+            "question",
+            "evidence_present",
+            "evidence_withheld",
+            "scoring_dimensions",
+        }
         assert len(row["question"]) >= 90
         assert row["evidence_present"]["packet"] != row["evidence_withheld"]["packet"]
         assert row["scoring_dimensions"]
         for variant in ("evidence_present", "evidence_withheld"):
             packet = row[variant]["packet"]
             assert len(packet) >= 50
-            assert not any(term in packet.lower() for term in ("answer key:", "hidden rubric:", "correct answer:"))
+            assert not any(
+                term in packet.lower()
+                for term in ("answer key:", "hidden rubric:", "correct answer:")
+            )
     return data
 
 
@@ -51,31 +69,48 @@ def manifest(seed: int, repetitions: int) -> dict:
             for repeat in range(repetitions):
                 order = ["A", "B"]  # A/B are internal arm codes; hidden from graders.
                 rng.shuffle(order)
-                packet = {"instruction": data["global_instruction"], "question": t["question"], "evidence": t[variant]["packet"]}
-                pairs.append({"task_id": t["id"], "variant": variant, "replicate": repeat,
-                              "packet_sha256": sha256(canonical_bytes(packet)),
-                              "execution_order": order})
+                packet = {
+                    "instruction": data["global_instruction"],
+                    "question": t["question"],
+                    "evidence": t[variant]["packet"],
+                }
+                pairs.append(
+                    {
+                        "task_id": t["id"],
+                        "variant": variant,
+                        "replicate": repeat,
+                        "packet_sha256": sha256(canonical_bytes(packet)),
+                        "execution_order": order,
+                    }
+                )
     rng.shuffle(pairs)
-    return {"schema_version": 1, "status": "DRAFT_NOT_FROZEN", "seed": seed,
-            "replicates_per_task_variant": repetitions, "paired_runs": len(pairs),
-            "total_arm_runs": 2 * len(pairs),
-            "task_file_sha256": sha256(TASKS.read_bytes()),
-            "canonical_tasks_sha256": sha256(canonical_bytes(data)),
-            "pairs": pairs,
-            # Proposed ceilings only. Provider/model selection, a priced estimate,
-            # protocol freeze, and owner authorization remain separate gates.
-            "model_provider": None, "model_exact_version": None,
-            "per_arm_token_cap": 64000,
-            "per_arm_input_token_cap": 48000,
-            "per_arm_output_token_cap": 16000,
-            "per_call_input_token_cap": 12000,
-            "per_call_output_token_cap": 4000,
-            "per_arm_model_call_cap": 4,
-            "per_arm_tool_call_cap": 1,
-            "per_arm_wall_seconds": 600,
-            "per_arm_usd_cap": 2.00,
-            "total_usd_cap": 2.00 * 2 * len(pairs),
-            "user_approved": False, "freeze_approved": False}
+    return {
+        "schema_version": 1,
+        "status": "DRAFT_NOT_FROZEN",
+        "seed": seed,
+        "replicates_per_task_variant": repetitions,
+        "paired_runs": len(pairs),
+        "total_arm_runs": 2 * len(pairs),
+        "task_file_sha256": sha256(TASKS.read_bytes()),
+        "canonical_tasks_sha256": sha256(canonical_bytes(data)),
+        "pairs": pairs,
+        # Proposed ceilings only. Provider/model selection, a priced estimate,
+        # protocol freeze, and owner authorization remain separate gates.
+        "model_provider": None,
+        "model_exact_version": None,
+        "per_arm_token_cap": 64000,
+        "per_arm_input_token_cap": 48000,
+        "per_arm_output_token_cap": 16000,
+        "per_call_input_token_cap": 12000,
+        "per_call_output_token_cap": 4000,
+        "per_arm_model_call_cap": 4,
+        "per_arm_tool_call_cap": 1,
+        "per_arm_wall_seconds": 600,
+        "per_arm_usd_cap": 2.00,
+        "total_usd_cap": 2.00 * 2 * len(pairs),
+        "user_approved": False,
+        "freeze_approved": False,
+    }
 
 
 def main() -> None:
