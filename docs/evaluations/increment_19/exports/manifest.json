@@ -12,8 +12,23 @@
       "source": "byte-for-byte copy of docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json",
       "sha256": "724f0ff42aaa849cd44f26b02ebf6381f7ee1bbf0e5807f1b4b0f8eaeb66226f",
       "size_bytes": 113748
+    },
+    {
+      "path": "maximum-regions-sigma-reexport.json",
+      "source": "Generated with sigma.api.export_project_view from the unchanged project/session records in the T17.8 export, loaded in an isolated temporary SIGMA project while preserving the original project and session IDs and saved Outcome summary.",
+      "sha256": "a6fb05e5e502c975ec6176827365c4e64dcb3f5fb0511d45ad3ef3e5888dc188",
+      "size_bytes": 121311
     }
   ],
+  "round2_export": {
+    "exporter": "sigma.api.export_project_view",
+    "source_project_id": "9018b1fe-83a9-4027-a755-8f997b4f46b5",
+    "source_session_ids": [
+      "91e96112-27ce-412e-841f-5cbf67cbba75"
+    ],
+    "validation": "Generated export retained the source project ID, session ID, and Outcome summary. The synthetic math/pause browser-view changes were not included.",
+    "capture_app_commit": "cbd409a43bc43d709c36d9f243d7a883b3e5550e"
+  },
   "increment_19_browser_exercise": {
     "capture_app_base_commit": "6686e6f7e77f0e27f27f65c1b40880bddb6cac7e",
     "browser_check": "browser_checks/t47_conclusion.py",
