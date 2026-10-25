@@ -10,4 +10,4 @@ It also aims to make **disagreement productive**. An Investigator develops ideas
 
 The same principles should be useful in mathematics, science, historical research, and complex scenario analysis, even though those fields demand different kinds of justification. SIGMA is intended to support that breadth without claiming any single procedure can certify every conclusion.
 
-The central proposition must also withstand scrutiny: **does persistent, multi-agent investigation produce better-supported, more useful research than a simpler AI assistant operating with comparable resources?** That advantage has not been established. Testing it is part of SIGMA's purpose.
+The central proposition must also withstand scrutiny: **does persistent, multi-agent investigation produce better-supported, more useful research than a simpler AI assistant operating with comparable resources?** That advantage has not been established. Testing it is part of SIGMA's purpose. And we're prepared to simplify SIGMA if the answer is no.
