@@ -2,17 +2,57 @@
   "schema_version": 8,
   "id": "a7d72eb8-95c5-4e48-9d6b-96b63c7c7b6d",
   "title": "Investigate an Unexpected Oscillation in a Controlled Experiment",
-  "problem": "A laboratory reports a repeatable-looking oscillation in a precision sensor after a new control algorithm was deployed. Raw observations, calibration records, environmental logs, and software version history have not yet been supplied. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
+  "problem": "A precision sensor began oscillating after its control software changed. Is this a physical signal, an instrument or software artifact, or coincidence? The raw observations, calibration records, environmental logs, and software history are missing; identifying what evidence is needed is part of the investigation. Form competing hypotheses spanning genuine physical effects, instrument artifacts, environmental coupling, aliasing, software defects, and statistical coincidence. Design a preregisterable, blinded where feasible investigation: identify indispensable measurements and metadata, controls, sample-size and power assumptions, quantitative analyses, falsification tests, replication criteria, and how to handle multiple comparisons. Explicitly distinguish simulated or proposed observations from actual evidence. Do not claim that a novel physical effect exists without data. Deliver a ranked experimental plan, predicted signatures of each hypothesis, decision rules, and unresolved uncertainties.",
   "events": [
     {
       "sequence": 1,
       "kind": "project.initialized",
       "timestamp": "2026-10-22T20:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:41.426420+00:00",
+      "strategy_id": "8a83da97-2fc6-4fcc-8aa4-e1281349df3a"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:41.426852+00:00",
+      "strategy_id": "5f676881-9f37-421e-83b1-683fdee9cfc4"
     }
   ],
-  "strategies": [],
-  "research_mode": "physics",
-  "active_order": [],
+  "strategies": [
+    {
+      "id": "8a83da97-2fc6-4fcc-8aa4-e1281349df3a",
+      "title": "Turn the question into a test",
+      "approach": "Name the proposed cause, measurable outcome, comparison condition, and one plausible confounder. Write a prediction that could fail, then sketch the smallest ethical observation or experiment that would distinguish it from a competing explanation.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:41.426420+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Turn the question into a test",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "5f676881-9f37-421e-83b1-683fdee9cfc4",
+      "title": "Audit evidence before concluding",
+      "approach": "For one available claim, trace the measurement to its source, check whether the comparison supports causation, and list a result that would weaken the claim. Keep observation, interpretation, and established conclusion in separate notes.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:41.426852+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Audit evidence before concluding",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "physics",
+  "active_order": [
+    "8a83da97-2fc6-4fcc-8aa4-e1281349df3a",
+    "5f676881-9f37-421e-83b1-683fdee9cfc4"
+  ],
   "ai_model": "gpt-6.1-sol",
   "reasoning_effort": "high",
   "difficulty": "medium"

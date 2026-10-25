@@ -170,7 +170,7 @@ with sync_playwright() as playwright:
     expect(first_copy).to_be_visible()
     recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
     expect(recent_meta).to_contain_text("strategies · ")
-    expect(recent_meta).to_contain_text("Difficulty")
+    expect(recent_meta).to_contain_text("Hard difficulty")
     assert "Mathematics" not in recent_meta.inner_text()
     recent_title_box = first_copy.bounding_box()
     recent_meta_box = recent_meta.bounding_box()
