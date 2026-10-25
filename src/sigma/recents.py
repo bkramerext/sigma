@@ -251,7 +251,7 @@ class RecentProject:
     title: str
     investigation_type: str | None
     strategy_count: int | None
-    runnable: bool
+    running: bool
     difficulty: str | None
     accessed_at: str | None
     included_example: bool
@@ -288,6 +288,9 @@ def recent_projects() -> dict:
             if str(UUID(view.project.id)) != entry["id"]:
                 raise ProjectError("Project identity changed")
             category = view.project.investigation_type.value
+            from sigma.research_sessions import read_session_snapshot
+
+            sessions, _ = read_session_snapshot(entry["path"])
             if category_counts.get(category, 0) >= MAX_PER_CATEGORY:
                 continue
             category_counts[category] = category_counts.get(category, 0) + 1
@@ -298,10 +301,7 @@ def recent_projects() -> dict:
                         title=view.project.title,
                         investigation_type=view.project.investigation_type,
                         strategy_count=len(view.project.active_order),
-                        runnable=any(
-                            strategy.enabled and strategy.id in view.project.active_order
-                            for strategy in view.project.strategies
-                        ),
+                        running=any(session.get("status") == "running" for session in sessions),
                         difficulty=view.project.difficulty,
                         available=True,
                     )
@@ -318,7 +318,7 @@ def recent_projects() -> dict:
                         title=Path(entry["path"]).name,
                         investigation_type=None,
                         strategy_count=None,
-                        runnable=False,
+                        running=False,
                         difficulty=None,
                         available=False,
                         error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",

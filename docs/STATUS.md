@@ -62,6 +62,26 @@ traffic.
   `stop_servers` call-count failure. Focused `tests/recents.py`, frontend
   typecheck/build, Ruff, and Pyright passed.
 
+### Home session activity feedback
+
+Replaced the strategy-eligibility label in Home with inline `· Running` metadata
+only for a persisted research session whose status is `running`. Sample
+projects no longer claim to be Runnable or Not runnable. `tests/recents.py`
+checks both running and stopped session states. Real Chrome verified the
+metadata sentence omits Running for a stopped record and displays
+`1 strategy · Medium difficulty · Running` for a running record. The broader
+recents browser check passed this new assertion, then hit the existing sample
+scroll-height assertion; a second run with only that unrelated assertion
+bypassed reached the subsequent flaky Back-to-Home detached-element timeout.
+
+I inspected `projects/test2.sigma` directly: its latest saved research session
+is `ended`, and its earlier session is `stopped` with no running branches or
+steps. It is therefore correct for test2 not to show Running at this moment.
+The full `./sigma test` remains blocked by the unrelated existing
+`tests/tooling.py:177` `stop_servers` call-count assertion. Frontend production
+build, targeted Ruff and Pyright checks, and the focused recents backend test
+passed. No provider calls were made.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored

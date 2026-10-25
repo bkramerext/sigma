@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -109,14 +110,13 @@ def check(root: Path, base: Path) -> None:
     recent_by_id = {item["id"]: item for item in recent_projects()["projects"]}
     assert recent_by_id[first.project.id]["difficulty"] == first.project.difficulty
     assert recent_by_id[second.project.id]["difficulty"] == second.project.difficulty
-    assert recent_by_id[first.project.id]["runnable"] is True
+    assert recent_by_id[first.project.id]["running"] is False
     edited = create_strategy(first.path, "My addition", "Investigate this case")
     reopened = open_sample_project(selected["id"])
     assert reopened.project.id not in {first.project.id, second.project.id}
     assert len(reopened.project.active_order) == selected["strategy_count"]
     refreshed_catalog = {item["id"]: item for item in sample_projects()["projects"]}
     assert refreshed_catalog[selected["id"]]["strategy_count"] == selected["strategy_count"]
-    assert refreshed_catalog[selected["id"]]["runnable"] is True
     assert Path(first.path, "project.json").read_bytes() != sources[source_path]
 
     other = open_sample_project(catalog[-1]["id"])
@@ -144,10 +144,34 @@ def check(root: Path, base: Path) -> None:
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
     actual = recent_projects()["projects"]
     assert all(
-        not entry["runnable"]
+        not entry["running"]
         for entry in actual
         if entry["id"] in {view.project.id for view in created}
     )
+    running_project = created[-1]
+    session_id = str(uuid4())
+    session_dir = Path(running_project.path) / "research-sessions"
+    session_dir.mkdir()
+    session_path = session_dir / f"{session_id}.json"
+    session_path.write_text(
+        json.dumps(
+            {
+                "id": session_id,
+                "project_id": running_project.project.id,
+                "project_path": running_project.path,
+                "status": "running",
+            }
+        )
+    )
+    running_entry = next(
+        item for item in recent_projects()["projects"] if item["id"] == running_project.project.id
+    )
+    assert running_entry["running"] is True
+    session_path.write_text(session_path.read_text().replace('"running"', '"stopped"'))
+    stopped_entry = next(
+        item for item in recent_projects()["projects"] if item["id"] == running_project.project.id
+    )
+    assert stopped_entry["running"] is False
     assert [entry["id"] for entry in actual[:4]] == [
         view.project.id for view in reversed(created[-4:])
     ]

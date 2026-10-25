@@ -4,6 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
+from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -70,11 +71,12 @@ with sync_playwright() as playwright:
             "small span:first-child"
         )
     ).to_have_text("1 strategy · Easy difficulty")
-    expect(
-        samples_panel.get_by_role("button", name="Open Maximum Regions Formed by Lines").locator(
-            ".home-runnable-state"
-        )
-    ).to_have_text("Runnable")
+    assert (
+        "Runnable"
+        not in samples_panel.get_by_role(
+            "button", name="Open Maximum Regions Formed by Lines"
+        ).inner_text()
+    )
     sample_title_box = samples_panel.locator(".sample-open strong").first.bounding_box()
     sample_meta_box = samples_panel.locator(".sample-open small span").first.bounding_box()
     assert (
@@ -175,6 +177,20 @@ with sync_playwright() as playwright:
         data={"path": path, "title": "Browser sample addition", "approach": "Keep this strategy"},
     )
     assert saved.status == 201
+    project_data = json.loads(Path(path, "project.json").read_text())
+    session_id = str(uuid4())
+    session_file = Path(path, "research-sessions", f"{session_id}.json")
+    session_file.parent.mkdir(exist_ok=True)
+    session_file.write_text(
+        json.dumps(
+            {
+                "id": session_id,
+                "project_id": project_data["id"],
+                "project_path": str(Path(path).resolve()),
+                "status": "running",
+            }
+        )
+    )
     page.get_by_role("button", name="Back to home", exact=True).click()
     # A Sample is copied into working projects; return to Recent automatically.
     expect(recent_tab).to_have_attribute("aria-selected", "true")
@@ -185,6 +201,8 @@ with sync_playwright() as playwright:
     recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
     expect(recent_meta).to_contain_text("strategies · ")
     expect(recent_meta).to_contain_text("Hard difficulty")
+    expect(recent_meta).to_contain_text(" · Running")
+    assert first_copy.locator("xpath=../..").locator(".home-runnable-state").count() == 0
     assert "Mathematics" not in recent_meta.inner_text()
     recent_title_box = first_copy.bounding_box()
     recent_meta_box = recent_meta.bounding_box()

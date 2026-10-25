@@ -65,7 +65,6 @@ class SampleProject:
     investigation_type: str
     difficulty: str | None
     strategy_count: int
-    runnable: bool
 
 
 def _projects() -> list[tuple[str, Path]]:
@@ -98,10 +97,6 @@ def _load(identifier: str) -> tuple[dict[str, Any], SampleProject]:
             project.investigation_type.value,
             project.difficulty.value if project.difficulty is not None else None,
             len(project.active_order),
-            any(
-                strategy.enabled and strategy.id in project.active_order
-                for strategy in project.strategies
-            ),
         ),
     )
 
