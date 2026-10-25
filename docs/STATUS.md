@@ -1,5 +1,25 @@
 # SIGMA status
 
+## PR #76 integration with main (2026-10-24)
+
+Merged `origin/main` at `81384dd` into `green/outcome-hierarchy` without
+rebasing. Preserved Blue's read-only Current Understanding section, typed
+research-state API/service, evidence navigation, report epistemics and tests,
+alongside the project-level Simple/Advanced Outcome preference and Research
+settings. Preserved Red's Markdown icon color/visibility rules. Historical
+sessions still expose an absent saved Conclusion as `null`; their saved summary
+remains visible and is not reattributed as an agent-authored Conclusion.
+
+Validation after reconciliation: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed all scenarios, Ruff, format, Pyright, frontend typecheck and
+production build. Real Chrome 156 passed `browser_checks/outcome_hierarchy.py`
+against fresh copies of the five-session Nonconsecutive Subset Sums project and
+historical Maximum Regions project: Simple/Advanced presentation, Conclusion
+distinction, preference save/reload/isolation, Reasoning Markdown, computational
+source/output access, and desktop/mobile settings at 390px and 320px. No page
+errors. Test copies were isolated under `/private/tmp/sigma-outcome-reconcile`;
+original saved projects were read only. Provider calls: 0.
+
 ## Blue Increment 2: read-only current understanding (2026-10-24)
 
 Implemented on `blue_session` under `messages/blue_out_2.md` plus the standing
@@ -113,6 +133,33 @@ viewport fit. Visual screenshots are `/tmp/sigma-t46-about-home-desktop.png`,
 the hit area and opens via its outer edge. The header arrangement is captured in
 `/tmp/sigma-t46-about-project-header-mobile.png`. The browser check used the local
 deterministic provider fixture; no live provider calls were made.
+
+## Outcome presentation and Project Settings (2026-10-24)
+
+Added project-scoped `show_advanced_outcome_details`, defaulting off. Simple mode
+shows the saved conclusion or an explicitly labeled historical summary, outcome
+status, verification, supporting artifacts, and qualifications without Outcome
+accordions. Advanced mode preserves the same primary finding in the expanded
+Conclusion section and keeps reasoning, evidence/obligations, metrics, and other
+records in the existing collapsible sections. Reasoning / proof has its own
+Markdown render toggle that preserves the complete saved reasoning content. Historical
+session projection no longer inserts a placeholder Conclusion; it preserves the
+record's saved summary.
+
+Project Settings now has a Preferences tab with “Show advanced Outcome details”.
+The Research tab's Model and Thinking level controls share a two-column desktop
+layout and stack on narrow screens; the model label is “Model”. Existing control
+IDs and save semantics are retained. `./sigma test` and focused Project,
+research-session, text-view, and strategy regressions passed. Real Chrome checks
+passed for the five saved Nonconsecutive Subset Sums sessions and historical
+Maximum Regions session at desktop and 390px/320px widths, including preference
+default, save/reload and project isolation, advanced section order, Reasoning / proof Markdown rendering, execution
+source/output access, and Project Settings control alignment. Screenshots:
+`/tmp/sigma-outcome-advanced-390.png`,
+`/tmp/sigma-outcome-advanced-320.png`,
+`/tmp/sigma-settings-model-390.png`, and
+`/tmp/sigma-settings-model-320.png`.
+
 
 ontext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';

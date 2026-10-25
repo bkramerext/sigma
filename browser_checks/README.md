@@ -280,3 +280,40 @@ signed-out, administrator and member screens, the Google account dialog,
 administrator add/edit/save/revoke actions, and desktop/mobile layout. Screenshots
 are written to `/tmp/sigma-t40-admin-home-{1440,390}.png` and
 `/tmp/sigma-t40-admin-dialog-{1440,390}.png`.
+
+
+## Outcome modes and Project Settings layout
+
+`outcome_hierarchy.py` uses real Chrome with local copies of the saved
+Nonconsecutive Subset Sums and Maximum Regions projects. Set
+`SIGMA_OUTCOME_PROJECTS_ROOT` to a directory containing
+`nonconsecutive-subset-sums-8.sigma` and
+`maximum-regions-by-lines-3.sigma` copies. The copies must have each saved
+session's `project_path` rebound to its copied project directory. The check
+writes its preference only to those copies.
+
+Start the API with isolated temporary data and the UI on a separate port:
+
+```sh
+SIGMA_PROJECTS_ROOT=/tmp/sigma-outcome/projects \
+SIGMA_STATE_DIR=/tmp/sigma-outcome/state \
+SIGMA_AUTH_HOME=/tmp/sigma-outcome/auth \
+uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8178
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 5178 --strictPort
+```
+
+Then run the actual Chrome check:
+
+```sh
+SIGMA_OUTCOME_PROJECTS_ROOT=/tmp/sigma-outcome/projects \
+SIGMA_OUTCOME_UI_ORIGIN=http://127.0.0.1:5178 \
+SIGMA_OUTCOME_API_ORIGIN=http://127.0.0.1:8178 \
+uv run --with playwright python browser_checks/outcome_hierarchy.py
+```
+
+It covers default Simple mode, historical summaries, qualifications and
+verification, per-project Preferences save/reload/isolation, Advanced disclosure
+order, Reasoning / proof Markdown rendering, and computational source/output
+access, narrow Outcome rendering, and the Model/Thinking side-by-side desktop
+and stacked mobile layouts. This is browser
+emulation at 390px and 320px, not physical-phone testing.

@@ -21,6 +21,10 @@
 .project-settings-dialog .settings-classification-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: end; }
 .project-settings-dialog .settings-classification-row > div { min-width: 0; }
 .project-settings-dialog .settings-classification-row label { margin-top: 16px; }
+.project-settings-dialog .settings-model-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.project-settings-dialog .settings-model-row > div { min-width: 0; }
+.project-settings-dialog .settings-model-row label { margin-top: 16px; }
+.project-settings-dialog .settings-model-row .settings-hint { margin: 8px 0 0; }
 .project-settings-dialog .research-type-picker [role="combobox"] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 43px; padding: 9px 12px; border: 1px solid #667079; border-radius: 5px; background: #030b14; color: #e3edf6; font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; cursor: pointer; }
 .project-settings-dialog .research-type-icon { display: block; flex: 0 0 20px; width: 20px; height: 20px; color: #d6a36f; }
 .project-settings-dialog .research-type-picker [role="combobox"] > span { flex: 1 1 auto; }
@@ -64,6 +68,7 @@
 .project-settings-dialog .settings-header button { padding: 9px 11px; min-height: 40px; overflow-wrap: anywhere; }
 .project-settings-dialog .settings-body { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 24px 24px; }
 @media (max-width: 560px) {
+ .project-settings-dialog .settings-model-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
  .project-settings-dialog .settings-header { flex-wrap: wrap; gap: 10px; padding: 16px 18px 12px; }
  .project-settings-dialog .settings-header h2 { width: 100%; font-size: 24px; }
  .project-settings-dialog .settings-header .settings-actions { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
@@ -239,3 +244,7 @@
   .project-settings-dialog.export-project-dialog .settings-body { padding: 16px 18px; }
   .project-settings-dialog.export-project-dialog .export-footer { padding: 12px 18px 18px; }
 }
+
+.project-settings-dialog .project-preference-checkbox { display: flex; align-items: center; gap: 9px; color: #e3e8eb; font-weight: 500; }
+.project-settings-dialog .project-preference-checkbox input { width: 17px; height: 17px; accent-color: #bd8355; }
+.project-settings-dialog .project-preferences-panel .settings-hint { margin-top: 4px; }

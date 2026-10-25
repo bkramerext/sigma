@@ -621,6 +621,25 @@
 .workspace-page .outcome-label.outcome-positive { color: #a5d1b3; }
 .workspace-page .outcome-label.outcome-negative { color: #e6a69a; }
 .workspace-page .outcome-general { margin: 7px 0 12px; }
+.workspace-page .outcome-simple { margin: 10px 0 2px; }
+.workspace-page .outcome-simple .outcome-summary-text > p:first-of-type { max-width: 78ch; margin: 4px 0 8px; color: #eef1f3; font-size: 15px; line-height: 1.65; }
+.workspace-page .outcome-advanced { margin-top: 8px; }
+.workspace-page .outcome-other-details > h4 { margin: 5px 0; color: #c9a16f; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.workspace-page .outcome-summary-kicker { display: block; margin-bottom: 2px; color: #d3a777; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.workspace-page .outcome-reasoning-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workspace-page .outcome-reasoning-actions h4 { margin: 0; }
+.workspace-page .outcome-summary-text > p:first-of-type { max-width: 78ch; margin: 4px 0 8px; color: #eef1f3; font-size: 15px; line-height: 1.65; }
+.workspace-page .outcome-summary-text > .outcome-primary-evidence,
+.workspace-page .outcome-summary-text > .outcome-confidence { margin: 5px 0 0; color: #bac8d3; font-size: 12px; line-height: 1.55; }
+.workspace-page .outcome-primary-evidence strong,
+.workspace-page .outcome-confidence strong { color: #e4c39c; }
+.workspace-page .outcome-qualifications { margin: 10px 0 12px; padding: 8px 0 2px 11px; border-left: 2px solid #9a6948; color: #c7d0d6; font-size: 12px; line-height: 1.55; }
+.workspace-page .outcome-qualifications h4 { margin: 0 0 4px; color: #e3c29b; font-size: 12px; font-weight: 600; }
+.workspace-page .outcome-qualifications > div { margin: 5px 0; }
+.workspace-page .outcome-qualifications ul { margin: 2px 0 0; padding-left: 18px; }
+.workspace-page .outcome-qualifications li { margin: 2px 0; }
+.workspace-page .outcome-conclusion { margin: 0 0 8px; }
+
 .workspace-page .outcome-subsections { display: grid; gap: 7px; min-width: 0; }
 .workspace-page .outcome-subsection { min-width: 0; border: 1px solid #344754; border-radius: 5px; background: #09141e; }
 .workspace-page .outcome-subsection > summary { display: flex; align-items: center; gap: 8px; padding: 9px 11px; color: #e4c39c; font-size: 13px; font-weight: 600; list-style: none; cursor: pointer; overflow-wrap: anywhere; }
