@@ -1,5 +1,34 @@
 # SIGMA status
 
+## Current owner follow-ups (2026-10-25)
+
+- TeX authoring: removed the extra white browser confirmation for long-form
+  generation; provider-use bounds are still visible in the dialog. Generate
+  becomes “Cancel generation” in place while running. Failed generation leaves
+  its error visible and restores an enabled Generate action for retry.
+- Project header: About matches Home's compact style in normal and hover states
+  and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
+  responsive.
+- Real-Chrome checks now cover direct long-form start without a browser prompt,
+  failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
+  About placement/style. `browser_checks/t45_long_paper.py` and
+  `browser_checks/header.py` passed in real Chrome; the full
+  `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+  Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
+  All checks used local deterministic fixtures; no paid provider calls or cloud
+  changes.
+
+Screenshots: `docs/evaluations/t45-paper-dialog/` and
+`docs/evaluations/project-about-pill/`.
+
+PR #108 merge-readiness refresh: fetched `main` at `f5388d8` (including Blue
+#116, Gray #120 and subsequent main history) and merged it without conflicts.
+The current-state summary and newer research/sample records in this file were
+preserved. Real Chrome `browser_checks/t45_long_paper.py` and
+`browser_checks/header.py` passed against the reconciled tree. The required
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+format, Pyright (0 diagnostics), frontend typecheck and production build. No
+paid provider calls or cloud changes.
 ## Current state for newcomers (2026-10-25)
 
 SIGMA is a local research workspace that stores questions, role responses,
@@ -125,7 +154,6 @@ acceptance detail and test evidence are in
 branch creation through final PR-ready push: approximately 22 minutes
 (09:41–10:03 PDT, 2026-10-25).
 
-
 ## T89 stock sample catalog audit (2026-10-25)
 
 Gray started from current `main` `7a2f445` and inventoried all 17 shipped
@@ -156,6 +184,225 @@ full suite is **not reported as passing**; this known baseline failure is
 outside the T89 diff. No real provider calls were made. The browser coverage
 is PR #74's reported study, not a new T89 Chrome run.
 
+## AI paper dialog polish (2026-10-25)
+
+Reduced unused space in the TeX dialog, increased its explanatory text to 14px,
+and made the dialog height follow its contents while capping the completed
+preview to a viewport-height scroll area. The header action now reads
+“Cancel”. During generation, the duplicate disabled “Authoring…” button is
+gone; Generate becomes a “Cancel generation” button in the same controls row,
+and the status line no longer carries a duplicate cancel action. Long-form
+generation now starts directly from Generate without the white browser-native
+confirmation; the static bounds remain visible before start and checkpoint
+restart keeps its explicit confirmation. A forced temporary generation failure
+in the Chrome check confirms the error remains visible and Generate is
+re-enabled for retry.
+Added the Project Export checkbox label exactly as “Open in browser tab”. When
+checked, the saved-PDF link opens a browser tab and requests inline PDF
+disposition; when unchecked, the link downloads as before. The PDF endpoint
+keeps attachment as its default, so existing downloads are unchanged.
+
+Updated `browser_checks/t45_long_paper.py` to exercise the no-prompt start,
+failure recovery, progress cancel, desktop and 390px mobile scrolling, completed-preview scrolling, inline PDF
+opening and attachment fallback, initial dialog focus, and focus restoration.
+Real Chrome passed. Captures are in
+`docs/evaluations/t45-paper-dialog/`: owner-provided desktop before, completed
+desktop and scrollable mobile after, retry-ready error, and authoring progress.
+The browser regression verifies the version count increases after retry, so an
+older saved paper cannot mask a failed generation. `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. No paid provider
+calls or cloud changes. After merging the latest `main` update, reran
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real
+Chrome `browser_checks/t45_long_paper.py`; both passed on the published tree.
+The latest follow-up additionally verifies direct start without the browser
+confirmation, retry after a simulated service failure, in-place cancellation,
+and a newly saved version.
+
+## Adversarial review transparency and documentation cleanup (2026-10-25)
+
+The README and Product Rationale now state that Investigator and Skeptic use
+the same underlying language model. They describe their challenge-and-objection
+process as structured scrutiny rather than independent validation, note their
+potential shared biases, and describe different-model review only as a possible
+future enhancement with no release commitment.
+
+Moved `JOURNAL.md` to `docs/JOURNAL.md` with `git mv`; its blob hash is unchanged
+and all 285 lines remain intact. The README, contributor guidance, and software
+factory documentation now point to the new location. Repository search found
+no stale root-path references, and the new local links resolve. `WOLF_TODO.md`
+remains because it still documents substantive, uncompleted evidence and
+writing requirements that the concise essay does not cover; deleting it would
+discard those open items. The essay was left unchanged.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+Pyright, frontend typecheck, and production build. No paid provider calls or
+cloud changes.
+## AI paper disclosure and preflight explanation (2026-10-25)
+
+The TeX authoring dialog now explains that SIGMA uses the complete recorded
+research history, distinguishes findings from conjectures, identifies gaps, and
+produces an AI-generated paper that has not been independently verified. Model,
+usage, and generation bounds remain visible. The deterministic TeX assembler
+adds an attribution beneath the title and author, followed by an “About this
+paper” section before the introduction. These additions are independent of the
+authoring prompt and therefore travel with the saved TeX and compiled PDF;
+existing evidence references, warnings, and obligations remain assembled as
+before.
+
+Focused regression coverage checks the disclosure text and ordering in the
+assembled and archived TeX, plus the dialog language and retained model/bounds
+in real Chrome. `uv run python tests/papers.py`, the real-Chrome
+`browser_checks/t45_long_paper.py`, and `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed. The first full-suite attempt caught only Ruff formatting
+in the new assertions; after formatting, the complete suite passed, including
+frontend typecheck and production build. No paid provider calls or cloud
+changes.
+
+## Home and text-copy polish follow-up (2026-10-25)
+
+Home Projects now starts at matching top and left offsets, with each edge half
+the previous desktop margin. Narrow mobile keeps the Projects list below the
+wrapping account pills while matching its top and left margins. New Project
+remembers the complete last successfully created form values in browser-local
+storage; failed attempts do not replace them. Project description and strategy
+approach rows have adjacent copy controls. They copy plain text in either
+display mode, and show a temporary checkmark that remains clickable for another
+copy. The artwork credit is split as “Brian Kramer &” / “OpenAI Models” and
+rendered in uppercase to match the SIGMA artwork's title lettering.
+
+Real Chrome checks cover the exact artwork credit lines, desktop/mobile Home placement, create success and
+reopen persistence, copy repetition for both text areas, and Markdown-to-plain
+clipboard output. `browser_checks/project_create_contract.py` and
+`browser_checks/t47_conclusion.py` passed. Screenshots:
+`/tmp/sigma-home-projects-desktop.png`, `/tmp/sigma-home-projects-mobile.png`,
+`/tmp/sigma-copy-buttons-desktop.png`, and
+`/tmp/sigma-copy-buttons-mobile.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test`, frontend typecheck/build, and `git diff --check` passed. No paid
+provider calls or cloud changes.
+## T93 mathematical formatting showcase and project creation regression (2026-10-25)
+
+Rebased the T93 work on current `main` (`f3bae10`, including the README update).
+The About Key Features section, README capabilities list, and `WOLF.md` essay
+now describe AI reformatting of plain-text project descriptions and saved
+Conclusions into Markdown with typeset equations. They say the saved text stays
+available and the formatted mathematics still needs review; this is not claimed
+as mathematical verification.
+
+Brian's New Project screenshot exposed that shared settings state sent the
+edit-only `show_advanced_outcome_details` preference to the strict create API.
+Project creation now sends only the create contract fields. A real-Chrome
+regression asserts the submitted request omits that preference and retains the
+API's strict error response without creating test data. A second Chrome check
+asserts the About copy and layout at 1440, 390 and 320 px. Both focused checks
+passed; screenshots are `/tmp/sigma-about-math-1440.png`,
+`/tmp/sigma-about-math-390.png`, and `/tmp/sigma-about-math-320.png`. The full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed after the frontend
+change, including typecheck and production build. No provider calls or cloud
+changes. The broader legacy `browser_checks/settings.py` did not reach its
+creation assertions in this local cloud-auth environment because its initial
+“Checking AI…” expectation was not met; the standalone request-contract check
+covers the reported regression directly.
+
+The Conclusion formatting controls now show the same visible “Formatting with
+AI…” label beside the hourglass in project descriptions, strategy approaches,
+and saved Conclusions, with consistent 6px spacing. The simple Outcome view now
+offers a quiet, underlined “Advanced Outcome” action below the summary; it saves
+the project preference and opens the full findings. The redundant excerpt note
+was removed. Focused real-Chrome checks cover all three formatting controls,
+the persisted preference link, rendered/raw modes, and desktop and narrow mobile
+layouts. Screenshots are `/tmp/sigma-project-markdown-formatting.png`,
+`/tmp/sigma-project-markdown-formatting-mobile.png`, and
+`/tmp/sigma-strategy-markdown-formatting.png`. `t47_conclusion.py` passed, and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed in full,
+including frontend typecheck and production build. No provider calls or cloud
+changes.
+## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
+
+Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
+musl release asset and a SHA-256 checked download. Paper versions now retain the
+exact TeX source used for compilation beside the frozen evidence snapshot and
+the existing hash-checked PDF in the project's paper archive. No cloud storage
+adapter or sponsored-inference accounting code changed.
+
+Added `python -m sigma.cloud_runtime_check`, an opt-in smoke proof that checks
+the selected Docker daemon reports rootless mode, executes real Python and
+SageMath through the existing bounded executor, verifies non-root/no-network/
+no-host-secret access, retrieves preserved execution artifacts, compiles actual
+TeX to PDF, and verifies source/evidence/PDF round trips. The local command in
+`CLOUD_DEPLOYMENT.md` explicitly permits Docker Desktop/Colima for development;
+the GCE command omits that override and requires the dedicated rootless daemon.
+
+Observed locally on Colima: both images completed against their resolved image
+IDs; both reported UID 65532, blocked the disposable host-secret probe and
+network probe, and round-tripped `runtime-evidence.json`. TeX compiled to a
+5,747-byte PDF; the paper archive returned byte-identical TeX, evidence
+snapshot, and PDF. The smoke computes the SHA-256 from the real saved-project
+snapshot using the paper service's canonical JSON encoding, then recomputes it
+from the reloaded snapshot and compares it with the stored digest. Separately,
+the built cloud backend image reported Tectonic
+0.15.0 and compiled a real 4,160-byte PDF under the backend's non-root/read-only
+container settings. Local Docker reported `daemon_rootless: false`; actual
+rootless daemon execution and host-boundary attacks remain **UNVERIFIED** until
+Red reruns the documented command on GCE. No Google Cloud resources or inference
+provider calls were used.
+
+Validation: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and focused
+paper tests passed. The first bare `./sigma test` attempt failed in the
+pre-existing UI tooling scenario because this shell has a bootstrap-admin
+environment setting. A later attempt also showed the fresh worktree lacked
+frontend dependencies; after `./sigma setup`, the environment-adjusted full
+suite passed, including Ruff, formatting, Pyright, frontend typecheck, and
+production build. Backend Docker image build and in-image Tectonic compilation
+passed. The runtime smoke script was exercised on actual Docker containers.
+The GCE command and real rootless execution remain a required Red follow-up;
+hosted AI paper generation, identity authorization, restart persistence, and
+sponsored budget operations are outside this Blue runtime increment.
+
+## T93 Conclusion Markdown and math rendering (2026-10-25)
+
+Markdown-rendered Conclusions now show a neutral loading message while the lazy
+renderer loads instead of briefly presenting raw Markdown as if it were the
+rendered result. Explicit legacy LaTeX `\(...\)` and `\[...\]` delimiters are
+translated for `remark-math`; empty math blocks are omitted from rendered mode,
+compact standalone legacy formula lines and unambiguous inline powers are typeset
+conservatively. Outcomes
+with recognizable math open in rendered mode by default; ordinary prose keeps
+its existing mode. The source toggle continues to show the original saved text
+unchanged. A real-Chrome regression covers the live RH-style `### Preliminary
+finding` heading, display and inline equations, an un-delimited zeta formula, an
+inline exponent in prose, an empty math block, and both rendered/source modes at
+desktop and 375/320 px widths. `./sigma test` passed
+with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset (the first run with it set failed
+an existing UI lifecycle cleanup assertion); focused Chrome check
+`uv run --with playwright python browser_checks/t47_conclusion.py`, frontend
+typecheck, and `git diff --check` passed. No provider calls or cloud changes.
+The API conversion request also accepts a bounded optional session ID for saved Conclusions. Sponsored-cloud provider attempt accounting remains active for both project and Conclusion conversions; `tests/text_views.py` and `tests/cloud_research_api.py` cover the API route and usage accounting. The rebased tree passed `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real-Chrome paper dialog check.
+
+Follow-up: the Conclusion Markdown toggle had been missed by the earlier
+Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
+That left it inheriting the generic workspace button padding/border, while its
+SVG had no size rule and rendered at 0×0: Chrome showed a 42×50 empty outlined
+box. The Conclusion action now uses the same 28×28 borderless control and 24×20
+glyph as the Outcome heading. The focused Chrome regression asserts those
+dimensions and transparent hover surface while continuing to verify rendered
+Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
+full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
+calls or cloud changes.
+
+The next Chrome inspection exposed a separate issue: the pressed copper icon
+could accompany raw formula characters because the Conclusion was only passed
+through the local Markdown/KaTeX parser. It now uses the same AI formatting
+endpoint and preservation instructions as project text, with an explicit
+user click. The source digest is checked before and after conversion; formatted
+Markdown stays in the view state and the saved session archive is never edited.
+The button stays gray in plain mode even under hover and turns copper when the
+formatted result is displayed. An offline API regression checks display-math
+and layout instructions plus byte-identical saved history. Real Chrome with a
+mocked conversion checked the RH-style source, formatted line breaks and three
+display equations at 1440, 375 and 320 px; screenshots are in `/tmp/sigma-conclusion-ai-desktop.png`,
+`/tmp/sigma-conclusion-ai-375.png` and `/tmp/sigma-conclusion-ai-320.png`. No
+provider calls or cloud changes.
 ## T91.2 packaged PDF and disaster-recovery acceptance (2026-10-25)
 
 Started on fresh branch `gray/t91.2-packaged-pdf-recovery` from current `main`
@@ -295,48 +542,6 @@ printed its existing configuration warning. Credentialed Google sign-in was
 not exercised. The updated T86 assigns WOLF drafting to ChatGPT after Brian
 approves its outline; Gray's work on this branch is limited to the README.
 
-## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
-
-Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
-musl release asset and a SHA-256 checked download. Paper versions now retain the
-exact TeX source used for compilation beside the frozen evidence snapshot and
-the existing hash-checked PDF in the project's paper archive. No cloud storage
-adapter or sponsored-inference accounting code changed.
-
-Added `python -m sigma.cloud_runtime_check`, an opt-in smoke proof that checks
-the selected Docker daemon reports rootless mode, executes real Python and
-SageMath through the existing bounded executor, verifies non-root/no-network/
-no-host-secret access, retrieves preserved execution artifacts, compiles actual
-TeX to PDF, and verifies source/evidence/PDF round trips. The local command in
-`CLOUD_DEPLOYMENT.md` explicitly permits Docker Desktop/Colima for development;
-the GCE command omits that override and requires the dedicated rootless daemon.
-
-Observed locally on Colima: both images completed against their resolved image
-IDs; both reported UID 65532, blocked the disposable host-secret probe and
-network probe, and round-tripped `runtime-evidence.json`. TeX compiled to a
-5,747-byte PDF; the paper archive returned byte-identical TeX, evidence
-snapshot, and PDF. The smoke computes the SHA-256 from the real saved-project
-snapshot using the paper service's canonical JSON encoding, then recomputes it
-from the reloaded snapshot and compares it with the stored digest. Separately,
-the built cloud backend image reported Tectonic
-0.15.0 and compiled a real 4,160-byte PDF under the backend's non-root/read-only
-container settings. Local Docker reported `daemon_rootless: false`; actual
-rootless daemon execution and host-boundary attacks remain **UNVERIFIED** until
-Red reruns the documented command on GCE. No Google Cloud resources or inference
-provider calls were used.
-
-Validation: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and focused
-paper tests passed. The first bare `./sigma test` attempt failed in the
-pre-existing UI tooling scenario because this shell has a bootstrap-admin
-environment setting. A later attempt also showed the fresh worktree lacked
-frontend dependencies; after `./sigma setup`, the environment-adjusted full
-suite passed, including Ruff, formatting, Pyright, frontend typecheck, and
-production build. Backend Docker image build and in-image Tectonic compilation
-passed. The runtime smoke script was exercised on actual Docker containers.
-The GCE command and real rootless execution remain a required Red follow-up;
-hosted AI paper generation, identity authorization, restart persistence, and
-sponsored budget operations are outside this Blue runtime increment.
-
 ## T99 Blue: sponsored inference outside sessions (2026-10-25)
 
 Started from current `main` at `d4ca2194b68314336855823970b4b97f55c1256a` on
@@ -420,6 +625,32 @@ not dispatched. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed
 again after the correction, including Ruff, formatting, Pyright, frontend
 typecheck, and production build. No paid inference or cloud resources were used.
 
+Follow-up: the Conclusion Markdown toggle had been missed by the earlier
+Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
+That left it inheriting the generic workspace button padding/border, while its
+SVG had no size rule and rendered at 0×0: Chrome showed a 42×50 empty outlined
+box. The Conclusion action now uses the same 28×28 borderless control and 24×20
+glyph as the Outcome heading. The focused Chrome regression asserts those
+dimensions and transparent hover surface while continuing to verify rendered
+Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
+full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
+calls or cloud changes.
+## Project header About pill placement (2026-10-25)
+
+The project header uses a compact About pill that matches Home's color, type,
+border and dimensions. Desktop controls form three columns and two rows:
+Difficulty/Model/Thinking, then About/Google/ChatGPT. On narrow screens About
+remains directly below Difficulty in the responsive two-column arrangement.
+The Home header orders its About/Admin group left of Google/ChatGPT and keeps
+the intended gaps between pills.
+Real Chrome `browser_checks/header.py` passed at 1280, 1100, 700, 390 and 320 px,
+including Home placement and no horizontal overflow. Screenshots:
+`/tmp/sigma-a13-header-1280.png`, `/tmp/sigma-a13-header-390.png`,
+`/tmp/sigma-home-header-admin-desktop.png` and
+`/tmp/sigma-home-header-admin-mobile.png`. `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios, Ruff,
+formatting, Pyright, frontend typecheck and production build. No live provider
+calls or cloud changes.
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.
