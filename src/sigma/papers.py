@@ -17,6 +17,7 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from sigma import cloud_research, cloud_workspaces
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import completed, failure
 from sigma.project_reports import _compile_pdf, _latex
@@ -1332,7 +1333,11 @@ def _tex(
 
 
 async def _provider(
-    context: dict[str, Any], binding: Mapping[str, Any], config: dict[str, Any]
+    context: dict[str, Any],
+    binding: Mapping[str, Any],
+    config: dict[str, Any],
+    project_id: str | None = None,
+    project_path_value: str | None = None,
 ) -> tuple[PaperDraft, str]:
     project_source = next(
         (source for source in context.get("sources", []) if source.get("kind") == "project"), {}
@@ -1341,13 +1346,14 @@ async def _provider(
     instructions = INSTRUCTIONS
     if isinstance(project_data, dict) and project_data.get("investigation_type") == "mathematical":
         instructions += "\n\n" + MATHEMATICS_INSTRUCTIONS
+    serialized_context = json.dumps(context, ensure_ascii=False)
     payload: dict[str, Any] = {
         "model": config["model"],
         "store": False,
         "max_output_tokens": 12000,
         "reasoning": {"effort": config["reasoning_effort"]},
         "instructions": instructions,
-        "input": json.dumps(context, ensure_ascii=False),
+        "input": serialized_context,
         "text": {
             "format": {
                 "type": "json_schema",
@@ -1364,7 +1370,26 @@ async def _provider(
         payload["input"] = [{"role": "user", "content": payload["input"]}]
         headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+    attempt = None
     try:
+        if cloud_workspaces.enabled():
+            if (
+                binding["identity"] != "cloud_service_api_key"
+                or binding["mode"] != "api_key"
+                or not binding["token"]
+                or not project_id
+                or not project_path_value
+            ):
+                raise ProjectError("Sponsored cloud inference is not configured.")
+            attempt = cloud_research.start_provider_attempt(
+                project_id,
+                project_path_value,
+                config["model"],
+                payload,
+                12000,
+            )
+        if attempt is not None:
+            attempt.dispatched = True
         async with (
             asyncio.timeout(CALL_SECONDS),
             httpx.AsyncClient(
@@ -1393,6 +1418,7 @@ async def _provider(
                     raw = {}
                 if response.status_code != 200:
                     failure(response.status_code, raw, binding["mode"], guard)
+        cloud_research.settle_provider_attempt(attempt, raw)
         if (
             not isinstance(raw, dict)
             or raw.get("status") != "completed"
@@ -1425,6 +1451,14 @@ async def _provider(
         raise ProjectError(
             "Provider returned malformed paper content. No PDF was published; retry explicitly."
         ) from exc
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
+    finally:
+        if attempt is not None:
+            try:
+                cloud_research.finish_provider_attempt(attempt)
+            except cloud_research.CloudResearchUnavailable:
+                pass
 
 
 async def _provider_structured(
@@ -1436,6 +1470,8 @@ async def _provider_structured(
     schema_name: str,
     response_model: type[BaseModel],
     max_input_bytes: int = MAX_PROVIDER_INPUT_BYTES,
+    project_id: str | None = None,
+    project_path_value: str | None = None,
 ) -> tuple[BaseModel, str]:
     """One bounded structured provider call for a long-paper stage."""
     input_text = json.dumps(input_value, ensure_ascii=False, separators=(",", ":"))
@@ -1464,7 +1500,26 @@ async def _provider_structured(
         payload["input"] = [{"role": "user", "content": input_text}]
         headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+    attempt = None
     try:
+        if cloud_workspaces.enabled():
+            if (
+                binding["identity"] != "cloud_service_api_key"
+                or binding["mode"] != "api_key"
+                or not binding["token"]
+                or not project_id
+                or not project_path_value
+            ):
+                raise ProjectError("Sponsored cloud inference is not configured.")
+            attempt = cloud_research.start_provider_attempt(
+                project_id,
+                project_path_value,
+                config["model"],
+                payload,
+                12000,
+            )
+        if attempt is not None:
+            attempt.dispatched = True
         async with (
             asyncio.timeout(CALL_SECONDS),
             httpx.AsyncClient(
@@ -1493,6 +1548,7 @@ async def _provider_structured(
                     raw = {}
                 if response.status_code != 200:
                     failure(response.status_code, raw, binding["mode"], guard)
+        cloud_research.settle_provider_attempt(attempt, raw)
         if (
             not isinstance(raw, dict)
             or raw.get("status") != "completed"
@@ -1525,6 +1581,14 @@ async def _provider_structured(
         raise ProjectError(
             "Provider returned malformed long-paper stage content. No paper was published."
         ) from exc
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
+    finally:
+        if attempt is not None:
+            try:
+                cloud_research.finish_provider_attempt(attempt)
+            except cloud_research.CloudResearchUnavailable:
+                pass
 
 
 async def _generate_long_draft(
@@ -1534,6 +1598,8 @@ async def _generate_long_draft(
     state: dict[str, Any],
     save_state: Callable[[dict[str, Any]], None],
     progress: Callable[[str, int, int], Awaitable[None]] | None = None,
+    project_id: str | None = None,
+    project_path_value: str | None = None,
 ) -> tuple[PaperDraft, int, int]:
     source_ids = {source["id"] for source in package["sources"]}
     batches = _evidence_batches(package)
@@ -1579,6 +1645,8 @@ distinct whenever merging would obscure differences between sessions or experime
                 instructions=extraction_instructions,
                 schema_name="sigma_paper_evidence_batch",
                 response_model=EvidenceBatchResult,
+                project_id=project_id,
+                project_path_value=project_path_value,
             )
             parsed = EvidenceBatchResult.model_validate(result)
             batch_refs = {field["source_ref"] for field in batch["fields"]}
@@ -1684,6 +1752,8 @@ that occur in the input. Do not add scientific claims or outside citations."""
                 instructions=reduce_instructions,
                 schema_name="sigma_paper_evidence_reduction",
                 response_model=EvidenceBatchResult,
+                project_id=project_id,
+                project_path_value=project_path_value,
             )
             reduced_result = EvidenceBatchResult.model_validate(reduced)
             allowed_refs = {ref for item in group for ref in item.evidence_refs}
@@ -1781,6 +1851,8 @@ into a result. Return the complete plan JSON matching the schema."""
             schema_name="sigma_long_paper_plan",
             response_model=LongPaperPlan,
             max_input_bytes=220_000,
+            project_id=project_id,
+            project_path_value=project_path_value,
         )
         long_plan = LongPaperPlan.model_validate(plan)
         state.update({"plan": long_plan.model_dump(), "provider_calls": calls})
@@ -1847,6 +1919,8 @@ plain prose and Unicode or inline LaTeX mathematics; do not emit TeX commands or
             schema_name="sigma_long_paper_section",
             response_model=LongSectionDraft,
             max_input_bytes=220_000,
+            project_id=project_id,
+            project_path_value=project_path_value,
         )
         section_draft = LongSectionDraft.model_validate(body)
         state["provider_calls"] = calls
@@ -1952,7 +2026,7 @@ async def generate(
             await progress("snapshot", 1, 1)
         work: dict[str, Any] = {}
         if len(_json(package)) <= MAX_ONE_SHOT_CONTEXT_BYTES and not force_long_form:
-            draft, model = await _provider(package, initial_auth, config)
+            draft, model = await _provider(package, initial_auth, config, view.project.id, path)
             provider_calls = 1
             long_form = False
             evidence_batch_count = 0
@@ -1987,7 +2061,14 @@ async def generate(
             else:
                 work = checkpoint
             draft, provider_calls, evidence_batch_count = await _generate_long_draft(
-                package, initial_auth, config, work, lambda state: _save_work(path, state), progress
+                package,
+                initial_auth,
+                config,
+                work,
+                lambda state: _save_work(path, state),
+                progress,
+                view.project.id,
+                path,
             )
             model = config["model"]
             long_form = True
