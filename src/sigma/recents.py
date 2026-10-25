@@ -252,6 +252,7 @@ class RecentProject:
     investigation_type: str | None
     strategy_count: int | None
     difficulty: str | None
+    research_running: bool
     accessed_at: str | None
     included_example: bool
     available: bool
@@ -279,6 +280,8 @@ def recent_projects() -> dict:
                 except ValueError:
                     pass
             entries.append(copied)
+    from sigma.research_sessions import has_active_session
+
     recent = []
     category_counts: dict[str | None, int] = {}
     for entry in entries:
@@ -298,6 +301,7 @@ def recent_projects() -> dict:
                         investigation_type=view.project.investigation_type,
                         strategy_count=len(view.project.active_order),
                         difficulty=view.project.difficulty,
+                        research_running=has_active_session(view.path),
                         available=True,
                     )
                 )
@@ -314,6 +318,7 @@ def recent_projects() -> dict:
                         investigation_type=None,
                         strategy_count=None,
                         difficulty=None,
+                        research_running=False,
                         available=False,
                         error="Unavailable or changed identity. Use Open Project to locate it, or forget this entry.",
                     )

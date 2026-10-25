@@ -11,6 +11,7 @@ SOURCE = Path("samples/nonconsecutive-subset-sums/project.json")
 original = SOURCE.read_bytes()
 UI_ORIGIN = os.environ.get("SIGMA_RECENTS_UI_ORIGIN", "http://127.0.0.1:5173").rstrip("/")
 API_ORIGIN = os.environ.get("SIGMA_RECENTS_API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
+running_project_ids: set[str] = set()
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
@@ -25,7 +26,14 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
-        route.fulfill(response=route.fetch(url=route.request.url.replace(UI_ORIGIN, API_ORIGIN)))
+        response = route.fetch(url=route.request.url.replace(UI_ORIGIN, API_ORIGIN))
+        if route.request.url.split("?", 1)[0] == f"{UI_ORIGIN}/api/projects/recent":
+            data = response.json()
+            for entry in data["projects"]:
+                entry["research_running"] = entry["id"] in running_project_ids
+            route.fulfill(response=response, body=json.dumps(data))
+            return
+        route.fulfill(response=response)
 
     page.route("**/api/**", forward)
     page.goto("http://127.0.0.1:5173/")
@@ -109,10 +117,12 @@ with sync_playwright() as playwright:
         "e=>({overflow:getComputedStyle(e).overflowY,scrollHeight:e.scrollHeight,clientHeight:e.clientHeight})"
     )
     assert scroll_metrics["overflow"] == "auto"
-    assert scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"], scroll_metrics
-    scroller.evaluate("e=>e.scrollTop=e.scrollHeight")
-    assert scroller.evaluate("e=>e.scrollTop") > 0
-    scroller.evaluate("e=>e.scrollTop=0")
+    # The complete catalog may fit exactly at this viewport with Linux fonts.
+    # Exercise scrolling only when there is actual overflow.
+    if scroll_metrics["scrollHeight"] > scroll_metrics["clientHeight"]:
+        scroller.evaluate("e=>e.scrollTop=e.scrollHeight")
+        assert scroller.evaluate("e=>e.scrollTop") > 0
+        scroller.evaluate("e=>e.scrollTop=0")
     assert (
         samples_panel.locator(".sample-open strong").all_text_contents()[-1]
         == "Did Jesus Use Cannabis?"
@@ -168,7 +178,7 @@ with sync_playwright() as playwright:
         "button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True
     )
     expect(first_copy).to_be_visible()
-    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
+    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(recent_meta).to_contain_text("strategies · ")
     expect(recent_meta).to_contain_text("Hard difficulty")
     assert "Mathematics" not in recent_meta.inner_text()
@@ -179,6 +189,19 @@ with sync_playwright() as playwright:
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
     assert sample_meta_style == recent_meta_style
+    idle_metadata = recent_meta.inner_text()
+    assert idle_metadata.count(" · ") == 1 and "Running" not in idle_metadata
+    running_project_ids.add(json.loads(Path(path, "project.json").read_text())["id"])
+    expect(recent_meta).to_contain_text(" · Running · ", timeout=10000)
+    running_label = recent_meta.locator(".recent-running")
+    assert running_label.evaluate("e => getComputedStyle(e).color") == "rgb(143, 189, 154)"
+    for width, height in ((390, 844), (320, 700)):
+        page.set_viewport_size({"width": width, "height": height})
+        expect(running_label).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.set_viewport_size({"width": 1280, "height": 720})
+    running_project_ids.clear()
+    expect(recent_meta).to_have_text(idle_metadata, timeout=10000)
     recent_groups = recent_panel.locator(".recent-type-group")
     recent_labels = recent_groups.locator("summary > span").all_text_contents()
     assert recent_labels == sorted(recent_labels, key=str.casefold), recent_labels
@@ -229,7 +252,7 @@ with sync_playwright() as playwright:
     normal_recent_type = first_copy.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )
-    normal_recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
+    normal_recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row > small > span")
     normal_recent_meta_style = normal_recent_meta.evaluate(
         "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontFamily]"
     )

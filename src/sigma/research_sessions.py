@@ -2815,6 +2815,41 @@ def list_sessions(path: str) -> list[dict[str, Any]]:
     return [_public(_recover(item)) for item in _all(path)]
 
 
+def has_active_session(path: str) -> bool:
+    """Read-only Home status: never restart a worker or rewrite research history.
+
+    A persisted running state without an active worker is stale after a crash.
+    An advisory worker lock identifies live local jobs. Cloud queued jobs are
+    durable and remain eligible for dispatch after reconnect.
+    """
+    records, _unavailable = read_session_snapshot(path)
+    directory = Path(project_path(path)) / "research-sessions"
+    for record in records:
+        status = record.get("status")
+        if status not in {"queued", "running"}:
+            continue
+        task = _tasks.get(record["id"])
+        if task is not None and not task.done():
+            return True
+        if status == "queued" and cloud_workspaces.enabled():
+            return True
+        lock_path = directory / f"{record['id']}.worker.lock"
+        try:
+            fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            continue
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+    return False
+
+
 async def ensure_queued_workers(path: str) -> None:
     """Restart only durable queued jobs when their owner reconnects."""
     if not cloud_workspaces.enabled():
