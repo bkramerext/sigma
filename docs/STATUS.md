@@ -63,6 +63,17 @@ an existing UI lifecycle cleanup assertion); focused Chrome check
 typecheck, and `git diff --check` passed. No provider calls or cloud changes.
 >>>>>>> 9380ca4 (Fix math rendering in saved research outcomes)
 
+Follow-up: the Conclusion Markdown toggle had been missed by the earlier
+Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
+That left it inheriting the generic workspace button padding/border, while its
+SVG had no size rule and rendered at 0×0: Chrome showed a 42×50 empty outlined
+box. The Conclusion action now uses the same 28×28 borderless control and 24×20
+glyph as the Outcome heading. The focused Chrome regression asserts those
+dimensions and transparent hover surface while continuing to verify rendered
+Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
+full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
+calls or cloud changes.
+
 ## Project header About pill placement (2026-10-25)
 
 The project header uses the labeled About pill in the left column beside Google
