@@ -3148,11 +3148,22 @@ def _saved_followup_questions(
     artifact blocks fallback to an older proposal.
     """
     selected = set(strategy_ids)
-    supplied = {
-        (item.get("strategy_id"), item.get("id")): item
-        for item in supplied_findings
-        if isinstance(item, dict)
-    }
+    # An artifact ID alone is not a sufficient provenance key. A malformed or
+    # repeated historical ID must not allow another session's summary to
+    # authorize a continuation, even when the strategy happens to match.
+    supplied: dict[tuple[str, str, str], dict[str, Any]] = {}
+    ambiguous: set[tuple[str, str, str]] = set()
+    for item in supplied_findings:
+        if not isinstance(item, dict):
+            continue
+        key_parts = (item.get("strategy_id"), item.get("session_id"), item.get("id"))
+        if not all(isinstance(part, str) and part for part in key_parts):
+            continue
+        key = (key_parts[0], key_parts[1], key_parts[2])
+        if key in supplied:
+            ambiguous.add(key)
+        else:
+            supplied[key] = item
     sources: dict[str, dict[str, str]] = {}
     seen: set[str] = set()
     ordered = sorted(
@@ -3164,7 +3175,9 @@ def _saved_followup_questions(
         reverse=True,
     )
     for session in ordered:
-        if session.get("status") in {"queued", "running"}:
+        # A paused, interrupted, manually stopped or failed investigation is
+        # not automatically an endorsement of its latest proposed question.
+        if session.get("status") not in {"ended", "completed"}:
             continue
         artifacts = session.get("artifacts")
         if not isinstance(artifacts, list):
@@ -3178,20 +3191,15 @@ def _saved_followup_questions(
             seen.add(strategy_id)
             artifact_id = artifact.get("id")
             # Do not silently use history omitted from the frozen role context.
-            saved_extract = supplied.get((strategy_id, artifact_id))
-            if saved_extract is None:
+            key = (strategy_id, session.get("id"), artifact_id)
+            saved_extract = supplied.get(key)
+            if saved_extract is None or key in ambiguous:
                 continue
-            # Carry a question only if its material scope was not shortened.
-            # Truncated reasoning steps alone do not invalidate a next test.
+            # Without the complete material assumptions and evidence scope,
+            # carrying a fluent next question would silently promote a summary.
             truncated = saved_extract.get("extract_truncated_fields", [])
             if not isinstance(truncated, list) or any(
-                field in truncated
-                for field in (
-                    "assumptions",
-                    "next_question",
-                    "skeptic_output.next_question",
-                    "evidence_status",
-                )
+                field in truncated for field in ("assumptions", "evidence_status")
             ):
                 continue
             if artifact.get("retracted_by_artifact_ids"):
@@ -3230,6 +3238,26 @@ def _saved_followup_questions(
                 question = skeptic.get("next_question")
                 field = "skeptic_output.next_question"
             if not isinstance(question, str) or not question.strip():
+                continue
+            # Confirm that the exact proposal *actually reached* the frozen
+            # source presented to this new session. A matching artifact ID is
+            # insufficient when the field was truncated, absent, or disagrees.
+            frozen = (
+                saved_extract.get("next_question")
+                if field == "artifact.next_question"
+                else (saved_extract.get("skeptic_output") or {}).get("next_question")
+                if isinstance(saved_extract.get("skeptic_output"), dict)
+                else None
+            )
+            if (
+                (field == "artifact.next_question" and "next_question" in truncated)
+                or (
+                    field == "skeptic_output.next_question"
+                    and "skeptic_output.next_question" in truncated
+                )
+                or not isinstance(frozen, str)
+                or frozen.strip() != question.strip()
+            ):
                 continue
             sources[strategy_id] = {
                 "question": question.strip(),
