@@ -11,7 +11,11 @@ import subprocess
 import tempfile
 from typing import Any, cast
 
-from sigma.research_epistemics import argument_availability, execution_provenance, verification_label
+from sigma.research_epistemics import (
+    argument_availability,
+    execution_provenance,
+    verification_label,
+)
 
 
 def _value(value: Any) -> str:
@@ -115,9 +119,11 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             "Recorded computation provenance",
             "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
             provenance["note"],
-            f"Persisted executions: {len(provenance['records'])} identified; "
-            f"{provenance['unidentified_count']} without an ID; "
-            f"{provenance['completed_count']} with unambiguous completed status.",
+            (
+                f"Persisted executions: {len(provenance['records'])} identified; "
+                f"{provenance['unidentified_count']} without an ID; "
+                f"{provenance['completed_count']} with unambiguous completed status."
+            ),
         ]
         for execution in provenance["records"]:
             refs = "; ".join(
@@ -132,8 +138,10 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             )
         lines += [
             "",
-            "Authored conclusion below is agent-reported; a recorded execution does not "
-            "independently validate its interpretation.",
+            (
+                "Authored conclusion below is agent-reported; a recorded execution does not "
+                "independently validate its interpretation."
+            ),
             "",
         ]
         if outcome.get("summary"):
