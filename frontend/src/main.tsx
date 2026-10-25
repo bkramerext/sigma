@@ -1812,7 +1812,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <GoogleIdentityPill compact/>
       <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
-    <AboutAction/>
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>?</button>
     </div>
   </header>;
 }
@@ -2402,6 +2402,7 @@ function Home({ initialPath, onOpen }: {
   const cloud = useCloudIdentity();
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
   const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
