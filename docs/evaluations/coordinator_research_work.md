@@ -22,9 +22,27 @@
 
 **Would I use it?** For a bounded investigation, I prefer a sourced, specific next action to a generic reset, particularly when a round budget was exhausted. I would not treat the model's question as a valid research direction merely because SIGMA carried it. The agent must still examine the source and unresolved objections, and a researcher-approved continuation must override the automatic suggestion.
 
+## Increment 9: provenance before authored conclusions
+
+**Observed gap:** A saved Conclusion and exported report put fluent agent-authored claims before the saved execution ledger. A graph-withheld control from Increment 7 demonstrated the hazard: an authored Conclusion could imply computational support even when no code executed. This is a **presentation/provenance gap**, not evidence that a model's text can be reliably classified by keywords.
+
+**Implementation:** A read-only `execution_provenance(record)` inventory derives execution IDs, runtimes, statuses, owning artifact/step IDs, source presence and output presence from saved Investigator artifacts, provider steps and pending branch executions. It deduplicates repeated references to one execution and refuses to count conflicting saved statuses as completed. Missing execution IDs remain explicit. It neither interprets the program output nor asserts that a successful run verifies an authored claim. `_outcome` exposes this inventory without rewriting historical sessions. The existing Simple and Advanced Outcome UI now displays the recorded-computation prelude *before* the authored Conclusion. TXT, HTML and TeX project reports render the same provenance inventory before the narrative, with a clear zero-record statement when no execution was persisted. Authored conclusions are preserved verbatim; noncomputational reasoning remains available, not automatically downgraded.
+
+**Adversarial controls:** `tests/project_reports.py` checks a falsely confident model-authored measurement claim with zero persisted executions, ordering across TXT/HTML/TeX, one successful Python execution referenced twice (deduplicated), a timed-out SageMath execution, inconsistent statuses for one ID, and an unidentified execution. `tests/research_sessions.py` checks derived Outcome provenance and source-record immutability. These are synthetic records and scripted controls, **not** autonomous model research. No stock sample was modified.
+
+**Commits:** `c6360aa` conservative inventory; `aa0f04b` Outcome projection; `6f5be40` report ordering; `8129ce0` UI ordering; `9b2ad5b` minimal copper/dark styling; `1e209d0` report regression controls; `cb9a112` Outcome test; `032361f` complete synthetic fixture; `e01dc59` tolerate absent legacy collections. Final CI status must be checked on the **latest head**, including this audit update.
+
+**Assessment at checkpoint:**
+- **MET (implementation inspected):** An explicit persisted-execution ledger now precedes authored Conclusion in the UI and all report formats; provenance derives from saved records, not from model prose; duplicate IDs are not double-counted.
+- **UNVERIFIED (CI pending):** Full test suite and frontend build on final exact head, until GitHub Actions finishes. No local or paid provider run was performed.
+- **UNVERIFIED (semantic claim verification):** The inventory does not prove that a specific conclusion is justified by a recorded computation. It is intentionally not a natural-language entailment checker. Human readers must inspect source/output and claim scope.
+- **UNVERIFIED (research benefit):** No blinded unscripted, matched-budget baseline or usability evaluation.
+
+**Time and cost:** Began approximately 2026-10-25 03:44 Pacific; source/test implementation checkpoint at approximately 03:48 Pacific (~4 minutes), excluding GitHub runner time and subsequent CI correction/review. No Codex, live model-provider call, or cloud resource was used. The incremental complexity is one small shared read projection, one read-order prelude, and report rendering; no new research agent or workflow.
+
 ## Remaining work (not yet complete)
 
-- **Increment 9 — UNMET:** A provenance-first Outcome/report reading order that does not silently lend unsupported model-authored measurement claims the authority of recorded computations. Avoid keyword filters, rewriting authored text, or treating noncomputational reasoning as failure.
+- **Increment 9 — IMPLEMENTED, CI PENDING:** Provenance-first Outcome/report with explicit persisted execution inventory. Research usefulness and semantic entailment remain UNVERIFIED.
 - **Increment 10 — UNMET:** Domain-general assumption and evidence-readiness boundaries, selected only after auditing actual deficiencies and complexity.
 - **Increment 11 — UNMET:** Cross-domain offline continuation controls with different epistemic standards, including science, history, and scenario work; no scripted fixture should be described as autonomous judgment.
 - **Increment 12 — UNMET:** Final cumulative CI/reproducibility and quality review, matched-budget blind gate *design* without unauthorized paid execution, clean PR and integration recommendation.
