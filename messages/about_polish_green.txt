@@ -1,8 +1,8 @@
 GREEN: About and Home polish — R4R
 
 Branch: green/about-polish
-Base: main at 617570b when fetched
-PR: pending
+Base: main at da0c442 (updated after opening the PR)
+PR: https://github.com/bkramerext/sigma/pull/87
 Dependencies/conflicts: none found
 
 ## Result
