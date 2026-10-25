@@ -1,8 +1,8 @@
 # T89: Stock sample catalog audit
 
-**Audit date:** 2026-10-25  
-**Base:** `main` at `7a2f445`  
-**Owner:** Gray  
+**Audit date:** 2026-10-25
+**Base:** `main` at `7a2f445`
+**Owner:** Gray
 **Scope:** Read-only audit of the 17 canonical `samples/*/project.json` entries, one safe metadata correction, and a proposal for owner review. The sample source records and any saved research history remain intact.
 
 ## Evidence and limits
@@ -70,4 +70,3 @@ Added `difficulty: "easy"` to `counting-constrained-binary-strings`. Its problem
 - `./sigma test` — **FAIL / suite stopped** at `tests/tooling.py:177`, where the existing mock expects `stop_servers` to be called but sees zero calls. I reran `tests/tooling.py` on unchanged `origin/main` `7a2f445` in a detached worktree and reproduced the same assertion. The T89 branch does not touch `src/sigma/ui.py`, `src/sigma/tooling.py`, or `tests/tooling.py`.
 - After that baseline failure point, I ran every remaining command in `sigma test` sequentially: local config, cloud/demo/auth/workspace/research/sponsored API, deployment-package, host/instance ownership, UI registry/orphans, Ruff check/format, Pyright, frontend typecheck, and production build — **all PASS**. This is broad downstream evidence but does not change the full `./sigma test` result to pass.
 - Real Chrome study: PR #74 reports all 17 samples opened as isolated copies, saved/reloaded, exported, and inspected at desktop and mobile-emulated widths. This T89 audit did not repeat that browser study because sample-opening code and UI were unchanged; the corrected field was verified through deterministic catalog/API/copy checks.
-

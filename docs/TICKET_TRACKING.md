@@ -47,7 +47,7 @@
 | T22 | Cloud deployment | Gates A/C merged; Gate B PR #49 refreshed against main `803e655` and R4R; deployment prep PR #52 open; T22.5 remains separate and unimplemented | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
 | T100 | Local validation of production-compatible persistent storage and real-Chrome restart/restore acceptance | Implementing · [issue #100](https://github.com/bkramerext/sigma/issues/100) | Red |
-| T89 | Stock sample catalog audit, safe metadata fix, and owner-decision proposal | Implementing · [issue #89](https://github.com/bkramerext/sigma/issues/89) · [audit](evaluations/t89-stock-sample-catalog.md) | Gray |
+| T89 | Stock sample catalog audit, safe metadata fix, and owner-decision proposal | R4R · [PR #115](https://github.com/bkramerext/sigma/pull/115) · [issue #89](https://github.com/bkramerext/sigma/issues/89) · [audit](evaluations/t89-stock-sample-catalog.md) | Gray |
 | T91.2 | Packaged real-PDF and disaster-recovery acceptance | R4R · [PR #113](https://github.com/bkramerext/sigma/pull/113) · [ticket](../tickets/t91.2.md) · [evidence](evaluations/t91.2/README.md) | Gray |
 | T99.1 | Pre-cloud sponsored inference API and spending acceptance | Implemented; R4R · [PR #110](https://github.com/bkramerext/sigma/pull/110) · [ticket](../tickets/t99.1.md) | Blue |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
