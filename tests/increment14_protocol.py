@@ -50,4 +50,26 @@ assert len(set.union(*(compat[k] for k in ("T1","T2","T3")))) == 2
 assert sum([60,50]) == 110
 assert max(60,50) < 110
 
+packet_spec = importlib.util.spec_from_file_location("packet14", ROOT / "scripts/increment14_agent_packet.py")
+assert packet_spec and packet_spec.loader
+packet_module = importlib.util.module_from_spec(packet_spec)
+packet_spec.loader.exec_module(packet_module)
+for task in data["tasks"]:
+    for variant in ("evidence_present", "evidence_withheld"):
+        packet = packet_module.agent_packet(task["id"], variant)
+        assert set(packet) == {"instruction", "question", "evidence"}
+        assert "scoring_dimensions" not in json.dumps(packet)
+        assert module.sha256(module.canonical_bytes(packet)) in {p["packet_sha256"] for p in manifest1["pairs"]}
+try:
+    packet_module.agent_packet("INVALID", "evidence_present")
+except ValueError:
+    pass
+else:
+    raise AssertionError("Invalid task accepted")
+try:
+    packet_module.agent_packet("M1", "../evaluator_only.md")
+except ValueError:
+    pass
+else:
+    raise AssertionError("Invalid variant accepted")
 print("Increment 14 adversarial offline checks passed")
