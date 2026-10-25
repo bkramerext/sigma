@@ -1,5 +1,46 @@
 # SIGMA status
 
+## T132 Red hosted research and Python/Sage execution audit (2026-10-25)
+
+Started from current `main` at `803a62d` on `red/t132-hosted-research-execution`.
+Audited the hosted sponsored API integration and existing deterministic
+coverage. Existing suites already join authenticated HTTP proposal, agentic,
+conversion, paper, and research-session generation with owner/global usage
+accounting, unknown-outcome no-replay behavior, cross-workspace controls,
+execution provenance/artifacts, and recovery; Python/Sage tests cover runtime
+limits, errors, timeouts, and persistence. Corrected a stale Cloud Deployment
+statement that still described these sponsored routes as disabled despite the
+current ledger-backed implementation and regression coverage. Added a pure
+rootless-mode policy guard and deterministic regression coverage: the
+production path rejects non-rootless daemons unless the explicit development
+override is supplied.
+
+Added [T132 hosted research acceptance](T132_HOSTED_RESEARCH_ACCEPTANCE.md)
+with repeatable offline commands, a no-override target-host rootless runtime
+proof, authorized-only hosted workflow steps, interruption/no-retry handling,
+and a sanitized evidence record. Linked it from the operations runbook. No
+production service, provider, identity, or cloud resource was contacted or
+modified. This is preparation, not hosted acceptance.
+
+The local Docker Desktop ARM64 development smoke passed using
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check
+--allow-nonrootless-dev`: Python and Sage both ran as UID 65532 and reported
+network, host sentinel, host state, and daemon socket blocked; artifact and
+execution persistence passed; Tectonic PDF compilation and paper snapshot/PDF
+hash persistence passed. It explicitly reported `daemon_rootless: false`, so
+it does not validate the GCE rootless boundary. Docker Compose v2 is absent on
+this workstation; packaged Compose/browser integration did not run. The strict
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check` command exited
+1 with the expected non-rootless refusal. `tests/deployment_package.py` passed,
+and the final `./sigma test` passed all scenarios, Ruff check/format, Pyright
+(0 diagnostics), frontend typecheck and production build. Actual rootless GCE,
+hosted OAuth/browser, provider-backed generation, and restart acceptance remain
+dependent on Brian's host verification and separate owner authorization for
+any live provider usage. Implementation commit `4e8111e22a27f4bb5a9319578ebdd30bc5b5941f`
+was submitted in [PR #157](https://github.com/bkramerext/sigma/pull/157); no
+merge was performed. Elapsed preparation time through PR creation was about
+15 minutes.
+
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
 Started from current `main` at `455d752` in an isolated ticket worktree. Audited
@@ -28,6 +69,26 @@ identities. T130 routing/TLS and T129 deployment remain outside this change.
 Preparation elapsed approximately 20 minutes; exact handoff SHA and PR are in
 [messages/t131_gray_hosted_oauth_preparation.txt](../messages/t131_gray_hosted_oauth_preparation.txt) and
 [PR #156](https://github.com/bkramerext/sigma/pull/156).
+
+### T131 browser harness repair follow-up (2026-10-25)
+
+The previously unverified `browser_checks/t23_1_google_signin.py` check now
+starts its own loopback API and Vite servers with temporary storage. Its
+Google status/login/logout redirects are deterministic browser fixtures; the
+test-only identity adapter handles protected API requests. Real Chrome passed
+fixture sign-in, reload persistence, logout, anonymous and revoked-identity
+401s, rejected-access UI, account switching, per-account project isolation,
+and desktop/mobile project-header checks. No Google endpoint, production OAuth
+configuration, credential, or paid provider was used. This resolves the local
+harness setup gap only; deployed cookie behavior and hosted Google OAuth remain
+unverified. See the self-contained command and fixture boundary in
+[`browser_checks/README.md`](../browser_checks/README.md). `./sigma test` also
+passed all scenarios, Ruff, format, Pyright, frontend typecheck, and production
+build. No SIGMA production auth code changed. Implementation commit
+`424ca3aa2cac5ba01a35c9dc11e58c1e251c83ae` is on
+[`red/t131-google-oauth-harness`](https://github.com/bkramerext/sigma/tree/red/t131-google-oauth-harness)
+and submitted R4R, unmerged, as [PR #158](https://github.com/bkramerext/sigma/pull/158).
+Elapsed implementation and validation time was approximately 20 minutes.
 
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 

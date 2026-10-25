@@ -21,6 +21,16 @@ from sigma import papers, python_sandbox
 from sigma.projects import initialize_project
 
 
+def _require_rootless(security_options: list[str], allow_nonrootless_dev: bool) -> bool:
+    rootless = any("rootless" in item.casefold() for item in security_options)
+    if not rootless and not allow_nonrootless_dev:
+        raise SystemExit(
+            "FAIL: selected Docker daemon does not report rootless mode; use the dedicated "
+            "sigma-sandbox socket (local desktop validation requires --allow-nonrootless-dev)."
+        )
+    return rootless
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -38,12 +48,7 @@ def main() -> None:
         env=python_sandbox._runtime_environment(),
     )
     security_options = json.loads(info.stdout)
-    rootless = any("rootless" in item.casefold() for item in security_options)
-    if not rootless and not args.allow_nonrootless_dev:
-        raise SystemExit(
-            "FAIL: selected Docker daemon does not report rootless mode; use the dedicated "
-            "sigma-sandbox socket (local desktop validation requires --allow-nonrootless-dev)."
-        )
+    rootless = _require_rootless(security_options, args.allow_nonrootless_dev)
 
     with tempfile.TemporaryDirectory(prefix="sigma-cloud-runtime-") as temporary:
         root = Path(temporary)
