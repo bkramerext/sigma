@@ -2,7 +2,7 @@
 
 Branch: t99-cloud-inference-parity
 Base: current main, a7fc937eaece2ae53c976cb2e09bbb2594a47c85
-Commit: pending final PR updates
+Pull request: https://github.com/bkramerext/sigma/pull/107
 
 ## Delivered
 
@@ -12,7 +12,7 @@ Deterministic API tests use mocked provider responses and cover all operations, 
 
 ## Verification
 
-`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed after rebase on current main, including scenarios, Ruff, formatting, Pyright, frontend typecheck, and production build. `git diff --check` passed. The mock API suite verifies the sponsored bearer is sent to the provider.
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed after rebase on the T100 main commit `ef57a87`, including scenarios, Ruff, formatting, Pyright, frontend typecheck, and production build. `git diff --check` passed. The mock API suite verifies the sponsored bearer is sent to the provider.
 
 ## Remaining follow-up
 
