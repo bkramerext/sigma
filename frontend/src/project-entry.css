@@ -26,9 +26,9 @@
 .home-page .entry-dialog-actions button { padding: 12px 16px; font-size: 13px; border: 1px solid #dbb080; }
 .home-page .entry-dialog-actions .entry-cancel { background: transparent; border-color: transparent; color: #c2ced9; box-shadow: none; font-weight: 500; }
 .home-page .entry-dialog-actions .entry-cancel:hover { background: transparent; color: #f0c992; text-decoration: underline; }
-.home-page .about-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.home-page .about-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; }
 .home-page .about-dialog .entry-dialog-header { position: sticky; top: -28px; z-index: 1; background: #07111e; }
-.home-page .about-dialog-content { color: #c4ced8; font: 13px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-dialog-content { color: #c4ced8; font: 13px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; overflow-anchor: none; }
 .home-page .about-dialog-content .about-intro { margin: 0 0 8px; color: #e7c8a1; font-size: 15px; line-height: 1.55; }
 .home-page .about-dialog-content .about-terms { margin: 0 0 24px; color: #aebbc7; font-size: 12px; }
 .home-page .about-dialog-content > h3 { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #795d3d; color: #edc38d; font: 400 20px/1.3 Georgia, serif; }
@@ -50,18 +50,19 @@
 .home-page .about-architecture { margin: 0; }
 .home-page .about-research-flow { display: grid; justify-items: center; width: 100%; }
 .home-page .about-flow-project, .home-page .about-flow-evidence { display: flex; justify-content: center; width: 100%; }
-.home-page .about-info-region { display: grid; justify-items: stretch; min-width: 0; width: 100%; }
+.home-page .about-info-region { position: relative; display: grid; justify-items: stretch; min-width: 0; width: 100%; }
 .home-page .about-flow-project .about-info-region { max-width: 390px; }
 .home-page .about-flow-evidence .about-info-region { max-width: 460px; }
 .home-page .about-diagram-node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; min-height: 62px; padding: 11px 38px 11px 14px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; text-align: center; background: linear-gradient(145deg, #302117 0%, #151c22 52%, #0a121b 100%); box-shadow: inset 0 1px 0 #f6c98d38, inset 0 -1px 0 #0008, 0 7px 18px #0005; text-shadow: 0 1px 8px #000a; transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease, transform 140ms ease; }
 .home-page .about-diagram-node-title { color: #f0c999; font: 600 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-diagram-node-subtitle { color: #b9c2cc; font: 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
-.home-page .about-info-region:hover > .about-diagram-node, .home-page .about-strategy-card:hover .about-strategy-expand { border-color: #e0ad74; box-shadow: inset 0 1px 0 #ffe0ab70, 0 0 0 1px #c78b5740, 0 8px 20px #0008; filter: brightness(1.08); }
+.home-page .about-info-region:hover > .about-diagram-node, .home-page .about-strategy-card:hover .about-strategy-node, .home-page .about-strategy-card:focus-within .about-strategy-node { border-color: #e0ad74; box-shadow: inset 0 1px 0 #ffe0ab70, 0 0 0 1px #c78b5740, 0 8px 20px #0008; filter: brightness(1.08); }
 .home-page .about-diagram-node--blue { border-color: #4c83a8; color: #d8ecfb; background: radial-gradient(ellipse at 50% 0%, #75b7ef22, transparent 75%), linear-gradient(145deg, #19384f, #0d1b29 55%, #09131e); box-shadow: inset 0 1px 0 #d5edff45, inset 0 -1px 0 #0009, 0 7px 20px #0006, 0 0 18px #397aaa14; }
 .home-page .about-diagram-node--blue .about-diagram-node-title { color: #acd9fa; }
 .home-page .about-diagram-help { position: absolute; top: 7px; right: 8px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid #c68d5d99; border-radius: 50%; color: #e6bb8b; background: #101820; font: 600 12px/1 Georgia, serif; cursor: help; }
 .home-page .about-diagram-node--blue .about-diagram-help { border-color: #70add499; color: #a8d9fa; }
 .home-page .about-diagram-help:hover, .home-page .about-diagram-help:focus-visible { border-color: #ffe0ab; color: #fff2e9; outline: 2px solid #edbc77; outline-offset: 2px; }
+.home-page .about-info-region .about-diagram-help:hover:not(:disabled), .home-page .about-info-region .about-diagram-help:focus-visible { background: #101820; }
 .home-page .about-diagram-node--blue .about-diagram-help:hover, .home-page .about-diagram-node--blue .about-diagram-help:focus-visible { border-color: #acd9fa; color: #fff; outline-color: #75b7ef; }
 .home-page .about-flow-connector, .home-page .about-inner-connector { display: grid; justify-items: center; gap: 5px; padding: 9px 0; color: #d4b18d; text-align: center; font: 500 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .025em; }
 .home-page .about-flow-connector i, .home-page .about-inner-connector i { position: relative; display: block; width: 1px; height: 17px; background: linear-gradient(180deg, #e1b77f, #926146 72%, #57402e); box-shadow: 0 0 6px #d79d604a; }
@@ -71,26 +72,30 @@
 .home-page .about-strategy-group-heading .about-diagram-help { position: static; flex: none; width: 18px; height: 18px; }
 .home-page .about-strategy-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .home-page .about-strategy-card { position: relative; min-width: 0; }
-.home-page .about-strategy-expand { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-height: 62px; padding: 10px 30px 10px 8px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; background: linear-gradient(145deg, #302117, #151c22 58%, #0a121b); cursor: pointer; }
-.home-page .about-strategy-expand:hover, .home-page .about-strategy-expand[aria-expanded="true"] { border-color: #e0ad74; filter: brightness(1.1); }
-.home-page .about-strategy-expand:focus-visible, .home-page .about-session-toggle:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.home-page .about-strategy-node { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-height: 62px; padding: 10px 30px 10px 8px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; background: linear-gradient(145deg, #302117, #151c22 58%, #0a121b); transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease; }
+.home-page .about-session-toggle:focus-visible { outline: 2px solid #75b7ef; outline-offset: 3px; }
 .home-page .about-strategy-card > .about-diagram-help { top: 6px; right: 6px; }
-.home-page .about-strategy-chevron, .home-page .about-session-chevron { position: absolute; right: 10px; bottom: 8px; color: #d4a372; transition: transform 140ms ease; }
-.home-page .about-strategy-expand[aria-expanded="true"] .about-strategy-chevron { transform: rotate(180deg); }
-.home-page .about-strategy-more { margin: 7px 2px 1px; color: #c4ced8; font: 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-session-chevron { position: absolute; right: 10px; top: 50%; color: #d4a372; transform: translateY(-50%); transition: transform 140ms ease; }
 .home-page .about-session-frame { width: 100%; padding: 12px; border: 1px solid #8a6846; border-radius: 9px; background: radial-gradient(ellipse at 50% 5%, #a965481c, transparent 65%), linear-gradient(150deg, #171c20, #0b121a 72%); box-shadow: inset 0 1px 0 #e3bd8c22, 0 12px 28px #0007; }
 .home-page .about-session-heading .about-diagram-node { min-height: 54px; }
-.home-page .about-session-toggle { position: relative; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 9px; width: 100%; min-height: 40px; margin-top: 9px; padding: 8px 34px 8px 12px; border: 1px solid #73583e; border-radius: 6px; color: #f1d5b1; background: linear-gradient(100deg, #211b17, #111a22); cursor: pointer; }
-.home-page .about-session-toggle:hover, .home-page .about-session-toggle[aria-expanded="true"] { border-color: #d4a372; background: linear-gradient(100deg, #342316, #142637); }
-.home-page .about-session-preview { font: 600 12px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
-.home-page .about-session-toggle-label { color: #bdc6cf; font: 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
-.home-page .about-session-chevron { top: 50%; bottom: auto; transform: translateY(-50%); }
-.home-page .about-session-toggle[aria-expanded="true"] .about-session-chevron { transform: translateY(-50%) rotate(180deg); }
-.home-page .about-session-detail { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows 200ms ease, opacity 150ms ease, visibility 0s linear 200ms; }
-.home-page .about-session-detail.is-expanded { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition: grid-template-rows 200ms ease, opacity 150ms ease; }
-.home-page .about-session-detail-inner { min-height: 0; overflow: hidden; padding-top: 0; }
-.home-page .about-session-detail.is-expanded .about-session-detail-inner { padding-top: 12px; }
+.home-page .about-agent-cycle-preview { position: relative; display: grid; grid-template-columns: minmax(84px, 1fr) minmax(96px, 1.25fr) minmax(84px, 1fr); align-items: center; gap: 5px; min-height: 58px; margin-top: 9px; padding: 7px 10px; }
+.home-page .about-agent-role { color: #acd9fa; text-align: center; font: 600 12px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-agent-review-arrow { width: 100%; height: 32px; overflow: visible; filter: drop-shadow(0 0 4px #4b98cf70); }
+.home-page .about-session-toggle { position: absolute; left: 50%; top: 50%; z-index: 1; min-height: 31px; padding: 6px 12px; border: 1px solid #75b7ef; border-radius: 999px; color: #eef8ff; background: linear-gradient(115deg, #194e72, #245c83 55%, #123b59); box-shadow: inset 0 1px 0 #effaff60, 0 4px 12px #0009, 0 0 12px #4b98cf45; font: 600 10px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transform: translate(-50%, -50%); }
+.home-page .about-dialog .about-session-toggle:hover:not(:disabled), .home-page .about-dialog .about-session-toggle[aria-expanded="true"] { border-color: #acd9fa; color: #fff; background: linear-gradient(115deg, #245c83, #3275a4 55%, #194e72); box-shadow: inset 0 1px 0 #effaff80, 0 5px 16px #0009, 0 0 16px #4b98cf55; }
+.home-page .about-session-detail { margin-top: 10px; padding: 12px; border: 1px solid #4c83a8; border-radius: 8px; background: radial-gradient(ellipse at 50% 0%, #3e7ca426, transparent 64%), linear-gradient(145deg, #142b3d, #0c1824 72%); box-shadow: inset 0 1px 0 #d5edff30, 0 6px 18px #0006; }
+.home-page .about-session-detail[hidden] { display: none; }
+.home-page .about-session-detail-inner { min-height: 0; }
 .home-page .about-session-detail h4 { margin: 0 0 9px; color: #dab78e; text-align: center; font: 600 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.home-page .about-multi-agent-intro { max-width: 600px; margin: 0 auto 10px; color: #c8d5df; text-align: center; font: 11px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-agent-role small { display: block; margin-top: 2px; color: #c8d5df; font: 8px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.home-page .about-agent-instantiation { margin: 2px 0; padding: 12px; border: 1px solid #4c83a8; border-radius: 8px; background: radial-gradient(ellipse at 50% 0%, #4b98cf24, transparent 68%), linear-gradient(145deg, #132a3b, #0b1722 76%); box-shadow: inset 0 1px 0 #d5edff30, 0 6px 18px #0006; }
+.home-page .about-agent-instantiation h5 { margin: 0 0 10px; color: #acd9fa; text-align: center; font: 600 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .04em; }
+.home-page .about-agent-instance-flow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(115px, .8fr) minmax(0, 1fr); align-items: center; gap: 10px; }
+.home-page .about-agent-handoff { display: grid; justify-items: center; gap: 2px; color: #d0e7f8; text-align: center; font: 9px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-agent-handoff svg { display: block; width: 100%; height: 34px; filter: drop-shadow(0 0 4px #4b98cf70); }
+.home-page .about-agent-instantiation-note { margin: 9px 0 0; color: #afc7d9; text-align: center; font: 10px/1.45 Inter, ui-sans-serif, system-ui, sans-serif; }
+.home-page .about-tools-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; gap: 9px; width: 100%; max-width: 500px; margin: 12px auto 0; color: #b8d5e8; text-align: right; font: 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 .home-page .about-orchestration, .home-page .about-working-evidence, .home-page .about-coordinator, .home-page .about-skeptic { width: 100%; max-width: 400px; margin: 0 auto; }
 .home-page .about-role-work-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 8px; }
 .home-page .about-optional-tool-link { display: flex; align-items: center; gap: 4px; color: #9fc5df; font: 9px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-align: center; }
@@ -104,8 +109,8 @@
 .home-page .about-history-return { display: flex; align-items: center; gap: 7px; margin: 12px auto 0; color: #bdc9d2; font: 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; text-align: center; }
 .home-page .about-history-return > span { color: #d7a772; font: 22px/1 Georgia, serif; }
 .home-page .about-architecture-caption { margin: 13px 0 0; padding: 11px 13px; border-left: 2px solid #568fb8; color: #d1e1ed; background: linear-gradient(100deg, #183148a8, #0b121a40); font: 12px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
-.home-page .about-diagram-tooltip { width: min(100%, 420px); margin: 7px auto 0; padding: 9px 11px; border: 1px solid #b47a52; border-radius: 6px; color: #f1e3d3; background: linear-gradient(145deg, #2a201a, #101821 72%); box-shadow: inset 0 1px 0 #ffe0ab48, 0 5px 14px #0007; font: 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; animation: about-tip-enter 110ms ease-out both; }
-.home-page .about-diagram-tooltip[data-tone="blue"] { border-color: #75b7ef; color: #e3edf5; background: linear-gradient(145deg, #142b3d, #09131e 72%); box-shadow: inset 0 1px 0 #e4f5ff38, 0 5px 14px #0008; }
+.home-page .about-diagram-tooltip { position: fixed; z-index: 4; width: min(360px, calc(100vw - 62px)); max-height: min(240px, calc(100dvh - 32px)); overflow: auto; margin: 0; padding: 10px 12px; border: 1px solid #b47a52; border-radius: 7px; color: #f1e3d3; background: linear-gradient(145deg, #302117, #101821 72%); box-shadow: inset 0 1px 0 #ffe0ab58, 0 8px 24px #000b, 0 0 15px #b8643c24; font: 11px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; pointer-events: auto; animation: about-tip-enter 100ms ease-out both; }
+.home-page .about-diagram-tooltip[data-tone="blue"] { border-color: #75b7ef; color: #e3edf5; background: linear-gradient(145deg, #19384f, #09131e 72%); box-shadow: inset 0 1px 0 #e4f5ff48, 0 8px 24px #000b, 0 0 16px #4b98cf30; }
 @keyframes about-tip-enter { from { opacity: .6; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 560px) {
   .home-page .about-dialog { width: calc(100vw - 24px); padding: 16px; }
@@ -114,13 +119,20 @@
   .home-page .about-disclosure-content { padding: 0 10px 11px; }
   .home-page .about-strategy-cards { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .home-page .about-session-frame, .home-page .about-strategy-group { padding: 9px; }
+  .home-page .about-session-detail { padding: 9px; }
+  .home-page .about-agent-cycle-preview { grid-template-columns: minmax(64px, 1fr) minmax(90px, 1.5fr) minmax(64px, 1fr); gap: 2px; padding: 5px 0; }
+  .home-page .about-agent-role { font-size: 11px; }
+  .home-page .about-agent-instance-flow { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .home-page .about-agent-handoff { width: min(180px, 75%); margin: 0 auto; }
+  .home-page .about-agent-handoff svg { width: 34px; height: 30px; transform: rotate(90deg); }
+  .home-page .about-tools-row { grid-template-columns: minmax(0, 1fr); gap: 5px; text-align: center; }
   .home-page .about-role-work-row { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .home-page .about-optional-tool-link { justify-content: center; }
   .home-page .about-optional-tool-link b { transform: rotate(90deg); }
   .home-page .about-architecture-caption { font-size: 11px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .home-page .about-disclosure > summary::before, .home-page .about-diagram-node, .home-page .about-session-detail, .home-page .about-session-chevron { transition: none; }
+  .home-page .about-disclosure > summary::before, .home-page .about-diagram-node, .home-page .about-session-chevron { transition: none; }
   .home-page .about-diagram-tooltip { animation: none; }
 }
 .home-page .project-entry-dialog button:disabled { box-shadow: none; cursor: not-allowed; border-color: #56606a; }

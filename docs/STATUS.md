@@ -5592,3 +5592,34 @@ backend scenarios, Ruff, Pyright, frontend typecheck, and production build.
 Plain `./sigma test` stopped at `tests/tooling.py` because the inherited
 bootstrap email changed that fixture's expected launcher cleanup path; with
 the variable unset, the complete suite passed.
+
+## About strategy hover contrast (2026-10-24)
+
+The Home-wide button hover background overrode the research strategy cards and
+made their light labels difficult to read. Strategy hover, focus and expanded
+states now keep the copper/black surface and readable text; diagram help buttons
+also retain a dark surface when hovered.
+
+**Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
+320px, with explicit computed-style checks for strategy hover label and
+background contrast. Touch help also passed at 390px. Screenshot:
+`/tmp/sigma-strategy-hover-fixed.png`.
+
+## About agent creation diagram and Home artwork (2026-10-24)
+
+The session detail now shows SIGMA starting a distinct Investigator agent for
+the selected task, then a separate Skeptic agent to review its work. The
+diagram labels the handoff, records both steps as session evidence, and shows
+how continued research can start a new cycle. The internal Show Me control is
+a standalone pill over the longer review arrow; the outer How SIGMA Works
+section remains a collapsed disclosure. Expanded details use a blue surface to
+set the agent work apart from the copper research structure. The updated Home
+background artwork is in both the source and served asset paths.
+
+**Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
+320px; touch help passed at 390px. Checks cover the separate overlaid Show Me
+button, blue hover contrast, readable tooltip placement, no diagram movement,
+and no narrow dialog overflow. Frontend typecheck passed. Plain `./sigma test`
+still encounters the inherited bootstrap-email tooling fixture mismatch;
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps,
+including Ruff, Pyright, typecheck, and production build.

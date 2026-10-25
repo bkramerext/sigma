@@ -1808,21 +1808,22 @@ function AboutArchitecture() {
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
     session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
     orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
-    investigator: 'The Investigator role develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
+    investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
     tools: 'Where enabled, proposed Python code is run through the execution subsystem; source and outputs become inspectable evidence. SageMath requires an available, validated runtime. A computation is not a formal proof.',
     workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
-    skeptic: "The Skeptic role examines claims and assumptions, looks for counterexamples or gaps, and suggests discriminating next tests. Its review is model-reported, not independent proof certification.",
+    skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
     decision: 'After a review, SIGMA applies the recorded assessment, next question and remaining work within resource limits. A strategy can remain available for later revision or another session.',
     savedEvidence: 'Persisted artifacts preserve findings, reasoning, objections, execution results and open questions. Researchers can revisit prior evidence to guide later sessions or strategy revisions.',
   } as const;
   type DiagramNode = keyof typeof descriptions;
   const [activeInfoNode, setActiveInfoNode] = useState<DiagramNode | null>(null);
-  const [expandedStrategy, setExpandedStrategy] = useState<'strategyA' | 'strategyB' | 'strategyC' | null>(null);
   const [sessionExpanded, setSessionExpanded] = useState(false);
   const sessionToggle = useRef<HTMLButtonElement>(null);
   const sessionPanel = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
   const pointerType = useRef('');
+  const activeAnchor = useRef<HTMLElement | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number; visibility: 'hidden' | 'visible' }>({ left: 0, top: 0, visibility: 'hidden' });
   const tooltipId = (key: DiagramNode) => 'about-diagram-tooltip-' + key;
 
   function cancelHide() {
@@ -1833,15 +1834,37 @@ function AboutArchitecture() {
     cancelHide();
     hideTimer.current = window.setTimeout(() => setActiveInfoNode(null), 130);
   }
-  function revealNode(key: DiagramNode, revealToKeyboardOrTouch = false) {
+  function positionTooltip(key = activeInfoNode, anchor = activeAnchor.current) {
+    if (!key || !anchor) return;
+    const dialog = anchor.closest('dialog');
+    if (!dialog) return;
+    const anchorRect = anchor.getBoundingClientRect();
+    const dialogRect = dialog.getBoundingClientRect();
+    const margin = 12;
+    const tipWidth = Math.min(360, window.innerWidth - 62, dialogRect.width - 24);
+    const lineWidth = Math.max(24, (tipWidth - 26) / 5.5);
+    const lines = Math.ceil(descriptions[key].length / lineWidth);
+    const tipHeight = Math.min(240, lines * 17 + 22);
+    const left = Math.max(dialogRect.left + margin, Math.min(anchorRect.left + anchorRect.width / 2 - tipWidth / 2, dialogRect.right - tipWidth - margin));
+    const preferredTop = anchorRect.bottom + 8;
+    const lowerBound = dialogRect.top + margin;
+    const upperBound = dialogRect.bottom - tipHeight - margin;
+    const aboveTop = anchorRect.top - tipHeight - 8;
+    const top = preferredTop <= upperBound || aboveTop < lowerBound
+      ? Math.max(lowerBound, Math.min(preferredTop, upperBound))
+      : Math.max(lowerBound, aboveTop);
+    setTooltipPosition({ left, top, visibility: 'visible' });
+  }
+  function revealNode(key: DiagramNode, anchor: HTMLElement, revealToKeyboardOrTouch = false) {
     cancelHide();
+    activeAnchor.current = anchor;
+    positionTooltip(key, anchor);
     setActiveInfoNode(key);
-    if (revealToKeyboardOrTouch) {
-      requestAnimationFrame(() => document.getElementById(tooltipId(key))?.scrollIntoView({ block: 'nearest' }));
-    }
+    if (revealToKeyboardOrTouch) requestAnimationFrame(() => positionTooltip(key, anchor));
   }
   useLayoutEffect(() => {
     if (!activeInfoNode) return;
+    positionTooltip(activeInfoNode);
     const pointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Element && target.closest('[data-about-info-node]')) return;
@@ -1854,11 +1877,16 @@ function AboutArchitecture() {
         setActiveInfoNode(null);
       }
     };
+    const repositionTooltip = () => positionTooltip();
     document.addEventListener('pointerdown', pointerDown, true);
     document.addEventListener('keydown', keyDown, true);
+    document.addEventListener('scroll', repositionTooltip, true);
+    window.addEventListener('resize', repositionTooltip);
     return () => {
       document.removeEventListener('pointerdown', pointerDown, true);
       document.removeEventListener('keydown', keyDown, true);
+      document.removeEventListener('scroll', repositionTooltip, true);
+      window.removeEventListener('resize', repositionTooltip);
     };
   }, [activeInfoNode]);
   useEffect(() => () => cancelHide(), []);
@@ -1871,13 +1899,13 @@ function AboutArchitecture() {
       aria-label={"Explain " + label}
       aria-describedby={active ? tooltipId(key) : undefined}
       onPointerDown={event => { pointerType.current = event.pointerType; }}
-      onFocus={() => revealNode(key, true)}
+      onFocus={event => revealNode(key, (event.currentTarget.closest('.about-info-region') as HTMLElement | null) ?? event.currentTarget, true)}
       onBlur={scheduleHide}
-      onClick={() => {
+      onClick={event => {
         const touch = pointerType.current === 'touch' || window.matchMedia('(hover: none)').matches;
         if (touch) {
           // Touch generates focus before click; keep the newly revealed tip open.
-          if (activeInfoNode !== key) revealNode(key, true);
+          if (activeInfoNode !== key) revealNode(key, (event.currentTarget.closest('.about-info-region') as HTMLElement | null) ?? event.currentTarget, true);
         }
         pointerType.current = '';
       }}
@@ -1887,11 +1915,11 @@ function AboutArchitecture() {
     return <div
       className="about-info-region"
       data-about-info-node={key}
-      onPointerEnter={event => { if (event.pointerType === 'mouse') revealNode(key); }}
+      onPointerEnter={event => { if (event.pointerType === 'mouse') revealNode(key, event.currentTarget); }}
       onPointerLeave={event => { if (event.pointerType === 'mouse') scheduleHide(); }}
     >
       {content}
-      {activeInfoNode === key && <div id={tooltipId(key)} className="about-diagram-tooltip" data-tone={tone} role="tooltip" onPointerEnter={cancelHide} onPointerLeave={scheduleHide}>{descriptions[key]}</div>}
+      {activeInfoNode === key && <div id={tooltipId(key)} className="about-diagram-tooltip" data-tone={tone} role="tooltip" style={{ left: tooltipPosition.left, top: tooltipPosition.top, visibility: tooltipPosition.visibility }} onPointerEnter={cancelHide} onPointerLeave={scheduleHide}>{descriptions[key]}</div>}
     </div>;
   }
   function card(key: DiagramNode, title: string, subtitle: string, tone: 'copper' | 'blue' = 'copper') {
@@ -1902,12 +1930,13 @@ function AboutArchitecture() {
     </div>, tone);
   }
   const strategyExamples = [
-    { id: 'strategyA' as const, title: 'Strategy A', subtitle: 'Explore a pattern', more: 'Study a promising structure or relationship, then test where it holds.' },
-    { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another model', more: 'Use a different representation or method to expose what another approach misses.' },
-    { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Challenge assumptions', more: 'Probe boundary cases, alternative hypotheses or potential counterexamples.' },
+    { id: 'strategyA' as const, title: 'Strategy A', subtitle: 'Explore a pattern' },
+    { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another model' },
+    { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Challenge assumptions' },
   ];
   function toggleSession() {
     const next = !sessionExpanded;
+    if (!next && activeInfoNode === 'session') setActiveInfoNode(null);
     if (!next && sessionPanel.current?.contains(document.activeElement)) {
       requestAnimationFrame(() => sessionToggle.current?.focus());
     }
@@ -1919,19 +1948,15 @@ function AboutArchitecture() {
       <div className="about-flow-project">{card('project', 'Research Project', 'The overarching hard question')}</div>
       <div className="about-flow-connector"><span>Branches into distinct research directions</span><i aria-hidden="true"/></div>
       <div className="about-strategy-group">
-        <div className="about-strategy-group-heading"><span>Project Strategies</span>{help('strategies', 'Project Strategies')}</div>
+        {infoRegion('strategies', <div className="about-strategy-group-heading"><span>Project Strategies</span>{help('strategies', 'Project Strategies')}</div>)}
         <div className="about-strategy-cards">
           {strategyExamples.map(strategy => {
-            const expanded = expandedStrategy === strategy.id;
-            const panelId = 'about-' + strategy.id + '-description';
             return infoRegion(strategy.id, <div className="about-strategy-card">
-              <button type="button" className="about-strategy-expand" aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpandedStrategy(expanded ? null : strategy.id)}>
+              <div className="about-strategy-node">
                 <span className="about-diagram-node-title">{strategy.title}</span>
                 <span className="about-diagram-node-subtitle">{strategy.subtitle}</span>
-                <span className="about-strategy-chevron" aria-hidden="true">⌄</span>
-              </button>
+              </div>
               {help(strategy.id, strategy.title)}
-              <p id={panelId} className="about-strategy-more" hidden={!expanded}>{strategy.more}</p>
             </div>);
           })}
         </div>
@@ -1939,32 +1964,37 @@ function AboutArchitecture() {
       <div className="about-flow-connector"><span>Selected strategies are investigated through sessions</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
         <div className="about-session-heading">{card('session', 'Research Session', 'Coordinates bounded investigations')}</div>
-        <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" onClick={toggleSession}>
-          <span className="about-session-preview">Investigator <span aria-hidden="true">↔</span> Skeptic</span>
-          <span className="about-session-toggle-label">{sessionExpanded ? 'Collapse agent coordination' : 'Explore agent coordination'}</span>
-          <span className="about-session-chevron" aria-hidden="true">⌄</span>
-        </button>
-        <div id="about-session-details" ref={sessionPanel} className={'about-session-detail' + (sessionExpanded ? ' is-expanded' : '')} role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded}>
+        <div className="about-agent-cycle-preview">
+          <span className="about-agent-role">Investigator<small>AI agent</small></span>
+          <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span className="about-agent-role">Skeptic<small>AI agent</small></span>
+          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show Me') + ' Investigator and Skeptic details'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show Me'}</button>
+        </div>
+        <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">Bounded role coordination</h4>
-            <div className="about-orchestration">{card('orchestration', 'Session Orchestration', 'Assign, route, evaluate')}</div>
-            <div className="about-inner-connector"><span>Assign task + context</span><i aria-hidden="true"/></div>
+            <h4 id="about-session-detail-heading">A coordinated research and review cycle</h4>
+            <p className="about-multi-agent-intro">SIGMA starts an Investigator agent for the selected task, then starts a separate Skeptic agent to review that work and evidence. Each agent contributes its own step to the session record. A critique can lead SIGMA to start another Investigator and Skeptic cycle.</p>
+            <div className="about-orchestration">{card('orchestration', 'Session Orchestration', 'Creates bounded agent tasks')}</div>
+            <div className="about-inner-connector"><span>Choose a direction and bounded task</span><i aria-hidden="true"/></div>
             <div className="about-selected-strategies">Selected strategies <span>One or more directions may be investigated in a session</span></div>
-            <div className="about-inner-connector"><span>Bounded work proceeds as resources allow</span><i aria-hidden="true"/></div>
-            <div className="about-role-work-row">
-              {card('investigator', 'Investigator', 'Develop reasoning and experiments', 'blue')}
-              <div className="about-optional-tool-link" aria-hidden="true"><span>Propose / execute when available</span><b>›</b></div>
-              {card('tools', 'Research Tools', 'Optional, bounded computations')}
-            </div>
-            <div className="about-inner-connector"><span>Work and outputs become reviewable evidence</span><i aria-hidden="true"/></div>
+            <div className="about-inner-connector"><span>Starts an Investigator agent for the selected work</span><i aria-hidden="true"/></div>
+            <section className="about-agent-instantiation" aria-label="Separate AI agents in a research cycle">
+              <h5>Two separate AI agents, one after the other</h5>
+              <div className="about-agent-instance-flow">
+                {card('investigator', 'Investigator Agent', 'Develops ideas, reasoning and experiments', 'blue')}
+                <div className="about-agent-handoff"><span>Starts a separate Skeptic agent</span><svg viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+                {card('skeptic', 'Skeptic Agent', 'Challenges assumptions and examines evidence', 'blue')}
+              </div>
+              <p className="about-agent-instantiation-note">The Skeptic is a separate agent call with a review role, not a formal proof verifier.</p>
+              <div className="about-tools-row"><span>The Investigator can use available research tools</span>{card('tools', 'Research Tools', 'Optional, bounded computations')}</div>
+            </section>
+            <div className="about-inner-connector"><span>Both agent steps become reviewable session evidence</span><i aria-hidden="true"/></div>
             <div className="about-working-evidence">{card('workingEvidence', 'Working Research Evidence', 'Shared context, traceable sources')}</div>
-            <div className="about-inner-connector"><span>Review evidence</span><i aria-hidden="true"/></div>
-            <div className="about-skeptic-row">{card('skeptic', 'Skeptic', 'Challenge the reasoning', 'blue')}</div>
             <div className="about-inner-connector"><span>Critique + next question</span><i aria-hidden="true"/></div>
             <div className="about-coordinator">{card('decision', 'Coordinator Decision', 'Continue, revise or stop')}</div>
             <div className="about-cycle-return">
               <svg viewBox="0 0 400 44" aria-hidden="true" focusable="false"><defs><linearGradient id="about-feedback-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient><marker id="about-feedback-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#acd9fa" strokeWidth="1.4"/></marker></defs><path d="M375 3 C375 38 25 38 25 3" fill="none" stroke="url(#about-feedback-metal)" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#about-feedback-arrow)"/></svg>
-              <span>If continued, another bounded cycle may return to the Investigator.</span>
+              <span>If continued, SIGMA starts a new Investigator and Skeptic cycle with the updated evidence.</span>
             </div>
             <p className="about-multiple-strategies-note">A session can investigate multiple selected strategies. Each follows bounded investigation and review; relevant evidence may inform another strategy.</p>
           </div>
@@ -2003,9 +2033,9 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
       </details>
-      <details className="about-disclosure">
+      <details className="about-disclosure about-architecture-disclosure">
         <summary>How SIGMA Works: Multi-Agentic Research</summary>
-        <div className="about-disclosure-content"><AboutArchitecture/></div>
+        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
     </div>
     <small className="about-build-commit">Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
@@ -3048,7 +3078,7 @@ function AccessManagementDialog({ bootstrapAdmin, grants, sessions, error, busy,
       const next = event.key === 'Home' ? 'access' : event.key === 'End' ? 'usage' : event.key === 'ArrowRight' ? (activeTab === 'access' ? 'usage' : 'access') : (activeTab === 'usage' ? 'access' : 'usage');
       setActiveTab(next); requestAnimationFrame(() => document.getElementById(next === 'access' ? 'access-management-tab' : 'account-usage-tab')?.focus());
     }}>
-      <button type="button" role="tab" id="access-management-tab" aria-controls="access-management-panel" aria-selected={activeTab === 'access'} tabIndex={activeTab === 'access' ? 0 : -1} onClick={() => setActiveTab('access')}>Access Management</button>
+      <button type="button" role="tab" id="access-management-tab" aria-controls="access-management-panel" aria-selected={activeTab === 'access'} tabIndex={activeTab === 'access' ? 0 : -1} onClick={() => setActiveTab('access')}>Access management</button>
       <button type="button" role="tab" id="account-usage-tab" aria-controls="account-usage-panel" aria-selected={activeTab === 'usage'} tabIndex={activeTab === 'usage' ? 0 : -1} onClick={() => setActiveTab('usage')}>Account usage</button>
     </div>
     <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
