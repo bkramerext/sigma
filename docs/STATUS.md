@@ -3828,9 +3828,9 @@ remembers the complete last successfully created form values in browser-local
 storage; failed attempts do not replace them. Project description and strategy
 approach rows have adjacent copy controls. They copy plain text in either
 display mode, and show a temporary checkmark that remains clickable for another
-copy.
+copy. The artwork credit is split as “Brian Kramer &” / “OpenAI Models.”
 
-Real Chrome checks cover desktop/mobile Home placement, create success and
+Real Chrome checks cover the exact artwork credit lines, desktop/mobile Home placement, create success and
 reopen persistence, copy repetition for both text areas, and Markdown-to-plain
 clipboard output. `browser_checks/project_create_contract.py` and
 `browser_checks/t47_conclusion.py` passed. Screenshots:
