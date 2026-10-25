@@ -3554,6 +3554,70 @@ def _call_timeout_seconds(record: dict[str, Any]) -> float:
     return min(float(CALL_TIMEOUT), max(0.0, remaining))
 
 
+def _usable_addressed_obligation_basis(
+    source: Any, citations: list[dict[str, Any]]
+) -> bool:
+    """Check evidence availability, not the truth of an obligation's conclusion.
+
+    A saved argument can support a reported disposition without being repeated.
+    A completed computation can support a *bounded* observation only when the
+    reviewer explicitly cites its saved result. Neither path verifies a proof.
+    """
+    if not isinstance(source, dict) or source.get("retracted_by_artifact_ids"):
+        return False
+    truncated = source.get("extract_truncated_fields", [])
+    if not isinstance(truncated, list):
+        return False
+    steps = source.get("reasoning_steps")
+    if (
+        isinstance(steps, list)
+        and bool(steps)
+        and "reasoning_steps" not in truncated
+    ):
+        return True
+
+    investigation = source.get("investigator_output")
+    for field in ("python_execution", "sage_execution"):
+        execution = source.get(field)
+        if not isinstance(execution, dict) and isinstance(investigation, dict):
+            execution = investigation.get(field)
+        if not isinstance(execution, dict):
+            continue
+        if (
+            execution.get("status") != "completed"
+            or execution.get("exit_code") != 0
+            or not isinstance(execution.get("id"), str)
+            or not isinstance(execution.get("source_sha256"), str)
+        ):
+            continue
+        for citation in citations:
+            if (
+                citation.get("research_artifact_id") != source.get("id")
+                or citation.get("execution_id") != execution["id"]
+                or citation.get("use") != "result"
+            ):
+                continue
+            if (
+                citation.get("evidence") == "output"
+                and isinstance(execution.get("stdout"), str)
+                and bool(execution["stdout"])
+                and not execution.get("stdout_truncated")
+            ):
+                return True
+            if citation.get("evidence") == "artifact":
+                inspections = execution.get("artifact_inspections", [])
+                if any(
+                    isinstance(item, dict)
+                    and item.get("filename") == citation.get("filename")
+                    and isinstance(item.get("inspection"), dict)
+                    and item["inspection"].get("status") == "available"
+                    and not item["inspection"].get("truncated")
+                    for item in inspections
+                ):
+                    return True
+    return False
+
+
 async def _call(
     record: dict[str, Any],
     role: str,
@@ -3801,16 +3865,15 @@ async def _call(
                 review["status"] == "addressed"
                 and not review["basis_step_ids"]
                 and not any(
-                    isinstance(source := closure_sources.get(artifact_id), dict)
-                    and "reasoning_steps" not in source.get("extract_truncated_fields", [])
-                    and not source.get("retracted_by_artifact_ids")
-                    and isinstance(source.get("reasoning_steps"), list)
-                    and bool(source["reasoning_steps"])
+                    _usable_addressed_obligation_basis(
+                        closure_sources.get(artifact_id),
+                        validated["computational_citations"],
+                    )
                     for artifact_id in review["basis_artifact_ids"]
                 )
             ):
                 raise ProjectError(
-                    "An addressed obligation needs a complete, unretracted supplied reasoning artifact or the current Investigator step"
+                    "An addressed obligation needs a complete unretracted supplied argument, a cited successful bounded computation, or the current Investigator step"
                 )
     else:
         supplied_failures = set(context.get("prior_session_failure_attempt_ids", []))
