@@ -1547,10 +1547,14 @@ function AboutArchitecture() {
     strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
     strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
-    session: 'A research session is a bounded attempt using one or more selected strategies. Its Investigator and Skeptic turns, intermediate work and outcome are saved together.',
-    investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
-    skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
-    savedEvidence: 'Findings, objections, experiments and open questions stay in the research history. Later sessions can draw on selected prior findings without changing the original records.',
+    session: 'A research session is a bounded attempt using one or more selected strategies. SIGMA routes role-specific AI turns, preserves intermediate work, and records the outcome within call and cycle limits.',
+    orchestration: 'The session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible strategy branches, manages budgets, and decides whether another cycle can run.',
+    investigator: 'A role-specific AI turn that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
+    investigatorFollowup: 'A later Investigator turn receives the critique and selected evidence, then may revise, retract, test, or narrow the claim. It is another role-conditioned AI turn, not a guaranteed different model.',
+    skeptic: "A role-specific AI turn that examines claims and assumptions, checks stated support, looks for counterexamples or gaps, and suggests discriminating next tests. Its review is model-reported, not independent proof certification.",
+    workingEvidence: 'Claims, objections, calculations, prior artifacts and source identifiers may inform later work. Evidence is selected into bounded role contexts; this is not unrestricted global chat memory.',
+    researchTools: 'Where enabled, proposed Python code runs through the execution subsystem; source and output become inspectable evidence. SageMath needs an available validated runtime. Computation is not formal proof.',
+    savedEvidence: 'Findings, objections, experiments and open questions stay in the research history. Later sessions can select relevant prior sources without changing their original records.',
   } as const;
   type DiagramNode = keyof typeof descriptions;
   const [activeInfoNode, setActiveInfoNode] = useState<DiagramNode | null>(null);
@@ -1558,6 +1562,7 @@ function AboutArchitecture() {
   const sessionToggle = useRef<HTMLButtonElement>(null);
   const sessionPanel = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
+  const showTimer = useRef<number | null>(null);
   const pointerType = useRef('');
   const activeAnchor = useRef<HTMLElement | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number; visibility: 'hidden' | 'visible' }>({ left: 0, top: 0, visibility: 'hidden' });
@@ -1567,9 +1572,18 @@ function AboutArchitecture() {
     if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
     hideTimer.current = null;
   }
+  function cancelShow() {
+    if (showTimer.current !== null) window.clearTimeout(showTimer.current);
+    showTimer.current = null;
+  }
   function scheduleHide() {
+    cancelShow();
     cancelHide();
     hideTimer.current = window.setTimeout(() => setActiveInfoNode(null), 130);
+  }
+  function scheduleShow(key: DiagramNode, anchor: HTMLElement) {
+    cancelShow();
+    showTimer.current = window.setTimeout(() => revealNode(key, anchor), 500);
   }
   function positionTooltip(key = activeInfoNode, anchor = activeAnchor.current) {
     if (!key || !anchor) return;
@@ -1593,6 +1607,7 @@ function AboutArchitecture() {
     setTooltipPosition({ left, top, visibility: 'visible' });
   }
   function revealNode(key: DiagramNode, anchor: HTMLElement, revealToKeyboardOrTouch = false) {
+    cancelShow();
     cancelHide();
     activeAnchor.current = anchor;
     positionTooltip(key, anchor);
@@ -1626,7 +1641,7 @@ function AboutArchitecture() {
       window.removeEventListener('resize', repositionTooltip);
     };
   }, [activeInfoNode]);
-  useEffect(() => () => cancelHide(), []);
+  useEffect(() => () => { cancelHide(); cancelShow(); }, []);
 
   function help(key: DiagramNode, label: string) {
     const active = activeInfoNode === key;
@@ -1652,7 +1667,7 @@ function AboutArchitecture() {
     return <div
       className="about-info-region"
       data-about-info-node={key}
-      onPointerEnter={event => { if (event.pointerType === 'mouse') revealNode(key, event.currentTarget); }}
+      onPointerEnter={event => { if (event.pointerType === 'mouse') scheduleShow(key, event.currentTarget); }}
       onPointerLeave={event => { if (event.pointerType === 'mouse') scheduleHide(); }}
     >
       {content}
@@ -1705,19 +1720,55 @@ function AboutArchitecture() {
           <span className="about-agent-role">Investigator<small>AI agent</small></span>
           <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span className="about-agent-role">Skeptic<small>AI agent</small></span>
-          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show') + ' Investigator and Skeptic details'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Details'}</button>
         </div>
+        <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={sessionExpanded ? 'Collapse multi-agent research explanation' : 'Explore multi-agent research'} onClick={toggleSession}>{sessionExpanded ? 'Hide multi-agent explanation' : 'Explore multi-agent research'}<span aria-hidden="true">{sessionExpanded ? '⌃' : '⌄'}</span></button>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">The critique loop</h4>
-            <p className="about-multi-agent-intro">The exchange can repeat, with each critique guiding what the Investigator explores next.</p>
-            <div className="about-agent-loop" aria-label="Investigator to Skeptic, then critique informs the next Investigator turn">
-              <div className="about-agent-loop-card">{card('investigator', 'Investigator', 'Develops an approach and tests ideas', 'blue')}</div>
-              <span className="about-turn-arrow" aria-hidden="true">→</span>
-              <div className="about-agent-loop-card">{card('skeptic', 'Skeptic', 'Challenges assumptions and evidence', 'blue')}</div>
+            <h4 id="about-session-detail-heading">How multi-agent research works</h4>
+            <p className="about-multi-agent-intro">SIGMA runs different research roles in a bounded critique loop, so the next step is informed by the last challenge.</p>
+            {infoRegion('orchestration', <div className="about-orchestration-band"><strong>Session orchestration</strong><span>Assigns bounded work · routes role turns · enforces call and cycle limits</span>{help('orchestration', 'Session orchestration')}</div>)}
+            <section className="about-critique-chapter" aria-labelledby="about-critique-heading">
+              <h5 id="about-critique-heading">Specialist critique loop</h5>
+              <div className="about-agent-turns" aria-label="Investigator investigates, Skeptic challenges, Investigator revisits the claim">
+                <article className="about-agent-turn">
+                  <span className="about-turn-number">01 · INVESTIGATE</span>
+                  {card('investigator', 'Investigator', 'Proposes a claim, argument, or test', 'blue')}
+                </article>
+                <span className="about-turn-arrow" aria-hidden="true">→</span>
+                <article className="about-agent-turn">
+                  <span className="about-turn-number">02 · CHALLENGE</span>
+                  {card('skeptic', 'Skeptic', 'Checks assumptions and support; finds gaps', 'blue')}
+                </article>
+                <span className="about-turn-arrow" aria-hidden="true">→</span>
+                <article className="about-agent-turn">
+                  <span className="about-turn-number">03 · REVISIT</span>
+                  {card('investigatorFollowup', 'Investigator', 'Tests, revises, retracts, or narrows a claim', 'blue')}
+                </article>
+              </div>
+              <p className="about-agent-feedback"><span aria-hidden="true">↶</span> Critique changes what comes next · repeat within session limits</p>
+              <p className="about-role-note">These are successive role-conditioned AI turns, not a formal proof checker or a promise of different model vendors.</p>
+            </section>
+            <section className="about-history-chapter" aria-labelledby="about-history-heading">
+              <h5 id="about-history-heading">Several approaches, one inspectable research history</h5>
+              <p>A session can select one or more persistent strategies. Each strategy keeps its own work and source-linked evidence trail.</p>
+              <div className="about-history-flow" aria-label="Selected strategies produce attributed findings saved for later sessions">
+                <div className="about-history-directions" aria-label="Different selected research strategies">
+                  <span>Strategy A</span><span>Strategy B</span><span>Strategy C</span>
+                </div>
+                <span className="about-history-arrow" aria-hidden="true">→</span>
+                {infoRegion('workingEvidence', <div className="about-history-record"><strong>Saved research record</strong><span>Findings · objections · calculations, linked to their source</span>{help('workingEvidence', 'Saved research record')}</div>)}
+                <span className="about-history-arrow about-history-arrow--down" aria-hidden="true">↓</span>
+                <div className="about-history-later"><strong>Subsequent sessions</strong><span>Select relevant sources to build on or challenge</span></div>
+              </div>
+              <p className="about-history-note">Source-linked evidence may inform a peer strategy; selection is bounded and does not imply automatic synthesis. Earlier records remain unchanged.</p>
+            </section>
+            {infoRegion('researchTools', <div className="about-tool-band"><strong>Optional computation</strong><span>Python or SageMath when available · code and output are inspectable evidence</span>{help('researchTools', 'Optional computation')}</div>, 'blue')}
+            <div className="about-coordination-facts" aria-label="What makes SIGMA's research cumulative">
+              <div><strong>Orchestrated</strong><span>Selected work follows session limits.</span></div>
+              <div><strong>Adversarial</strong><span>Objections and failed paths remain visible.</span></div>
+              <div><strong>Cumulative</strong><span>Saved sources can inform later review.</span></div>
             </div>
-            <p className="about-agent-feedback"><span aria-hidden="true">↶</span> Critique informs the next Investigator turn</p>
-            <p className="about-session-record">Each turn and its evidence remain in the session history.</p>
+            <p className="about-integrity-note">Agent critique and computational evidence support investigation; neither independently verifies a proof. Researchers can inspect and redirect the work.</p>
           </div>
         </div>
       </div>

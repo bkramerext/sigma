@@ -73,8 +73,22 @@ with sync_playwright() as playwright:
         expect(dialog.locator("details")).to_have_count(1)
 
     def assert_interactions(dialog):
+        toggle = dialog.locator(".about-session-toggle")
+        expect(toggle).to_have_attribute("aria-label", "Explore multi-agent research")
+        expect(toggle).to_have_attribute("aria-controls", "about-session-details")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        dialog.locator('[data-about-info-node="session"]').hover()
+        page.wait_for_timeout(200)
+        expect(dialog.get_by_role("tooltip")).to_have_count(0)
+        toggle.hover()
+        page.wait_for_timeout(350)
+        expect(dialog.get_by_role("tooltip")).to_have_count(0)
+
         project_region = dialog.locator('[data-about-info-node="project"]')
         project_region.hover()
+        page.wait_for_timeout(200)
+        expect(dialog.get_by_role("tooltip")).to_have_count(0)
+        page.wait_for_timeout(350)
         tip = dialog.get_by_role("tooltip")
         expect(tip).to_contain_text("overarching research question")
         tip_box = tip.bounding_box()
@@ -89,19 +103,50 @@ with sync_playwright() as playwright:
         page.keyboard.press("Escape")
         expect(dialog).to_be_visible()
         expect(dialog.get_by_role("tooltip")).to_have_count(0)
-        toggle = dialog.locator(".about-session-toggle")
-        expect(toggle).to_have_attribute("aria-expanded", "false")
-        toggle.click()
+        toggle.focus()
+        page.keyboard.press("Enter")
         expect(toggle).to_have_attribute("aria-expanded", "true")
         details = dialog.locator("#about-session-details")
-        expect(details.get_by_role("heading", name="The critique loop")).to_be_visible()
-        expect(details.locator(".about-agent-loop-card")).to_have_count(2)
+        expect(
+            details.get_by_role("heading", name="How multi-agent research works")
+        ).to_be_visible()
+        expect(details.locator(".about-agent-turn")).to_have_count(3)
+        expect(details.locator(".about-agent-turn").nth(0)).to_contain_text("01 · INVESTIGATE")
+        expect(details.locator(".about-agent-turn").nth(1)).to_contain_text("02 · CHALLENGE")
+        expect(details.locator(".about-agent-turn").nth(2)).to_contain_text("03 · REVISIT")
         expect(details.locator(".about-agent-feedback")).to_contain_text(
-            "Critique informs the next Investigator turn"
+            "repeat within session limits"
         )
-        expect(details.locator(".about-session-record")).to_contain_text(
-            "remain in the session history"
+        expect(details.locator(".about-orchestration-band")).to_contain_text(
+            "enforces call and cycle limits"
         )
+        expect(details.locator(".about-history-chapter")).to_contain_text("persistent strategies")
+        expect(details.locator(".about-history-chapter")).to_contain_text("peer strategy")
+        expect(details.locator(".about-history-flow")).to_contain_text("Subsequent sessions")
+        expect(details.locator(".about-tool-band")).to_contain_text(
+            "Python or SageMath when available"
+        )
+        expect(details.locator(".about-integrity-note")).to_contain_text(
+            "neither independently verifies a proof"
+        )
+        expect(details.locator(".about-agent-feedback")).to_contain_text(
+            "Critique changes what comes next"
+        )
+        assert_dialog_fits(page.viewport_size["width"])
+        revisit_help = details.locator(
+            '[data-about-info-node="investigatorFollowup"] .about-diagram-help'
+        )
+        revisit_help.focus()
+        expect(dialog.get_by_role("tooltip")).to_contain_text("revise, retract, test, or narrow")
+        page.keyboard.press("Escape")
+        expect(dialog.get_by_role("tooltip")).to_have_count(0)
+        details.locator('[data-about-info-node="workingEvidence"] .about-diagram-help').focus()
+        expect(dialog.get_by_role("tooltip")).to_contain_text("selected into bounded role contexts")
+        toggle.evaluate("element => element.click()")
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(toggle).to_be_focused()
+        page.keyboard.press("Space")
+        expect(toggle).to_have_attribute("aria-expanded", "true")
         assert dialog.evaluate("e => e.scrollHeight > e.clientHeight")
         dialog.evaluate("e => e.scrollTop = e.scrollHeight")
         assert dialog.evaluate("e => e.scrollTop + e.clientHeight >= e.scrollHeight - 1")
@@ -124,6 +169,7 @@ with sync_playwright() as playwright:
     expect(dialog.get_by_role("tooltip")).to_have_count(0)
     dialog.screenshot(path=f"{screenshots}/sigma-t46-about-home-desktop.png")
     assert_interactions(dialog)
+    dialog.evaluate("element => element.scrollTop = 0")
     dialog.screenshot(path=f"{screenshots}/sigma-about-polish-expanded-desktop.png")
     page.keyboard.press("Escape")
     expect(dialog).not_to_be_visible()
@@ -195,6 +241,7 @@ with sync_playwright() as playwright:
     button, dialog = open_about()
     assert_dialog_fits(390)
     assert_interactions(dialog)
+    dialog.evaluate("element => element.scrollTop = 0")
     dialog.screenshot(path=f"{screenshots}/sigma-about-polish-expanded-mobile.png")
     dialog.screenshot(path=f"{screenshots}/sigma-t46-about-home-mobile.png")
     page.keyboard.press("Escape")
@@ -207,10 +254,32 @@ with sync_playwright() as playwright:
     button, dialog = open_about()
     assert_dialog_fits(320)
     assert_interactions(dialog)
+    dialog.evaluate("element => element.scrollTop = 0")
     dialog.screenshot(path=f"{screenshots}/sigma-about-polish-mobile-320.png")
     dialog.get_by_role("button", name="Close", exact=True).click()
     expect(dialog).not_to_be_visible()
     expect(button).to_be_focused()
+
+    for width, height, suffix in [
+        (1440, 1800, "desktop"),
+        (390, 2800, "mobile-390"),
+        (320, 3200, "mobile-320"),
+    ]:
+        page.set_viewport_size({"width": width, "height": height})
+        button, dialog = open_about()
+        assert_dialog_fits(width)
+        dialog.screenshot(path=f"{screenshots}/about-multiagent-collapsed-{suffix}.png")
+        toggle = dialog.locator(".about-session-toggle")
+        toggle.click()
+        expect(toggle).to_have_attribute("aria-expanded", "true")
+        assert_dialog_fits(width)
+        dialog.screenshot(path=f"{screenshots}/about-multiagent-expanded-{suffix}.png")
+        dialog.locator(".about-session-detail").screenshot(
+            path=f"{screenshots}/about-multiagent-chapter-{suffix}.png"
+        )
+        dialog.get_by_role("button", name="Close", exact=True).click()
+        expect(dialog).not_to_be_visible()
+        expect(button).to_be_focused()
 
     touch = browser.new_context(
         viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True
@@ -227,6 +296,10 @@ with sync_playwright() as playwright:
     expect(touch_dialog).to_be_visible()
     touch_page.get_by_role("button", name="Explain Research Project").tap()
     expect(touch_dialog.get_by_role("tooltip")).to_contain_text("overarching research question")
+    touch_dialog.get_by_role("button", name="Explore multi-agent research").tap()
+    expect(
+        touch_dialog.get_by_role("region", name="How multi-agent research works")
+    ).to_be_visible()
     touch_dialog.get_by_role("button", name="Close", exact=True).tap()
     expect(touch_dialog).not_to_be_visible()
     expect(opener).to_be_focused()

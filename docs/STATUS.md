@@ -216,6 +216,35 @@ Home and Project, including tooltip, expanded content, keyboard/touch, scrolling
 focus restoration, and Project hit-area checks. Updated screenshots are in the
 About polish capture directory. No provider calls or cloud changes were made.
 
+### Multi-agent explanation restoration (About specification)
+
+Restored the substantive expanded explanation in three concise chapters: the
+Investigator → Skeptic → Investigator critique loop; a separate selected-strategy
+to attributed-history flow showing how later sessions may reuse or challenge
+relevant sources; and short orchestration, optional-computation, and integrity
+notes. The loop names call/cycle limits, permits revise/retract/narrow outcomes,
+and identifies the roles as successive role-conditioned AI turns. The history
+copy makes source selection selective, keeps original records immutable, and
+avoids claims of automatic synthesis or unrestricted memory. The compact closed
+overview remains intact. About diagram hover explanations now wait 500ms; focus
+and touch reveal them immediately so the expansion control is easier to reach.
+
+Verification: `browser_checks/about.py` passed in real Chrome at 1440px, 390px,
+and 320px from Home and Project. It exercised the delay/cancel behavior, direct
+keyboard and touch expansion, accessible control/panel names, the three turn
+sequence, orchestration/history/integrity copy, tooltip focus, collapse focus
+restoration, scrolling, and horizontal overflow. Full dialog and chapter-only
+captures at desktop and both mobile widths are in
+[About polish screenshots](evaluations/about-polish/README.md). No paid provider
+calls or cloud changes were made.
+
+The final `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build.
+`uv run ruff check browser_checks/about.py`, `uv run ruff format --check
+browser_checks/about.py`, frontend typecheck and `git diff --check` passed as
+well. The collapsed overview retains its compact height; the expanded dialog
+uses the available viewport height and scrolls when its content exceeds it.
+
 ## Outcome presentation and Project Settings (2026-10-24)
 
 Added project-scoped `show_advanced_outcome_details`, defaulting off. Simple mode

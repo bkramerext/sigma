@@ -8,7 +8,8 @@ Dependencies/conflicts: none found
 ## Result
 
 - Simplified the About architecture diagram while keeping its interactive details; the four-stage research flow is now visible without an extra disclosure.
-- Reduced the expanded Investigator/Skeptic explanation to the two-role critique loop and cumulative saved-history behavior. Widened the About dialog for more desktop breathing room and removed repeated copy/dead styling.
+- Restored the substantive multi-agent explanation in three scannable chapters: an Investigator → Skeptic → Investigator critique loop with explicit limits; coordination across selected persistent strategies; and attributed, cumulative research history that later sessions can selectively revisit. Added concise computation and integrity notes without presenting role turns as independent proof verification or guaranteed synthesis.
+- Delayed diagram hover explanations by 500ms so they do not obstruct the multi-agent expansion control; keyboard focus and touch still reveal detail immediately. The closed dialog stays compact while the expanded dialog can use more of the viewport and scroll.
 - Replaced the Project header `?` action with an About pill in the row below Difficulty; the narrow layout retains a 44px hit area.
 - Reordered Home About/Admin before the Google/ChatGPT pills. The signed-out notice is 430px maximum width and uses matching top/left insets. Mobile controls are placed below the notice to avoid overlap.
 - Shortened Home’s signed-out ChatGPT label to “Connect to ChatGPT.”
@@ -21,6 +22,18 @@ Dependencies/conflicts: none found
 - `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 SIGMA_BROWSER_API_URL=http://127.0.0.1:8001 uv run --with playwright python browser_checks/t40_cloud_ui.py` — passed in installed Chrome across desktop/narrow layouts; checked direct Google login routing with a local OAuth fixture, absence of an intermediate sign-in dialog, signed-in account controls, Home pill order/gaps, and signed-out notice alignment/overlap.
 - Ruff checks on the changed browser checks and `git diff --check` — passed.
 - No live Google OAuth, paid provider calls, or cloud changes.
+
+## Multi-agent explanation specification follow-up
+
+Implemented `docs/specs/about-multiagent-expanded.md` in PR #87. The three turns make the critique loop explicit and show that objections affect later Investigator work. The next chapter shows multiple persistent strategies contributing source-linked findings to saved history for selective reuse or challenge by subsequent sessions. Orchestration limits, optional computation, human inspection, and the boundary between review/evidence and proof are stated directly. The history flow avoids claims of unrestricted memory or automatic synthesis.
+
+Verification on the final implementation:
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — passed all scenarios, Ruff/format checks, Pyright, frontend typecheck, and production build.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5173 SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8026 SIGMA_ABOUT_SCREENSHOT_DIR=docs/evaluations/about-polish uv run --with playwright python browser_checks/about.py` — passed in real Chrome at 1440px, 390px, and 320px from Home and Project. Covered the 500ms hover delay/cancellation, focus and touch help, all three turns, orchestration/history/integrity content, keyboard and touch expansion, Escape, scroll containment, focus restoration, and horizontal overflow.
+- `uv run ruff check browser_checks/about.py`, `uv run ruff format --check browser_checks/about.py`, frontend typecheck, and `git diff --check` — passed.
+- Desktop and mobile collapsed/expanded and chapter captures: [screenshot walkthrough](https://github.com/bkramerext/sigma/blob/green/about-polish/docs/evaluations/about-polish/README.md#multi-agent-explanation-walkthrough).
+
+No paid provider calls or cloud changes. R4R; Brian's visual/content approval is requested before merge. Do not merge.
 
 ## Height follow-up
 
