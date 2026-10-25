@@ -19,6 +19,7 @@ jobs:
       - name: Validate and generate deterministic manifest (no provider calls)
         run: |
           python tests/increment14_protocol.py
+          python tests/increment14_audit.py
           python scripts/increment14_protocol.py --seed 140017 --replicates 1 --output /tmp/manifest-a.json
           python scripts/increment14_protocol.py --seed 140017 --replicates 1 --output /tmp/manifest-b.json
           cmp /tmp/manifest-a.json /tmp/manifest-b.json
