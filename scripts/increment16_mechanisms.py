@@ -10,7 +10,48 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1] / "docs/evaluations"
 
 
+def followup_is_grounded(observation, next_test, scenario):
+    """Minimum falsifiable link; intentionally not a semantic quality score."""
+    witness = observation["witness"]
+    normalized = next_test.lower()
+    # Require the entire exact witness, not loose words or a convenient number.
+    if json.dumps(witness, sort_keys=True) not in next_test:
+        return False
+    if scenario == "subset":
+        return (
+            witness["actual"] != witness["predicted"]
+            and "residual" in normalized
+            and "phase" in normalized
+            and "do not infer" in normalized
+        )
+    if scenario == "graph":
+        return (
+            witness["candidate_accepts"] is True
+            and witness["oracle_acyclic_after"] is False
+            and "reachability" in normalized
+            and "recomputation" in normalized
+        )
+    return False
+
+
+def adversarial_controls():
+    subset = {"witness": {"actual": 8, "n": 0, "predicted": 9, "residual": -1}}
+    graph = {"witness": {"candidate_accepts": True, "edges_before": [[0, 2], [1, 0]], "insert": [2, 1], "oracle_acyclic_after": False}}
+    good_subset = "Observed counterexample " + json.dumps(subset["witness"], sort_keys=True) + ". Separate residuals by phase; do not infer a theorem."
+    good_graph = "Observed counterexample " + json.dumps(graph["witness"], sort_keys=True) + ". Replace the naive guard with reachability and check recomputation."
+    assert followup_is_grounded(subset, good_subset, "subset")
+    assert followup_is_grounded(graph, good_graph, "graph")
+    for bad, scenario, obs in [
+        ("counterexample residual phase do not infer; continue as before", "subset", subset),
+        (good_subset.replace('"actual": 8', '"actual": 9'), "subset", subset),
+        ("counterexample reachability recomputation; continue as before", "graph", graph),
+        (good_graph.replace('"oracle_acyclic_after": false', '"oracle_acyclic_after": true'), "graph", graph),
+    ]:
+        assert not followup_is_grounded(obs, bad, scenario)
+
+
 def examine():
+    adversarial_controls()
     control = json.loads((ROOT / "increment_3/control-results.json").read_text())
     oracle = json.loads((ROOT / "increment_4/independent-results.json").read_text())
     off = control["off_second_question"]
@@ -42,18 +83,7 @@ def examine():
             grounded_followups.append({
                 "scenario": row.get("scenario"),
                 "has_execution_provenance": bool(link.get("execution_id")),
-                "identifies_observed_counterexample": (
-                    "counterexample" in next_test.lower()
-                    and all(
-                        json.dumps(value) in next_test
-                        for value in observation.get("witness", {}).values()
-                        if isinstance(value, bool)
-                    )
-                    and (
-                        "residual" not in observation.get("witness", {})
-                        or str(observation["witness"]["residual"]) in next_test
-                    )
-                ),
+                "identifies_observed_counterexample": followup_is_grounded(observation, next_test, row.get("scenario")),
                 "requests_bounded_next_step": bool(link.get("next_investigator_step_id")),
             })
     # Independent structural oracle for the graph witness, not role prose.
