@@ -22,7 +22,6 @@ browser_checks
 tests
 docs
 tickets
-samples
 specs
 sandbox-poc
 deploy/local-state

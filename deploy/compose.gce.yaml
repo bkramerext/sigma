@@ -5,3 +5,11 @@ volumes:
       type: none
       o: bind
       device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth
+
+services:
+  backend:
+    environment:
+      SIGMA_STORAGE_BACKEND: persistent_disk
+      SIGMA_STORAGE_ROOT: /var/lib/sigma-auth
+      SIGMA_CLOUD_AUTH_HOME: /var/lib/sigma-auth
+      SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces

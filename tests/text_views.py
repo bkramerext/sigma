@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import httpx
 from fastapi.testclient import TestClient
@@ -22,7 +23,7 @@ from sigma.projects import (
 from sigma.text_conversion import MAX_CONVERSION_RESPONSE_BYTES, convert_text
 from sigma.text_views import digest, inspect_text, save_source
 
-SOURCE = Path("samples/nonconsecutive-subset-sums/project.json")
+SOURCE = Path("samples/jesus-cannabis/project.json")
 MODEL = "gpt-6.1-sol"
 REAL_CLIENT = httpx.AsyncClient
 
@@ -48,6 +49,38 @@ async def main_async(root: Path):
     path.mkdir()
     (path / "project.json").write_bytes(source_before)
     project_before = (path / "project.json").read_bytes()
+    conclusion_path = root / "conclusion-session.sigma"
+    initialize_project(conclusion_path, "Conclusion conversion", "Review a saved result.")
+    conclusion_source = (
+        "Preliminary finding\n\nFor the meromorphic continuation "
+        "zeta(s)=s/(s-1)-s integral_1^infinity {x}^(-s-1) dx on Re(s)>0, "
+        "the argument gives a conditional zero-free region. This does not prove RH.\n\n"
+        "The investigation is paused; this is not a completed conclusion."
+    )
+    conclusion_markdown = (
+        "### Preliminary finding\n\n"
+        "For the meromorphic continuation\n\n"
+        "$$\\zeta(s)=\\frac{s}{s-1}-s\\int_1^\\infty\\{x\\}s^{-s-1}\\,dx$$\n\n"
+        "on $\\operatorname{Re}(s)>0$, the argument gives a conditional zero-free region. "
+        "This does not prove RH.\n\n"
+        "The investigation is paused; this is not a completed conclusion."
+    )
+    conclusion_session_id = str(uuid4())
+    session_dir = conclusion_path / "research-sessions"
+    session_dir.mkdir()
+    session_path = session_dir / f"{conclusion_session_id}.json"
+    session_path.write_text(
+        json.dumps(
+            {
+                "id": conclusion_session_id,
+                "project_id": inspect_project(conclusion_path).project.id,
+                "project_path": str(conclusion_path.resolve()),
+                "outcome": {"conclusion": conclusion_source},
+            }
+        ),
+        encoding="utf-8",
+    )
+    session_before_conversion = session_path.read_bytes()
     plain = inspect_text(path, "project")
     assert (
         plain["source_format"] == "plain"
@@ -78,8 +111,13 @@ async def main_async(root: Path):
             "required": ["body", "warnings"],
             "additionalProperties": False,
         }
-        assert context["text"] == inspect_project(path).project.problem
-        output = markdown if context["target_format"] == "markdown" else plain["plain"]["body"]
+        if context["text"] == conclusion_source:
+            assert context["target_format"] == "markdown"
+            assert "standalone display-math blocks" in body["instructions"]
+            output = conclusion_markdown
+        else:
+            assert context["text"] == inspect_project(path).project.problem
+            output = markdown if context["target_format"] == "markdown" else plain["plain"]["body"]
         return httpx.Response(200, json=provider_output(output))
 
     def client(**kwargs):
@@ -125,6 +163,41 @@ async def main_async(root: Path):
         assert len(calls) == 2
         assert (await convert_text(str(path), "project", "plain"))["plain"]["current"]
         assert len(calls) == 2
+
+    with (
+        patch("sigma.text_conversion.auth_context", new=AsyncMock(return_value=binding)),
+        patch("sigma.text_conversion.configuration", new=AsyncMock(return_value=config)),
+        patch("sigma.text_conversion.httpx.AsyncClient", side_effect=client),
+    ):
+        converted_conclusion = await convert_text(
+            str(conclusion_path),
+            "research-conclusion",
+            "markdown",
+            expected_digest=digest(conclusion_source),
+            session_id=conclusion_session_id,
+        )
+        assert converted_conclusion["body"] == conclusion_markdown
+        assert converted_conclusion["source_digest"] == digest(conclusion_source)
+        assert converted_conclusion["provenance"]["provider"] == "openai"
+        assert session_path.read_bytes() == session_before_conversion
+        assert not (conclusion_path / "text-representations.json").exists()
+
+        with TestClient(app) as api:
+            response = api.post(
+                "/api/projects/text/convert",
+                json={
+                    "path": str(conclusion_path),
+                    "scope": "research-conclusion",
+                    "session_id": conclusion_session_id,
+                    "target": "markdown",
+                    "expected_digest": digest(conclusion_source),
+                    "expected_binding": binding["identity"],
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["body"] == conclusion_markdown
+        assert session_path.read_bytes() == session_before_conversion
+        print("PASS AI Markdown conversion of immutable historical Conclusions with typed math")
 
     # Large strategy descriptions can produce a response envelope above the
     # smaller proposal limit even though the converted body remains bounded.

@@ -1,0 +1,35 @@
+name: Increment 15 offline readiness
+
+on:
+  push:
+    branches:
+      - coordinator/research-increment-15
+  workflow_dispatch:
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate 15 preflight without any provider calls
+        run: |
+          python scripts/increment15_readiness.py --output /tmp/increment15-readiness.json
+          python scripts/increment15_offline_pairs.py --output /tmp/increment15-offline-pairs.json
+          python scripts/increment15_retrospective.py --output /tmp/increment15-retrospective.json
+          python - <<'PY'
+          import json
+          with open('/tmp/increment15-readiness.json', encoding='utf-8') as f:
+              d = json.load(f)
+          assert d['task_packet_hashes'] == 'passed'
+          assert d['paired_trials'] == 36 and d['planned_model_runs'] == 72
+          assert d['status'] == 'BLOCKED_FOR_LIVE_PILOT'
+          assert d['paid_provider_calls'] == 0
+          assert not d['paid_runs_approved']
+          assert not d['runner_isolation_demonstrated']
+          print('Increment 15 offline preflight passed.')
+          PY

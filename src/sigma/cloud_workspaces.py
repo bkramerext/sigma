@@ -44,6 +44,8 @@ _CURRENT: ContextVar[Workspace | None] = ContextVar("sigma_cloud_workspace", def
 
 def enabled() -> bool:
     """Cloud auth is an explicit opt-in; local SIGMA does not need cloud config."""
+    from sigma.storage import persistent_disk_enabled
+
     enabled = os.environ.get("SIGMA_CLOUD_AUTH_ENABLED", "").strip().casefold() in {
         "1",
         "true",
@@ -54,7 +56,7 @@ def enabled() -> bool:
         "true",
         "yes",
     }
-    return enabled and not local_auth
+    return enabled and (persistent_disk_enabled() or not local_auth)
 
 
 def current() -> Workspace | None:
@@ -79,6 +81,29 @@ def reset(token: Token[Workspace | None]) -> None:
 
 def storage_root() -> Path:
     """Return the private persistent root, defaulting beside the T22.2 auth DB."""
+    from sigma.storage import persistent_disk_enabled
+    from sigma.storage import storage_root as configured_storage_root
+
+    if persistent_disk_enabled():
+        root = configured_storage_root()
+        assert root is not None
+        configured = os.environ.get("SIGMA_CLOUD_WORKSPACES_ROOT", "").strip()
+        candidate = Path(configured) if configured else root / "workspaces"
+        if not candidate.is_absolute() or candidate.is_symlink():
+            raise WorkspaceUnavailable("Private workspace storage is unavailable.")
+        try:
+            resolved = candidate.resolve(strict=False)
+            if resolved != root / "workspaces":
+                raise WorkspaceUnavailable("Private workspace storage is unavailable.")
+            if not resolved.exists():
+                if resolved.parent != root:
+                    raise WorkspaceUnavailable("Private workspace storage is unavailable.")
+                resolved.mkdir(mode=0o700)
+            private_directory(resolved)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise WorkspaceUnavailable("Private workspace storage is unavailable.") from exc
+        return resolved
+
     from sigma.projects import ROOT
 
     configured = os.environ.get("SIGMA_CLOUD_WORKSPACES_ROOT")

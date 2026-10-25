@@ -2816,19 +2816,37 @@ def list_sessions(path: str) -> list[dict[str, Any]]:
 
 
 def has_active_session(path: str) -> bool:
-    """Return whether a project has a queued or running research session.
+    """Read-only Home status: never restart a worker or rewrite research history.
 
-    Recovery is part of the status read: an abandoned local ``running`` record
-    becomes paused before Home reports it, while a live worker's lock preserves
-    its active state.
+    A persisted running state without an active worker is stale after a crash.
+    An advisory worker lock identifies live local jobs. Cloud queued jobs are
+    durable and remain eligible for dispatch after reconnect.
     """
     records, _unavailable = read_session_snapshot(path)
+    directory = Path(project_path(path)) / "research-sessions"
     for record in records:
-        try:
-            if _recover(record).get("status") in {"queued", "running"}:
-                return True
-        except (KeyError, OSError, TypeError, ValueError):
+        status = record.get("status")
+        if status not in {"queued", "running"}:
             continue
+        task = _tasks.get(record["id"])
+        if task is not None and not task.done():
+            return True
+        if status == "queued" and cloud_workspaces.enabled():
+            return True
+        lock_path = directory / f"{record['id']}.worker.lock"
+        try:
+            fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            continue
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return True
+            else:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
     return False
 
 
@@ -3165,11 +3183,31 @@ def _saved_followup_questions(
     artifact blocks fallback to an older proposal.
     """
     selected = set(strategy_ids)
-    supplied = {
-        (item.get("strategy_id"), item.get("id")): item
-        for item in supplied_findings
-        if isinstance(item, dict)
-    }
+    # An artifact ID alone is not a sufficient provenance key. A malformed or
+    # repeated historical ID must not allow another session's summary to
+    # authorize a continuation, even when the strategy happens to match.
+    supplied: dict[tuple[str, str, str], dict[str, Any]] = {}
+    ambiguous: set[tuple[str, str, str]] = set()
+    for item in supplied_findings:
+        if not isinstance(item, dict):
+            continue
+        source_strategy = item.get("strategy_id")
+        source_session = item.get("session_id")
+        source_artifact = item.get("id")
+        if not (
+            isinstance(source_strategy, str)
+            and source_strategy
+            and isinstance(source_session, str)
+            and source_session
+            and isinstance(source_artifact, str)
+            and source_artifact
+        ):
+            continue
+        key = (source_strategy, source_session, source_artifact)
+        if key in supplied:
+            ambiguous.add(key)
+        else:
+            supplied[key] = item
     sources: dict[str, dict[str, str]] = {}
     seen: set[str] = set()
     ordered = sorted(
@@ -3181,10 +3219,18 @@ def _saved_followup_questions(
         reverse=True,
     )
     for session in ordered:
-        if session.get("status") in {"queued", "running"}:
-            continue
         artifacts = session.get("artifacts")
         if not isinstance(artifacts, list):
+            continue
+        # A later interrupted run may contain important negative evidence, but
+        # is not a completed approval of any suggestion. Do not fall back to
+        # an older question for the same strategy as though it never occurred.
+        if session.get("status") not in {"ended", "completed"}:
+            for artifact in artifacts:
+                if isinstance(artifact, dict):
+                    strategy_id = artifact.get("strategy_id", session.get("strategy_id"))
+                    if strategy_id in selected:
+                        seen.add(strategy_id)
             continue
         for artifact in reversed(artifacts):
             if not isinstance(artifact, dict):
@@ -3194,21 +3240,23 @@ def _saved_followup_questions(
                 continue
             seen.add(strategy_id)
             artifact_id = artifact.get("id")
-            # Do not silently use history omitted from the frozen role context.
-            saved_extract = supplied.get((strategy_id, artifact_id))
-            if saved_extract is None:
+            session_id = session.get("id")
+            if not (
+                isinstance(strategy_id, str)
+                and isinstance(session_id, str)
+                and isinstance(artifact_id, str)
+            ):
                 continue
-            # Carry a question only if its material scope was not shortened.
-            # Truncated reasoning steps alone do not invalidate a next test.
+            # Do not silently use history omitted from the frozen role context.
+            key = (strategy_id, session_id, artifact_id)
+            saved_extract = supplied.get(key)
+            if saved_extract is None or key in ambiguous:
+                continue
+            # Without the complete material assumptions and evidence scope,
+            # carrying a fluent next question would silently promote a summary.
             truncated = saved_extract.get("extract_truncated_fields", [])
             if not isinstance(truncated, list) or any(
-                field in truncated
-                for field in (
-                    "assumptions",
-                    "next_question",
-                    "skeptic_output.next_question",
-                    "evidence_status",
-                )
+                field in truncated for field in ("assumptions", "evidence_status")
             ):
                 continue
             if artifact.get("retracted_by_artifact_ids"):
@@ -3247,6 +3295,26 @@ def _saved_followup_questions(
                 question = skeptic.get("next_question")
                 field = "skeptic_output.next_question"
             if not isinstance(question, str) or not question.strip():
+                continue
+            # Confirm that the exact proposal *actually reached* the frozen
+            # source presented to this new session. A matching artifact ID is
+            # insufficient when the field was truncated, absent, or disagrees.
+            frozen = (
+                saved_extract.get("next_question")
+                if field == "artifact.next_question"
+                else (saved_extract.get("skeptic_output") or {}).get("next_question")
+                if isinstance(saved_extract.get("skeptic_output"), dict)
+                else None
+            )
+            if (
+                (field == "artifact.next_question" and "next_question" in truncated)
+                or (
+                    field == "skeptic_output.next_question"
+                    and "skeptic_output.next_question" in truncated
+                )
+                or not isinstance(frozen, str)
+                or frozen.strip() != question.strip()
+            ):
                 continue
             sources[strategy_id] = {
                 "question": question.strip(),

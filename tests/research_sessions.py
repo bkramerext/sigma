@@ -6492,9 +6492,15 @@ def test_saved_followup_question_selection():
     current = session(2, "A")
     peer = session(3, "B")
     supplied = [
-        {"strategy_id": "A", "id": "artifact-1"},
-        {"strategy_id": "A", "id": "artifact-2"},
-        {"strategy_id": "B", "id": "artifact-3"},
+        {
+            "strategy_id": strategy,
+            "id": f"artifact-{number}",
+            "session_id": f"session-{number}",
+            "next_question": "",
+            "skeptic_output": {"next_question": "New bounded test"},
+            "extract_truncated_fields": [],
+        }
+        for number, strategy in ((1, "A"), (2, "A"), (3, "B"))
     ]
     select = research_sessions._saved_followup_questions
     result = select([older, current, peer], ["A", "B"], supplied)
@@ -6507,8 +6513,10 @@ def test_saved_followup_question_selection():
     shortened: list[dict[str, Any]] = [dict(item) for item in supplied]
     shortened[1]["extract_truncated_fields"] = ["assumptions"]
     assert select([older, current], ["A"], shortened) == {}
+    # Truncating an unused source field does not invalidate the Skeptic's
+    # complete, separately supplied next question.
     shortened[1]["extract_truncated_fields"] = ["next_question"]
-    assert select([older, current], ["A"], shortened) == {}
+    assert select([older, current], ["A"], shortened)["A"]["artifact_id"] == "artifact-2"
     shortened[1]["extract_truncated_fields"] = ["skeptic_output.next_question"]
     assert select([older, current], ["A"], shortened) == {}
     # A shortened *argument* does not invalidate a bounded next test by itself.
@@ -6525,6 +6533,44 @@ def test_saved_followup_question_selection():
         assert select([older, blocked], ["A"], supplied) == {}
     assert select([older, peer], ["A"], supplied)["A"]["artifact_id"] == "artifact-1"
     assert select([older], ["B"], supplied) == {}
+
+    # A matching artifact ID does not establish that the same complete
+    # question and historical session are visible in the frozen role context.
+    absent = deepcopy(supplied)
+    absent[1]["skeptic_output"] = {}
+    assert select([older, current], ["A"], absent) == {}
+    mismatch = deepcopy(supplied)
+    mismatch[1]["skeptic_output"]["next_question"] = "Conflicting proposal"
+    assert select([older, current], ["A"], mismatch) == {}
+    foreign = deepcopy(supplied)
+    foreign[1]["session_id"] = "session-1"
+    assert select([older, current], ["A"], foreign) == {}
+    missing_session = deepcopy(supplied)
+    del missing_session[1]["session_id"]
+    assert select([older, current], ["A"], missing_session) == {}
+    duplicate = deepcopy(supplied)
+    duplicate.append(deepcopy(duplicate[1]))
+    assert select([older, current], ["A"], duplicate) == {}
+    competing_strategy = deepcopy(supplied)
+    competing_strategy[1]["strategy_id"] = "B"
+    assert select([older, current], ["A"], competing_strategy) == {}
+
+    # A manually interrupted or failed later run is not a new automatic
+    # endorsement of the latest question. It also blocks stale fallback.
+    for state in ("queued", "running", "paused", "stopped", "failed"):
+        interrupted = deepcopy(current)
+        interrupted["status"] = state
+        assert select([older, interrupted], ["A"], supplied) == {}
+
+    # A completed record with its exact artifact question is also supported.
+    active = session(2, "A", decision="continue")
+    complete = deepcopy(supplied)
+    complete[1]["next_question"] = "New bounded test"
+    assert select([older, active], ["A"], complete)["A"]["source_field"] == (
+        "artifact.next_question"
+    )
+    complete[1]["next_question"] = "Incomplete or altered question"
+    assert select([older, active], ["A"], complete) == {}
 
 
 async def test_saved_followup_question_reaches_real_dispatch(path: Path):

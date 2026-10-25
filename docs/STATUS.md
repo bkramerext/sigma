@@ -1,25 +1,716 @@
 # SIGMA status
 
-## T92: Home Recent Projects Running status (2026-10-25)
+## T98 Red cloud-deployment checkpoint (2026-10-25)
 
-Home Recent Projects now derives each project's `research_running` flag from its
-persisted queued/running research-session records and the backend worker lock.
-Abandoned local running records recover to paused before the status is reported;
-paused, stopped, completed and failed sessions do not show Running. The Home UI
-shows the green label inline between strategy count and difficulty and refreshes
-the backend state every three seconds while visible, including on return to a
-visible tab. If a refresh fails, it clears the indicator until status can be
-read again.
+On current `main` (`f76d834`), the existing host-readiness package, sponsored
+cloud inference, and Python/Sage/TeX runtime passed the full offline `./sigma
+test` suite. A local Colima persistent-volume smoke retained hosted-mode auth
+state across backend restart and container recreation. Docker Compose v2 is
+missing in this workstation, so the packaged Compose/Chrome check did not run;
+the read-only production preflight correctly blocks on this macOS ARM64 host.
 
-Focused `tests/recents.py` checks active, completed, and paused state through the
-service and Home API. Real Chrome `browser_checks/recents.py` checks the idle and
-active metadata text, periodic updates, reload persistence, removal, green
-styling and layout at 1280px, 390px, and 320px. The full
-`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite passed, including
-Ruff, format, Pyright, frontend typecheck and production build. Browser-check
-Ruff and format, a standalone frontend typecheck, and `git diff --check` passed.
-No provider calls or cloud changes were made.
+The live hostname resolves to `50.47.237.240`, but HTTP returned 406 and HTTPS
+port 443 refused the connection; no SIGMA page or TLS endpoint was verified. No
+GCP resources, DNS writes, OAuth changes, secrets, or paid provider calls were
+made. GCE project/operator access and spend approval, production OAuth and
+Secret Manager values, DuckDNS update access, a second Google test account,
+rootless Ubuntu 24.04 host verification, and an approved backup mechanism
+remain required. Full results and exact owner actions: [T98 cloud checkpoint](../messages/t98_red_cloud_checkpoint_20261025.txt).
 
+## Current owner follow-ups (2026-10-25)
+
+- TeX authoring: removed the extra white browser confirmation for long-form
+  generation; provider-use bounds are still visible in the dialog. Generate
+  becomes “Cancel generation” in place while running. Failed generation leaves
+  its error visible and restores an enabled Generate action for retry.
+- Project header: About matches Home's compact style in normal and hover states
+  and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
+  responsive.
+- Real-Chrome checks now cover direct long-form start without a browser prompt,
+  failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
+  About placement/style. `browser_checks/t45_long_paper.py` and
+  `browser_checks/header.py` passed in real Chrome; the full
+  `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+  Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
+  All checks used local deterministic fixtures; no paid provider calls or cloud
+  changes.
+
+Screenshots: `docs/evaluations/t45-paper-dialog/` and
+`docs/evaluations/project-about-pill/`.
+
+PR #108 merge-readiness refresh: fetched `main` at `f5388d8` (including Blue
+#116, Gray #120 and subsequent main history) and merged it without conflicts.
+The current-state summary and newer research/sample records in this file were
+preserved. Real Chrome `browser_checks/t45_long_paper.py` and
+`browser_checks/header.py` passed against the reconciled tree. The required
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+format, Pyright (0 diagnostics), frontend typecheck and production build. No
+paid provider calls or cloud changes.
+## Current state for newcomers (2026-10-25)
+
+SIGMA is a local research workspace that stores questions, role responses,
+computations and reports. Current tests establish specific engineering
+behaviors on deterministic fixtures; they do **not** establish that SIGMA
+reliably discovers correct research results or outperforms a single researcher.
+Investigator and Skeptic use the same underlying model, so their agreement is
+structured scrutiny, not independent verification.
+
+**Research-quality evidence:** one earlier live Maximum Regions run used a
+solution-bearing stock strategy and cannot count as independent discovery. A
+later answer-free live run produced a reviewed proof candidate, but exact role
+inputs were not retained and output fields were truncated; its independence is
+unverified. Deterministic fixtures and archived sessions are useful engineering
+evidence, not new live trials. The matched-budget blind comparison remains
+**unexecuted**. Its current proposal is [issue 114 preregistration](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md).
+It tests only within-session adversarial review against single-role self-review;
+it cannot establish cumulative persistence. The separate longitudinal design
+is [issue #119](https://github.com/bkramerext/sigma/issues/119). No live
+shakedown or scored run is authorized.
+
+**What is established:** the dated entries below link to actual tests, exports,
+browser observations and bounded engineering results, with their stated limits.
+Computations establish only their recorded finite scope. No model consensus,
+saved label or polished report alone establishes a theorem. See [Getting
+Started](GETTING_STARTED.md), [research evaluation records](evaluations/), and
+the [researcher-centered product limits](RESEARCHER_CENTERED_SIGMA.md).
+
+**Still unverified / launch blockers:** unscripted multi-agent advantage,
+general research quality, and independent proof correctness remain unverified.
+The proposed blind study still needs independent task/key review and
+contamination/provenance assessment, sealed-key custody, proven model-visible
+isolation, shared output-boundary validation, independent graders, current
+pricing and enforceable budget controls, and explicit owner approval. Cloud deployment also
+has host-specific acceptance requirements; those are recorded in the Red/cloud
+entries below and are not implied by local checks.
+
+The entries that follow are the retained chronological engineering and
+evaluation history; newer summaries do not replace or rewrite them.
+
+## Round 2 Increment 18 — hosted research and export integration (2026-10-25)
+
+Extended the deterministic authenticated hosted-session API scenario to follow a
+completed sponsored research session through the owner-facing project export,
+saved Outcome verification label, text report download, and a fresh FastAPI
+process reading the same project, session, Outcome, and report from the durable
+workspace. The fixture uses the production API and workspace boundaries with a
+test-only verified-principal adapter and fake OpenAI Responses transport. It
+does not contact Google OAuth or OpenAI. Code inspection plus this joined check
+found no Blue-owned session-engine defect requiring behavioral changes; the
+gap was that existing hosted inference coverage ended before the user's export
+and restart workflow.
+
+**Acceptance state:** simulated authenticated research → saved Outcome → export
+→ new-process recovery: PASS. Workspace ownership, sponsor-only inference,
+budget admission/holds, idempotency and failure cases remain covered by the
+same existing scenario. The full suite passed, including this extension,
+Ruff, format, Pyright, frontend typecheck and production build. No real provider
+calls, cloud resources, or production secrets were used.
+
+The packaged Compose/Chrome acceptance did not run. The repository script first
+stopped because this host lacks the `docker compose` CLI plugin; routing it to
+the installed Compose v2 binary then stopped before app startup because the
+ARM64 Docker engine lacks Buildx and produced ARM64 images where the package
+requires amd64. Thus no new real-browser hosted acceptance is claimed. Real
+Google OIDC, a hosted browser session, GCE rootless execution and the Red-owned
+#98/#99 deployment gates remain **UNVERIFIED**; Red owns those host checks, and
+actual hosted provider usage remains unauthorized. Increment 18 remains
+partially verified pending coordinator disposition of these dependencies.
+
+The actual synthetic hosted project and text-report response bytes produced by
+the accepted API workflow are retained in
+[`increment_18/exports`](evaluations/increment_18/exports/manifest.json). The
+manifest records project/session IDs, capture/app commit `adb3205`, initial
+artifact publishing commit `ab35f2f`, exercised actions and omissions. These
+are exports of the deterministic fixture session, not live research or hosted
+customer data.
+
+Elapsed worker time was approximately 40 minutes through PR-ready handoff.
+The focused change is on `blue/increment-18-hosted-research`; see
+[`messages/i18_blue_r4r.md`](../messages/i18_blue_r4r.md) for exact commands,
+scope and outstanding acceptance.
+
+## Issue 114 first increment (2026-10-25)
+
+Audited the Increment 6/14 blind plans and Increment 15 offline preparation,
+the answer-bearing stock-sample Maximum Regions trial, and the later answer-free
+live trial. No matched-budget blind result exists. The later live run's
+mathematical candidate and Skeptic revision remain a single live observation;
+missing exact request bodies and historical response-field truncation prevent
+its use as verified independent-discovery evidence. Deterministic archived
+sessions and fixtures remain separate from live trials.
+
+Added a proposed paired protocol and USD $48 / 96-call hard-ceiling sheet in
+[the issue 114 evaluation record](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md)
+([PR #116](https://github.com/bkramerext/sigma/pull/116)).
+The existing offline manifest and audit now check per-call and aggregate input
+and output token budgets. Twenty-four synthetic records passed the dry-run;
+the readiness report still blocks live work for absent isolation, model,
+graders and owner authorization. This is setup evidence, not research-quality
+evidence. No provider calls, paid inference or cloud work occurred.
+
+Validation: focused Increment 14 protocol/audit and Increment 15 pair dry-run
+passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+scenarios, Ruff, format, Pyright, frontend typecheck and production build after
+locked frontend dependencies were installed. The first full-suite attempt
+stopped at format; after formatting, another stopped because `tsc` was not yet
+installed. After rebasing onto main `8562c89`, one full run transiently failed
+at the copied-workspace assertion in `tests/storage.py`; that scenario passed
+alone and the subsequent full run passed all scenarios, Ruff, format, Pyright,
+frontend typecheck and production build. Actual elapsed time for the first
+increment: approximately 35 minutes. No browser surface changed. Matched live
+comparison, independent task/key review, runner isolation, pricing verification,
+blinded graders and owner authorization remain outstanding.
+
+## T89 ship-ready stock sample curation, increment 1 (2026-10-25)
+
+Started from fresh `gray/t89-stock-sample-curation` at current `main`
+`8562c89` after PR #115 merged, then merged `main` `950c810` into the branch
+without rewriting history; the `docs/STATUS.md` conflict was resolved with
+both this record and the new T114/main status preserved. Reframed the opening of all 17 sample briefs
+in conversational language while retaining their research questions, evidence
+requirements, and exit criteria. Added 12 bounded, human-authored starting
+strategies across seven samples: Algorithm Design, Constrained Binary Strings,
+Operation Narrow Passage, RH, Scientific Investigation, and both Warp Drive
+samples. Set Nonconsecutive Subset Sums, Operation Narrow Passage, and Warp
+Drive Engineering to Hard. Kept Jesus/cannabis difficulty unset for editorial
+review; Arrival remains in the current `Other` domain pending taxonomy review.
+
+Removed a direct answer spoiler from the active Maximum Regions starting path.
+Its full previous proof, strategy identity, and provider provenance remain
+unchanged in removed-strategy history; the active starter now guides the reader
+to find an upper bound and an attaining arrangement. No project IDs, session
+evidence, outcomes, original research text, or provenance were changed. The
+previous Maximum Regions strategy was archived rather than discarded. The five
+Subset Sums sessions remain deterministic fixtures, not provider research. No
+inference calls were made, and the proposed Maximum Regions → Operation Narrow
+Passage → RH authentic-session order is awaiting a separately approved spend
+cap. The cost model and provenance plan are in
+`evaluations/t89-stock-sample-curation-increment1.md`.
+
+**Acceptance matrix: PASS 8, FAIL 1, BLOCKED 1.** Editorial implementation,
+strategy guidance, metadata review, newcomer path, no-spend session proposal,
+identity/history preservation, ownership boundaries, and focused checks pass.
+The full-suite tooling assertion is FAIL; authentic stock sessions are blocked
+on a separate budget approval, and none were fabricated.
+
+Focused checks passed: `tests/recents.py` (17 samples, metadata, independent
+copying, archived Maximum Regions proof and non-spoiling starter),
+`tests/test_sample_copies.py` (9 tests), `tests/make_sample.py` (export/import
+with a real v5 legacy fixture), `tests/example_math.py`, and
+`tests/agentic.py`. Real Chrome `browser_checks/recents.py` passed against a
+fresh isolated UI and provider fixture (Samples/Recent, direct copy, strategy
+rendering, save, and source immutability). Ruff check/format, Pyright, frontend
+typecheck/build, and `git diff --check` passed.
+
+`./sigma test` ran and stopped at the known, unchanged
+`tests/tooling.py:177` mock expectation that `stop_servers` be called once; it
+was called zero times. Every later suite command was run individually under
+isolated temporary state and passed, including cloud/workspace/storage,
+deployment/host, UI registry, type checks, and production build. Therefore the
+full-suite result is **FAIL (existing tooling assertion)**, not a pass. No
+provider calls, live OAuth, or GCP resources were used. The active-branch
+acceptance detail and test evidence are in
+`evaluations/t89-stock-sample-curation-increment1.md`. Elapsed time from fresh
+branch creation through final PR-ready push: approximately 22 minutes
+(09:41–10:03 PDT, 2026-10-25).
+
+## T89 stock sample catalog audit (2026-10-25)
+
+Gray started from current `main` `7a2f445` and inventoried all 17 shipped
+samples against their canonical project records, saved evidence and PR #74's
+17-sample Chrome study. The audit records current domain/difficulty, problem,
+strategies, stock sessions/outcomes, educational purpose, and a KEEP/REVISE/
+CONSOLIDATE proposal with before/after rationale. Sixteen samples have no
+saved stock session; Nonconsecutive Subset Sums has five deterministic fixture
+sessions, all mixed with unresolved general proof obligations. PR #74's
+historical Maximum Regions provider export is kept distinct from stock sample
+history. No sample was removed, consolidated, or substantively rewritten; RH
+remains the flagship. Owner decisions are listed in
+`evaluations/t89-stock-sample-catalog.md`.
+
+The only data correction is `counting-constrained-binary-strings`: migrated its
+sample document from schema 6 to supported schema 8 and set its clearly
+elementary recurrence exercise to Easy. `tests/recents.py` now pins the
+17-entry catalog count and verifies that metadata through catalog loading and
+an independent copied project. Focused recents, copy-independence (9 tests),
+sample-export, and deterministic math checks passed.
+
+`./sigma test` reached `tests/tooling.py` and failed at its existing mocked
+`stop_servers` assertion. The same focused failure reproduces unchanged on
+`origin/main` `7a2f445` in a detached worktree. Every command after that point
+in the suite was run individually and passed, including cloud/storage checks,
+Ruff check/format, Pyright, frontend typecheck and production build. Thus the
+full suite is **not reported as passing**; this known baseline failure is
+outside the T89 diff. No real provider calls were made. The browser coverage
+is PR #74's reported study, not a new T89 Chrome run.
+
+## AI paper dialog polish (2026-10-25)
+
+Reduced unused space in the TeX dialog, increased its explanatory text to 14px,
+and made the dialog height follow its contents while capping the completed
+preview to a viewport-height scroll area. The header action now reads
+“Cancel”. During generation, the duplicate disabled “Authoring…” button is
+gone; Generate becomes a “Cancel generation” button in the same controls row,
+and the status line no longer carries a duplicate cancel action. Long-form
+generation now starts directly from Generate without the white browser-native
+confirmation; the static bounds remain visible before start and checkpoint
+restart keeps its explicit confirmation. A forced temporary generation failure
+in the Chrome check confirms the error remains visible and Generate is
+re-enabled for retry.
+Added the Project Export checkbox label exactly as “Open in browser tab”. When
+checked, the saved-PDF link opens a browser tab and requests inline PDF
+disposition; when unchecked, the link downloads as before. The PDF endpoint
+keeps attachment as its default, so existing downloads are unchanged.
+
+Updated `browser_checks/t45_long_paper.py` to exercise the no-prompt start,
+failure recovery, progress cancel, desktop and 390px mobile scrolling, completed-preview scrolling, inline PDF
+opening and attachment fallback, initial dialog focus, and focus restoration.
+Real Chrome passed. Captures are in
+`docs/evaluations/t45-paper-dialog/`: owner-provided desktop before, completed
+desktop and scrollable mobile after, retry-ready error, and authoring progress.
+The browser regression verifies the version count increases after retry, so an
+older saved paper cannot mask a failed generation. `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. No paid provider
+calls or cloud changes. After merging the latest `main` update, reran
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real
+Chrome `browser_checks/t45_long_paper.py`; both passed on the published tree.
+The latest follow-up additionally verifies direct start without the browser
+confirmation, retry after a simulated service failure, in-place cancellation,
+and a newly saved version.
+
+## Adversarial review transparency and documentation cleanup (2026-10-25)
+
+The README and Product Rationale now state that Investigator and Skeptic use
+the same underlying language model. They describe their challenge-and-objection
+process as structured scrutiny rather than independent validation, note their
+potential shared biases, and describe different-model review only as a possible
+future enhancement with no release commitment.
+
+Moved `JOURNAL.md` to `docs/JOURNAL.md` with `git mv`; its blob hash is unchanged
+and all 285 lines remain intact. The README, contributor guidance, and software
+factory documentation now point to the new location. Repository search found
+no stale root-path references, and the new local links resolve. `WOLF_TODO.md`
+remains because it still documents substantive, uncompleted evidence and
+writing requirements that the concise essay does not cover; deleting it would
+discard those open items. The essay was left unchanged.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+Pyright, frontend typecheck, and production build. No paid provider calls or
+cloud changes.
+## AI paper disclosure and preflight explanation (2026-10-25)
+
+The TeX authoring dialog now explains that SIGMA uses the complete recorded
+research history, distinguishes findings from conjectures, identifies gaps, and
+produces an AI-generated paper that has not been independently verified. Model,
+usage, and generation bounds remain visible. The deterministic TeX assembler
+adds an attribution beneath the title and author, followed by an “About this
+paper” section before the introduction. These additions are independent of the
+authoring prompt and therefore travel with the saved TeX and compiled PDF;
+existing evidence references, warnings, and obligations remain assembled as
+before.
+
+Focused regression coverage checks the disclosure text and ordering in the
+assembled and archived TeX, plus the dialog language and retained model/bounds
+in real Chrome. `uv run python tests/papers.py`, the real-Chrome
+`browser_checks/t45_long_paper.py`, and `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed. The first full-suite attempt caught only Ruff formatting
+in the new assertions; after formatting, the complete suite passed, including
+frontend typecheck and production build. No paid provider calls or cloud
+changes.
+
+## Home and text-copy polish follow-up (2026-10-25)
+
+Home Projects now starts at matching top and left offsets, with each edge half
+the previous desktop margin. Narrow mobile keeps the Projects list below the
+wrapping account pills while matching its top and left margins. New Project
+remembers the complete last successfully created form values in browser-local
+storage; failed attempts do not replace them. Project description and strategy
+approach rows have adjacent copy controls. They copy plain text in either
+display mode, and show a temporary checkmark that remains clickable for another
+copy. The artwork credit is split as “Brian Kramer &” / “OpenAI Models” and
+rendered in uppercase to match the SIGMA artwork's title lettering.
+
+Real Chrome checks cover the exact artwork credit lines, desktop/mobile Home placement, create success and
+reopen persistence, copy repetition for both text areas, and Markdown-to-plain
+clipboard output. `browser_checks/project_create_contract.py` and
+`browser_checks/t47_conclusion.py` passed. Screenshots:
+`/tmp/sigma-home-projects-desktop.png`, `/tmp/sigma-home-projects-mobile.png`,
+`/tmp/sigma-copy-buttons-desktop.png`, and
+`/tmp/sigma-copy-buttons-mobile.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test`, frontend typecheck/build, and `git diff --check` passed. No paid
+provider calls or cloud changes.
+## T93 mathematical formatting showcase and project creation regression (2026-10-25)
+
+Rebased the T93 work on current `main` (`f3bae10`, including the README update).
+The About Key Features section, README capabilities list, and `WOLF.md` essay
+now describe AI reformatting of plain-text project descriptions and saved
+Conclusions into Markdown with typeset equations. They say the saved text stays
+available and the formatted mathematics still needs review; this is not claimed
+as mathematical verification.
+
+Brian's New Project screenshot exposed that shared settings state sent the
+edit-only `show_advanced_outcome_details` preference to the strict create API.
+Project creation now sends only the create contract fields. A real-Chrome
+regression asserts the submitted request omits that preference and retains the
+API's strict error response without creating test data. A second Chrome check
+asserts the About copy and layout at 1440, 390 and 320 px. Both focused checks
+passed; screenshots are `/tmp/sigma-about-math-1440.png`,
+`/tmp/sigma-about-math-390.png`, and `/tmp/sigma-about-math-320.png`. The full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed after the frontend
+change, including typecheck and production build. No provider calls or cloud
+changes. The broader legacy `browser_checks/settings.py` did not reach its
+creation assertions in this local cloud-auth environment because its initial
+“Checking AI…” expectation was not met; the standalone request-contract check
+covers the reported regression directly.
+
+The Conclusion formatting controls now show the same visible “Formatting with
+AI…” label beside the hourglass in project descriptions, strategy approaches,
+and saved Conclusions, with consistent 6px spacing. The simple Outcome view now
+offers a quiet, underlined “Advanced Outcome” action below the summary; it saves
+the project preference and opens the full findings. The redundant excerpt note
+was removed. Focused real-Chrome checks cover all three formatting controls,
+the persisted preference link, rendered/raw modes, and desktop and narrow mobile
+layouts. Screenshots are `/tmp/sigma-project-markdown-formatting.png`,
+`/tmp/sigma-project-markdown-formatting-mobile.png`, and
+`/tmp/sigma-strategy-markdown-formatting.png`. `t47_conclusion.py` passed, and
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed in full,
+including frontend typecheck and production build. No provider calls or cloud
+changes.
+## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
+
+Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
+musl release asset and a SHA-256 checked download. Paper versions now retain the
+exact TeX source used for compilation beside the frozen evidence snapshot and
+the existing hash-checked PDF in the project's paper archive. No cloud storage
+adapter or sponsored-inference accounting code changed.
+
+Added `python -m sigma.cloud_runtime_check`, an opt-in smoke proof that checks
+the selected Docker daemon reports rootless mode, executes real Python and
+SageMath through the existing bounded executor, verifies non-root/no-network/
+no-host-secret access, retrieves preserved execution artifacts, compiles actual
+TeX to PDF, and verifies source/evidence/PDF round trips. The local command in
+`CLOUD_DEPLOYMENT.md` explicitly permits Docker Desktop/Colima for development;
+the GCE command omits that override and requires the dedicated rootless daemon.
+
+Observed locally on Colima: both images completed against their resolved image
+IDs; both reported UID 65532, blocked the disposable host-secret probe and
+network probe, and round-tripped `runtime-evidence.json`. TeX compiled to a
+5,747-byte PDF; the paper archive returned byte-identical TeX, evidence
+snapshot, and PDF. The smoke computes the SHA-256 from the real saved-project
+snapshot using the paper service's canonical JSON encoding, then recomputes it
+from the reloaded snapshot and compares it with the stored digest. Separately,
+the built cloud backend image reported Tectonic
+0.15.0 and compiled a real 4,160-byte PDF under the backend's non-root/read-only
+container settings. Local Docker reported `daemon_rootless: false`; actual
+rootless daemon execution and host-boundary attacks remain **UNVERIFIED** until
+Red reruns the documented command on GCE. No Google Cloud resources or inference
+provider calls were used.
+
+Validation: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and focused
+paper tests passed. The first bare `./sigma test` attempt failed in the
+pre-existing UI tooling scenario because this shell has a bootstrap-admin
+environment setting. A later attempt also showed the fresh worktree lacked
+frontend dependencies; after `./sigma setup`, the environment-adjusted full
+suite passed, including Ruff, formatting, Pyright, frontend typecheck, and
+production build. Backend Docker image build and in-image Tectonic compilation
+passed. The runtime smoke script was exercised on actual Docker containers.
+The GCE command and real rootless execution remain a required Red follow-up;
+hosted AI paper generation, identity authorization, restart persistence, and
+sponsored budget operations are outside this Blue runtime increment.
+
+## T93 Conclusion Markdown and math rendering (2026-10-25)
+
+Markdown-rendered Conclusions now show a neutral loading message while the lazy
+renderer loads instead of briefly presenting raw Markdown as if it were the
+rendered result. Explicit legacy LaTeX `\(...\)` and `\[...\]` delimiters are
+translated for `remark-math`; empty math blocks are omitted from rendered mode,
+compact standalone legacy formula lines and unambiguous inline powers are typeset
+conservatively. Outcomes
+with recognizable math open in rendered mode by default; ordinary prose keeps
+its existing mode. The source toggle continues to show the original saved text
+unchanged. A real-Chrome regression covers the live RH-style `### Preliminary
+finding` heading, display and inline equations, an un-delimited zeta formula, an
+inline exponent in prose, an empty math block, and both rendered/source modes at
+desktop and 375/320 px widths. `./sigma test` passed
+with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset (the first run with it set failed
+an existing UI lifecycle cleanup assertion); focused Chrome check
+`uv run --with playwright python browser_checks/t47_conclusion.py`, frontend
+typecheck, and `git diff --check` passed. No provider calls or cloud changes.
+The API conversion request also accepts a bounded optional session ID for saved Conclusions. Sponsored-cloud provider attempt accounting remains active for both project and Conclusion conversions; `tests/text_views.py` and `tests/cloud_research_api.py` cover the API route and usage accounting. The rebased tree passed `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real-Chrome paper dialog check.
+
+Follow-up: the Conclusion Markdown toggle had been missed by the earlier
+Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
+That left it inheriting the generic workspace button padding/border, while its
+SVG had no size rule and rendered at 0×0: Chrome showed a 42×50 empty outlined
+box. The Conclusion action now uses the same 28×28 borderless control and 24×20
+glyph as the Outcome heading. The focused Chrome regression asserts those
+dimensions and transparent hover surface while continuing to verify rendered
+Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
+full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
+calls or cloud changes.
+
+The next Chrome inspection exposed a separate issue: the pressed copper icon
+could accompany raw formula characters because the Conclusion was only passed
+through the local Markdown/KaTeX parser. It now uses the same AI formatting
+endpoint and preservation instructions as project text, with an explicit
+user click. The source digest is checked before and after conversion; formatted
+Markdown stays in the view state and the saved session archive is never edited.
+The button stays gray in plain mode even under hover and turns copper when the
+formatted result is displayed. An offline API regression checks display-math
+and layout instructions plus byte-identical saved history. Real Chrome with a
+mocked conversion checked the RH-style source, formatted line breaks and three
+display equations at 1440, 375 and 320 px; screenshots are in `/tmp/sigma-conclusion-ai-desktop.png`,
+`/tmp/sigma-conclusion-ai-375.png` and `/tmp/sigma-conclusion-ai-320.png`. No
+provider calls or cloud changes.
+## T91.2 packaged PDF and disaster-recovery acceptance (2026-10-25)
+
+Started on fresh branch `gray/t91.2-packaged-pdf-recovery` from current `main`
+`5fa536b`. Extended the packaged Compose / real-Chrome check with real Tectonic
+0.15.0 compilation from a saved TeX source inside the backend image, strict PDF
+parsing and extracted-content checks, authenticated API download/hash comparison,
+malformed-TeX failure/no-publication checks, backend container recreation, and
+full auth/workspace-volume backup to a new disposable Docker volume. The restore
+check compares owner project/strategy/session/paper identities, TeX and PDF
+hashes, session outcomes/evidence, and deterministic HTML report hash. A second
+simulated user remains denied after restore. Invalid tar extraction returns
+nonzero and cannot mark the restore accepted.
+
+**Acceptance matrix for the five requested criteria: PASS 5, FAIL 0, BLOCKED 0.** The packaged
+workflow also reports PASS for its existing UI/report/persistence checks; three
+cloud/provider checks are explicitly SKIPPED. Details, hashes and exact commands: [T91.2 evidence](evaluations/t91.2/README.md).
+The packaged run's PDF was 4,782 bytes, SHA-256
+`8e4604f8e35a87f0592ca802170aa86d0398364617e146bb2b1f3d421e28a5c9`; the
+restored HTML report SHA-256 was
+`284295274a8c1fd2e678b1983c0ea3256638f5f3971e9d6d864cc9f26d9dbcfa`.
+No paid inference, Google OAuth exchange, GCP resource, or rootless host
+acceptance was used. GCE disk attachment, Red-owned bootstrap/mount/systemd,
+public TLS/OAuth, and persistent-disk-on-GCE remain cloud-only limitations.
+
+Validation passed: `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
+./deploy/validate-local.sh` (fresh amd64 backend/frontend builds and packaged
+Chrome matrix); `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build);
+Ruff check/format for the browser acceptance script; `python3 -m py_compile
+browser_checks/t91_packaged_compose.py`; and `git diff --check`. Assignment elapsed time was approximately 16 minutes (08:57–09:13 PDT,
+2026-10-25). Implementation commit `5c519ba0be92604e4507cd29ae90497c1924b7ab`;
+[PR #113](https://github.com/bkramerext/sigma/pull/113).
+
+Post-merge verification after Red PR #111: fetched `origin/main` at
+`37637153c4daf0aa652b63a40cef5bf1f5b642ec` and merged it into T91.2. The only
+conflict was `docs/STATUS.md`; both acceptance entries were preserved, with no
+code conflicts. `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
+./deploy/validate-local.sh` passed again, including packaged Chrome, real
+Tectonic, malformed TeX, backend recreation, fresh-volume restore and isolation.
+The rerun PDF SHA-256 was
+`057c293aade96f34d9990e1697257da0f6da406990bb0b47e8397fb8451bd06c`; report
+SHA-256 was `fb08945053785e85e8f882517aaa98e2a0f582013f625f041dc9988b77f2ce29`.
+The requested bare `./sigma test` stopped at existing `tests/tooling.py` cleanup
+because `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is set in this shell;
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+including merged `tests/gce_host.py`, Ruff, formatting, Pyright, frontend
+typecheck and production build. No provider calls, OAuth, or GCP resources were
+used.
+
+## T98 production host readiness pre-cloud (2026-10-25)
+
+Added a pinned Ubuntu 24.04 amd64 host installer for Docker Engine/Compose v2
+and the dedicated rootless `sigma-sandbox` daemon, a rootless-only runner image
+builder, systemd startup ordering/restart units, and a read-only `PASS`/`FAIL`/
+`BLOCKED` production host preflight. The preflight validates the protected
+non-secret environment file, secret-file metadata without reading values, disk
+mount/ownership and sandbox denial, daemon/socket mode, runner images, Compose
+health dependencies, and guarded startup configuration. The runtime proof now
+checks that Python and Sage runners cannot access host state or the daemon
+socket, in addition to host secrets and network. Production rootless checks
+remain mandatory; no Docker Desktop override was used for production acceptance.
+
+The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite passed,
+including host, deployment, cloud, sponsored inference, storage, user-isolation,
+backup/restore, and Recent relocation coverage. Ruff check/format, Pyright,
+frontend typecheck/build, and `git diff --check` passed. On this macOS
+workstation the preflight reported `BLOCKED` for Ubuntu/Linux-only checks, the
+installer exited `2` before package changes, and `python -m
+sigma.cloud_runtime_check` without the dev override refused the selected
+non-rootless daemon. Ubuntu 24.04 installation, `systemd-analyze`, actual
+rootless daemon/socket permissions, image builds, disk mount, and runtime escape
+probes still require an Ubuntu 24.04 amd64 Linux host. No GCP resources, DNS,
+OAuth, Secret Manager, credentials, or paid inference were used. See
+`messages/t98_red_host_readiness.txt` for rerun commands and commit details.
+
+## T41 — Sponsored cloud inference verification (2026-10-23)
+
+Added deterministic sponsored-inference API coverage through the production
+FastAPI routes and a fake OpenAI HTTP transport. The check exercises cloud-only
+credential selection, model discovery, successful Responses usage settlement,
+idempotency, authenticated workspace isolation, explicit unconfigured behavior,
+provider HTTP failure and timeout handling, uncertain-charge holds without
+replay, and allowance exhaustion before provider dispatch. No live provider,
+cloud resources, UI changes, or product implementation changes were needed.
+
+The T41-specific test lives in `tests/cloud_research_sponsored_api.py` and is
+registered in `./sigma test`. Current-main `tests/cloud_research_api.py` remains
+intact with T99 budgeted-inference parity coverage, including its own API
+failures, timeout, quota and cross-owner checks. The T41 scenario uniquely
+exercises the production sponsored credential and Responses transport for
+research-session dispatch; shared cloud-ledger tests cover contention and
+restart/recovery.
+
+## T100 persistent-disk storage (2026-10-25)
+
+Implemented opt-in `SIGMA_STORAGE_BACKEND=persistent_disk` with a validated
+private `SIGMA_STORAGE_ROOT`, while preserving `local` as the default. The
+authenticated workspace services now cover projects, strategies, sessions,
+evidence/artifacts, Recents, paper files, and research accounting. GCE Compose
+settings and a host mount guard are included. No GCP resources, OAuth exchange,
+or paid inference were used.
+
+Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`,
+focused persistent workspace/research tests, Ruff, Pyright, and
+`git diff --check`. Real Chrome exercised sample copy, project and strategy
+edits, save/reload/reopen, backend restart, Recent identity, cross-subject
+denial, and stock-sample immutability; screenshot and transcripts are in
+[T100 evidence](evaluations/t100/README.md). A disposable local Docker volume
+and backend image retained auth data through restart and container recreation.
+Negative root, symlink, permissions, traversal, corrupt mapping, and missing
+mount checks passed. The local Docker installation lacks Compose v2, so merged
+Compose configuration and a real GCE disk mount are unverified; YAML parsing
+and the guard's missing-mount check passed. Production startup now uses the
+guarded host script from the deployment runbook, with `/etc/sigma/deploy.env` as
+its default env file; the exact env-file handoff and refusal to invoke Docker on
+a missing mount are covered in `tests/storage.py`. See
+`messages/t100_red_r4r.txt` for the complete handoff and commit details.
+
+## T86 README validation (2026-10-25)
+
+Rewrote the newcomer README with a local quick start, optional AI/API-key
+configuration, a separate optional local Google administrator bootstrap, and
+links to the main product and engineering guides. The owner deferred Home and
+RH screenshots until after cloud launch; README contains no screenshot
+placeholders or substitute images.
+Setup and bootstrap details were checked against `./sigma setup`,
+`src/sigma/ui.py`, `src/sigma/local_config.py`, and the local Google sign-in
+section of `CLOUD_DEPLOYMENT.md`.
+
+`./sigma setup` passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed all scenarios, Ruff, formatting, Pyright, frontend typecheck, and
+production build. An actual local `./sigma start` reached ready state; frontend
+and API health URLs returned HTTP 200, and `./sigma shutdown` completed. The
+checkout contained Google OAuth client settings but no bootstrap email in that
+launch environment, so the observed run stayed in local single-user mode and
+printed its existing configuration warning. Credentialed Google sign-in was
+not exercised. The updated T86 assigns WOLF drafting to ChatGPT after Brian
+approves its outline; Gray's work on this branch is limited to the README.
+
+## T99 Blue: sponsored inference outside sessions (2026-10-25)
+
+Started from current `main` at `d4ca2194b68314336855823970b4b97f55c1256a` on
+the isolated `t99-cloud-inference-parity` branch. Reused the existing durable
+cloud call ledger for standalone proposal calls, agentic proposal steps, text
+conversion, and one-shot paper generation. Each provider attempt now reserves a
+per-user/global spend amount, token ceiling and concurrent slot before dispatch,
+then reconciles reported usage using the reviewed model prices. Provider failures
+and interruptions after dispatch retain the reservation as an unknown charge.
+Cloud inference accepts only the server-side sponsored API credential. Existing
+project ownership checks, cancellation paths and LOCAL credential selection
+remain in place.
+
+Removed the cloud 403 gates from the four operation routes after adding ledger
+admission at each provider-call site, including every long-form paper stage.
+Paper preflight and checkpoint restart are available to authenticated owners as
+well. Cloud provider quality, live OIDC, hosted persistence, cloud browser
+behavior, and TeX compilation on the hosted VM were not exercised; no paid calls
+or cloud resources were used.
+
+`docs/CLOUD_DEPLOYMENT.md` still describes these routes as disabled; that
+Red-owned deployment document was left untouched for its owner to reconcile.
+
+## T99.1 Blue: pre-cloud sponsored inference acceptance (2026-10-25)
+
+Extended the existing `tests/cloud_research_api.py` scenario rather than adding
+a test harness. It uses the production FastAPI app, a test-only verified
+principal adapter, temporary but persistent authenticated workspaces and
+SQLite ledger, the real hosted `auth_context`/configuration path, and an
+offline `httpx.MockTransport` provider fixture. A personal API key is present
+as a decoy; all Responses calls carry only the sponsor credential. No real
+provider calls, GCP resources, or paid usage occurred.
+
+**Acceptance matrix tally: PASS 7, FAIL 0, BLOCKED 0.**
+
+| Acceptance item | Result | Evidence |
+|---|---|---|
+| Proposal, agentic proposal, Markdown conversion, one-shot and long-form paper endpoints | PASS | Existing production-route scenario; Responses fixture returns schema-valid payloads and each operation reconciles ledger calls. |
+| Sponsored key precedence and absent-key rejection | PASS | Real auth adapter reports `cloud_service_api_key`; server key is used with a personal key configured; removing the server key leaves provider dispatch count unchanged. |
+| Per-user and global spending ceilings; concurrent admission; quota preflight | PASS | Full global pool blocks a second authenticated user before dispatch; a raised global ceiling with the second user's allowance exhausted blocks that user's next dispatch; same-user simultaneous operation is rejected while the first provider call is held. |
+| Timeout, malformed response, cancellation, uncertain charge | PASS | HTTP 429, read timeout, completed response with missing usage/malformed output, and explicit cancellation each retain an unknown reservation; cancellation returns HTTP 499. |
+| Durable recovery and cross-user isolation | PASS | A fresh Uvicorn/FastAPI process reads the same persistent ledger after the test workload; owner A retains four unknown attempts and zero remaining, while owner B retains zero unknown attempts and its full $1 allowance. |
+| Authenticated workspace evidence and artifacts | PASS | Research and paper paths resolve under the private workspace root; one-shot and long-form paper metadata and PDF files are readable through the owning API identity; cross-owner project reads remain denied. |
+
+Cancellation testing exposed an API route defect: an explicitly cancelled
+proposal task previously let `CancelledError` escape and produced no HTTP
+response. `src/sigma/api.py` now returns the bounded `499` response already
+used for client disconnect cancellation. Focused checks and the full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+formatting, Pyright, frontend typecheck and production build. The requested
+bare `./sigma test` also ran, but stopped at the pre-existing
+`tests/tooling.py` UI cleanup assertion because the invoking shell exported
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`; the environment-clean rerun passed that
+same test. Test output uses a deterministic provider fixture, the PDF compiler
+is stubbed, and identity is provided by the test-only shim rather than live
+OIDC. Those are deliberate no-cost local test boundaries; no provider-quality,
+browser, Google OAuth, or GCP claim is made. No paid provider calls or cloud
+resources were used.
+
+Deterministic API coverage exercises successful strategy and agentic proposals,
+text conversion, one-shot and forced long-form paper generation, TeX/PDF archival
+with the sponsored bearer, and checks their reconciled ledger rows. Provider 429
+and a request-timeout fixture both retain unknown reservations; exhaustion blocks
+dispatch and cross-user project access is denied. Existing local proposal,
+agentic, paper and text conversion regression scenarios also passed.
+Focused commands `uv run --locked --no-sync python tests/cloud_research_api.py`,
+`tests/proposals.py`, `tests/agentic.py`, `tests/papers.py` and
+`tests/text_views.py` passed. The first bare `./sigma test` run stopped at the
+existing `tests/tooling.py` UI cleanup assertion while
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` was set. After `./sigma setup`,
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, formatting, Pyright, frontend typecheck and production build. The
+environment override matches the repository's existing UI test workaround.
+
+Adversarial review of PR #107 found that the write-ahead estimate counted only
+request-specific dynamic input. The reservation now uses the UTF-8 JSON size of
+the full billable `instructions`, `input`, and structured-output `text` payload,
+then adds maximum output tokens. A deterministic API regression leaves enough
+budget for dynamic input alone but not for the complete request; the provider is
+not dispatched. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed
+again after the correction, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. No paid inference or cloud resources were used.
+
+Follow-up: the Conclusion Markdown toggle had been missed by the earlier
+Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
+That left it inheriting the generic workspace button padding/border, while its
+SVG had no size rule and rendered at 0×0: Chrome showed a 42×50 empty outlined
+box. The Conclusion action now uses the same 28×28 borderless control and 24×20
+glyph as the Outcome heading. The focused Chrome regression asserts those
+dimensions and transparent hover surface while continuing to verify rendered
+Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
+full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
+calls or cloud changes.
+## Project header About pill placement (2026-10-25)
+
+The project header uses a compact About pill that matches Home's color, type,
+border and dimensions. Desktop controls form three columns and two rows:
+Difficulty/Model/Thinking, then About/Google/ChatGPT. On narrow screens About
+remains directly below Difficulty in the responsive two-column arrangement.
+The Home header orders its About/Admin group left of Google/ChatGPT and keeps
+the intended gaps between pills.
+Real Chrome `browser_checks/header.py` passed at 1280, 1100, 700, 390 and 320 px,
+including Home placement and no horizontal overflow. Screenshots:
+`/tmp/sigma-a13-header-1280.png`, `/tmp/sigma-a13-header-390.png`,
+`/tmp/sigma-home-header-admin-desktop.png` and
+`/tmp/sigma-home-header-admin-mobile.png`. `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios, Ruff,
+formatting, Pyright, frontend typecheck and production build. No live provider
+calls or cloud changes.
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.
@@ -3450,3 +4141,73 @@ test logs, synthetic-test diagnostics and provenance are in
 `docs/evaluations/increment_5/`. The blind unscripted quality gate is proposed
 there but awaits explicit paid-provider authorization. No PDF/AI-paper quality,
 unprompted reasoning advantage or general mathematical proof is claimed.
+
+## T91 — production-shaped local Compose smoke (2026-10-25)
+
+Ran `./deploy/validate-local.sh` against the tree at
+`579a2069090bd972232c88ec8b5515485d81b0b2` (whose code base is current `main`
+`f3bae10af63eeb781b549bd610100ba75f6a3633`). Docker Engine 29.5.2 on the
+Colima Linux VM and Compose 5.6.1 built the locked backend and frontend images,
+started the local Compose stack, served the SPA and API through its edge,
+reported hosted auth enabled/ready, and confirmed auth SQLite persistence after
+backend restart and container recreation. The script exited 0 with
+`Local deployment smoke passed`. It removed its temporary stack, volumes, and
+dummy secret files. No Google or provider endpoints were called. Compose was
+installed through Homebrew; Docker plugin discovery used a temporary CLI
+config, leaving the existing Docker config unchanged.
+
+This verifies the local production-shaped package and its basic persistence
+path. It is not a clean-machine README onboarding/browser acceptance run, live
+Google OAuth, sponsored inference, GCE startup, rootless-daemon isolation,
+public HTTPS, backup restore, or cloud deployment approval. Those remain
+separate acceptance items in T91 and the cloud runbook.
+
+## T91 — packaged Chrome workflow increment (2026-10-25)
+
+From `main` at `f0dd5c63dd88cdd79190231856119dbfb317522d` and reconciled with
+current `main` (`903a356230267390aa7fdcc20d774eda56195c48`), expanded the
+local Compose check to drive installed Chrome against the packaged Caddy,
+Nginx, and FastAPI services. The backend image now includes the stock `samples/`
+catalog, which the packaged sample endpoint requires. See the explicit
+acceptance matrix and run instructions in `docs/evaluations/t91/README.md`.
+
+**PASS:** sample creation; project and strategy edits; save, reload and reopen;
+five saved sessions and outcomes; HTML report download; User B denied User A's
+project, report, and session evidence; the same session and edited project
+survived backend container recreation; packaged Compose health and auth SQLite
+survived restart and full container recreation. **SKIPPED:** real Google OAuth
+(the workflow seeds two ephemeral local sessions), PDF download (no saved PDF
+fixture), and the T100 persistent-disk configuration (this run uses Compose's
+default local storage). T99 inference is also skipped; no provider calls were
+made. This is local acceptance, not live OAuth or cloud-deployment evidence.
+
+## Issue 118 — harden within-session blind comparison (2026-10-25)
+
+Revised the T114 proposal after adversarial review. The active design uses three
+repeats for each of six tasks and two evidence variants (36 paired comparisons,
+72 arm runs), but treats only the six tasks as independent clusters. It reports
+all task-level effects and a six-cluster interval and does not claim confirmatory
+power. It tests within-session adversarial review versus single-role self-review;
+it does not test cumulative persistence (separate issue #119).
+
+Added a common six-field output normalizer, identical character caps, explicit
+clipping and native schema-truncation audit fields, scorer-only anonymous
+packets, output-digest validation and a task-cluster summary. Removed
+objection-uptake scoring and replaced the old decisive `+0.40` threshold with
+task-outcome/reasoning primary scoring and exploratory interpretation. The
+proposal now requires an independent curator to document task/key/model-family
+provenance and contamination, separate key custody, and graders independent of
+the task author, curator, implementer and provider run. A one-pair throwaway
+shakedown is specified but remains **not authorized**.
+
+Focused protocol and audit regressions passed. The offline paired harness
+validated 72 synthetic records across 36 pairs with zero model calls or cost.
+The changed Python scripts passed focused Ruff checks and `git diff --check`.
+`./sigma test` stopped at the existing `tests/tooling.py::check_ui` mocked
+`stop_servers` assertion (expected one call, got zero); the runner stopped
+before Ruff/format, Pyright, frontend checks and production build. No browser
+workflow changed. No paid inference, live shakedown, cloud operation or browser
+check occurred. No project was modified or exercised, so no project export was
+created. The newcomer summary above is retained; the concurrent Green
+PR #108 also edits `STATUS.md`, so integration must preserve that summary and
+this issue record.

@@ -983,6 +983,10 @@ def projects_root() -> Path:
     workspace = cloud_workspaces.current()
     if workspace is not None:
         return workspace.path
+    from sigma.storage import persistent_disk_enabled
+
+    if persistent_disk_enabled():
+        raise ProjectError("Authenticated persistent workspace is unavailable.")
     try:
         configured = Path(
             os.environ.get("SIGMA_PROJECTS_ROOT", str(ROOT / "projects"))

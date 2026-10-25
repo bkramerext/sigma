@@ -10,6 +10,12 @@ from sigma import cloud_auth, cloud_research, openai_connection, python_sandbox
 
 
 def main() -> int:
+    from sigma.storage import validate_startup
+
+    try:
+        validate_startup()
+    except RuntimeError:
+        return 1
     auth = cloud_auth.config()
     if not auth.enabled or auth.error:
         return 1

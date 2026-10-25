@@ -2,7 +2,7 @@
   "schema_version": 8,
   "id": "74c892da-1c36-4480-8dac-d9ccc17154ba",
   "title": "Riemann Hypothesis: A Research Portfolio",
-  "problem": "Determine whether every nontrivial zero of the Riemann zeta function has real part 1/2, by proving the statement or producing a valid counterexample. The objective is open; do not assume it is true or that a proof is within reach. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source search or formal proof-assistant tools. Local scientific Python or SageMath computation is permitted only when the session execution_tools explicitly reports an available runtime; otherwise no numerical or symbolic runtime is available. Require saved execution evidence for every computation claim; never claim to have searched, computed, or machine-verified anything without that evidence. Finite computation is not proof of a statement about all zeros. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.",
+  "problem": "Can every nontrivial zero of the Riemann zeta function lie on the critical line? This is the Riemann Hypothesis, a famous open problem. Test bounded claims without assuming the answer or expecting a proof. Begin with a precise statement of the analytic continuation and zero domain your argument uses. Treat each proposed lemma as a separate obligation, seek counterexamples to intermediate claims, and distinguish theorem, heuristic, numerical check, and recollection. This workspace has no external-source search or formal proof-assistant tools. Local scientific Python or SageMath computation is permitted only when the session execution_tools explicitly reports an available runtime; otherwise no numerical or symbolic runtime is available. Require saved execution evidence for every computation claim; never claim to have searched, computed, or machine-verified anything without that evidence. Finite computation is not proof of a statement about all zeros. A useful partial result must be exact, nontrivial, and independently checkable from the text. If no defensible advance is made, report the obstacle and a discriminating next step without presenting a research program as a candidate proof.",
   "events": [
     {
       "sequence": 1,
@@ -26,6 +26,12 @@
       "kind": "strategy.created",
       "timestamp": "2026-10-23T06:16:05.810543+00:00",
       "strategy_id": "80c175ae-d783-4087-bd13-0585f1342664"
+    },
+    {
+      "sequence": 5,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:41.425424+00:00",
+      "strategy_id": "aaa73abb-17bd-48e6-af08-91cc6b623933"
     }
   ],
   "strategies": [
@@ -64,13 +70,26 @@
       "summary": "",
       "provenance": null,
       "enabled": true
+    },
+    {
+      "id": "aaa73abb-17bd-48e6-af08-91cc6b623933",
+      "title": "Test one implication chain",
+      "approach": "Select one classical implication of the Riemann Hypothesis and write every intermediate statement with its assumptions. Prove one bounded lemma or locate the first unsupported step, then state why the implication does not by itself prove RH.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:41.425424+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Test one implication chain",
+      "provenance": null,
+      "enabled": true
     }
   ],
   "investigation_type": "mathematical",
   "active_order": [
     "110615e0-c289-4519-a14e-fa8a042606e2",
     "82f288cc-b6ab-40c9-8453-c0e0b0a8bc60",
-    "80c175ae-d783-4087-bd13-0585f1342664"
+    "80c175ae-d783-4087-bd13-0585f1342664",
+    "aaa73abb-17bd-48e6-af08-91cc6b623933"
   ],
   "ai_model": "gpt-6.1-sol",
   "reasoning_effort": "high",

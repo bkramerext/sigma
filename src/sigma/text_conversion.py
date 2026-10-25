@@ -8,11 +8,12 @@ import re
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sigma import cloud_research, cloud_workspaces
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
 from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
-from sigma.text_views import Format, _format, inspect_text, store_conversion
+from sigma.text_views import Format, _format, digest, inspect_text, store_conversion
 
 CALL_SECONDS = 60
 MAX_CONVERSION_RESPONSE_BYTES = MAX_STREAM_BYTES
@@ -32,6 +33,8 @@ INSTRUCTIONS = (
     "Do not solve, prove, invent, summarize, strengthen or weaken the content. Preserve code "
     "and literal strings; do not reinterpret ambiguous underscores or escapes without context. "
     "For Markdown use normal Markdown prose and $...$ or $$...$$ LaTeX mathematics. "
+    "Break long mixed prose-and-equation lines into readable paragraphs; put substantial "
+    "equations in standalone display-math blocks and keep brief symbols inline. "
     "For Plain use readable ASCII mathematics such as a_n, >=, F_{n+2}, 1/3, never raw "
     "LaTeX commands or Markdown delimiters. Report genuine ambiguity in public warnings. "
     "Output only the requested structured body and warnings. The result is an AI conversion, "
@@ -55,10 +58,19 @@ async def convert_text(
     strategy_id: str | None = None,
     expected_digest: str | None = None,
     expected_binding: str | None = None,
+    expected_project_id: str | None = None,
+    session_id: str | None = None,
 ) -> dict:
     try:
         return await _convert_text(
-            path, scope, target, strategy_id, expected_digest, expected_binding
+            path,
+            scope,
+            target,
+            strategy_id,
+            expected_digest,
+            expected_binding,
+            expected_project_id,
+            session_id,
         )
     except TimeoutError as exc:
         raise ProjectError("Text conversion timed out; source text was kept") from exc
@@ -71,6 +83,8 @@ async def _convert_text(
     strategy_id: str | None = None,
     expected_digest: str | None = None,
     expected_binding: str | None = None,
+    expected_project_id: str | None = None,
+    session_id: str | None = None,
 ) -> dict:
     target_format = _format(target)
     if _gate.locked():
@@ -78,7 +92,39 @@ async def _convert_text(
     async with _gate:
         async with asyncio.timeout(CALL_SECONDS + 5):
             view = inspect_project(path)
-            source = inspect_text(path, scope, strategy_id)
+            if expected_project_id is not None and view.project.id != expected_project_id:
+                raise ProjectError("Project identity changed; reopen it before converting")
+            if scope == "research-conclusion":
+                if not session_id or strategy_id is not None or target_format != "markdown":
+                    raise ProjectError(
+                        "Conclusion conversion requires a saved session and Markdown"
+                    )
+                from sigma.research_sessions import (
+                    MAX_CONCLUSION_CHARACTERS,
+                    read_session_snapshot,
+                )
+
+                records, _ = read_session_snapshot(path)
+                record = next((item for item in records if item.get("id") == session_id), None)
+                outcome = record.get("outcome") if record else None
+                raw_conclusion = outcome.get("conclusion") if isinstance(outcome, dict) else None
+                if not isinstance(raw_conclusion, str) or not raw_conclusion.strip():
+                    raise ProjectError("Saved research Conclusion is unavailable")
+                if len(raw_conclusion) > MAX_CONCLUSION_CHARACTERS:
+                    raise ProjectError("Conclusion exceeds the conversion limit")
+                source_digest = digest(raw_conclusion)
+                if expected_digest is None:
+                    raise ProjectError("Conclusion source digest is required")
+                source = {
+                    "source_format": "plain",
+                    "source_digest": source_digest,
+                    "plain": {"body": raw_conclusion},
+                    "markdown": None,
+                }
+            else:
+                if session_id is not None:
+                    raise ProjectError("Session ID is only valid for a research Conclusion")
+                source = inspect_text(path, scope, strategy_id)
             if expected_digest is not None and source["source_digest"] != expected_digest:
                 raise ProjectError("Text changed since this view opened. Refresh before converting")
             if target_format == source["source_format"]:
@@ -87,7 +133,7 @@ async def _convert_text(
                 return source
             source_format: Format = source["source_format"]
             source_body: str = source[source_format]["body"]
-            limit = 20000 if scope == "project" else MAX_STRATEGY_APPROACH
+            limit = 20000 if scope in {"project", "research-conclusion"} else MAX_STRATEGY_APPROACH
             if len(source_body) > limit:
                 raise ProjectError("Source text exceeds the conversion limit")
             binding = await auth_context()
@@ -141,7 +187,24 @@ async def _convert_text(
                 payload["input"] = [{"role": "user", "content": context}]
                 headers["Accept"] = "text/event-stream"
             guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+            attempt = None
             try:
+                if cloud_workspaces.enabled():
+                    if (
+                        binding["identity"] != "cloud_service_api_key"
+                        or binding["mode"] != "api_key"
+                        or not binding["token"]
+                    ):
+                        raise ProjectError("Sponsored cloud inference is not configured.")
+                    attempt = cloud_research.start_provider_attempt(
+                        view.project.id,
+                        path,
+                        config["model"],
+                        payload,
+                        8000,
+                    )
+                if attempt is not None:
+                    attempt.dispatched = True
                 async with (
                     asyncio.timeout(CALL_SECONDS),
                     httpx.AsyncClient(
@@ -208,6 +271,7 @@ async def _convert_text(
                             raw = {}
                         if response.status_code != 200:
                             failure(response.status_code, raw, binding["mode"], guard)
+                cloud_research.settle_provider_attempt(attempt, raw)
                 if (
                     not isinstance(raw, dict)
                     or raw.get("status") != "completed"
@@ -243,6 +307,8 @@ async def _convert_text(
                 raise ProjectError(
                     "Could not reach OpenAI for conversion; source text was kept"
                 ) from exc
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise ProjectError(str(exc)) from exc
             except (ValueError, KeyError, TypeError, AttributeError, ValidationError) as exc:
                 if isinstance(exc, ValidationError):
                     detail = "; ".join(
@@ -255,6 +321,12 @@ async def _convert_text(
                 raise ProjectError(
                     f"Provider returned malformed conversion output ({detail}); source text was kept"
                 ) from exc
+            finally:
+                if attempt is not None:
+                    try:
+                        cloud_research.finish_provider_attempt(attempt)
+                    except cloud_research.CloudResearchUnavailable:
+                        pass
             body = result.body
             if (
                 not body.strip()
@@ -285,6 +357,30 @@ async def _convert_text(
                 raise ProjectError(
                     "Project model/Thinking changed during conversion; nothing was saved"
                 )
+            if scope == "research-conclusion":
+                from sigma.research_sessions import read_session_snapshot
+
+                records, _ = read_session_snapshot(path)
+                record = next((item for item in records if item.get("id") == session_id), None)
+                outcome = record.get("outcome") if record else None
+                latest_conclusion = outcome.get("conclusion") if isinstance(outcome, dict) else None
+                if (
+                    not isinstance(latest_conclusion, str)
+                    or digest(latest_conclusion) != source["source_digest"]
+                ):
+                    raise ProjectError(
+                        "Saved Conclusion changed during conversion; reopen before retrying"
+                    )
+                return {
+                    "body": body,
+                    "warnings": result.warnings,
+                    "source_digest": source["source_digest"],
+                    "provenance": {
+                        "provider": "openai",
+                        "model": config["model"],
+                        "reasoning_effort": config["reasoning_effort"],
+                    },
+                }
             return store_conversion(
                 path,
                 scope,

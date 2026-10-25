@@ -43,6 +43,11 @@ are fixed to amd64 digests. The lockfiles pin Python/JavaScript packages. Build
 the Python and Sage execution images from the existing `sandbox-poc` recipes
 and tags in `src/sigma/python_sandbox.py`; SIGMA continues to apply its existing
 no-network, non-root, memory, CPU, process, wall-time, and output limits.
+The backend image also includes pinned Tectonic 0.15.0 for paper PDF
+compilation. Each paper version persists its exact TeX source, frozen evidence
+snapshot, metadata, and hash-checked PDF in the owner's existing project
+workspace on the state disk. Tectonic runs in untrusted mode with bounded input,
+time, and output; first compilation may download its typesetting bundle.
 
 The web/API container is unprivileged, has a read-only root filesystem, drops
 Linux capabilities, and sees only a **separate rootless Docker daemon** for
@@ -261,75 +266,81 @@ trial-signup, project-creation, or API-enablement command.
 
 ## Host setup and launch contract
 
-1. Mount the state disk at `/srv/sigma-state`; create
-   `/srv/sigma-state/auth` owned by UID/GID `10001`, mode `0700`. Ensure it is
-   mounted before Docker/SIGMA starts. Do not put secrets in this disk.
-2. Install Docker Engine with Compose v2 from their official Ubuntu
-   repositories. Caddy runs as the pinned Compose edge container. Configure
-   Docker's log driver rotation as shown in Compose.
-3. Create `sigma-sandbox` as a separate non-sudo user. Install Docker's
-   `docker-ce-rootless-extras`, enable lingering, and initialize its rootless
-   daemon. Build the existing Python and SageMath recipes while targeting that
-   daemon:
+1. Verify the attached state disk identity before mounting; do not format a disk
+   as part of host setup. Add its owner-confirmed filesystem UUID to `/etc/fstab`
+   at `/srv/sigma-state` so systemd generates
+   `srv-sigma\x2dstate.mount`. Mount it, then set the filesystem root to
+   `root:root` mode `0700`. `deploy/start-gce.sh` creates the separate `auth`
+   directory as UID/GID `10001`, mode `0700`; the rootless sandbox account must
+   not traverse the state filesystem. Do not put secrets on this disk.
+2. Stage the reviewed checkout at `/opt/sigma/current`, then run
+   `sudo /opt/sigma/current/deploy/install-gce-host.sh` on Ubuntu 24.04 amd64.
+   The idempotent installer configures Docker's official Ubuntu repository,
+   Docker Engine and Compose v2, rootless extras, the non-sudo `sigma-sandbox`
+   user, socket group/mode override, and systemd units. It enables the host
+   engine and rootless daemon but does not configure the disk UUID, deploy.env,
+   secrets, DNS/OAuth, or start the SIGMA application. It uses OS package
+   repositories only; it creates no GCP resources.
+3. Build the runner images through the separate rootless daemon, never through
+   the host Compose daemon:
 
    ```sh
    SANDBOX_UID=$(id -u sigma-sandbox)
-   sudo -u sigma-sandbox XDG_RUNTIME_DIR="/run/user/$SANDBOX_UID" \
-     systemctl --user edit docker.service
-   sudo -u sigma-sandbox env DOCKER_HOST="unix:///run/user/$SANDBOX_UID/docker.sock" \
-     docker build --platform linux/amd64 -t sigma-research-python:0.1 \
-     -f /opt/sigma/current/sandbox-poc/Dockerfile /opt/sigma/current/sandbox-poc
-   sudo -u sigma-sandbox env DOCKER_HOST="unix:///run/user/$SANDBOX_UID/docker.sock" \
-     docker build --platform linux/amd64 -t sigma-research-sage:10.8 \
-     -f /opt/sigma/current/sandbox-poc/Dockerfile.sage /opt/sigma/current/sandbox-poc
+   sudo -u sigma-sandbox env XDG_RUNTIME_DIR="/run/user/$SANDBOX_UID" \
+     /opt/sigma/current/deploy/build-sandbox-images.sh
    ```
 
-   In the user service override, add these lines so each daemon start exposes
-   the socket only to the dedicated sandbox group as well as its owner:
-
-   ```ini
-   [Service]
-   ExecStartPost=/usr/bin/chgrp sigma-sandbox %t/docker.sock
-   ExecStartPost=/usr/bin/chmod 0660 %t/docker.sock
-   ```
-
-   Save the override, restart the user daemon, confirm the socket is owned by
-   `sigma-sandbox:sigma-sandbox` with mode `0660`, and place its numeric GID and
-   socket path in `/etc/sigma/deploy.env`. Do not relax socket permissions to
-   world access. Verify the backend can connect and an unrelated host account
-   cannot.
-4. Install the reviewed checkout at `/opt/sigma/current`. Copy
-   `deploy/env.example` to `/etc/sigma/deploy.env`, set the approved non-secret
-   values and exact release SHA, then set owner root and mode `0600`. Create
-   two Secret Manager entries. Run (with the approved VM service account):
+   If invoking the build steps manually, use `DOCKER_HOST=unix:///run/user/$SANDBOX_UID/docker.sock`
+   with `sudo -u sigma-sandbox`. The installed user-service override applies
+   `chgrp sigma-sandbox` and `chmod 0660` after every socket creation. Confirm
+   socket ownership/group/mode, numeric group ID, rootless daemon mode, and that
+   `sigma-sandbox` is in neither `docker` nor `sudo`. Do not grant world access.
+4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; use the exact 40-digit
+   release SHA, production hostname/OAuth client ID, approved limits, socket
+   path and actual numeric GID. The environment file contains only non-secret
+   values and secret-file paths. Set `root:root` mode `0600`. Create the two
+   Secret Manager entries and fetch them with the approved VM service account:
 
    ```sh
-   sudo deploy/fetch-secrets.sh PROJECT_ID GOOGLE_OAUTH_SECRET OPENAI_API_KEY_SECRET
+   sudo /opt/sigma/current/deploy/fetch-secrets.sh PROJECT_ID GOOGLE_OAUTH_SECRET OPENAI_API_KEY_SECRET
    ```
 
-5. Configure the VM-managed Caddy Compose service and systemd unit to read the
-   same env file and use both `deploy/compose.yaml` and
-   `deploy/compose.gce.yaml`. The state disk bind override is essential. Start
-   only after DNS and OAuth settings are reviewed:
+5. Run the read-only host gate. It captures system/Docker command output,
+   checks metadata but never reads secret file contents, and prints only
+   explicit `PASS`, `FAIL`, or `BLOCKED` rows. Exit status is 0 only when every
+   check passes, 1 for a failed check, and 2 when prerequisites are blocked.
+   Do not continue until it exits 0:
 
    ```sh
-   cd /opt/sigma/current
-   docker compose --env-file /etc/sigma/deploy.env \
-     -f deploy/compose.yaml -f deploy/compose.gce.yaml up --build --detach
+   sudo /usr/local/libexec/sigma/gce_preflight.py --json
+   sudo systemctl enable --now sigma.service
    ```
 
-   The unit should use `Restart=on-failure`, start after `docker.service` and
-   `srv-sigma\\x2dstate.mount`, and run the same `compose ... up -d` on boot.
-   Do not run the stack until both disks and secrets are present. Public ingress
-   reaches only Caddy; backend/frontend addresses remain private to Compose.
+   `sigma.service` requires Docker, the dedicated rootless daemon, and
+   `srv-sigma\x2dstate.mount`; it runs the same preflight in `ExecStartPre`,
+   then invokes guarded `start-gce.sh`. `Restart=on-failure` retries a failed
+   launch. Stop/restart only through `systemctl`; do not invoke production
+   Compose `up` or `start` directly. Public ingress reaches only Caddy; the
+   backend and frontend addresses remain private to Compose.
+
+The preflight is intentionally **read-only**: it checks OS/package/service
+presence, the protected environment file's syntax and modes, secret-file
+metadata (not content), disk mount and permissions, isolation of the state
+filesystem from `sigma-sandbox`, both daemon modes, socket permissions, runner
+image tags, Compose merged configuration, and systemd unit validity. It does
+not start containers or perform the untrusted-code isolation experiment. After
+host setup, run the separate rootless runtime proof below without the developer
+`--allow-nonrootless-dev` override and retain its output. A Mac/Colima host is
+expected to report `BLOCKED` for the Ubuntu/systemd/rootless production checks;
+never substitute its rootful daemon for the GCE acceptance.
 
 ## Backup, restart, update, and rollback
 
-- **Restart/recovery:** Compose uses `restart: unless-stopped`; systemd starts
-  the stack after Docker and the state-disk mount. SQLite auth, workspaces,
-  sessions, artifacts and spend reservations remain on the disk. Existing T22
-  recovery treats an interrupted provider attempt as unknown and holds its
-  reservation; do not delete or manually edit the ledger after a restart.
+- **Restart/recovery:** Compose uses `restart: unless-stopped`; systemd invokes
+  guarded `start-gce.sh` after Docker and the state-disk mount. SQLite auth,
+  workspaces, sessions, artifacts and spend reservations remain on the disk.
+  Existing T22 recovery treats an interrupted provider attempt as unknown and
+  holds its reservation; do not delete or manually edit the ledger after a restart.
 - **Application-consistent backup:** Notify users; stop the stack so no SQLite
   transaction or project write is in flight. Create a regional standard
   snapshot of `sigma-state` and a separately encrypted tar copy in a private
@@ -352,8 +363,9 @@ trial-signup, project-creation, or API-enablement command.
       --output /tmp/sigma-state-backup.tgz.gpg
   gcloud storage cp /tmp/sigma-state-backup.tgz.gpg gs://APPROVED_PRIVATE_BUCKET/recovery/
   rm -f /tmp/sigma-state-backup.tgz.gpg
-  docker compose --env-file /etc/sigma/deploy.env \
-    -f deploy/compose.yaml -f deploy/compose.gce.yaml start
+  sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
+    SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
+    /opt/sigma/current/deploy/start-gce.sh
   ```
 
   Use a RAM-backed or otherwise encrypted temporary directory if disk data
@@ -438,9 +450,55 @@ limits, read-only root, and non-root user; deterministic `print(6 * 7)` returned
 first local Python build took about two minutes under emulation; first-time
 Sage image build on GCE and memory use remain unmeasured.
 
+Run the opt-in runtime proof after building the Python and Sage runner images.
+On a developer workstation using Docker Desktop/Colima, this proves real bounded
+Python and Sage runs, UID/network/host-secret/state/socket isolation probes, artifact
+round-trips, actual PDF compilation, and paper source/evidence/PDF persistence.
+The workstation daemon is not the production rootless daemon, so this does not
+close GCE isolation acceptance:
+
+```sh
+docker build -t sigma-research-python:0.1 -f sandbox-poc/Dockerfile sandbox-poc
+docker build --platform linux/amd64 -t sigma-research-sage:10.8 -f sandbox-poc/Dockerfile.sage sandbox-poc
+uv run --locked python src/sigma/cloud_runtime_check.py --allow-nonrootless-dev
+```
+
+To verify the pinned compiler included in the actual backend image (the
+workstation command above uses the workstation's installed Tectonic):
+
+```sh
+docker build -t sigma-backend:runtime-check .
+docker run --rm -i --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001 \
+  -e SIGMA_STATE_DIR=/tmp/sigma sigma-backend:runtime-check python - <<'PY'
+from sigma.project_reports import _compile_pdf
+pdf = _compile_pdf(r"\documentclass{article}\begin{document}SIGMA PDF smoke.\end{document}")
+assert pdf.startswith(b"%PDF-")
+print({"pdf_bytes": len(pdf)})
+PY
+```
+
+For GCE, run the same proof inside the backend container after the dedicated
+rootless daemon and both runner images are ready. Compose already points the
+backend Docker CLI at `/run/sigma-sandbox/docker.sock`; omitting the development
+override makes the proof fail unless Docker reports rootless mode:
+
+```sh
+docker compose --env-file /etc/sigma/deploy.env \
+  -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+  exec -T backend python -m sigma.cloud_runtime_check
+```
+
+The output includes the daemon's reported rootless status, image IDs, execution
+IDs, isolation observations, and PDF SHA-256. Preserve that output with the
+GCE acceptance record. This proof creates a disposable project under the
+container's `/tmp`; it does not exercise Google login, sponsored inference,
+cross-user HTTP authorization, or persistence across container/VM restart.
+
 UNVERIFIED until measured on the approved GCE VM: exact regional invoice,
 first-time Sage image build duration/bytes/RAM, VM memory under application plus
-Sage concurrency, rootless Docker socket behavior and adversarial isolation,
+Sage concurrency, successful target-VM run of the rootless runtime proof above
+and adversarial escape/isolation checks,
 end-to-end HTTPS certificate issuance, production OAuth client behavior, actual
 Secret Manager IAM, snapshot/GCS restore and retention, service boot after VM
 restart, and production latency/capacity. The local tests cannot establish
@@ -840,14 +898,21 @@ gcloud compute instances add-tags "$VM_NAME" --project="$PROJECT_ID" \
   --zone="$ZONE" --tags=sigma-web
 ```
 
-After verifying env and secret files on the VM:
+After verifying env and secret files on the VM, validate the merged Compose
+configuration (read-only; no containers start):
 
 ```sh
 cd /opt/sigma/current
 docker compose --env-file /etc/sigma/deploy.env \
   -f deploy/compose.yaml -f deploy/compose.gce.yaml config --quiet
-docker compose --env-file /etc/sigma/deploy.env \
-  -f deploy/compose.yaml -f deploy/compose.gce.yaml up --build --detach
+```
+
+Then use only the guarded production startup path:
+
+```sh
+sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
+  SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
+  /opt/sigma/current/deploy/start-gce.sh
 ```
 
 Keep container ports private. Never enable public TCP/8000, 5173, 2375, or
@@ -942,9 +1007,14 @@ backup; decide on recovery, shutdown, or paid continuation before trial end.
 
 ## Validation evidence and references
 
-This runbook adds no provisioning automation. Review commands as text only;
-do not run `gcloud`, contact Google, access credentials, push images, or call
-providers while authoring/reviewing it.
+`deploy/install-gce-host.sh` installs host packages and local systemd
+configuration only when explicitly run as root on Ubuntu 24.04 amd64;
+`deploy/gce_preflight.py` is read-only. Neither runs `gcloud`, contacts Google,
+accesses credential contents, pushes images, changes DNS, nor calls providers.
+The install script was not run on the authoring workstation. Linux-only
+verification commands are the preflight above, `systemd-analyze verify`,
+`systemctl status docker sigma-sandbox sigma`, and the rootless runtime command
+below; use them on the actual Ubuntu VM before production launch.
 
 - [gcloud budgets create](https://cloud.google.com/sdk/gcloud/reference/billing/budgets/create)
 - [gcloud VM create](https://cloud.google.com/sdk/gcloud/reference/compute/instances/create)

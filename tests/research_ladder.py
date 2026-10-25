@@ -15,7 +15,7 @@ LADDER = (
     ("euler-product-primes", "medium", 2),
     ("alternating-zeta-boundary", "hard", 2),
     ("theta-functional-equation", "hard", 2),
-    ("riemann-hypothesis-research", "hard", 3),
+    ("riemann-hypothesis-research", "hard", 4),
 )
 
 

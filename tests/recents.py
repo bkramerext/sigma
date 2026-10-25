@@ -1,6 +1,7 @@
 """Sample catalog copies, recent-project behavior, collision safety, and API/CLI access."""
 
 import fcntl
+import hashlib
 import json
 import os
 import subprocess
@@ -27,7 +28,7 @@ from sigma.samples import open_sample_project, sample_projects
 def check(root: Path, base: Path) -> None:
     sources = {path: path.read_bytes() for path in (ROOT / "samples").glob("*/project.json")}
     catalog = sample_projects()["projects"]
-    assert len(catalog) >= 2
+    assert len(catalog) == 17
     assert {entry["title"] for entry in catalog} >= {
         "Nonconsecutive Subset Sums Modulo 3",
         "Did Jesus Use Cannabis?",
@@ -40,6 +41,39 @@ def check(root: Path, base: Path) -> None:
     assert sample_categories["Warp Drive Feasibility"] == "engineering"
     maximum_regions = next(item for item in catalog if item["id"] == "maximum-regions-by-lines")
     assert maximum_regions["difficulty"] == "easy"
+    assert maximum_regions["strategy_count"] == 1
+    maximum_raw = json.loads(
+        (ROOT / "samples" / "maximum-regions-by-lines" / "project.json").read_bytes()
+    )
+    archived_solution = next(
+        strategy for strategy in maximum_raw["strategies"] if strategy["removed_at"]
+    )
+    active_starter = next(
+        strategy for strategy in maximum_raw["strategies"] if not strategy["removed_at"]
+    )
+    assert archived_solution["provenance"]["provider"] == "openai"
+    assert hashlib.sha256(archived_solution["approach"].encode()).hexdigest() == (
+        "74b756da7105ba842adfb2bde8d6f88349b4c4010555cefc9d30b147983db9f4"
+    )
+    assert "R(n) = 1 + n(n + 1)/2" in archived_solution["summary"]
+    assert "R(n) = 1 + n(n + 1)/2" not in active_starter["approach"]
+    assert "upper bound" in active_starter["approach"]
+    binary_counting = next(
+        item for item in catalog if item["id"] == "counting-constrained-binary-strings"
+    )
+    assert binary_counting["difficulty"] == "easy"
+    difficulty_by_id = {entry["id"]: entry["difficulty"] for entry in catalog}
+    assert difficulty_by_id["nonconsecutive-subset-sums"] == "hard"
+    assert difficulty_by_id["operation-narrow-passage"] == "hard"
+    assert difficulty_by_id["warp-drive-engineering"] == "hard"
+    strategy_counts = {entry["id"]: entry["strategy_count"] for entry in catalog}
+    assert strategy_counts["algorithm-design"] == 2
+    assert strategy_counts["counting-constrained-binary-strings"] == 1
+    assert strategy_counts["operation-narrow-passage"] == 2
+    assert strategy_counts["riemann-hypothesis-research"] == 4
+    assert strategy_counts["scientific-investigation"] == 2
+    assert strategy_counts["warp-drive-engineering"] == 2
+    assert strategy_counts["warp-drive-physics"] == 2
     assert {entry["investigation_type"] for entry in catalog} >= {
         "mathematical",
         "engineering",
@@ -59,7 +93,7 @@ def check(root: Path, base: Path) -> None:
         assert len(sample_projects()["projects"]) == 6
     assert not list(root.iterdir())
 
-    selected = next(item for item in catalog if item["investigation_type"] == "mathematical")
+    selected = binary_counting
     source_path = ROOT / "samples" / selected["id"] / "project.json"
     first = open_sample_project(selected["id"])
     assert first.path == str(root / f"{selected['id']}.sigma")
@@ -110,45 +144,47 @@ def check(root: Path, base: Path) -> None:
     created = [create_project(f"User project {i}", "Own research") for i in range(5)]
     from sigma import research_sessions
 
-    running_project = created[-1]
-    idle_project = created[-2]
-    idle_history = Path(idle_project.path) / "research-sessions"
-    assert not idle_history.exists()
-    assert not research_sessions.has_active_session(idle_project.path)
-    assert not idle_history.exists()
+    active = created[-1]
+    idle = created[-2]
+    idle_directory = Path(idle.path) / "research-sessions"
+    assert not idle_directory.exists()
+    assert not research_sessions.has_active_session(idle.path)
+    assert not idle_directory.exists(), "Home status must not create session storage"
 
-    running_directory = Path(running_project.path) / "research-sessions"
-    running_directory.mkdir()
-    running_id = str(uuid4())
-    running_record = {
-        "id": running_id,
-        "project_id": running_project.project.id,
-        "project_path": running_project.path,
+    directory = Path(active.path) / "research-sessions"
+    directory.mkdir()
+    session_id = str(uuid4())
+    session_file = directory / f"{session_id}.json"
+    record = {
+        "id": session_id,
+        "project_id": active.project.id,
+        "project_path": active.path,
         "status": "running",
         "created_at": "2026-10-25T00:00:00Z",
     }
-    session_file = running_directory / f"{running_id}.json"
-    session_file.write_text(json.dumps(running_record))
-    worker_lock = running_directory / f"{running_id}.worker.lock"
-    with worker_lock.open("a") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        assert research_sessions.has_active_session(running_project.path)
-        active_recent = {item["id"]: item for item in recent_projects()["projects"]}
-        assert active_recent[running_project.project.id]["research_running"] is True
-        with TestClient(app) as api:
-            active_api = {
-                item["id"]: item for item in api.get("/api/projects/recent").json()["projects"]
-            }
-            assert active_api[running_project.project.id]["research_running"] is True
-        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-    running_record["status"] = "completed"
-    session_file.write_text(json.dumps(running_record))
-    assert not research_sessions.has_active_session(running_project.path)
-    completed_recent = {item["id"]: item for item in recent_projects()["projects"]}
-    assert completed_recent[running_project.project.id]["research_running"] is False
-    running_record["status"] = "paused"
-    session_file.write_text(json.dumps(running_record))
-    assert not research_sessions.has_active_session(running_project.path)
+    session_file.write_text(json.dumps(record), encoding="utf-8")
+    lock_path = directory / f"{session_id}.worker.lock"
+    original_record = session_file.read_bytes()
+    assert not research_sessions.has_active_session(active.path)
+    assert session_file.read_bytes() == original_record
+    assert not lock_path.exists(), "Status reads must not create worker locks"
+    with lock_path.open("a") as worker_lock:
+        fcntl.flock(worker_lock.fileno(), fcntl.LOCK_EX)
+        assert research_sessions.has_active_session(active.path)
+        by_id = {item["id"]: item for item in recent_projects()["projects"]}
+        assert by_id[active.project.id]["research_running"] is True
+        with TestClient(app) as client:
+            response = client.get("/api/projects/recent")
+            assert response.status_code == 200
+            api_by_id = {item["id"]: item for item in response.json()["projects"]}
+            assert api_by_id[active.project.id]["research_running"] is True
+        assert session_file.read_bytes() == original_record
+        fcntl.flock(worker_lock.fileno(), fcntl.LOCK_UN)
+    assert not research_sessions.has_active_session(active.path)
+    for status in ("completed", "paused", "stopped", "failed"):
+        record["status"] = status
+        session_file.write_text(json.dumps(record), encoding="utf-8")
+        assert not research_sessions.has_active_session(active.path)
 
     actual = recent_projects()["projects"]
     assert [entry["id"] for entry in actual[:4]] == [

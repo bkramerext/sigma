@@ -28,10 +28,13 @@ MAX_ENTRIES = MAX_PER_CATEGORY * (len(ResearchMode) + 1)
 
 def state_directory() -> Path:
     from sigma import cloud_workspaces
+    from sigma.storage import persistent_disk_enabled
 
     workspace_path = cloud_workspaces.private_state_directory()
     if workspace_path is not None:
         return workspace_path
+    if persistent_disk_enabled():
+        raise ProjectError("Authenticated persistent workspace is unavailable.")
     configured = os.environ.get("SIGMA_STATE_DIR")
     if configured:
         path = Path(configured).expanduser()
@@ -258,7 +261,27 @@ class RecentProject:
 
 def recent_projects() -> dict:
     with _index() as index:
-        entries = [dict(entry) for entry in index["entries"]]
+        from sigma import cloud_workspaces
+
+        workspace = cloud_workspaces.current()
+        entries = []
+        for entry in index["entries"]:
+            copied = dict(entry)
+            if workspace is not None:
+                old_path = Path(copied["path"])
+                try:
+                    marker = old_path.parts.index(workspace.workspace_id)
+                    suffix = old_path.parts[marker + 1 :]
+                    if suffix and all(part not in {".", ".."} for part in suffix):
+                        rebased = workspace.path.joinpath(*suffix)
+                        if rebased.is_relative_to(workspace.path):
+                            copied["path"] = str(rebased)
+                            entry["path"] = str(rebased)
+                except ValueError:
+                    pass
+            entries.append(copied)
+    from sigma.research_sessions import has_active_session
+
     recent = []
     category_counts: dict[str | None, int] = {}
     for entry in entries:
@@ -270,8 +293,6 @@ def recent_projects() -> dict:
             if category_counts.get(category, 0) >= MAX_PER_CATEGORY:
                 continue
             category_counts[category] = category_counts.get(category, 0) + 1
-            from sigma.research_sessions import has_active_session
-
             recent.append(
                 asdict(
                     RecentProject(

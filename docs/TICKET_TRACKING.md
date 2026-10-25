@@ -46,6 +46,10 @@
 | T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
 | T22 | Cloud deployment | Gates A/C merged; Gate B PR #49 refreshed against main `803e655` and R4R; deployment prep PR #52 open; T22.5 remains separate and unimplemented | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
+| T100 | Local validation of production-compatible persistent storage and real-Chrome restart/restore acceptance | Implementing · [issue #100](https://github.com/bkramerext/sigma/issues/100) | Red |
+| T89 | Ship-ready stock sample curation, increment 1 | R4R · [PR #120](https://github.com/bkramerext/sigma/pull/120) · [issue #89](https://github.com/bkramerext/sigma/issues/89) · [implementation](evaluations/t89-stock-sample-curation-increment1.md) · prior audit [PR #115](https://github.com/bkramerext/sigma/pull/115) | Gray |
+| T91.2 | Packaged real-PDF and disaster-recovery acceptance | R4R · [PR #113](https://github.com/bkramerext/sigma/pull/113) · [ticket](../tickets/t91.2.md) · [evidence](evaluations/t91.2/README.md) | Gray |
+| T99.1 | Pre-cloud sponsored inference API and spending acceptance | Implemented; R4R · [PR #110](https://github.com/bkramerext/sigma/pull/110) · [ticket](../tickets/t99.1.md) | Blue |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Original implementation merged in PR #12; local Google-pill acceptance follow-up in review | Blue |
