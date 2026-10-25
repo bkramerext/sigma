@@ -111,6 +111,40 @@ or cloud resources were used.
 `docs/CLOUD_DEPLOYMENT.md` still describes these routes as disabled; that
 Red-owned deployment document was left untouched for its owner to reconcile.
 
+## T99.1 Blue: pre-cloud sponsored inference acceptance (2026-10-25)
+
+Extended the existing `tests/cloud_research_api.py` scenario rather than adding
+a test harness. It uses the production FastAPI app, a test-only verified
+principal adapter, temporary but persistent authenticated workspaces and
+SQLite ledger, the real hosted `auth_context`/configuration path, and an
+offline `httpx.MockTransport` provider fixture. A personal API key is present
+as a decoy; all Responses calls carry only the sponsor credential. No real
+provider calls, GCP resources, or paid usage occurred.
+
+| Acceptance item | Result | Evidence |
+|---|---|---|
+| Proposal, agentic proposal, Markdown conversion, one-shot and long-form paper endpoints | PASS | Existing production-route scenario; Responses fixture returns schema-valid payloads and each operation reconciles ledger calls. |
+| Sponsored key precedence and absent-key rejection | PASS | Real auth adapter reports `cloud_service_api_key`; server key is used with a personal key configured; removing the server key leaves provider dispatch count unchanged. |
+| Per-user and global spending ceilings; concurrent admission; quota preflight | PASS | Full global pool blocks a second authenticated user before dispatch; a raised global ceiling with the second user's allowance exhausted blocks that user's next dispatch; same-user simultaneous operation is rejected while the first provider call is held. |
+| Timeout, malformed response, cancellation, uncertain charge | PASS | HTTP 429, read timeout, completed response with missing usage/malformed output, and explicit cancellation each retain an unknown reservation; cancellation returns HTTP 499. |
+| Durable recovery and cross-user isolation | PASS | A fresh Uvicorn/FastAPI process reads the same persistent ledger after the test workload; owner A retains four unknown attempts and zero remaining, while owner B retains zero unknown attempts and its full $1 allowance. |
+| Authenticated workspace evidence and artifacts | PASS | Research and paper paths resolve under the private workspace root; one-shot and long-form paper metadata and PDF files are readable through the owning API identity; cross-owner project reads remain denied. |
+
+Cancellation testing exposed an API route defect: an explicitly cancelled
+proposal task previously let `CancelledError` escape and produced no HTTP
+response. `src/sigma/api.py` now returns the bounded `499` response already
+used for client disconnect cancellation. Focused checks and the full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+formatting, Pyright, frontend typecheck and production build. The requested
+bare `./sigma test` also ran, but stopped at the pre-existing
+`tests/tooling.py` UI cleanup assertion because the invoking shell exported
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL`; the environment-clean rerun passed that
+same test. Test output uses a deterministic provider fixture, the PDF compiler
+is stubbed, and identity is provided by the test-only shim rather than live
+OIDC. Those are deliberate no-cost local test boundaries; no provider-quality,
+browser, Google OAuth, or GCP claim is made. No paid provider calls or cloud
+resources were used.
+
 Deterministic API coverage exercises successful strategy and agentic proposals,
 text conversion, one-shot and forced long-form paper generation, TeX/PDF archival
 with the sponsored bearer, and checks their reconciled ledger rows. Provider 429
