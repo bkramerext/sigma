@@ -3860,3 +3860,24 @@ in real Chrome. `uv run python tests/papers.py`, the real-Chrome
 in the new assertions; after formatting, the complete suite passed, including
 frontend typecheck and production build. No paid provider calls or cloud
 changes.
+
+## Adversarial review transparency and documentation cleanup (2026-10-25)
+
+The README and Product Rationale now state that Investigator and Skeptic use
+the same underlying language model. They describe their challenge-and-objection
+process as structured scrutiny rather than independent validation, note their
+potential shared biases, and describe different-model review only as a possible
+future enhancement with no release commitment.
+
+Moved `JOURNAL.md` to `docs/JOURNAL.md` with `git mv`; its blob hash is unchanged
+and all 285 lines remain intact. The README, contributor guidance, and software
+factory documentation now point to the new location. Repository search found
+no stale root-path references, and the new local links resolve. `WOLF_TODO.md`
+remains because it still documents substantive, uncompleted evidence and
+writing requirements that the concise essay does not cover; deleting it would
+discard those open items. The essay was left unchanged.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+Pyright, frontend typecheck, and production build. No paid provider calls or
+cloud changes.
+

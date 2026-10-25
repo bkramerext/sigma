@@ -10,13 +10,13 @@ SIGMA is a local research workspace for turning a difficult question into a set 
 
 SIGMA can use AI to help investigate a question, but it does not establish that an answer is correct. Model agreement and computational results are evidence to inspect, not mathematical proof. The Riemann Hypothesis sample is an open problem, not a claimed solution.
 
-For more background on the research approach and its underlying rationale, see [Product Rationale](docs/PRODUCT_RATIONALE.md).
+For more background on the research approach and its underlying rationale, see [Product Rationale](docs/PRODUCT_RATIONALE.md) and the [development journal](docs/JOURNAL.md).
 
 ## SIGMA in use
 
 Create a project or start from a sample, write or generate strategies, then choose strategies for a research session. Investigator and Skeptic roles work through bounded steps; SIGMA saves findings, objections, optional computation, and unresolved questions so you can review and continue the work. You remain in control of starting, pausing, stopping, and evaluating investigations.
 
-AI can reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatting does not verify the mathematics. Investigator and Skeptic currently use the same underlying model, so their structured challenge is not independent model validation. Different-model review is a potential future enhancement.
+AI can reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatting does not verify the mathematics. Investigator and Skeptic currently use the same underlying model, so their structured challenge is not independent validation. Different-model review is a potential future enhancement.
 
 ## Run SIGMA locally
 
