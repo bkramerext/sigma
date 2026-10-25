@@ -3185,7 +3185,13 @@ def _saved_followup_questions(
             # Truncated reasoning steps alone do not invalidate a next test.
             truncated = saved_extract.get("extract_truncated_fields", [])
             if not isinstance(truncated, list) or any(
-                field in truncated for field in ("assumptions", "next_question", "evidence_status")
+                field in truncated
+                for field in (
+                    "assumptions",
+                    "next_question",
+                    "skeptic_output.next_question",
+                    "evidence_status",
+                )
             ):
                 continue
             if artifact.get("retracted_by_artifact_ids"):
@@ -7330,6 +7336,9 @@ def _prior_session_findings_index(
                 ),
                 "coordinator_decision": artifact.get("coordinator_decision"),
                 "next_question": _bounded_note(artifact.get("next_question"), 500),
+                "skeptic_output": {
+                    "next_question": _bounded_note(skeptic_output.get("next_question"), 500)
+                },
                 "session_id": session.get("id"),
                 "session_number": session.get("session_number"),
                 "strategy_id": artifact.get("strategy_id"),
@@ -7347,6 +7356,11 @@ def _prior_session_findings_index(
                 )
                 if isinstance(artifact.get(key), str) and len(artifact[key].strip()) > limit
             ]
+            if (
+                isinstance(skeptic_output.get("next_question"), str)
+                and len(skeptic_output["next_question"].strip()) > 500
+            ):
+                finding["extract_truncated_fields"].append("skeptic_output.next_question")
             saved_steps = artifact.get("reasoning_steps")
             if isinstance(saved_steps, list) and saved_steps:
                 finding["reasoning_steps"] = []
