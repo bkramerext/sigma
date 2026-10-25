@@ -2,8 +2,14 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-if ! docker compose version >/dev/null 2>&1; then
-  echo "Docker Compose v2 is required for the local deployment check." >&2
+if docker compose version >/dev/null 2>&1; then
+  compose_command=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1 && docker-compose version >/dev/null 2>&1; then
+  # Homebrew may install Compose as a standalone v2+ CLI instead of a Docker
+  # CLI plugin. The acceptance workflow is otherwise identical.
+  compose_command=(docker-compose)
+else
+  echo "Docker Compose is required for the local deployment check." >&2
   exit 2
 fi
 if ! docker info >/dev/null 2>&1; then
@@ -53,16 +59,31 @@ SIGMA_HTTPS_BIND=127.0.0.1
 SIGMA_HTTPS_PORT=18443
 EOF
 
-compose=(env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL docker compose --project-name "$project" --env-file "$environment" -f "$root/deploy/compose.yaml")
+compose=(env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "${compose_command[@]}" --project-name "$project" --env-file "$environment" -f "$root/deploy/compose.yaml")
 cleanup() {
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  while IFS= read -r restore_volume; do
+    docker volume rm --force "$restore_volume" >/dev/null 2>&1 || true
+  done < <(docker volume ls -q --filter "name=${project}_t91-restore-")
   rm -rf "$temporary"
 }
 trap cleanup EXIT
 
 cd "$root"
-"${compose[@]}" build backend
-"${compose[@]}" build frontend
+# Build the pinned amd64 images explicitly. The standalone Homebrew Compose
+# client does not pass the service platform through to its classic builder on
+# Apple Silicon. Support both the Docker CLI plugin and Homebrew's standalone
+# buildx binary; native amd64 hosts can use the classic builder fallback.
+if docker buildx version >/dev/null 2>&1; then
+  docker buildx build --platform linux/amd64 --load --tag sigma-backend:local-check --file "$root/Dockerfile" "$root"
+  docker buildx build --platform linux/amd64 --load --tag sigma-frontend:local-check --file "$root/deploy/frontend.Dockerfile" "$root"
+elif command -v docker-buildx >/dev/null 2>&1; then
+  docker-buildx build --platform linux/amd64 --load --tag sigma-backend:local-check --file "$root/Dockerfile" "$root"
+  docker-buildx build --platform linux/amd64 --load --tag sigma-frontend:local-check --file "$root/deploy/frontend.Dockerfile" "$root"
+else
+  docker build --platform linux/amd64 --tag sigma-backend:local-check --file "$root/Dockerfile" "$root"
+  docker build --platform linux/amd64 --tag sigma-frontend:local-check --file "$root/deploy/frontend.Dockerfile" "$root"
+fi
 "${compose[@]}" run --rm --no-deps --cap-add CHOWN --user 0:0 backend \
   python -c "import os; os.chown('/var/lib/sigma-auth', $socket_uid, $socket_gid)"
 "${compose[@]}" up --detach
