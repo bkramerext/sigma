@@ -58,6 +58,30 @@ def dry_run() -> dict:
                           scores={d: 0 for d in audit.DIMENSIONS},
                           critical_integrity_failure=False)
             records.append(record)
+    # Adversarial fixture mutations must fail closed, not silently score a win.
+    from copy import deepcopy
+
+    def must_reject(change):
+        altered = deepcopy(records)
+        changed_manifest = deepcopy(frozen)
+        change(changed_manifest, altered)
+        try:
+            audit.check_trial_records(changed_manifest, altered)
+        except (ValueError, KeyError):
+            return
+        raise AssertionError("Unsafe experiment record was accepted")
+
+    must_reject(lambda m, r: r.pop())
+    must_reject(lambda m, r: r.append(deepcopy(r[0])))
+    must_reject(lambda m, r: r[0].update(packet_sha256="other-packet"))
+    must_reject(lambda m, r: r[0].update(model_calls=3))
+    must_reject(lambda m, r: r[0].update(total_tokens=201))
+    must_reject(lambda m, r: r[0].update(cost_usd=0.01))
+    must_reject(lambda m, r: r[0].update(transcript_sha256=""))
+    must_reject(lambda m, r: r[0].update(scorer_saw_arm_identity=True))
+    must_reject(lambda m, r: m.update(user_approved=False))
+    must_reject(lambda m, r: m.update(status="DRAFT_NOT_FROZEN"))
+
     result = audit.check_trial_records(frozen, records)
     if result != {"pairs": 12, "cost_usd": 0, "integrity_failures": 0}:
         raise AssertionError("Unexpected paired-run summary")
