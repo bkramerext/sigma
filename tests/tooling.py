@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, Mock, call, patch
 from sigma.cli import main as cli_main
 from sigma.projects import ROOT
 from sigma.tooling import run_tooling
-from sigma.ui import run_shutdown, run_ui, stop_servers
+from sigma.ui import local_google_configuration_warning, run_shutdown, run_ui, stop_servers
 from sigma.ui_instance import Instance
 
 
@@ -60,6 +60,65 @@ def check_start_cli() -> None:
         else:
             raise AssertionError("removed admin option was accepted")
     assert "unrecognized arguments" in output.getvalue()
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "--help"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("shutdown --help did not exit")
+    assert "identifiable local SIGMA UI servers" in output.getvalue()
+
+
+def check_command_help() -> None:
+    for argv in (
+        ["sigma", "-h", "create"],
+        ["sigma", "create", "-h"],
+        ["sigma", "create", "--help"],
+    ):
+        output = StringIO()
+        with patch("sys.argv", argv), redirect_stdout(output):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                assert exc.code == 0
+            else:
+                raise AssertionError(f"{argv} did not exit")
+        help_text = output.getvalue()
+        assert "Create a project in the configured projects root" in help_text
+        assert "--title TITLE         Set title (required)" in help_text
+        assert "(default: medium)" in help_text
+        assert "Example:" in help_text and "SIGMA_PROJECTS_ROOT" in help_text
+
+    output = StringIO()
+    with patch("sys.argv", ["sigma", "-h"]), redirect_stdout(output):
+        try:
+            cli_main()
+        except SystemExit as exc:
+            assert exc.code == 0
+        else:
+            raise AssertionError("top-level -h did not exit")
+    top_help = output.getvalue()
+    assert "SIGMA projects and repository maintenance" in top_help
+    assert "Use `sigma -h COMMAND`" in top_help
+    assert "SIGMA_PROJECTS_ROOT selects the root" not in top_help
+
+    # Every registered command has the same detailed-help structure.
+    from sigma.cli import COMMAND_DETAILS
+
+    for command in COMMAND_DETAILS:
+        output = StringIO()
+        with patch("sys.argv", ["sigma", "-h", command]), redirect_stdout(output):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                assert exc.code == 0
+            else:
+                raise AssertionError(f"help for {command} did not exit")
+        help_text = output.getvalue()
+        assert "Example:" in help_text, command
+        assert "Notes:" in help_text, command
 
 
 def check_ui() -> None:
@@ -68,7 +127,8 @@ def check_ui() -> None:
     with (
         patch("sigma.ui.Instance", return_value=MagicMock()),
         patch("sigma.ui.load_local_config"),
-        patch("sigma.ui.recover_orphans"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
         patch("pathlib.Path.is_dir", return_value=True),
         patch("sigma.ui.shutil.which", return_value="npm"),
         patch("sigma.ui.wait_for_ports", side_effect=RuntimeError("port occupied")),
@@ -95,7 +155,8 @@ def check_ui() -> None:
         with (
             patch("sigma.ui.Instance", return_value=owner),
             patch("sigma.ui.load_local_config"),
-            patch("sigma.ui.recover_orphans"),
+            patch("sigma.ui.recover_orphans", return_value=[]),
+            patch("sigma.ui.stop_registered_instances", return_value=[]),
             patch("pathlib.Path.is_dir", return_value=True),
             patch("sigma.ui.shutil.which", return_value="npm"),
             patch("sigma.ui.wait_for_ports"),
@@ -145,7 +206,8 @@ def check_local_google_startup() -> None:
         ),
         patch("sigma.ui.Instance", return_value=owner),
         patch("sigma.ui.load_local_config"),
-        patch("sigma.ui.recover_orphans"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
         patch("pathlib.Path.is_dir", return_value=True),
         patch("sigma.ui.shutil.which", return_value="npm"),
         patch("sigma.ui.wait_for_ports"),
@@ -169,6 +231,70 @@ def check_local_google_startup() -> None:
     assert "GOOGLE_OIDC_CLIENT_SECRET" not in frontend_env
     assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" not in frontend_env
     assert frontend_env["SIGMA_CLOUD_AUTH_LOCAL"] == "true"
+
+
+def check_local_google_setup_warning() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "GOOGLE_OIDC_CLIENT_ID": "client-id",
+            "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+        },
+        clear=True,
+    ):
+        warning = local_google_configuration_warning()
+    assert warning is not None
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in warning
+    assert "source ~/.bashrc" in warning
+    assert "server-secret" not in warning
+    with patch.dict(
+        "os.environ",
+        {
+            "GOOGLE_OIDC_CLIENT_ID": "client-id",
+            "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+            "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "owner@gmail.com",
+        },
+        clear=True,
+    ):
+        assert local_google_configuration_warning() is None
+
+
+def check_partial_google_startup_warns_without_enabling_auth() -> None:
+    backend, frontend = Mock(), Mock()
+    backend.poll.return_value = None
+    frontend.poll.return_value = None
+    owner = MagicMock()
+    owner.__enter__.return_value.replacement_request.return_value = None
+    warning_output = StringIO()
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "GOOGLE_OIDC_CLIENT_ID": "client-id",
+                "GOOGLE_OIDC_CLIENT_SECRET": "server-secret",
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            },
+            clear=True,
+        ),
+        patch("sigma.ui.Instance", return_value=owner),
+        patch("sigma.ui.load_local_config"),
+        patch("sigma.ui.recover_orphans", return_value=[]),
+        patch("sigma.ui.stop_registered_instances", return_value=[]),
+        patch("pathlib.Path.is_dir", return_value=True),
+        patch("sigma.ui.shutil.which", return_value="npm"),
+        patch("sigma.ui.wait_for_ports"),
+        patch("sigma.ui.subprocess.Popen", side_effect=[backend, frontend]) as launch,
+        patch("sigma.ui.ready", return_value=True),
+        patch("sigma.ui.time.sleep", side_effect=KeyboardInterrupt),
+        patch("sigma.ui.stop_servers"),
+        redirect_stderr(warning_output),
+    ):
+        assert run_ui() == 0
+    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in warning_output.getvalue()
+    backend_env = launch.call_args_list[0].kwargs["env"]
+    assert "SIGMA_CLOUD_AUTH_ENABLED" not in backend_env
+    assert backend_env["GOOGLE_OIDC_CLIENT_SECRET"] == "server-secret"
 
 
 def check_shutdown_and_suspended() -> None:
@@ -229,16 +355,13 @@ def check_shutdown_and_suspended() -> None:
                 raise AssertionError("Unrelated process holding lock was trusted")
             send.assert_not_called()
 
-    owner = MagicMock()
     with (
-        patch("sigma.ui.Instance", return_value=owner) as factory,
-        patch("sigma.ui.recover_orphans") as cleanup,
+        patch("sigma.ui.stop_registered_instances", return_value=[]) as cleanup_all,
+        patch("sigma.ui.recover_orphans", return_value=[]) as cleanup,
     ):
         assert run_shutdown() == 0
-        factory.assert_called_once_with(shutdown_only=True)
-        cleanup.assert_called_once_with(ROOT)
-        owner.__enter__.assert_called_once()
-        owner.__exit__.assert_called_once()
+        cleanup_all.assert_called_once_with()
+        cleanup.assert_called_once_with()
 
 
 def main() -> None:
@@ -246,8 +369,11 @@ def main() -> None:
     with redirect_stdout(output), redirect_stderr(output):
         check_failures()
         check_start_cli()
+        check_command_help()
         check_ui()
         check_local_google_startup()
+        check_local_google_setup_warning()
+        check_partial_google_startup_warns_without_enabling_auth()
         check_shutdown_and_suspended()
     for message in ("Missing prerequisite", "exit 7", "Could not start"):
         assert message in output.getvalue()

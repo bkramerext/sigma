@@ -1,0 +1,39 @@
+PASS exact degree-six polynomial countermodel: reflection/conjugation symmetry, finite-height on-line zeros, and a zero-free right half-plane coexist with off-critical zeros
+PASS exact finite eta identity for signed integer exponents and bounded m
+NOTE these are mathematical oracles, not RH results or agent judgment
+{
+  "provenance": "Independent evaluator-only exact arithmetic; no provider or research-agent tool execution",
+  "subset_counts_n_0_through_18": [
+    1,
+    1,
+    1,
+    2,
+    3,
+    5,
+    8,
+    12,
+    19,
+    31,
+    49,
+    79,
+    128,
+    205,
+    331,
+    536,
+    864,
+    1397,
+    2261
+  ],
+  "short_rule_counterexample": {
+    "n": 2,
+    "a_n_plus_3": 5,
+    "a_n_plus_2_plus_a_n": 4
+  },
+  "a12": 128,
+  "gaussian_q_k_squared": "Complete polynomial coefficients match explicit nonadjacent-subset enumeration for n=0..18. Gap removal shift k(k-1)/2 plus ordinary k-subset shift k(k+1)/2 totals k squared.",
+  "global_recurrence": "Unproved by these checks",
+  "one_third_limit": "Unproved by these checks",
+  "rh_oracle": "Existing tests/rh_adversarial.py exact rational polynomial F(s)=F(1-s), roots 1/2\u00b1i,1/4\u00b11001i,3/4\u00b11001i; all assertions and mutations pass. Symmetry of set does not force each element fixed; finite low-height checks insufficient.",
+  "rh_scope": "The polynomial is NOT zeta and is NOT a counterexample to RH. It refutes the invalid logical deduction from listed premises alone.",
+  "answer_key_boundary": "This script/output is evaluator-only, not included in initial RH Investigator context, strategy or project."
+}

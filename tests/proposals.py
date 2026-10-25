@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi.testclient import TestClient
 
-from sigma import chatgpt_auth, proposals
+from sigma import chatgpt_auth, openai_connection, proposals, research_sessions
 from sigma.api import app
 from sigma.projects import ProjectError, create_strategy, initialize_project, inspect_project
 
@@ -52,6 +52,31 @@ async def rejects(awaitable, contains=None):
 
 async def check(path):
     await chatgpt_auth.select("api_key")
+    research_sessions._save(
+        str(path),
+        {
+            "id": "session-moment",
+            "session_number": 1,
+            "project_path": str(path.resolve()),
+            "status": "completed",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "strategy_title": "Moment positivity",
+            "artifacts": [
+                {
+                    "id": "finding-moment",
+                    "sequence": 1,
+                    "strategy_id": "strategy-moment",
+                    "claim_or_question": "A real mathematical question about moment positivity.",
+                    "method": "Test a finite moment matrix condition.",
+                    "evidence_status": "Partial necessary condition found; sufficiency remains open.",
+                    "objections": ["The condition may be too weak."],
+                    "open_obligations": ["Test the boundary parameter range."],
+                    "coordinator_decision": "continue",
+                    "next_question": "Does positivity persist at the boundary?",
+                }
+            ],
+        },
+    )
     before = (path / "project.json").read_bytes()
     calls = []
 
@@ -69,19 +94,22 @@ async def check(path):
         assert payload["store"] is False and payload["text"]["format"]["strict"] is True
         assert payload["reasoning"] == {"effort": "high"}
         assert payload["model"] == "gpt-6.1-sol"
-        assert payload["max_output_tokens"] == 25000
+        assert payload["max_output_tokens"] == 8000
         # Generation must propose a candidate answer, leaving viability assessment for later.
         instructions = payload["instructions"]
-        assert "candidate SOLUTION" in instructions
+        assert "bounded STRATEGY" in instructions
         assert "concise, specific title of 2–12 words" in instructions
-        assert "not a plan to investigate" in instructions
-        assert "independent agents to assess its viability later" in instructions
-        assert "other required JSON fields separate" in instructions
+        assert "not a complete solution" in instructions
+        assert "first discriminating" in instructions
+        assert "other required JSON fields concise" in instructions
         context = json.loads(payload["input"])
         assert context["research_problem"] == "A real mathematical question"
         assert context["research_mode"] == "mathematical"
         assert context["existing_strategies"][0]["approach"] == "Existing full content"
         assert len(context["starting_point"]) <= 4000
+        assert len(context["prior_research_findings"]) == 1
+        assert context["prior_research_findings"][0]["id"] == "finding-moment"
+        assert context["prior_research_findings"][0]["session_id"] == "session-moment"
         calls.append(payload)
         return httpx.Response(200, json=response())
 
@@ -205,6 +233,40 @@ async def check(path):
             snapshot = (path / "project.json").read_bytes()
             await rejects(proposals.generate_proposal(str(path), consent=True))
             assert (path / "project.json").read_bytes() == snapshot
+
+    synthetic_credential = "synthetic-provider-credential-do-not-log"
+
+    async def credential_echo(request):
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+            )
+        assert request.headers["authorization"] == f"Bearer {synthetic_credential}"
+        return httpx.Response(
+            401,
+            json={"error": {"code": "unauthorized", "message": synthetic_credential}},
+        )
+
+    def credential_echo_client(**kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(credential_echo), **kwargs)
+
+    with (
+        patch.dict(os.environ, {"OPENAI_API_KEY": synthetic_credential}),
+        patch("sigma.proposals.httpx.AsyncClient", side_effect=credential_echo_client),
+    ):
+        try:
+            await proposals.generate_proposal(str(path), consent=True)
+        except ProjectError as exc:
+            assert synthetic_credential not in str(exc)
+        else:
+            raise AssertionError("Expected synthetic provider credential rejection")
+    openai_connection._identity = ""
+    openai_connection._cached = None
+    openai_connection._known = set()
+    openai_connection._pending = None
+    with patch("sigma.proposals.httpx.AsyncClient", side_effect=client):
+        await proposals.configuration(str(path))
 
     request_started = asyncio.Event()
 

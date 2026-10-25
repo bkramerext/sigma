@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 from sigma.api import app, export_project_view
 from sigma.project_reports import render_report
 from sigma.projects import create_strategy, initialize_project
+from sigma.research_epistemics import execution_provenance, verification_label
 
 
 def fixture() -> dict:
@@ -38,6 +40,7 @@ def fixture() -> dict:
                 "status": "ended",
                 "outcome": {
                     "assessment": "mixed",
+                    "conclusion": "### Partial finding\n\nThe candidate remains unverified.\n\n### Scope\n\nNo independent verification.",
                     "provisional": False,
                     "metrics": {
                         "operational": [
@@ -49,7 +52,23 @@ def fixture() -> dict:
                     },
                     "solution_review": {
                         "claim": "Candidate formula",
+                        "claim_scope": "conditional",
                         "argument_summary": "Upper bound and attaining construction.",
+                        "argument_steps": [
+                            {
+                                "number": 1,
+                                "title": "Insertion recurrence",
+                                "argument": "The nth line has at most n-1 crossings and therefore creates at most n regions.",
+                                "epistemic_status": "deduction",
+                                "basis_artifact_ids": ["artifact-1"],
+                                "research_artifact_id": "artifact-1",
+                                "review": {
+                                    "disposition": "accepted",
+                                    "rationale": "The crossing count partitions the line into at most n pieces.",
+                                    "basis_artifact_ids": ["artifact-1"],
+                                },
+                            }
+                        ],
                         "assumptions": ["Euclidean lines"],
                         "proof_obligations": ["Verify n=0"],
                         "verification_status": "convincing_unverified",
@@ -138,7 +157,12 @@ def test_unequal_metric_groups() -> None:
         html_report, _ = render_report(data, "html")
         assert isinstance(plain, str) and isinstance(html_report, str)
         for item in ops + research:
-            assert f"{item['label']}: {item['value']}" in plain
+            value = (
+                verification_label(data["research_sessions"][0]["outcome"]["solution_review"])
+                if item["label"] == "Verification"
+                else item["value"]
+            )
+            assert f"{item['label']}: {value}" in plain
             assert f"<dt>{item['label']}</dt>" in html_report
         assert ("Operational metrics" in plain) == bool(ops)
         assert ("Research-quality metrics" in plain) == bool(research)
@@ -157,6 +181,78 @@ def test_unequal_metric_groups() -> None:
         assert html_report.count('<dl class="report-outcome-metrics">') == bool(ops) + bool(
             research
         )
+
+
+def test_report_retains_reviewed_argument_steps() -> None:
+    data = fixture()
+    data["research_sessions"][0]["outcome"]["solution_review"]["strategy_findings"] = [
+        {
+            "strategy_title": "Branch A",
+            "status": "partial",
+            "claim": "A partial bound.",
+            "research_artifact_id": "artifact-1",
+            "reasoning_steps": [
+                {
+                    "number": 1,
+                    "title": "Partial lemma",
+                    "argument": "The finite bound follows under the stated condition.",
+                    "epistemic_status": "deduction",
+                    "review": {
+                        "disposition": "unresolved",
+                        "rationale": "The other direction is missing.",
+                        "objection": "No attainment argument.",
+                    },
+                }
+            ],
+            "objections": ["No attainment argument."],
+            "open_obligations": ["Construct an attaining case."],
+        },
+        {
+            "strategy_title": "Branch B",
+            "status": "execution_failed",
+            "execution_status": "failed",
+            "failure_reason": "Provider timed out before a complete cycle.",
+            "claim": "No research artifact was saved for this strategy.",
+            "research_artifact_id": "",
+            "research_artifact_ids": [],
+            "reasoning_steps": [],
+            "objections": [],
+            "open_obligations": ["Provider timed out before a complete cycle."],
+        },
+    ]
+    plain, _ = render_report(data, "txt")
+    html_report, _ = render_report(data, "html")
+    assert isinstance(plain, str) and isinstance(html_report, str)
+    assert "Insertion recurrence" in plain
+    assert "at most n pieces" in plain
+    assert "Skeptic rationale: The crossing count" in plain
+    assert "Insertion recurrence" in html_report
+    assert "at most n pieces" in html_report
+    assert "Branch A · partial" in plain
+    assert "Branch B · execution_failed" in plain
+    assert "Strategy execution status: failed" in plain
+    assert "Provider timed out before a complete cycle." in plain
+    assert "No attainment argument." in plain
+
+    single_failure = fixture()
+    single_failure["research_sessions"][0]["outcome"]["solution_review"]["strategy_findings"] = [
+        {
+            "strategy_title": "Only selected route",
+            "status": "execution_failed",
+            "execution_status": "failed",
+            "failure_reason": "Provider unavailable.",
+            "claim": "No research artifact was saved for this strategy.",
+            "research_artifact_id": "",
+            "research_artifact_ids": [],
+            "reasoning_steps": [],
+            "objections": [],
+            "open_obligations": ["Provider unavailable."],
+        }
+    ]
+    single_report, _ = render_report(single_failure, "txt")
+    assert isinstance(single_report, str)
+    assert "Only selected route · execution_failed" in single_report
+    assert "Provider unavailable." in single_report
 
 
 def test_context_manifest_is_reported() -> None:
@@ -217,7 +313,107 @@ def test_context_manifest_is_reported() -> None:
         assert expected in report
 
 
+def test_verification_presentation() -> None:
+    for code, label in (
+        ("incomplete", "Incomplete"),
+        ("convincing_unverified", "Convincing but unverified"),
+        ("unknown", "Unknown"),
+        ("verified", "Reported verified; not independently checked by SIGMA"),
+        ("unrecognized-legacy-value", "Unknown"),
+        (None, "Not recorded"),
+    ):
+        for structured in (True, False):
+            data = fixture()
+            outcome = data["research_sessions"][0]["outcome"]
+            review = outcome["solution_review"]
+            if code is None:
+                review.pop("verification_status")
+            else:
+                review["verification_status"] = code
+            if not structured:
+                review.pop("argument_steps")
+            original = deepcopy(data)
+            for format in ("txt", "html", "tex"):
+                rendered, _ = render_report(data, format)
+                assert isinstance(rendered, str)
+                assert label in rendered
+                # The old cached metric label cannot override the saved code.
+                assert "Convincing, unverified" not in rendered
+                if code != "convincing_unverified":
+                    assert "Convincing but unverified" not in rendered
+                if not structured:
+                    assert "saved narrative is available" in rendered
+            assert data == original  # reports never migrate or rewrite the archive
+
+
+def test_computation_provenance_precedes_authored_claims() -> None:
+    data = fixture()
+    session = data["research_sessions"][0]
+    session["outcome"]["conclusion"] = "The agent claims we measured an effect."
+    original = deepcopy(data)
+
+    # No saved execution must be stated before the author's confident prose.
+    for output_format in ("txt", "html", "tex"):
+        report, _ = render_report(data, output_format)
+        assert isinstance(report, str)
+        assert "No persisted Python/SageMath execution records" in report
+        assert report.index("No persisted Python/SageMath execution records") < report.index(
+            "The agent claims we measured an effect."
+        )
+    assert data == original
+
+    success = {
+        "id": "execution-completed",
+        "runtime": "python",
+        "status": "completed",
+        "source": "print(42)",
+        "stdout": "42",
+    }
+    failed = {
+        "id": "execution-failed",
+        "runtime": "sagemath",
+        "status": "timeout",
+        "source": "expensive_test()",
+        "stderr": "Timed out",
+    }
+    session["artifacts"][0]["id"] = "artifact-source"
+    session["artifacts"][0]["investigator_output"] = {"python_execution": success}
+    session["steps"] = [
+        {"id": "step-success", "output": {"python_execution": success}},
+        {"id": "step-failure", "output": {"sage_execution": failed}},
+    ]
+    provenance = execution_provenance(session)
+    assert len(provenance["records"]) == 2
+    assert provenance["completed_count"] == 1
+    assert provenance["other_count"] == 1
+    completed = next(row for row in provenance["records"] if row["id"] == success["id"])
+    assert completed["artifact_ids"] == ["artifact-source"]
+    assert completed["step_ids"] == ["step-success"]
+    assert completed["source_recorded"] and completed["output_recorded"]
+    for output_format in ("txt", "html", "tex"):
+        report, _ = render_report(data, output_format)
+        assert isinstance(report, str)
+        assert report.index("Recorded computation provenance") < report.index(
+            "The agent claims we measured an effect."
+        )
+        assert "execution-completed" in report
+        assert "execution-failed" in report
+        assert "timeout" in report
+
+    # An execution ID with inconsistent saved statuses is never counted as success.
+    session["steps"].append(
+        {"id": "step-conflict", "output": {"python_execution": {**success, "status": "failed"}}}
+    )
+    assert execution_provenance(session)["completed_count"] == 0
+    session["steps"].append(
+        {"id": "step-no-id", "output": {"python_execution": {"status": "completed"}}}
+    )
+    assert execution_provenance(session)["unidentified_count"] == 1
+
+
 def main() -> None:
+    test_computation_provenance_precedes_authored_claims()
+    test_verification_presentation()
     test_unequal_metric_groups()
     test_context_manifest_is_reported()
     data = fixture()
@@ -228,15 +424,18 @@ def main() -> None:
         "Research type: Mathematics",
         "Research problem: Can we prove 50%? A & B; x_1 < x_2.",
         "Session #3",
+        "### Partial finding",
+        "The candidate remains unverified.",
         "Execution status: ended",
         "Outcome:",
         "Outcome metrics",
         "Operational metrics",
         "Model calls: 2 dispatched · 2 completed",
         "Research-quality metrics",
-        "Verification: Convincing, unverified",
+        "Verification: Convincing but unverified",
         "Solution claim: Candidate formula",
-        "Verification status: convincing_unverified",
+        "Claim scope: conditional",
+        "Saved verification code: convincing_unverified",
         "Strategy Assessments",
         "Productive: The linked counterexample attempt clarified the boundary case.",
         "Claim: A < B & C",
@@ -252,7 +451,7 @@ def main() -> None:
     del legacy_data["research_sessions"][0]["outcome"]["solution_review"]["verification_status"]
     legacy_report, _ = render_report(legacy_data, "txt")
     assert isinstance(legacy_report, str)
-    assert "Verification status:" not in legacy_report
+    assert "Saved verification code:" not in legacy_report
     assert "Difficulty:" not in plain
     data["project"]["difficulty"] = "easy"
     plain_with_difficulty, _ = render_report(data, "txt")
@@ -277,6 +476,7 @@ def main() -> None:
     assert '<h2 class="report-heading">Research sessions</h2>' in html_report
     assert '<article class="report-session">' in html_report
     assert '<h3 class="report-record-heading">Session #3</h3>' in html_report
+    assert "The candidate remains unverified." in html_report
     assert '<h4 class="report-subheading">Strategy Assessments</h4>' in html_report
     assert html_report.index("Session #3</h3>") < html_report.index("Strategy Assessments</h4>")
     assert html_report.index("Strategy Assessments</h4>") < html_report.index(

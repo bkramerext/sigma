@@ -1,5 +1,24 @@
 # A7 browser checks
 
+T46 About-dialog acceptance uses a local UI and the deterministic provider
+fixture. Start them in separate terminals:
+
+```sh
+uv run uvicorn provider_fixture:app --app-dir browser_checks --host 127.0.0.1 --port 8026
+npm --prefix frontend run dev -- --port 5193 --strictPort
+```
+
+Then run the real-Chrome check:
+
+```sh
+uv run --with playwright python browser_checks/about.py
+```
+
+The check covers Home and Project at 1440px and 390px, keyboard dismissal,
+focus restoration, state preservation, and no request on opening About. It saves
+screenshots to `/tmp/sigma-t46-about-*.png`. Set `SIGMA_BROWSER_FIXTURE_URL` or
+`SIGMA_BROWSER_BASE_URL` to use different local ports.
+
 These checks create temporary projects and use an explicitly identified HTTP
 provider fixture. They never call OpenAI or use real credentials. The fixture is
 not loaded by `sigma ui` and never belongs in a production launch. Test context
@@ -169,17 +188,43 @@ desktop/mobile layout, and unchanged strategy data. It makes no live provider
 call. Screenshots are written to `/tmp/sigma-a171-desktop.png` and
 `/tmp/sigma-a171-mobile.png`.
 
-## T29 Human intervention during research
+## T17.8 archived answer-free session projection
+
+Run `uv run --with playwright python browser_checks/t17_8_saved_session.py`.
+The check starts its own API and Vite servers on dynamically selected local
+ports, mounts a temporary copy of the archived T17.8 project/session export,
+and opens it in real Chrome. It verifies the ended session, provisional
+positive/unverified outcome, mathematical solution review, verification caveat,
+and saved artifacts. It also checks that expanding/collapsing the session does
+not move the Sessions count and that the Export Project dialog offers no LaTeX
+report choice. It sends no session-start or provider request and removes only
+its own temporary files and processes.
+
+## T29 Human feedback during research
 
 With the normal UI on port 5173 and a fresh isolated `provider_fixture:app` on
 port 8002, run `uv run --with playwright python
-browser_checks/t29_intervention.py`. This real-Chrome check submits an objection
-while a fixture-backed session is running, verifies submission makes no provider
-call, checks per-target acknowledgment/audit provenance, and checks the narrow
-mobile layout. The deterministic service scenarios in `tests/research_sessions.py`
+browser_checks/t29_intervention.py`. This real-Chrome check verifies the vertical
+Type and agent radio groups, Type → For → Strategy ordering, and feedback
+submission during a fixture-backed session. It verifies submission makes no
+additional provider call, checks per-target acknowledgment/audit provenance, and
+checks the narrow mobile layout. The deterministic service scenarios in `tests/research_sessions.py`
 add concurrent strategy, safe-boundary delivery, pause/resume, restart recovery,
 supersession and terminal rejection coverage. These are local fixtures and make no
 live provider calls. Screenshot: `/tmp/sigma-t29-intervention-mobile.png`.
+
+## T43.1 enabled strategy session set
+
+With Vite running on `127.0.0.1:5173` and a fresh isolated provider fixture on
+port 8022, run
+`SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8022 uv run --with playwright
+python browser_checks/t43_1_strategy_selection.py`. Real Chrome creates a
+temporary project with three strategies, disables strategy rows, confirms an
+over-budget enabled set is rejected, and checks that the start request includes
+exactly the currently enabled strategies. The start request is intercepted, so
+no research session or provider inference call is started. The check also
+verifies confirmation actions stay in the Strategies heading slot and that the
+layout fits 1440px and 390px viewports.
 
 ## A20 AI-authored research paper
 
@@ -209,6 +254,22 @@ calls. Review captures are `/tmp/sigma-a20-paper-preview.png` and
 `/tmp/sigma-a20-paper-mobile.png`; the downloaded PDF is
 `/tmp/sigma-a20-paper.pdf`.
 
+## T45 long-form Xenopus paper
+
+Run the Vite frontend on port 5181 and the isolated mock provider/API on port
+8015, then run:
+
+```sh
+SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 \
+  uv run --locked --with playwright python browser_checks/t45_long_paper.py
+```
+
+This real-Chrome check opens the Xenopus sample, confirms the expanded
+multi-section call ceiling, verifies streamed progress and saved-version
+metadata, and downloads the compiled PDF. The provider is deterministic and
+local; no live model or paid usage is involved. The PDF is saved at
+`/tmp/sigma-t45-xenopus.pdf` for visual inspection.
+
 ## T40 Google account and administrator controls
 
 Run the normal SIGMA UI and then run
@@ -219,3 +280,40 @@ signed-out, administrator and member screens, the Google account dialog,
 administrator add/edit/save/revoke actions, and desktop/mobile layout. Screenshots
 are written to `/tmp/sigma-t40-admin-home-{1440,390}.png` and
 `/tmp/sigma-t40-admin-dialog-{1440,390}.png`.
+
+
+## Outcome modes and Project Settings layout
+
+`outcome_hierarchy.py` uses real Chrome with local copies of the saved
+Nonconsecutive Subset Sums and Maximum Regions projects. Set
+`SIGMA_OUTCOME_PROJECTS_ROOT` to a directory containing
+`nonconsecutive-subset-sums-8.sigma` and
+`maximum-regions-by-lines-3.sigma` copies. The copies must have each saved
+session's `project_path` rebound to its copied project directory. The check
+writes its preference only to those copies.
+
+Start the API with isolated temporary data and the UI on a separate port:
+
+```sh
+SIGMA_PROJECTS_ROOT=/tmp/sigma-outcome/projects \
+SIGMA_STATE_DIR=/tmp/sigma-outcome/state \
+SIGMA_AUTH_HOME=/tmp/sigma-outcome/auth \
+uv run uvicorn sigma.api:app --host 127.0.0.1 --port 8178
+npm --prefix frontend run dev -- --host 127.0.0.1 --port 5178 --strictPort
+```
+
+Then run the actual Chrome check:
+
+```sh
+SIGMA_OUTCOME_PROJECTS_ROOT=/tmp/sigma-outcome/projects \
+SIGMA_OUTCOME_UI_ORIGIN=http://127.0.0.1:5178 \
+SIGMA_OUTCOME_API_ORIGIN=http://127.0.0.1:8178 \
+uv run --with playwright python browser_checks/outcome_hierarchy.py
+```
+
+It covers default Simple mode, historical summaries, qualifications and
+verification, per-project Preferences save/reload/isolation, Advanced disclosure
+order, Reasoning / proof Markdown rendering, and computational source/output
+access, narrow Outcome rendering, and the Model/Thinking side-by-side desktop
+and stacked mobile layouts. This is browser
+emulation at 390px and 320px, not physical-phone testing.

@@ -51,12 +51,13 @@ def main() -> None:
                 assert expected.path and not expected.exists
                 created = create_project(title, "A bounded question", mode)
                 assert created.path == expected.path
-                assert created.project.schema_version == 8
+                assert created.project.schema_version == 9
                 assert created.project.difficulty is not None
                 assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
                 raw = json.loads((Path(created.path) / STATE).read_bytes())
                 assert raw["investigation_type"] == mode.value
+                assert raw["show_advanced_outcome_details"] is False
                 assert open_project(created.path) == created
                 assert project_destination(title).exists
                 # Strategy mutations retain mode and v4 without a downgrade.
@@ -65,7 +66,7 @@ def main() -> None:
                 edit_strategy(created.path, strategy_id, "Edited idea", "Updated approach")
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
-                assert removed.project.schema_version == 8
+                assert removed.project.schema_version == 9
                 snapshot = (Path(created.path) / STATE).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
@@ -245,6 +246,7 @@ def main() -> None:
             raw["schema_version"] = version
             raw.pop("active_order", None)
             raw.pop("difficulty", None)
+            raw.pop("show_advanced_outcome_details", None)
             for item in raw.get("strategies", []):
                 for key in ("stage", "summary", "provenance"):
                     item.pop(key, None)

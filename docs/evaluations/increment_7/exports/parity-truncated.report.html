@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Parity continuation control — Research Report</title><style>
+      *{box-sizing:border-box}
+      :root{color-scheme:light;--ink:#23313b;--muted:#65737d;--navy:#0b1b29;--blue:#24485e;--copper:#b77943;--line:#dbe2e5;--paper:#fff;--canvas:#edf1f2}
+      body{margin:0;background:var(--canvas);color:var(--ink);font:16px/1.72 Georgia,"Iowan Old Style","Palatino Linotype",serif}
+      .report{width:min(960px,calc(100% - 40px));margin:42px auto;background:var(--paper);border:1px solid #d6dfe2;border-radius:12px;box-shadow:0 18px 60px #18304018;overflow:hidden}
+      .report-header{position:relative;padding:52px 68px 46px;background:linear-gradient(125deg,#0a1927,#183348 72%,#24475c);border-bottom:4px solid var(--copper);color:#f7f2ea}
+      .report-header:after{position:absolute;right:68px;bottom:22px;width:76px;height:1px;background:linear-gradient(90deg,transparent,#d7a36d);content:""}
+      .report-kicker{margin:0 0 16px;color:#e3b37d;font:600 11px/1.4 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase}
+      h1{max-width:760px;margin:0;color:#fff8ee;font:400 clamp(2rem,4vw,3rem)/1.12 Georgia,"Iowan Old Style",serif;letter-spacing:-.025em;overflow-wrap:anywhere}
+      .report-subtitle{margin:18px 0 0;color:#bfd0d9;font:13px/1.5 system-ui,sans-serif;letter-spacing:.04em}
+      .report-content{padding:12px 68px 64px}
+      .report-section{padding:24px 0 12px;border-bottom:1px solid var(--line)}
+      .report-section:last-child{border-bottom:0}
+      .report-heading{color:var(--navy);font-family:Georgia,"Iowan Old Style",serif;font-weight:400;line-height:1.25}
+      h2.report-heading{margin:0 0 22px;padding:0 0 13px;border-bottom:1px solid var(--line);font-size:1.65rem;letter-spacing:-.015em}
+      h2.report-heading:before{display:block;width:34px;height:3px;margin:0 0 13px;background:var(--copper);content:""}
+      h3.report-heading,.report-record-heading{margin:28px 0 10px;color:var(--blue);font:600 1.08rem/1.4 system-ui,sans-serif;overflow-wrap:anywhere}
+      h3.report-heading{padding-bottom:8px;border-bottom:1px solid #e7ecee}
+      .report-session{margin:26px 0 34px;padding:0 22px 20px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,#fbfcfc,#fff);box-shadow:0 3px 12px #18304008}
+      .report-session-header{display:block;margin:0 -22px 20px;padding:16px 20px 17px;border-bottom:1px solid var(--line);border-left:3px solid var(--copper);border-radius:9px 9px 0 0;background:#f4f6f6}
+      .report-session .report-record-heading{margin:0 0 14px;color:var(--navy);font:600 1.18rem/1.3 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 24px;margin:0}
+      .report-outcome-metrics{margin:8px 0 18px;font:13px/1.5 system-ui,sans-serif}
+      .report-outcome-metrics div{margin:8px 0;overflow-wrap:anywhere}
+      .report-outcome-metrics dt{color:var(--muted);font-weight:600}
+      .report-outcome-metrics dd{margin:2px 0 0}
+      .report-session-fact{min-width:0}
+      .report-session-fact-wide{grid-column:1/-1}
+      .report-session-fact dt{margin:0 0 3px;color:var(--muted);font:700 10px/1.4 system-ui,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+      .report-session-value{margin:0;color:var(--ink);font:500 13px/1.5 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-session-value.report-status-ended{color:#426d5a}
+      .report-session-value.report-status-active{color:#825b28}
+      .report-session-value.report-outcome-positive{color:#286447;font-weight:700}
+      .report-session-value.report-outcome-negative{color:#9b403c;font-weight:700}
+      .report-session-value.report-outcome-mixed{color:#825b28;font-weight:700}
+      .report-subheading{margin:25px 0 9px;padding-top:14px;border-top:1px solid #e7ecee;color:#775532;font:700 .74rem/1.4 system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase}
+      .report-artifact-heading{margin:28px 0 8px;padding-top:12px;border-top:1px solid var(--line);color:var(--blue);font:600 .95rem/1.45 system-ui,sans-serif;overflow-wrap:anywhere}
+      .report-paragraph,.report-field{margin:10px 0;overflow-wrap:anywhere}
+      .report-field strong{display:inline-block;margin-right:.35em;color:#5b4937;font:700 .76em/1.5 system-ui,sans-serif;letter-spacing:.06em}
+      .report-note{margin:0 0 24px;padding:14px 18px;border-left:3px solid #6d94a5;background:#f1f6f7;color:#455762;font:13px/1.6 system-ui,sans-serif}
+      p{orphans:3;widows:3}
+      ul{margin:10px 0 18px;padding-left:1.4em}
+      li{margin:.4em 0;padding-left:.2em}
+      li::marker{color:var(--copper)}
+      code{padding:.12em .35em;border:1px solid #e2e7e9;border-radius:4px;background:#f4f6f6;color:#274052;font: .88em/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}
+      .report-math{color:#183a50;font:italic 1.06em Georgia,serif;white-space:normal}
+      .table-scroll{max-width:100%;margin:18px 0 24px;overflow-x:auto;border:1px solid var(--line);border-radius:7px}
+      table{width:100%;border-collapse:collapse;font:13px/1.55 system-ui,sans-serif}
+      .report-assessment-table{min-width:680px;table-layout:fixed}
+      .report-assessment-table col:nth-child(1){width:17%}
+      .report-assessment-table col:nth-child(2){width:15%}
+      .report-assessment-table col:nth-child(3){width:44%}
+      .report-assessment-table col:nth-child(4){width:24%}
+      th,td{text-align:left;vertical-align:top;padding:11px 13px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+      th{background:var(--navy);color:#f1c58d;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+      tbody tr:nth-child(even){background:#f6f8f8}
+      tbody tr:last-child td{border-bottom:0}
+      @media(max-width:640px){.report{width:100%;margin:0;border:0;border-radius:0;box-shadow:none}.report-header{padding:36px 25px 32px}.report-header:after{right:25px}.report-content{padding:8px 25px 40px}.report-section{padding-top:20px}.report-session{padding:0 16px 14px}.report-session-header{margin-inline:-16px;padding-inline:16px}.report-session-meta{gap:10px 14px}.report-session-fact-wide{grid-column:1/-1}h2.report-heading{font-size:1.45rem}}
+      @media print{body{background:#fff;color:#111;font-size:10.5pt}.report{width:auto;margin:0;border:0;border-radius:0;box-shadow:none;overflow:visible}.report-header{padding:0 0 20pt;background:#fff;color:#111;border-bottom:2pt solid #a76d3d;print-color-adjust:exact;-webkit-print-color-adjust:exact}.report-header:after{display:none}.report-kicker{color:#76502f}.report-header h1{color:#111;font-size:25pt}.report-subtitle{color:#555}.report-content{padding:0}.report-section{padding:18pt 0 8pt;break-inside:auto}.report-session{break-inside:auto;border-color:#aaa;background:#fff}.report-heading,.report-record-heading,.report-subheading,.report-artifact-heading{break-after:avoid}.report-note,.report-record-heading,th{print-color-adjust:exact;-webkit-print-color-adjust:exact}.table-scroll{overflow:visible;border:0}table{font-size:9pt}th{background:#e8edf0;color:#162d3b}.report-record-heading{break-after:avoid}}
+    </style></head><body><main class="report"><header class="report-header"><p class="report-kicker">SIGMA · Research report</p><h1>Parity continuation control</h1><p class="report-subtitle">Project record and research evidence</p></header><div class="report-content"><section class="report-section">
+<h2 class="report-heading">Project</h2>
+<p class="report-note"><strong>Interpretation:</strong> Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.</p>
+<p class="report-field"><strong>Research problem:</strong> Which bounded claims about n(n+1)+k follow from a saved parity lemma? State the supported scope and remaining cases.</p>
+<p class="report-field"><strong>Project ID:</strong> dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7</p>
+<p class="report-field"><strong>Research type:</strong> Other</p>
+<p class="report-field"><strong>Difficulty:</strong> Medium</p>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Strategies</h2>
+<h3 class="report-heading">Carry the parity lemma (saved)</h3>
+<p class="report-paragraph">Establish n(n+1) is even, then test specific even perturbations using that saved step.</p>
+<h3 class="report-heading">Unrelated geometry (saved)</h3>
+<p class="report-paragraph">Investigate bounded polygon geometry, not parity.</p>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Research sessions</h2>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #1</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value report-status-ended">ended</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value report-outcome-mixed">Mixed · partial progress, unresolved</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Carry the parity lemma</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:15:34.490765+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> The cited local parity step holds; the larger characterization remains open.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Partial finding
+
+The cited local parity step holds; the larger characterization remains open.
+
+The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Characterize broader perturbations without assuming this local lemma solves the project.
+- Broader perturbation classification is not established.
+- Check boundary case 1
+- Check boundary case 2
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+<strong>Evidence:</strong> Artifact 1, Artifact 2
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>Agent-reported evidence is unverified; agreement is not independent verification.</li><li>The saved argument remains incomplete; no solution is claimed.</li><li>Open obligations remain; inspect the saved artifacts before relying on this result.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps are recorded; review their evidence and objections.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>4 dispatched · 4 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>480 / 320 / 80 / 800</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 2 call(s) · Skeptic 0s across 2 call(s)</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>2 finding(s) · 0 Python file(s) (0 B) · session record 95,945 B</dd></div><div><dt>Provider failures / retries</dt><dd>0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>$0.004008 estimated (rates checked 2026-10-23)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Carry the parity lemma</dd></div><div><dt>Research cycles</dt><dd>2 completed / 2 started</dd></div><div><dt>Outcome classification</dt><dd>Mixed · partial progress, unresolved</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>4 · Broader perturbation classification is not established.; Characterize broader perturbations without assuming this local lemma solves the project. (+2 more)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>1 conclusion(s) · 2 cited finding(s)</dd></div><div><dt>Strategy contribution</dt><dd>productive: 1</dd></div><div><dt>Unresolved objections</dt><dd>0 · None recorded</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> unconditional</p>
+<p class="report-field"><strong>Solution claim:</strong> The cited local parity step holds; the larger characterization remains open.</p>
+<p class="report-field"><strong>Argument:</strong> The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Still open:</strong> Characterize broader perturbations without assuming this local lemma solves the project.; Broader perturbation classification is not established.; Check boundary case 1; Check boundary case 2</p>
+<p class="report-field"><strong>Solution evidence references:</strong> bcb9b5c3-fe73-4b0f-8079-08108e77a0e3; 8c11ebaa-6460-4592-9859-a8e530f1b9f1</p>
+<p class="report-field"><strong>Unresolved objections:</strong> None recorded</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Skeptic objection:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<h3 class="report-heading">Reviewed reasoning</h3>
+<p class="report-field"><strong>Step 1:</strong> Bounded parity step</p>
+<p class="report-field"><strong>Epistemic status:</strong> deduction</p>
+<p class="report-paragraph">The saved parity lemma covers n(n+1); adding the even integer 2 preserves parity.</p>
+<p class="report-field"><strong>Research artifact:</strong> 8c11ebaa-6460-4592-9859-a8e530f1b9f1</p>
+<p class="report-field"><strong>Source artifacts:</strong> bcb9b5c3-fe73-4b0f-8079-08108e77a0e3</p>
+<p class="report-field"><strong>Skeptic disposition:</strong> accepted</p>
+<p class="report-field"><strong>Skeptic rationale:</strong> The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.</p>
+<p class="report-field"><strong>Strategy finding:</strong> Carry the parity lemma · partial</p>
+<p class="report-field"><strong>Strategy execution status:</strong> ended</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Stop budget exhausted</p>
+<p class="report-field"><strong>Claim:</strong> The cited local parity step holds; the larger characterization remains open.</p>
+<p class="report-field"><strong>Source artifacts:</strong> bcb9b5c3-fe73-4b0f-8079-08108e77a0e3; 8c11ebaa-6460-4592-9859-a8e530f1b9f1</p>
+<p class="report-field"><strong>Step 1:</strong> Bounded parity step (deduction)</p>
+<p class="report-paragraph">The saved parity lemma covers n(n+1); adding the even integer 2 preserves parity.</p>
+<p class="report-field"><strong>Skeptic review:</strong> accepted · The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.</p>
+<p class="report-field"><strong>Objection:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Open obligation:</strong> Characterize broader perturbations without assuming this local lemma solves the project.</p>
+<p class="report-field"><strong>Open obligation:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 2</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Carry the parity lemma</td><td>Productive</td><td>The saved derivation advances the objective through the linked strategy.</td><td>bcb9b5c3-fe73-4b0f-8079-08108e77a0e3; 8c11ebaa-6460-4592-9859-a8e530f1b9f1</td></tr></tbody></table></div>
+<h4 class="report-artifact-heading">Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> For every integer n, n(n+1) is even.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: examine only this bounded parity claim and its saved source.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role derivation; no independent verifier or computation.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The parity lemma follows from exhaustive parity cases; retain the broader duty.</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Decision:</strong> continue</p>
+<p class="report-field"><strong>Open obligations:</strong> Characterize broader perturbations without assuming this local lemma solves the project.; Broader perturbation classification is not established.; Check boundary case 1</p>
+<p class="report-field"><strong>Next question:</strong> Use the saved parity lemma to test addition of 2 without rewriting its derivation.</p>
+<h4 class="report-artifact-heading">Artifact 2 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> For every integer n, n(n+1)+2 is even.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: examine only this bounded parity claim and its saved source.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role derivation; no independent verifier or computation.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The new +2 step cites the supplied earlier parity lemma; no full rewrite is needed. The project-wide classification remains open.</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 2</p>
+<p class="report-field"><strong>Decision:</strong> stop_budget_exhausted</p>
+<p class="report-field"><strong>Open obligations:</strong> Characterize broader perturbations without assuming this local lemma solves the project.; Broader perturbation classification is not established.; Check boundary case 1; Check boundary case 2</p>
+<p class="report-field"><strong>Next question:</strong> Not recorded</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 65bb6be7-df1c-4d44-8f34-2466c7c31804 · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 3237 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li></ul>
+<p class="report-field"><strong>Step d51c5602-1dd7-482b-a054-8599f244a6d1 · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 5142 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected current_investigator_obligation: [&quot;65bb6be7-df1c-4d44-8f34-2466c7c31804&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Step 29e2eb88-ac0d-4ca0-8f8a-a464827843b9 · investigator:</strong> 1 selected, 0 current-session artifacts omitted, 10357 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 3, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected current_session_material_evidence: [&quot;bcb9b5c3-fe73-4b0f-8079-08108e77a0e3&quot;] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history</li><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li></ul>
+<p class="report-field"><strong>Step db4a39a3-338a-421d-b6d7-2ded60e52ce3 · skeptic:</strong> 1 selected, 0 current-session artifacts omitted, 11542 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 3, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected current_session_material_evidence: [&quot;bcb9b5c3-fe73-4b0f-8079-08108e77a0e3&quot;] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history</li><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected current_investigator_obligation: [&quot;29e2eb88-ac0d-4ca0-8f8a-a464827843b9&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Terminal reason:</strong> stop_budget_exhausted</p>
+</article>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #2</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value report-status-ended">ended</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value report-outcome-mixed">Mixed · partial progress, unresolved</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Carry the parity lemma</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:15:34.537560+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> The cited local parity step holds; the larger characterization remains open.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Partial finding
+
+The cited local parity step holds; the larger characterization remains open.
+
+The specifically cited prior-session parity lemma supports the local +4 delta; the larger project remains open.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Broader perturbation classification is not established.
+- Check boundary case 1
+- Characterize broader perturbations without assuming this local lemma solves the project.
+- Check boundary case 2
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+<strong>Evidence:</strong> Artifact 1
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>Agent-reported evidence is unverified; agreement is not independent verification.</li><li>The saved argument remains incomplete; no solution is claimed.</li><li>Open obligations remain; inspect the saved artifacts before relying on this result.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps are recorded; review their evidence and objections.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>2 dispatched · 2 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>240 / 160 / 40 / 400</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>1 finding(s) · 0 Python file(s) (0 B) · session record 68,885 B</dd></div><div><dt>Provider failures / retries</dt><dd>0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>$0.002004 estimated (rates checked 2026-10-23)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Carry the parity lemma</dd></div><div><dt>Research cycles</dt><dd>1 completed / 1 started</dd></div><div><dt>Outcome classification</dt><dd>Mixed · partial progress, unresolved</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>4 · Broader perturbation classification is not established.; Check boundary case 1 (+2 more)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>1 conclusion(s) · 1 cited finding(s)</dd></div><div><dt>Strategy contribution</dt><dd>productive: 1</dd></div><div><dt>Unresolved objections</dt><dd>0 · None recorded</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> unconditional</p>
+<p class="report-field"><strong>Solution claim:</strong> The cited local parity step holds; the larger characterization remains open.</p>
+<p class="report-field"><strong>Argument:</strong> The specifically cited prior-session parity lemma supports the local +4 delta; the larger project remains open.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The specifically cited prior-session parity lemma supports the local +4 delta; the larger project remains open.</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Still open:</strong> Broader perturbation classification is not established.; Check boundary case 1; Characterize broader perturbations without assuming this local lemma solves the project.; Check boundary case 2</p>
+<p class="report-field"><strong>Solution evidence references:</strong> 9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c</p>
+<p class="report-field"><strong>Unresolved objections:</strong> None recorded</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Skeptic objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<h3 class="report-heading">Reviewed reasoning</h3>
+<p class="report-field"><strong>Step 1:</strong> Bounded parity step</p>
+<p class="report-field"><strong>Epistemic status:</strong> deduction</p>
+<p class="report-paragraph">The supplied saved lemma establishes the product parity; adding 4 preserves it.</p>
+<p class="report-field"><strong>Research artifact:</strong> 9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c</p>
+<p class="report-field"><strong>Source artifacts:</strong> bcb9b5c3-fe73-4b0f-8079-08108e77a0e3</p>
+<p class="report-field"><strong>Skeptic disposition:</strong> accepted</p>
+<p class="report-field"><strong>Skeptic rationale:</strong> The specifically cited prior-session parity lemma supports the local +4 delta; the larger project remains open.</p>
+<p class="report-field"><strong>Strategy finding:</strong> Carry the parity lemma · partial</p>
+<p class="report-field"><strong>Strategy execution status:</strong> ended</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Stop budget exhausted</p>
+<p class="report-field"><strong>Claim:</strong> The cited local parity step holds; the larger characterization remains open.</p>
+<p class="report-field"><strong>Source artifacts:</strong> 9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c</p>
+<p class="report-field"><strong>Step 1:</strong> Bounded parity step (deduction)</p>
+<p class="report-paragraph">The supplied saved lemma establishes the product parity; adding 4 preserves it.</p>
+<p class="report-field"><strong>Skeptic review:</strong> accepted · The specifically cited prior-session parity lemma supports the local +4 delta; the larger project remains open.</p>
+<p class="report-field"><strong>Objection:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Broader perturbation classification is not established.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Open obligation:</strong> Characterize broader perturbations without assuming this local lemma solves the project.</p>
+<p class="report-field"><strong>Open obligation:</strong> Check boundary case 2</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Carry the parity lemma</td><td>Productive</td><td>The saved derivation advances the objective through the linked strategy.</td><td>9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c</td></tr></tbody></table></div>
+<h4 class="report-artifact-heading">Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.</h4>
+<p class="report-field"><strong>Claim:</strong> For every integer n, n(n+1)+4 is even.</p>
+<p class="report-field"><strong>Method:</strong> OFFLINE SCRIPT: examine only this bounded parity claim and its saved source.</p>
+<p class="report-field"><strong>Assumptions:</strong> Not recorded</p>
+<p class="report-field"><strong>Evidence status:</strong> Offline scripted role derivation; no independent verifier or computation.</p>
+<p class="report-field"><strong>Skeptic response:</strong> OFFLINE SCRIPT: The specifically cited prior-session parity lemma supports the local +4 delta; the larger project remains open.</p>
+<p class="report-field"><strong>Objections:</strong> Check boundary case 1</p>
+<p class="report-field"><strong>Decision:</strong> stop_budget_exhausted</p>
+<p class="report-field"><strong>Open obligations:</strong> Broader perturbation classification is not established.; Check boundary case 1; Characterize broader perturbations without assuming this local lemma solves the project.; Check boundary case 2</p>
+<p class="report-field"><strong>Next question:</strong> Not recorded</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 4aab38eb-8856-4fb8-82db-89c6da6949c9 · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 12867 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 4, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;8c11ebaa-6460-4592-9859-a8e530f1b9f1&quot;, &quot;bcb9b5c3-fe73-4b0f-8079-08108e77a0e3&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected prior_session_obligation: [&quot;e176cc8a431b87119757e5a2683f10fff5dffcfff71378288e355561f98b6b51&quot;, &quot;5935fd9974d4aeb0f81b0f71bce5059278678c40ddce3f64d206d26630577ec7&quot;, &quot;3bf5ffb9f6bef3dafc131aab9e8c369863c975b48e33cfd00b4a4f6d57e9626a&quot;, &quot;caf328ef7c96e4531f44b6b1fbd5f818991bb6f423c3bfd154520f225f1c69c5&quot;] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed</li></ul>
+<p class="report-field"><strong>Step 6264cc27-5e3a-421e-a0c6-8a7fbbd4dff7 · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 14106 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 4, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;8c11ebaa-6460-4592-9859-a8e530f1b9f1&quot;, &quot;bcb9b5c3-fe73-4b0f-8079-08108e77a0e3&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected prior_session_obligation: [&quot;e176cc8a431b87119757e5a2683f10fff5dffcfff71378288e355561f98b6b51&quot;, &quot;5935fd9974d4aeb0f81b0f71bce5059278678c40ddce3f64d206d26630577ec7&quot;, &quot;3bf5ffb9f6bef3dafc131aab9e8c369863c975b48e33cfd00b4a4f6d57e9626a&quot;, &quot;caf328ef7c96e4531f44b6b1fbd5f818991bb6f423c3bfd154520f225f1c69c5&quot;] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed</li><li>selected current_investigator_obligation: [&quot;4aab38eb-8856-4fb8-82db-89c6da6949c9&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+<p class="report-field"><strong>Terminal reason:</strong> stop_budget_exhausted</p>
+</article>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #3</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value">failed</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value">Pending · execution failed</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Unrelated geometry</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:15:34.564458+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> Execution failed before a research artifact was saved.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Failed investigation
+
+The session failed before it saved a complete Investigator/Skeptic finding. It establishes no answer to the project question.
+
+### Session caveats
+- No complete research artifact is available.
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>No complete research artifact is available.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator</dd></div><div><dt>Model calls by status</dt><dd>1 dispatched · 0 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 1 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>— (0/1 calls report token usage) / — (0/1 calls report token usage) / — (0/1 calls include cached-token metadata) / — (token usage incomplete for 1 call(s))</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 1 call(s) · Skeptic —</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>0 finding(s) · 0 Python file(s) (0 B) · session record 20,828 B</dd></div><div><dt>Provider failures / retries</dt><dd>1 provider failure(s) (0 rejected, 0 timed out, 1 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>— (complete usage metadata or applicable price unavailable)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Unrelated geometry</dd></div><div><dt>Research cycles</dt><dd>0 completed / 1 started</dd></div><div><dt>Outcome classification</dt><dd>Pending · execution failed</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>— (no saved findings)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>— (no saved findings)</dd></div><div><dt>Strategy contribution</dt><dd>not used: 2</dd></div><div><dt>Unresolved objections</dt><dd>— (no saved findings)</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> not recorded</p>
+<p class="report-field"><strong>Solution claim:</strong> No objective result was established in this session.</p>
+<p class="report-field"><strong>Argument:</strong> No complete research artifact was saved.</p>
+<p class="report-field"><strong>Skeptic response:</strong> Not recorded</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Not recorded</p>
+<p class="report-field"><strong>Still open:</strong> None recorded</p>
+<p class="report-field"><strong>Solution evidence references:</strong> Not recorded</p>
+<p class="report-field"><strong>Unresolved objections:</strong> None recorded</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<p class="report-field"><strong>Strategy finding:</strong> Unrelated geometry · execution_failed</p>
+<p class="report-field"><strong>Strategy execution status:</strong> failed</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> Research reasoning cited an artifact not supplied in this call&#x27;s context</p>
+<p class="report-field"><strong>Claim:</strong> No research artifact was saved for this strategy.</p>
+<p class="report-field"><strong>Source artifacts:</strong> Not recorded</p>
+<p class="report-field"><strong>Open obligation:</strong> Research reasoning cited an artifact not supplied in this call&#x27;s context</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Carry the parity lemma</td><td>Not used</td><td>No session artifact is linked to this strategy.</td><td>No artifact references</td></tr><tr><td>Unrelated geometry</td><td>Not used</td><td>No session artifact is linked to this strategy.</td><td>No artifact references</td></tr></tbody></table></div>
+<p class="report-paragraph">No completed research artifact is recorded.</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 80082e97-18e0-495f-aba4-c23e96b237fb · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 3395 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;448110e1-6420-4171-8fe1-9c1918b4c37e&quot;, &quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;] · bounded portfolio overview for strategy and domain context</li></ul>
+</article>
+<article class="report-session">
+<header class="report-session-header">
+<h3 class="report-record-heading">Session #4</h3>
+<dl class="report-session-meta"><div class="report-session-fact"><dt>Execution status</dt><dd class="report-session-value">failed</dd></div><div class="report-session-fact"><dt>Outcome</dt><dd class="report-session-value">Pending · execution failed</dd></div><div class="report-session-fact report-session-fact-wide"><dt>Strategy</dt><dd class="report-session-value">Carry the parity lemma</dd></div><div class="report-session-fact"><dt>Started</dt><dd class="report-session-value">2026-10-25T09:15:34.626879+00:00</dd></div></dl>
+</header>
+<p class="report-field"><strong>Outcome summary:</strong> Execution failed before a research artifact was saved.</p>
+<h3 class="report-heading">Conclusion</h3>
+<p class="report-paragraph">### Failed investigation
+
+The session failed before it saved a complete Investigator/Skeptic finding. It establishes no answer to the project question.
+
+### Session caveats
+- No complete research artifact is available.
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.</p>
+<p class="report-paragraph">Outcome caveats:</p>
+<ul><li>No complete research artifact is available.</li></ul>
+<p class="report-field"><strong>Verification:</strong> Incomplete</p>
+<p class="report-paragraph">Structured argument steps were not recorded; saved narrative is available for inspection in Reasoning / proof and the research artifacts. Its completeness and correctness remain unassessed.</p>
+<h4 class="report-subheading">Outcome metrics</h4>
+<h5 class="report-heading">Operational metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Participating agents</dt><dd>Investigator, Skeptic</dd></div><div><dt>Model calls by status</dt><dd>2 dispatched · 1 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 1 failed · 0 in progress · 0 not dispatched · 0 status unavailable</dd></div><div><dt>Tokens · input / output / cached / total</dt><dd>— (1/2 calls report token usage) / — (1/2 calls report token usage) / — (1/2 calls include cached-token metadata) / — (token usage incomplete for 1 call(s))</dd></div><div><dt>Wall-clock / agent call time</dt><dd>0s wall · Investigator 0s across 1 call(s) · Skeptic 0s across 1 call(s)</dd></div><div><dt>Python runs by status</dt><dd>0 executions</dd></div><div><dt>SageMath runs by status</dt><dd>0 executions</dd></div><div><dt>Artifacts and storage</dt><dd>0 finding(s) · 0 Python file(s) (0 B) · session record 53,994 B</dd></div><div><dt>Provider failures / retries</dt><dd>1 provider failure(s) (0 rejected, 0 timed out, 1 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries</dd></div><div><dt>Estimated monetary cost</dt><dd>— (complete usage metadata or applicable price unavailable)</dd></div></dl>
+<h5 class="report-heading">Research-quality metrics</h5>
+<dl class="report-outcome-metrics"><div><dt>Strategies investigated</dt><dd>Carry the parity lemma</dd></div><div><dt>Research cycles</dt><dd>0 completed / 1 started</dd></div><div><dt>Outcome classification</dt><dd>Pending · execution failed</dd></div><div><dt>Verification status</dt><dd>Incomplete</dd></div><div><dt>Open proof obligations</dt><dd>— (no saved findings)</dd></div><div><dt>Evidence-backed conclusions</dt><dd>— (no saved findings)</dd></div><div><dt>Strategy contribution</dt><dd>not used: 2</dd></div><div><dt>Unresolved objections</dt><dd>— (no saved findings)</dd></div></dl>
+<p class="report-field"><strong>Claim scope:</strong> not recorded</p>
+<p class="report-field"><strong>Solution claim:</strong> No objective result was established in this session.</p>
+<p class="report-field"><strong>Argument:</strong> No complete research artifact was saved.</p>
+<p class="report-field"><strong>Skeptic response:</strong> Not recorded</p>
+<p class="report-field"><strong>Assumptions reviewed:</strong> Not recorded</p>
+<p class="report-field"><strong>Proof obligations considered:</strong> Not recorded</p>
+<p class="report-field"><strong>Still open:</strong> None recorded</p>
+<p class="report-field"><strong>Solution evidence references:</strong> Not recorded</p>
+<p class="report-field"><strong>Unresolved objections:</strong> None recorded</p>
+<p class="report-field"><strong>Resolved review notes:</strong> None recorded</p>
+<p class="report-field"><strong>Saved verification code:</strong> incomplete</p>
+<p class="report-field"><strong>Strategy finding:</strong> Carry the parity lemma · execution_failed</p>
+<p class="report-field"><strong>Strategy execution status:</strong> failed</p>
+<p class="report-field"><strong>Strategy failure detail:</strong> An addressed obligation needs a complete, unretracted supplied reasoning artifact or the current Investigator step</p>
+<p class="report-field"><strong>Claim:</strong> No research artifact was saved for this strategy.</p>
+<p class="report-field"><strong>Source artifacts:</strong> Not recorded</p>
+<p class="report-field"><strong>Open obligation:</strong> An addressed obligation needs a complete, unretracted supplied reasoning artifact or the current Investigator step</p>
+<h4 class="report-subheading">Strategy Assessments</h4>
+<div class="table-scroll"><table class="report-assessment-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>Strategy</th><th>Assessment</th><th>Rationale</th><th>Evidence</th></tr></thead><tbody><tr><td>Carry the parity lemma</td><td>Not used</td><td>No session artifact is linked to this strategy.</td><td>No artifact references</td></tr><tr><td>Unrelated geometry</td><td>Not used</td><td>No session artifact is linked to this strategy.</td><td>No artifact references</td></tr></tbody></table></div>
+<p class="report-paragraph">No completed research artifact is recorded.</p>
+<h3 class="report-heading">Agent context selection</h3>
+<p class="report-paragraph">Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.</p>
+<p class="report-field"><strong>Step 5124a3e0-d0a6-44cf-9ab7-d904960940b0 · investigator:</strong> 0 selected, 0 current-session artifacts omitted, 17841 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 4, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;, &quot;448110e1-6420-4171-8fe1-9c1918b4c37e&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c&quot;, &quot;8c11ebaa-6460-4592-9859-a8e530f1b9f1&quot;, &quot;bcb9b5c3-fe73-4b0f-8079-08108e77a0e3&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected prior_session_obligation: [&quot;e176cc8a431b87119757e5a2683f10fff5dffcfff71378288e355561f98b6b51&quot;, &quot;5935fd9974d4aeb0f81b0f71bce5059278678c40ddce3f64d206d26630577ec7&quot;, &quot;3bf5ffb9f6bef3dafc131aab9e8c369863c975b48e33cfd00b4a4f6d57e9626a&quot;, &quot;caf328ef7c96e4531f44b6b1fbd5f818991bb6f423c3bfd154520f225f1c69c5&quot;] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed</li><li>selected prior_operational_failure: [&quot;80082e97-18e0-495f-aba4-c23e96b237fb&quot;] · newest-first failure history; operational failure is not research evidence</li></ul>
+<p class="report-field"><strong>Step 0b19aa00-7fa8-4c4e-8858-915ef8525335 · skeptic:</strong> 0 selected, 0 current-session artifacts omitted, 19037 UTF-8 bytes</p>
+<p class="report-field"><strong>Obligation ledger dispositions:</strong> unresolved 4, addressed 0, superseded 0, retracted 0, unknown 0</p>
+<ul><li>selected project_strategy_snapshot: [&quot;1a92ca82-b545-4f46-b0dc-2d7481f22aa6&quot;, &quot;448110e1-6420-4171-8fe1-9c1918b4c37e&quot;] · bounded portfolio overview for strategy and domain context</li><li>selected prior_session_finding: [&quot;9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c&quot;, &quot;8c11ebaa-6460-4592-9859-a8e530f1b9f1&quot;, &quot;bcb9b5c3-fe73-4b0f-8079-08108e77a0e3&quot;] · bounded frozen prior-session extract; inspect linked original before relying on details</li><li>selected prior_session_obligation: [&quot;e176cc8a431b87119757e5a2683f10fff5dffcfff71378288e355561f98b6b51&quot;, &quot;5935fd9974d4aeb0f81b0f71bce5059278678c40ddce3f64d206d26630577ec7&quot;, &quot;3bf5ffb9f6bef3dafc131aab9e8c369863c975b48e33cfd00b4a4f6d57e9626a&quot;, &quot;caf328ef7c96e4531f44b6b1fbd5f818991bb6f423c3bfd154520f225f1c69c5&quot;] · unresolved obligations frozen from prior sessions for this strategy; source artifacts remain separately attributed</li><li>selected prior_operational_failure: [&quot;80082e97-18e0-495f-aba4-c23e96b237fb&quot;] · newest-first failure history; operational failure is not research evidence</li><li>selected current_investigator_obligation: [&quot;5124a3e0-d0a6-44cf-9ab7-d904960940b0&quot;] · current Investigator step is the source; disposition remains unverified</li></ul>
+</article>
+</section>
+<section class="report-section">
+<h2 class="report-heading">Agentic runs</h2>
+<p class="report-paragraph">No agentic runs are recorded.</p>
+</section></div></main></body></html>

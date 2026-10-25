@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
@@ -31,9 +32,34 @@ def provider_response(value):
     value = dict(value)
     if "claim" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("claim_is_conditional", False)
+        value.setdefault(
+            "reasoning_steps",
+            [
+                {
+                    "title": "Current bounded result",
+                    "argument": "A saved research step states the local claim and the evidence used to support it.",
+                    "epistemic_status": "deduction",
+                    "basis_artifact_ids": [],
+                }
+            ],
+        )
     if "assessment" in value:
         value.setdefault("human_guidance_reviews", [])
+        value.setdefault("claim_is_conditional", False)
         value.setdefault("obligation_reviews", [])
+        value.setdefault(
+            "reasoning_assessments",
+            [
+                {
+                    "step_number": 1,
+                    "disposition": "accepted",
+                    "rationale": "The cited local argument follows from its stated evidence and assumptions.",
+                    "objection": "",
+                    "basis_artifact_ids": [],
+                }
+            ],
+        )
     return {
         "status": "completed",
         "usage": {
@@ -51,6 +77,15 @@ def investigation(n):
     return {
         "claim": f"Claim {n}: a candidate consequence follows from cycle {n}.",
         "method": f"Derive the consequence using the strategy in cycle {n}.",
+        "reasoning_steps": [
+            {
+                "title": f"Cycle {n} bounded consequence",
+                "argument": f"The cycle {n} strategy yields its stated local consequence under the recorded assumption.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+        ],
+        "claim_is_conditional": False,
         "assumptions": [f"Assumption {n}"],
         "evidence_status": "Unverified model derivation; no tool was run.",
         "open_obligations": [f"Obligation {n}"],
@@ -73,6 +108,16 @@ def skeptic(n, assessment="continue", stop_reason="recoverable_objection"):
         "objective_status": "partial",
         "solution_claim": "A partial consequence follows from the saved work.",
         "argument_summary": "The result uses the stated mechanism but does not settle the full objective.",
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "The stated local consequence follows from its supplied premise for this cycle.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            }
+        ],
+        "claim_is_conditional": False,
         "assumptions_reviewed": [f"Assumption {n}"],
         "proof_obligations": [f"Check obligation {n}"],
         "unresolved_objections": [],
@@ -138,6 +183,179 @@ async def setup(path: Path):
     return view, strategy, credential, config
 
 
+def test_request_audit_truncation_tokens_and_reconciliation():
+    context = {"problem": "Answer-free objective", "strategy": "Incremental reasoning"}
+    record = {
+        "mode": "chatgpt",
+        "model": MODEL,
+        "reasoning_effort": "high",
+        "output_token_limit": 4000,
+    }
+    body = research_sessions._role_request_payload(record, "investigator", context)
+    audit = research_sessions._role_input_audit(record, "investigator", context, "fixture-token")
+    assert audit["kind"] == "exact_provider_request_body"
+    research_sessions._expand_role_input_audit(audit)
+    assert audit["request_body"] == body and audit["headers_included"] is False
+    submitted = body["input"][0]["content"]
+    assert submitted == json.dumps(context, ensure_ascii=False)
+    assert "fixture-token" not in json.dumps(audit)
+    concurrent_contexts = [
+        {"problem": "Shared objective", "strategy": "Concurrent route A"},
+        {"problem": "Shared objective", "strategy": "Concurrent route B"},
+    ]
+    concurrent_payloads = [
+        research_sessions._role_request_payload(record, "investigator", item)
+        for item in concurrent_contexts
+    ]
+    concurrent_steps = [
+        {
+            "id": f"same-role-step-{index}",
+            "role": "investigator",
+            "status": "running",
+            "provider_input_audit": research_sessions._role_input_audit(
+                record, "investigator", item, "fixture-token"
+            ),
+        }
+        for index, item in enumerate(concurrent_contexts)
+    ]
+    concurrent_record = {"steps": concurrent_steps}
+    research_sessions._assert_saved_role_input_matches(
+        concurrent_record, "investigator", concurrent_payloads[0], "same-role-step-0"
+    )
+    try:
+        research_sessions._assert_saved_role_input_matches(
+            concurrent_record, "investigator", concurrent_payloads[1], "same-role-step-0"
+        )
+    except ProjectError as exc:
+        assert "did not match" in str(exc)
+    else:
+        raise AssertionError("A same-role request must not validate against another step's audit")
+    try:
+        research_sessions._assert_saved_role_input_matches(
+            concurrent_record, "investigator", concurrent_payloads[0], None
+        )
+    except ProjectError as exc:
+        assert "audit is missing" in str(exc)
+    else:
+        raise AssertionError("Calls with recorded steps must provide their exact step ID")
+    try:
+        research_sessions._role_input_audit(
+            record,
+            "investigator",
+            {"problem": "refresh_token=synthetic-secret-value"},
+            "fixture-token",
+        )
+    except ProjectError as exc:
+        assert "credential-like" in str(exc)
+        assert "synthetic-secret-value" not in str(exc)
+    else:
+        raise AssertionError(
+            "Credential-like prompt data must be rejected before audit persistence"
+        )
+
+    investigator_output = {"method": "m" * 6000}
+    skeptic_output = {"response": "r" * 6000}
+    assert research_sessions._potential_truncation_fields("investigator", investigator_output) == [
+        "method"
+    ]
+    assert research_sessions._potential_truncation_fields("skeptic", skeptic_output) == ["response"]
+    assert (
+        research_sessions._research_schema(research_sessions.Investigator)["properties"]["method"][
+            "maxLength"
+        ]
+        == 6000
+    )
+    assert (
+        research_sessions._research_schema(research_sessions.Skeptic)["properties"]["response"][
+            "maxLength"
+        ]
+        == 6000
+    )
+    safe_execution = research_sessions._execution_with_inspections(
+        {
+            "id": "execution-fixture",
+            "status": "completed",
+            "stdout": "30",
+            "artifacts": [],
+            "private_config": {"token": "synthetic-confidential-value"},
+        },
+        "unused-fixture-path",
+    )
+    assert "private_config" not in safe_execution
+    assert "synthetic-confidential-value" not in json.dumps(safe_execution)
+
+    accounting = {
+        "steps": [{"status": "completed", "token_usage": {"input_tokens": 3, "output_tokens": 2}}],
+        "status": "ended",
+    }
+    research_sessions._refresh_token_accounting(accounting)
+    assert accounting["tokens_used"] == 5 and accounting["token_usage_status"] == "complete"
+    accounting["steps"].append({"status": "completed", "token_usage_status": "unavailable"})
+    research_sessions._refresh_token_accounting(accounting)
+    assert accounting["tokens_used"] == 5 and accounting["token_usage_status"] == "partial"
+    unavailable = {"steps": [{"status": "completed"}], "status": "ended"}
+    research_sessions._refresh_token_accounting(unavailable)
+    assert unavailable["tokens_used"] is None and unavailable["token_usage_status"] == "unavailable"
+
+    archived = json.loads(
+        Path(
+            "docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
+        ).read_text()
+    )["research_sessions"][0]
+    archived_public = research_sessions._public(archived)
+    assert archived_public["tokens_used"] == 38591
+    assert archived_public["token_usage_status"] == "complete"
+    source_artifacts = json.loads(json.dumps(archived["artifacts"]))
+    archived["artifacts"] = []
+    for artifact in source_artifacts:
+        archived["artifacts"].append(artifact)
+        if isinstance(artifact.get("skeptic_output"), dict):
+            research_sessions._reconcile_skeptic_obligations(
+                archived,
+                artifact["investigator_output"],
+                artifact["skeptic_output"],
+                artifact["strategy_id"],
+                artifact["sequence"],
+            )
+        research_sessions._reconcile_artifact_open_obligations(archived, artifact)
+    assert archived["artifacts"][0]["open_obligations"]
+    assert (
+        archived["artifacts"][1]["open_obligations"]
+        == archived["artifacts"][1]["skeptic_output"]["remaining_obligations"]
+    )
+    assert archived["artifacts"][1]["skeptic_output"]["model_remaining_obligations"] == []
+    assert archived["artifacts"][1]["skeptic_output"]["coordinator_global_closure"]["accepted"]
+    assert archived["artifacts"][1]["skeptic_output"]["coordinator_closed_obligations"]
+
+    strategy_id = "strategy-fixture"
+    artifact_id = "artifact-fixture"
+    decision = research_sessions._portfolio_decision(
+        {
+            "artifacts": [
+                {
+                    "id": artifact_id,
+                    "strategy_id": strategy_id,
+                    "strategy_review": {
+                        "assessment": "solution",
+                        "basis_artifact_ids": [artifact_id],
+                    },
+                }
+            ],
+            "strategy_runs": [
+                {
+                    "strategy_id": strategy_id,
+                    "strategy_title": "Completed",
+                    "status": "ended",
+                    "last_decision": "stop_productive_conclusion",
+                    "artifacts": [artifact_id],
+                }
+            ],
+        }
+    )
+    assert [item["strategy_title"] for item in decision["completed_strategies"]] == ["Completed"]
+    assert decision["stopped_strategies"] == []
+
+
 async def test_disabled_strategy_never_starts_a_run(path: Path):
     view, strategy, _, _ = await setup(path)
     set_strategy_enabled(path, strategy.id, False)
@@ -164,6 +382,7 @@ async def test_three_cycles_and_idempotency(path: Path):
         skeptic(3),
     ]
     contexts = []
+    submitted_payloads = []
 
     async def handler(request):
         payload = json.loads(request.content)
@@ -179,6 +398,7 @@ async def test_three_cycles_and_idempotency(path: Path):
             )
         context = json.loads(payload["input"])
         contexts.append((payload["text"]["format"]["name"], context))
+        submitted_payloads.append(payload)
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -213,6 +433,11 @@ async def test_three_cycles_and_idempotency(path: Path):
         assert duplicate["id"] == started["id"]
 
     assert finished["status"] == "ended" and finished["calls_used"] == 6
+    assert finished["tokens_used"] == 1200 and finished["token_usage_status"] == "complete"
+    assert [
+        step["provider_input_audit"]["request_body"] for step in finished["steps"]
+    ] == submitted_payloads
+    assert all(not step["provider_input_audit"]["headers_included"] for step in finished["steps"])
     assert len(finished["artifacts"]) == 3 and [a["sequence"] for a in finished["artifacts"]] == [
         1,
         2,
@@ -270,6 +495,54 @@ async def test_three_cycles_and_idempotency(path: Path):
         range(1, len(finished["events"]) + 1)
     )
     assert any(event["kind"] == "coordinator.started" for event in finished["events"])
+
+
+async def test_legacy_worker_aggregates_usage_and_audits_inputs(path: Path):
+    view, strategy, credential, config = await setup(path)
+    calls = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
+    calls[0]["method"] = "m" * 6000
+    calls[1]["response"] = "r" * 6000
+    calls[0]["open_obligations"] = []
+
+    async def defer_worker(*_args):
+        return None
+
+    async def fake_call(_record, _role, _context, _timeout=None, step_id=None):
+        assert isinstance(step_id, str)
+        return calls.pop(0), {
+            "input_tokens": 7,
+            "output_tokens": 5,
+            "cached_input_tokens": None,
+        }
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_worker", new=defer_worker),
+    ):
+        started = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+    record = research_sessions._read(str(path), started["id"])
+    record.pop("strategy_runs")
+    record["status"] = "queued"
+    research_sessions._save(str(path), record)
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_call", new=fake_call),
+    ):
+        await research_sessions._worker(started["id"], str(path))
+    finished = research_sessions.get_session(str(path), started["id"])
+    assert finished["status"] == "ended" and finished["calls_used"] == 2
+    assert finished["tokens_used"] == 24 and finished["token_usage_status"] == "complete"
+    assert len(finished["steps"]) == 2
+    assert all(
+        step["provider_input_audit"]["kind"] == "exact_provider_request_body"
+        for step in finished["steps"]
+    )
+    assert finished["steps"][0]["potential_truncation_fields"] == ["method"]
+    assert finished["steps"][1]["potential_truncation_fields"] == ["response"]
 
 
 async def test_investigator_python_is_run_and_reviewed(path: Path):
@@ -339,6 +612,8 @@ async def test_investigator_python_is_run_and_reviewed(path: Path):
         "session_id": started["id"],
         "strategy_id": strategy.id,
         "cycle": 1,
+        "runtime_name": "python",
+        "step_id": next(step["id"] for step in finished["steps"] if step["role"] == "investigator"),
     }
     assert [role for role, _ in contexts] == [
         "research_investigator",
@@ -853,11 +1128,34 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
             "assumptions_reviewed": ["Assumption 1"],
             "coordinator_decision": completed["artifacts"][0]["coordinator_decision"],
             "next_question": completed["artifacts"][0]["next_question"],
+            "skeptic_output": {
+                "next_question": completed["artifacts"][0]["skeptic_output"]["next_question"],
+            },
             "session_id": completed["id"],
             "session_number": completed["session_number"],
             "strategy_id": strategy.id,
             "strategy_title": strategy.title,
             "extract_truncated_fields": [],
+            "reasoning_steps": [
+                {
+                    "number": 1,
+                    "title": "Cycle 1 bounded consequence",
+                    "epistemic_status": "deduction",
+                    "basis_artifact_ids": [],
+                    "argument": "The cycle 1 strategy yields its stated local consequence under the recorded assumption.",
+                    "review": {
+                        "disposition": "accepted",
+                        "rationale": "The stated local consequence follows from its supplied premise for this cycle.",
+                        "objection": "",
+                    },
+                }
+            ],
+            "source_readiness": {
+                "state": "model_reviewed_steps",
+                "assumptions": "model_reviewed",
+                "original_in_context": False,
+                "independently_verified": False,
+            },
         }
     ], next_context["prior_session_findings"]
     assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]
@@ -1461,6 +1759,19 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         >= 100
     )
 
+    # A complete multi-step proof must survive the deterministic extract intact.
+    long_proof = {
+        "id": "long-proof",
+        "strategy_id": strategy,
+        "open_obligations": ["Resolve this proof obligation."],
+        "claim_or_question": "Claim",
+        "method": "Step 1. " + "A complete proof step. " * 200,
+        "evidence_status": "Unverified",
+    }
+    compact_proof = research_sessions._compact_context_artifact(long_proof, view.path)
+    assert compact_proof["method"] == long_proof["method"]
+    assert compact_proof["extract_truncated_fields"] == []
+
     # A required proof source with decisive content beyond the deterministic
     # extract bound must not be represented to a provider as supplied evidence.
     decisive = {
@@ -1468,7 +1779,7 @@ def test_t37_obligation_identity_lifecycle_and_history(path: Path):
         "strategy_id": strategy,
         "open_obligations": ["Resolve this proof obligation."],
         "claim_or_question": "Claim",
-        "method": "M" * 2401 + " decisive final line",
+        "method": "M" * 12_001 + " decisive final line",
         "evidence_status": "Unverified",
     }
     before = json.dumps(decisive)
@@ -2208,6 +2519,25 @@ def test_outcome_classification():
     )
     pending = research_sessions._outcome({"status": "running", "artifacts": []})
     assert pending["assessment"] == "pending" and pending["provisional"]
+    failed_portfolio = research_sessions._outcome(
+        {
+            "status": "failed",
+            "artifacts": [],
+            "strategy_runs": [
+                {
+                    "strategy_id": "failed-route",
+                    "strategy_title": "Failed route",
+                    "status": "failed",
+                    "reason": "Provider failed before a complete cycle.",
+                }
+            ],
+        }
+    )
+    failed_finding = failed_portfolio["solution_review"]["strategy_findings"][0]
+    assert failed_finding["strategy_id"] == "failed-route"
+    assert failed_finding["status"] == "execution_failed"
+    assert failed_finding["failure_reason"] == "Provider failed before a complete cycle."
+    assert failed_finding["research_artifact_ids"] == []
     partial = research_sessions._outcome(
         {
             "status": "ended",
@@ -2239,6 +2569,85 @@ def test_outcome_classification():
     )
     assert legacy_outcome["solution_review"]["verification_status"] == "unknown"
     assert "verification_status" not in legacy_review  # derived default does not mutate evidence
+    strategy_step = {
+        "number": 1,
+        "title": "Bounded branch result",
+        "argument": "This is an explicit partial derivation for one strategy.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": [],
+        "research_artifact_id": "a1",
+        "review": {
+            "disposition": "unresolved",
+            "rationale": "The branch needs a second lemma.",
+            "objection": "The bound is not yet established.",
+        },
+    }
+    portfolio = research_sessions._outcome(
+        {
+            "status": "ended",
+            "strategy_id": "s1",
+            "strategy_title": "Branch one",
+            "strategy_runs": [
+                {"strategy_id": "s1", "strategy_title": "Branch one", "status": "ended"},
+                {
+                    "strategy_id": "s2",
+                    "strategy_title": "Branch two",
+                    "status": "ended",
+                },
+                {
+                    "strategy_id": "s3",
+                    "strategy_title": "Failed before first artifact",
+                    "status": "failed",
+                    "reason": "Provider timed out before a complete research cycle.",
+                    "artifacts": [],
+                },
+            ],
+            "artifacts": [
+                {
+                    **artifact,
+                    "id": "a1",
+                    "strategy_id": "s1",
+                    "strategy_title": "Branch one",
+                    "reasoning_steps": [strategy_step],
+                    "objective_review": {
+                        "status": "partial",
+                        "claim": "A bound candidate.",
+                        "argument_steps": [strategy_step],
+                    },
+                },
+                {
+                    **artifact,
+                    "id": "a2",
+                    "strategy_id": "s2",
+                    "strategy_title": "Branch two",
+                    "reasoning_steps": [{**strategy_step, "research_artifact_id": "a2"}],
+                    "objective_review": {
+                        "status": "achieved",
+                        "claim": "A reviewed conclusion.",
+                        "argument_steps": [{**strategy_step, "research_artifact_id": "a2"}],
+                    },
+                },
+            ],
+        }
+    )
+    findings = portfolio["solution_review"]["strategy_findings"]
+    assert [item["strategy_title"] for item in findings] == [
+        "Branch one",
+        "Branch two",
+        "Failed before first artifact",
+    ]
+    assert (
+        findings[0]["reasoning_steps"][0]["review"]["objection"]
+        == "The bound is not yet established."
+    )
+    assert findings[0]["status"] == "partial"
+    assert findings[0]["research_artifact_ids"] == ["a1"]
+    assert findings[1]["research_artifact_ids"] == ["a2"]
+    assert findings[2]["status"] == "execution_failed"
+    assert findings[2]["execution_status"] == "failed"
+    assert findings[2]["research_artifact_ids"] == []
+    assert "timed out" in findings[2]["failure_reason"]
+    assert "timed out" in findings[2]["open_obligations"][0]
     # A reported assertion without a completed evidence review cannot become success.
     unsupported = research_sessions._outcome(
         {
@@ -2262,6 +2671,287 @@ def test_outcome_classification():
         unsupported["assessment"] == "mixed"
         and "No supporting construction." in unsupported["caveats"]
     )
+
+
+def test_session_listing_ignores_sequence_metadata(path: Path):
+    view = initialize_project(path, "Sequence metadata", "Keep session numbering separate.")
+    directory = Path(view.path) / "research-sessions"
+    directory.mkdir()
+    (directory / "sequence.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "project_id": view.project.id,
+                "project_path": str(project_path(view.path)),
+                "next_session_number": 1,
+            }
+        )
+    )
+    assert research_sessions.list_sessions(view.path) == []
+
+
+def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
+    view = initialize_project(
+        path,
+        "Conclusion cases",
+        "Determine whether the stated formula holds for all n, and justify it.",
+    )
+    conclusion_step = {
+        "number": 1,
+        "title": "Match the insertion bound",
+        "argument": "The insertion bound and attaining construction give the same value.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": ["artifact-a"],
+        "research_artifact_id": "artifact-a",
+        "review": {
+            "disposition": "accepted",
+            "rationale": "The cited construction attains the upper bound.",
+            "objection": "",
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    artifact = {
+        "id": "artifact-a",
+        "sequence": 1,
+        "strategy_id": "strategy-a",
+        "claim_or_question": "R(n) = 1 + n(n+1)/2",
+        "method": "The insertion argument gives the upper bound.",
+        "skeptic_response": "The argument is coherent, but no external checker was used.",
+        "reasoning_steps": [conclusion_step],
+        "coordinator_decision": "stop_productive_conclusion",
+        "open_obligations": [],
+        "objective_review": {
+            "status": "achieved",
+            "verification_status": "convincing_unverified",
+            "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
+            "argument_summary": "The insertion bound and explicit arrangement match.",
+            "argument_steps": [conclusion_step],
+            "unresolved_objections": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    success = research_sessions._outcome(
+        {"status": "ended", "problem": view.project.problem, "artifacts": [artifact]}
+    )
+    assert "### Complete reviewed candidate answer" in success["conclusion"]
+    assert "for every n ≥ 0" in success["conclusion"]
+    assert "not independently verified" in success["conclusion"].lower()
+
+    oversized_artifact = {
+        **artifact,
+        "argument_summary": "Long supporting detail. "
+        * (research_sessions.MAX_CONCLUSION_CHARACTERS // 10),
+    }
+    oversized = research_sessions._outcome_conclusion(
+        {"status": "ended", "artifacts": [oversized_artifact]},
+        {
+            "assessment": "positive",
+            "solution_review": {
+                "status": "achieved",
+                "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
+                "argument_summary": oversized_artifact["argument_summary"],
+                "unresolved_objections": [],
+                "open_obligations": [],
+            },
+            "caveats": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    )
+    assert len(oversized) <= research_sessions.MAX_CONCLUSION_CHARACTERS
+    assert oversized.startswith("### Conclusion truncated\n\n")
+    assert "### Verification and scope" in oversized
+    assert "not independently verified" in oversized.lower()
+    assert "exceeded the display limit" in oversized
+    assert "R(n) = 1 + n(n+1)/2" not in oversized
+    assert oversized.endswith("before relying on it.")
+
+    partial_artifact = {
+        **artifact,
+        "objective_review": {
+            "status": "partial",
+            "claim": "The upper bound appears to be triangular.",
+            "argument_summary": "An attaining construction has not been established.",
+            "unresolved_objections": ["The construction is missing."],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+        "open_obligations": ["Give an arrangement attaining the bound."],
+    }
+    partial = research_sessions._outcome(
+        {"status": "ended", "problem": view.project.problem, "artifacts": [partial_artifact]}
+    )
+    assert "### Partial finding" in partial["conclusion"]
+    assert "does not establish a complete answer" in partial["conclusion"]
+    assert "The construction is missing." in partial["conclusion"]
+
+    failed = research_sessions._outcome(
+        {"status": "failed", "artifacts": [], "message": "Provider failed before saving."}
+    )
+    assert "### Failed investigation" in failed["conclusion"]
+    assert "establishes no answer" in failed["conclusion"]
+
+    unresolved = research_sessions._outcome({"status": "ended", "artifacts": []})
+    assert "### Unresolved investigation" in unresolved["conclusion"]
+    assert "No answer" in unresolved["conclusion"]
+
+    branches = [
+        {
+            "strategy_id": "strategy-a",
+            "strategy_title": "Insertion",
+            "status": "ended",
+            "artifacts": ["artifact-a"],
+        },
+        {
+            "strategy_id": "strategy-b",
+            "strategy_title": "Failed search",
+            "status": "failed",
+            "artifacts": [],
+            "reason": "No finding saved.",
+        },
+    ]
+    multi = research_sessions._outcome(
+        {
+            "status": "ended",
+            "problem": view.project.problem,
+            "strategy_runs": branches,
+            "strategy_assessments": [
+                {
+                    "strategy_id": "strategy-a",
+                    "strategy_title": "Insertion",
+                    "assessment": "contributed_to_solution",
+                },
+                {
+                    "strategy_id": "strategy-b",
+                    "strategy_title": "Failed search",
+                    "assessment": "unknown",
+                },
+            ],
+            "artifacts": [artifact],
+        }
+    )
+    assert "### Findings across strategies" in multi["conclusion"]
+    assert "Insertion — candidate finding (unverified)" in multi["conclusion"]
+    assert "Failed search — failed" in multi["conclusion"]
+    assert "has not independently verified" in multi["conclusion"].lower()
+
+    conflicting_artifact = {
+        **artifact,
+        "id": "artifact-b",
+        "sequence": 2,
+        "strategy_id": "strategy-b",
+        "objective_review": {
+            "status": "achieved",
+            "claim": "R(n) = n² for every n.",
+            "argument_summary": "A distinct candidate was reported.",
+            "basis_artifact_ids": ["artifact-b"],
+        },
+    }
+    conflict = research_sessions._outcome(
+        {
+            "status": "ended",
+            "strategy_runs": [
+                branches[0],
+                {**branches[1], "status": "ended", "artifacts": ["artifact-b"]},
+            ],
+            "artifacts": [artifact, conflicting_artifact],
+        }
+    )
+    assert "different candidate answers" in conflict["conclusion"]
+    assert "remains unresolved" in conflict["conclusion"]
+
+    # New sessions save the derived Markdown with their outcome. Historical
+    # records without this version receive an honest fallback on read.
+    persisted = {
+        "schema_version": 1,
+        "id": str(uuid4()),
+        "project_path": view.path,
+        "project_id": view.project.id,
+        "status": "ended",
+        "session_number": 1,
+        "strategy_id": "strategy-a",
+        "strategy_title": "Insertion",
+        "strategy_runs": [],
+        "strategy_assessments": [],
+        "strategy_snapshot": [],
+        "problem": view.project.problem,
+        "steps": [],
+        "events": [],
+        "artifacts": [artifact],
+        "outcome_conclusion_version": 1,
+        "outcome": success,
+    }
+    research_sessions._save(view.path, persisted)
+    reloaded = research_sessions._read(view.path, persisted["id"])
+    assert reloaded["outcome"]["conclusion"] == success["conclusion"]
+    assert research_sessions._public(reloaded)["outcome"]["conclusion"] == success["conclusion"]
+    assert "outcome_conclusion_version" not in research_sessions._public(reloaded)
+    snapshot, _ = papers._snapshot(view.path)
+    session_source = next(item for item in snapshot["sources"] if item["kind"] == "session")
+    assert session_source["data"]["outcome"]["conclusion"] == success["conclusion"]
+
+    structured_step = {
+        "number": 1,
+        "title": "Count the pieces made by an inserted line",
+        "argument": "At most n−1 intersections divide the new line into at most n pieces.",
+        "epistemic_status": "deduction",
+        "basis_artifact_ids": ["artifact-a"],
+        "research_artifact_id": "artifact-a",
+        "review": {
+            "disposition": "accepted",
+            "rationale": "The crossing bound implies at most n pieces.",
+            "objection": "",
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    structured_artifact = {
+        **artifact,
+        "reasoning_steps": [structured_step],
+        "objective_review": {
+            "status": "achieved",
+            "claim": "Conditional on general position, R(n) = 1 + n(n+1)/2 for every n.",
+            "claim_scope": "conditional",
+            "argument_summary": "The insertion bound and attaining construction match under the stated premise.",
+            "argument_steps": [structured_step],
+            "assumptions": ["The lines are in general position."],
+            "proof_obligations": [],
+            "unresolved_objections": [],
+            "basis_artifact_ids": ["artifact-a"],
+        },
+    }
+    structured_record = {
+        **persisted,
+        "id": str(uuid4()),
+        "session_number": 3,
+        "artifacts": [structured_artifact],
+        "outcome": research_sessions._outcome(
+            {
+                "status": "ended",
+                "problem": view.project.problem,
+                "artifacts": [structured_artifact],
+            }
+        ),
+    }
+    research_sessions._save(view.path, structured_record)
+    structured_reloaded = research_sessions._read(view.path, structured_record["id"])
+    structured_public = research_sessions._public(structured_reloaded)
+    structured_review = structured_public["outcome"]["solution_review"]
+    assert structured_public["outcome"]["conclusion"] == structured_record["outcome"]["conclusion"]
+    assert structured_review["claim_scope"] == "conditional"
+    assert structured_review["argument_steps"][0]["review"]["disposition"] == "accepted"
+    assert structured_review["strategy_findings"][0]["reasoning_steps"][0]["review"]["rationale"]
+    assert "Conditional on general position" in structured_public["outcome"]["conclusion"]
+
+    legacy = {
+        **persisted,
+        "id": str(uuid4()),
+        "session_number": 2,
+        "outcome": dict(persisted["outcome"]),
+    }
+    legacy.pop("outcome_conclusion_version")
+    legacy["outcome"].pop("conclusion", None)
+    research_sessions._save(view.path, legacy)
+    legacy_public = research_sessions._public(research_sessions._read(view.path, legacy["id"]))
+    assert legacy_public["outcome"]["conclusion"] is None
+    assert legacy_public["outcome"]["summary"] == legacy["outcome"]["summary"]
     # A positive research finding does not rewrite a later execution failure.
     positive_but_failed = research_sessions._outcome(
         {
@@ -2280,8 +2970,13 @@ def test_outcome_classification():
             ],
         }
     )
-    assert positive_but_failed["assessment"] == "positive" and any(
-        "Execution failed" in caveat for caveat in positive_but_failed["caveats"]
+    assert (
+        positive_but_failed["assessment"] == "mixed"
+        and any(
+            "no structured argument steps" in caveat.lower()
+            for caveat in positive_but_failed["caveats"]
+        )
+        and any("Execution failed" in caveat for caveat in positive_but_failed["caveats"])
     )
     assessments = research_sessions._strategy_assessments(
         {
@@ -2354,12 +3049,136 @@ def test_outcome_classification():
     ]
 
 
+def test_deliberate_argument_gap_is_preserved_and_not_complete():
+    long_gap = (
+        "At most n−1 crossings give at most n pieces; the argument asserts that every piece contributes a new region. "
+        * 48
+    )
+    assert len(long_gap) > 3000
+    assert (
+        research_sessions.ResearchReasoningStep.model_validate(
+            {
+                "title": "Extended insertion claim",
+                "argument": long_gap,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            }
+        ).argument
+        == long_gap
+    )
+    investigation_record = {
+        "reasoning_steps": [
+            {
+                "title": "Intersections divide the new line",
+                "argument": "At most n-1 crossings give at most n pieces.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Each piece adds a new region",
+                "argument": long_gap,
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+        ]
+    }
+    skeptic_record = {
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "The crossing bound gives at most n line pieces.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 2,
+                "disposition": "challenged",
+                "rationale": "This conclusion does not follow from the piece count alone.",
+                "objection": "The piece count alone does not show that each piece lies in a distinct old region or that each region met in its interior is split into two.",
+                "basis_artifact_ids": [],
+            },
+        ]
+    }
+    argument = research_sessions._reviewed_argument(investigation_record, skeptic_record)
+    assert len(argument) == 2
+    assert argument[1]["argument"] == long_gap
+    assert argument[1]["review"]["disposition"] == "challenged"
+    assert "distinct old region" in argument[1]["review"]["objection"]
+    assert not research_sessions._argument_is_complete(argument)
+    conjectured = [
+        {
+            "epistemic_status": "conjecture",
+            "review": {
+                "disposition": "accepted",
+                "rationale": "The plausible pattern matches every supplied finite example.",
+                "objection": "",
+            },
+        }
+    ]
+    assert research_sessions._argument_is_complete(conjectured)
+    assert not research_sessions._argument_is_complete(conjectured, mathematical_proof=True)
+    accepted_assumption = [
+        {
+            "argument": "The equation holds under premise P.",
+            "epistemic_status": "assumption",
+            "review": {
+                "disposition": "accepted",
+                "rationale": "This premise is explicitly stated as a condition of the claim.",
+                "objection": "",
+            },
+        }
+    ]
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=[],
+        reviewed_assumptions=[],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["The equation holds under premise P."],
+        reviewed_assumptions=[],
+    )
+    assert not research_sessions._argument_is_complete(
+        accepted_assumption,
+        mathematical_proof=True,
+        claim_is_conditional=True,
+        declared_assumptions=["A different premise."],
+        reviewed_assumptions=["The equation holds under premise P."],
+    )
+    assert (
+        research_sessions._claim_scope(
+            {"claim_is_conditional": True}, {"claim_is_conditional": False}
+        )
+        == "disputed"
+    )
+
+
 async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     problem = (
         "For each integer n >= 0, determine the maximum number of regions formed by n lines. "
         "Derive a formula, prove the upper bound, and show an arrangement attains it, including n=0."
     )
-    view = initialize_project(path, "Maximum Regions Formed by Lines", problem)
+    view = initialize_project(
+        path, "Maximum Regions Formed by Lines", problem, research_mode="mathematical"
+    )
     strategy = create_strategy(
         path,
         "Incremental region counting with an explicit maximizing arrangement",
@@ -2376,7 +3195,46 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
     proof = {
         "claim": "R(n) = 1 + n(n+1)/2 for every n >= 0.",
         "method": "Each region is an intersection of open half-planes: points with a fixed choice of side for every line form a convex set, and different side choices cannot belong to the same component. The kth line meets at most k-1 earlier lines, so adds at most k regions. Two different pieces of an inserted line cannot lie in the same region, since convexity would put an intervening point on an earlier line in that region. Each encountered region is open, so a small disk around an intersection has points on both sides of the inserted line. Lines y=kx+k^2 meet each earlier line at distinct x coordinates, attaining k increments. Summing gives the formula; the empty arrangement has one region.",
+        "reasoning_steps": [
+            {
+                "title": "Scope and assumptions",
+                "argument": "Lines are distinct straight lines in the Euclidean plane.",
+                "epistemic_status": "assumption",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "At most n new regions",
+                "argument": "The nth line has at most n−1 distinct intersection points with earlier lines. These points divide it into at most n pieces. Each piece lies in one old region, and adding the line can split that region into at most two, so at most n new regions are created.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "An intersection splits a region",
+                "argument": "Each old region is an intersection of open half-planes and therefore convex. Along the inserted line, distinct pieces cannot lie in one old region: if they did, convexity would include the intervening crossing point on an old line, outside that region. Every open region met by the new line has points on both sides, so it is split into two.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Attaining every increment",
+                "argument": "For lines y=kx+k², k=1,…,n, line k meets earlier line i at x=−(i+k). These x-coordinates are distinct as i varies, and the pairwise intersections are not triple intersections. Thus line k has k−1 distinct crossings and is cut into k pieces, each splitting a different old region.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Recurrence and base case",
+                "argument": "The upper bound gives R(k)≤R(k−1)+k, and the construction attains k new regions at every insertion, so R(k)=R(k−1)+k for the maximizing arrangement. The empty arrangement has R(0)=1.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+            {
+                "title": "Closed form",
+                "argument": "Induction gives R(n)=1+Σ(k=1…n)k=1+n(n+1)/2: it holds at n=0, and adding n to 1+(n−1)n/2 yields 1+n(n+1)/2.",
+                "epistemic_status": "deduction",
+                "basis_artifact_ids": [],
+            },
+        ],
         "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
+        "claim_is_conditional": True,
         "evidence_status": "Complete unverified argument; no formal checker was run.",
         "open_obligations": [],
         "python_code": None,
@@ -2394,7 +3252,52 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         "objective_status": "achieved",
         "solution_claim": "R(n) = 1 + n(n+1)/2 for all n >= 0.",
         "argument_summary": "At most k regions are added at step k, and the explicit family y=kx+k^2 attains every increment; sum the increments, the empty arrangement gives R(0)=1, and verify the small values.",
-        "assumptions_reviewed": ["Distinct straight lines in the Euclidean plane."],
+        "reasoning_assessments": [
+            {
+                "step_number": 1,
+                "disposition": "accepted",
+                "rationale": "The domain and general-position conditions are explicit and match the construction used for attainability.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 2,
+                "disposition": "accepted",
+                "rationale": "At most n−1 crossings create at most n line pieces, each able to split at most one prior region.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 3,
+                "disposition": "accepted",
+                "rationale": "Convexity prevents separated pieces sharing one region, and openness guarantees both sides of each cut.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 4,
+                "disposition": "accepted",
+                "rationale": "The pairwise intersection coordinates are distinct for fixed k, with no triple intersections, so all k pieces are realized.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 5,
+                "disposition": "accepted",
+                "rationale": "The universal insertion bound and the attaining family give matching recurrence increments from the empty arrangement.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+            {
+                "step_number": 6,
+                "disposition": "accepted",
+                "rationale": "The sum identity follows by induction from n=0 and addition of the nth increment.",
+                "objection": "",
+                "basis_artifact_ids": [],
+            },
+        ],
+        "claim_is_conditional": True,
+        "assumptions_reviewed": ["Lines are distinct straight lines in the Euclidean plane."],
         "proof_obligations": [
             "Insertion lemma splits each affected region into two [cycle 1].",
             "The insertion bound proves the upper bound [cycle 1].",
@@ -2472,8 +3375,29 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
             if item["id"] == finished["id"]
         )
         assert exported_session["steps"][1]["context_manifest"]["policy_version"] == "t37-v1"
+        assert (
+            exported_session["outcome"]["solution_review"]["argument_steps"]
+            == finished["outcome"]["solution_review"]["argument_steps"]
+        )
+        from sigma.project_reports import render_report
+
+        report, _ = render_report(export_project_view(str(path)), "txt")
+        assert isinstance(report, str)
+        assert "At most n new regions" in report
+        assert "the pairwise intersection coordinates are distinct" in report.lower()
+        assert "Skeptic rationale: At most n−1 crossings" in report
+        paper_snapshot, _ = papers._snapshot(str(path))
+        paper_artifact = next(
+            item for item in paper_snapshot["sources"] if item["kind"] == "artifact"
+        )
+        assert paper_artifact["data"]["reasoning_steps"][1]["title"] == "At most n new regions"
+        assert "Attaining every increment" in json.dumps(paper_snapshot, ensure_ascii=False)
         assert finished["status"] == "ended"
         assert finished["outcome"]["assessment"] == "positive"
+        assert finished["outcome"]["solution_review"]["claim_scope"] == "conditional"
+        assert finished["outcome"]["solution_review"]["claim"].startswith(
+            "Conditional on: Lines are distinct straight lines in the Euclidean plane."
+        )
         assert finished["outcome"]["label"] == "Positive · solution candidate (unverified)"
         assert finished["artifacts"][0]["coordinator_decision"] == "stop_productive_conclusion"
         assert any(
@@ -2489,27 +3413,53 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         assert finished["outcome"]["solution_review"]["basis_artifact_ids"] == [
             finished["artifacts"][0]["id"]
         ]
+        saved_argument = finished["outcome"]["solution_review"]["argument_steps"]
+        assert len(saved_argument) == 6
+        assert saved_argument[1]["title"] == "At most n new regions"
+        assert "at most n pieces" in saved_argument[1]["argument"]
+        assert saved_argument[1]["research_artifact_id"] == finished["artifacts"][0]["id"]
+        assert saved_argument[1]["review"]["disposition"] == "accepted"
+        argument_titles = [item["title"].lower() for item in saved_argument]
+        assert any("assumption" in title for title in argument_titles)
+        assert any("attain" in title for title in argument_titles)
+        assert any("recurrence" in title for title in argument_titles)
+        assert all(item["epistemic_status"] == "deduction" for item in saved_argument[1:])
+        full_argument = " ".join(item["argument"] for item in saved_argument)
+        assert "at most n" in full_argument and "different old region" in full_argument
+        assert "R(k)=R(k−1)+k" in full_argument and "R(0)=1" in full_argument
+        assert "1+n(n+1)/2" in full_argument
+        assert all(item["review"]["disposition"] == "accepted" for item in saved_argument)
         assert any("unverified" in item.lower() for item in finished["outcome"]["caveats"])
         rows = finished["strategy_assessments"]
         assert [row["assessment"] for row in rows] == ["contributed_to_solution", "not_used"]
         assert rows[0]["basis_artifact_ids"] == [finished["artifacts"][0]["id"]]
         assert rows[1]["basis_artifact_ids"] == []
 
-        # The same candidate language must not override a Skeptic's material,
-        # unresolved objection. Before the evidence-contract fix this passed
-        # the special-case keyword checklist and was incorrectly promoted.
+        # An achieved summary with no remaining obligations still cannot
+        # override a Skeptic's challenge to one logical proof step.
         incomplete_review = {
             **review,
             "assessment": "continue",
             "stop_reason": "recoverable_objection",
-            "response": "No mathematical counterexample is apparent, but the central component-identification step remains asserted.",
-            "objections": ["The region/sign-set identification remains asserted."],
-            "remaining_obligations": ["Justify that each sign set is exactly one component."],
+            "response": "The crossing count alone does not justify that each line piece splits a different old region.",
+            "objections": [],
+            "remaining_obligations": [],
             "next_question": "Review the component-identification step.",
-            "objective_status": "not_achieved",
+            "objective_status": "achieved",
             "proof_obligations": ["Review the insertion argument."],
-            "verification_status": "incomplete",
-            "unresolved_objections": ["The region/sign-set identification remains asserted."],
+            "verification_status": "convincing_unverified",
+            "unresolved_objections": [],
+            "reasoning_assessments": [
+                {
+                    **item,
+                    "disposition": "challenged",
+                    "rationale": "The piece-count bound alone does not show that every piece splits a different old region.",
+                    "objection": "The argument must show that the pieces lie in distinct old regions and that each region met in its interior is split into two.",
+                }
+                if item["step_number"] == 2
+                else item
+                for item in review["reasoning_assessments"]
+            ],
             "strategy_contribution": "productive",
         }
         research_sessions.save_limits(
@@ -2528,10 +3478,10 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
         )
         incomplete = await wait_for(path, incomplete_started["id"])
         assert incomplete["outcome"]["assessment"] == "mixed"
-        assert incomplete["outcome"]["solution_review"]["status"] == "not_achieved"
-        assert "region/sign-set" in " ".join(
-            incomplete["outcome"]["solution_review"]["unresolved_objections"]
-        )
+        assert incomplete["outcome"]["solution_review"]["status"] == "partial"
+        challenged = incomplete["outcome"]["solution_review"]["argument_steps"][1]
+        assert challenged["review"]["disposition"] == "challenged"
+        assert "pieces lie in distinct old regions" in challenged["review"]["objection"]
         research_sessions.save_limits(str(path), research_sessions.DEFAULT_LIMITS)
 
         # Three cycles can distribute the proof across saved artifacts. The
@@ -2651,17 +3601,34 @@ async def test_maximum_regions_solution_and_frozen_attribution(path: Path):
 
 
 async def test_answer_free_maximum_regions_prompt(path: Path):
+    # Keep the shipped acceptance task answer-free end to end. This goes
+    # through normal session creation and request assembly, rather than only
+    # checking the source fixture strings.
+    title = "Maximum regions formed by straight lines"
+    problem = (
+        "For each nonnegative integer n, determine the greatest possible number of regions into "
+        "which n distinct straight lines divide the Euclidean plane. Establish an exact answer "
+        "for all n with a rigorous upper bound and a construction that attains it. State any "
+        "geometric assumptions required for the argument."
+    )
+    strategy_title = "Incremental line insertion"
+    strategy_text = (
+        "Examine how adding one line changes the connected regions of an arrangement of earlier "
+        "lines. Identify what would need to be proved for an upper bound and what separate "
+        "evidence would demonstrate attainability. Do not assume that a particular arrangement "
+        "or formula is optimal."
+    )
     view = initialize_project(
         path,
-        "Maximum Regions · answer-free regression",
-        "Determine the greatest number of regions formed by n distinct straight lines in the plane. State assumptions, derive an upper bound, and give a construction if you can.",
+        title,
+        problem,
         research_mode="mathematical",
         difficulty="easy",
     )
     strategy = create_strategy(
         path,
-        "Incremental line insertion",
-        "Study what one newly inserted line can add. Bound its segments by its intersections with the earlier lines, and seek a configuration attaining the bound.",
+        strategy_title,
+        strategy_text,
     ).project.strategies[0]
     credential = {
         "identity": "fixture-account",
@@ -2671,11 +3638,17 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
     }
     config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
     outputs = [investigation(1), skeptic(1, "stop", "productive_conclusion")]
-    inputs = []
+    requests = []
 
     async def handler(request):
         payload = json.loads(request.content)
-        inputs.append(json.loads(payload["input"]))
+        requests.append(
+            {
+                "role": payload["text"]["format"]["name"],
+                "instructions": payload["instructions"],
+                "context": json.loads(payload["input"]),
+            }
+        )
         return httpx.Response(200, json=provider_response(outputs.pop(0)))
 
     with (
@@ -2694,13 +3667,46 @@ async def test_answer_free_maximum_regions_prompt(path: Path):
         finished = await wait_for(path, started["id"])
 
     assert finished["status"] == "ended" and finished["artifacts"]
-    assert len(inputs) == 2
-    for context in inputs:
-        assert context["problem"] == view.project.problem
-        assert context["strategy"]["approach"] == strategy.approach
-        prompt = json.dumps(context)
-        assert "1 + n(n+1)/2" not in prompt
-        assert "y=kx+k^2" not in prompt
+    assert len(requests) == 2
+    initial = requests[0]
+    assert initial["role"] == "research_investigator"
+    context = initial["context"]
+    assert context["problem"] == problem == view.project.problem
+    assert context["strategy"]["title"] == strategy_title == strategy.title
+    assert context["strategy"]["approach"] == strategy_text == strategy.approach
+    assert context["prior_artifacts"] == []
+    assert context["prior_session_findings"] == []
+    assert context["obligation_ledger"] == []
+    assert context["prior_session_obligations_omitted"] == 0
+    assert context["prior_session_failures"] == []
+    manifest_sources = context["context_manifest"]["sources"]
+    assert manifest_sources == [
+        {
+            "category": "project_strategy_snapshot",
+            "source_ids": [strategy.id],
+            "reason": "bounded portfolio overview for strategy and domain context",
+            "representation": "bounded_snapshot",
+            "status": "selected",
+        }
+    ]
+
+    # Normalize whitespace and superscript so harmless formatting changes do
+    # not let a known formula or attaining family slip through the audit.
+    initial_request = json.dumps(initial, ensure_ascii=False).casefold()
+    normalized = "".join(initial_request.split()).replace("²", "^2")
+    forbidden = (
+        "1+n(n+1)/2",
+        "n(n+1)/2",
+        "y=kx+k^2",
+        "x=-(i+k)",
+        "linesl_k",
+    )
+    assert not any(leak in normalized for leak in forbidden)
+    # The old literal-space assertion would miss this formatting variant;
+    # the normalized audit must identify both the formula and construction.
+    synthetic_leak = "R(n) = 1 + n (n + 1) / 2; L_k: y = k x + k²"
+    normalized_synthetic_leak = "".join(synthetic_leak.casefold().split()).replace("²", "^2")
+    assert any(leak in normalized_synthetic_leak for leak in forbidden)
     # This is an answer-leakage regression fixture, not evidence that a model
     # can independently solve the problem; the provider is mocked above.
 
@@ -3221,6 +4227,8 @@ async def test_portfolio_marks_unsuccessful_approach_without_mutating_strategy_p
         if role == "research_investigator":
             output = investigation(cycle)
             output["claim"] = f"Candidate claim for {context['strategy']['title']}."
+            if strategy_id == first.id:
+                output["open_obligations"] = []
         elif strategy_id == first.id:
             output = skeptic(cycle, "stop", "no_progress")
             output["next_question"] = ""
@@ -3288,6 +4296,7 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
     limits["model_calls"] = 20
     limits = research_sessions.save_limits(str(path), limits)
     state = {"active": 0, "maximum": 0}
+    first_response_gate = asyncio.Event()
     delays = {
         strategy.id: (len(strategies) - index) * 0.005 for index, strategy in enumerate(strategies)
     }
@@ -3311,7 +4320,11 @@ async def test_ten_strategy_portfolio_respects_concurrency_and_budget(path: Path
                 if role == "research_investigator"
                 else skeptic(context["cycle"])
             )
+            if context["strategy"]["id"] == first.id and role == "research_investigator":
+                await first_response_gate.wait()
             completion_order.append((context["strategy"]["id"], role))
+            if context["strategy"]["id"] != first.id:
+                first_response_gate.set()
             return httpx.Response(200, json=provider_response(output))
         finally:
             state["active"] -= 1
@@ -3632,6 +4645,79 @@ async def test_portfolio_preflight_failure_terminates_instead_of_spinning(path: 
     assert finished["calls_used"] == 0
     assert all(branch["status"] == "paused" for branch in finished["strategy_runs"])
     assert "configuration service failure" in finished["message"].lower()
+    failures = [event for event in finished["events"] if event["kind"] == "call.preflight_failed"]
+    assert len(failures) == 1
+    assert failures[0]["strategy_id"] == strategy.id
+    assert failures[0]["strategy_title"] == strategy.title
+    assert failures[0]["role"] == "investigator"
+    assert failures[0]["failure_stage"] == "model_configuration"
+    assert failures[0]["failure_kind"] == "preflight_error"
+    assert failures[0]["dispatched"] is False
+
+
+async def test_portfolio_audits_mixed_preflight_failure_and_sibling_success(path: Path):
+    view, first, credential, config = await setup(path)
+    second = create_strategy(
+        path, "Independent check", "Try an independent derivation and boundary check."
+    ).project.strategies[-1]
+    snapshot_calls = 0
+    real_snapshot = research_sessions._snapshot
+
+    def fail_first_worker_snapshot(target):
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        # start_session takes the first snapshot. The first branch then fails
+        # preflight; its sibling proceeds to the provider fixture.
+        if snapshot_calls == 2:
+            raise ProjectError("temporary project snapshot service failure")
+        return real_snapshot(target)
+
+    async def handler(_request):
+        return httpx.Response(200, json=provider_response(investigation(1)))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "_snapshot", side_effect=fail_first_worker_snapshot),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        started = await research_sessions.start_session(
+            str(path),
+            first.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[first.id, second.id],
+        )
+        finished = await wait_for(path, started["id"])
+
+    assert finished["status"] == "failed"
+    assert finished["calls_used"] == 1
+    failed_events = [
+        event for event in finished["events"] if event["kind"] == "call.preflight_failed"
+    ]
+    assert len(failed_events) == 1
+    failure = failed_events[0]
+    expected_titles = {first.id: first.title, second.id: second.title}
+    assert failure["strategy_id"] in expected_titles
+    assert failure["strategy_title"] == expected_titles[failure["strategy_id"]]
+    assert failure["role"] == "investigator"
+    assert failure["failure_stage"] == "project_snapshot"
+    assert failure["failure_kind"] == "preflight_error"
+    assert failure["dispatched"] is False
+    assert "temporary project snapshot service failure" not in failure["message"]
+    completed_steps = [step for step in finished["steps"] if step["status"] == "completed"]
+    assert len(completed_steps) == 1
+    assert completed_steps[0]["strategy_id"] in expected_titles
+    assert completed_steps[0]["strategy_id"] != failure["strategy_id"]
+    assert completed_steps[0]["role"] == "investigator"
+    assert completed_steps[0]["output"]["claim"].startswith("Claim 1:")
+    assert all(step.get("strategy_id") != failure["strategy_id"] for step in finished["steps"])
 
 
 async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
@@ -3677,6 +4763,15 @@ async def test_portfolio_preflight_timeout_pauses_without_spending_calls_and_rec
         assert paused["calls_used"] == 0
         assert "timed out" in paused["message"].lower()
         assert all(branch["status"] == "paused" for branch in paused["strategy_runs"])
+        failure_events = [
+            event for event in paused["events"] if event["kind"] == "call.preflight_failed"
+        ]
+        assert len(failure_events) == 1
+        assert failure_events[0]["strategy_id"] == strategy.id
+        assert failure_events[0]["role"] == "investigator"
+        assert failure_events[0]["failure_stage"] == "model_configuration"
+        assert failure_events[0]["failure_kind"] == "timeout"
+        assert failure_events[0]["dispatched"] is False
 
         resumed = await research_sessions.control_session(str(path), started["id"], "resume")
         finished = await wait_for(path, resumed["id"])
@@ -4898,7 +5993,8 @@ async def test_concurrent_human_guidance_is_delivered_and_attributed(path: Path)
     initial_investigators = 0
     calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    async def fake_call(record, role, context, timeout):
+    async def fake_call(record, role, context, timeout=None, step_id=None):
+        assert isinstance(step_id, str)
         nonlocal initial_investigators
         strategy_id = context["strategy"]["id"]
         calls.append((role, strategy_id, json.loads(json.dumps(context))))
@@ -5011,7 +6107,8 @@ async def test_intervention_delivery_pause_resume_keeps_attempt_provenance(path:
     guided_skeptic_calls = 0
     contexts = []
 
-    async def fake_call(record, role, context, timeout):
+    async def fake_call(record, role, context, timeout=None, step_id=None):
+        assert isinstance(step_id, str)
         nonlocal guided_skeptic_calls
         contexts.append((role, json.loads(json.dumps(context))))
         guidance = context.get("human_guidance", [])
@@ -5211,7 +6308,7 @@ def test_intervention_recovery_supersession_and_rejection(path: Path):
             )
         )
     except ProjectError as exc:
-        assert "24-intervention limit" in str(exc)
+        assert "24-feedback limit" in str(exc)
     else:
         raise AssertionError("A session must reject guidance past its explicit bound")
     bounded = research_sessions.get_session(str(path), session_id)
@@ -5241,11 +6338,521 @@ def test_intervention_recovery_supersession_and_rejection(path: Path):
     assert "intervention.rejected" in [event["kind"] for event in final["events"]]
 
 
+def test_epistemic_presentation_is_conservative_and_read_only() -> None:
+    archive = Path(__file__).resolve().parents[1] / (
+        "docs/evaluations/fixtures/t17-8-answer-free/"
+        "live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
+    )
+    archive_bytes = archive.read_bytes()
+    original = json.loads(archive_bytes)["research_sessions"][0]
+    for code, expected in (
+        ("incomplete", "Incomplete"),
+        ("convincing_unverified", "Convincing but unverified"),
+        ("unknown", "Unknown"),
+        ("verified", "Reported verified; not independently checked by SIGMA"),
+        (None, "Unknown"),  # legacy derived default, never written back
+    ):
+        for status in ("ended", "failed"):
+            for structured in (True, False):
+                record = deepcopy(original)
+                record["status"] = status
+                for artifact in record["artifacts"]:
+                    review = artifact["objective_review"]
+                    if code is None:
+                        review.pop("verification_status", None)
+                    else:
+                        review["verification_status"] = code
+                    if structured:
+                        # Representation fixture only, not an enriched historical proof.
+                        review["argument_steps"] = [
+                            {
+                                "number": 1,
+                                "title": "Representation fixture",
+                                "argument": "This tests structured availability, not mathematical validity.",
+                                "epistemic_status": "conjecture",
+                                "basis_artifact_ids": [],
+                            }
+                        ]
+                before = deepcopy(record)
+                outcome = research_sessions._outcome(record)
+                assert outcome["verification_label"] == expected
+                if code != "convincing_unverified":
+                    assert outcome["assessment"] == "mixed"
+                    assert "Complete reviewed candidate answer" not in outcome["conclusion"]
+                assert expected in outcome["conclusion"]
+                if code != "convincing_unverified":
+                    assert "convincing but unverified candidate" not in " ".join(outcome["caveats"])
+                public = research_sessions._public(record)
+                assert public["outcome"]["verification_label"] == expected
+                metric = next(
+                    item
+                    for item in public["outcome"]["metrics"]["research_quality"]
+                    if item["label"] == "Verification status"
+                )
+                assert metric["value"] == expected
+                availability = public["outcome"]["argument_availability"]
+                assert availability["status"] == ("structured" if structured else "narrative")
+                if not structured:
+                    assert "saved narrative is available" in availability["label"]
+                    assert "unstructured argument, unassessed" in outcome["label"]
+                    assert (
+                        "cannot be assessed as a complete argument from this record"
+                        not in outcome["summary"]
+                    )
+                    # Historical summaries remain available without being
+                    # misattributed as an agent-authored Conclusion.
+                    assert public["outcome"]["conclusion"] is None
+                    assert public["outcome"]["summary"]
+                assert record == before
+    # Absence and partial work remain distinct from a recorded candidate narrative.
+    partial = deepcopy(original)
+    partial["artifacts"][-1]["objective_review"]["status"] = "partial"
+    partial["artifacts"][-1]["objective_review"]["verification_status"] = "incomplete"
+    assert research_sessions._outcome(partial)["verification_label"] == "Incomplete"
+    empty = research_sessions._outcome({"status": "failed", "artifacts": []})
+    assert empty["verification_label"] == "Not recorded"
+    assert empty["argument_availability"]["status"] == "not_recorded"
+    from sigma.research_epistemics import argument_availability
+
+    assert argument_availability({"claim": "An assertion alone"})["status"] == "not_recorded"
+    assert archive.read_bytes() == archive_bytes
+
+
+def test_source_readiness_distinguishes_content_from_verification():
+    """Typed source availability is domain-neutral and never proof certification."""
+    source = {
+        "id": "saved-evidence",
+        "assumptions": ["Samples were randomly assigned"],
+        "assumptions_reviewed": ["  samples WERE randomly   assigned "],
+        "reasoning_steps": [
+            {
+                "argument": "Under the recorded sampling procedure the two groups differ.",
+                "review": {"disposition": "accepted", "objection": ""},
+            }
+        ],
+        "extract_truncated_fields": [],
+    }
+    readiness = research_sessions._finding_source_readiness
+    assert readiness(source) == {
+        "state": "model_reviewed_steps",
+        "assumptions": "model_reviewed",
+        "original_in_context": False,
+        "independently_verified": False,
+    }
+    disputed = deepcopy(source)
+    disputed["assumptions_reviewed"] = ["Different selection procedure"]
+    assert readiness(disputed)["assumptions"] == "requires_review"
+    truncated = deepcopy(source)
+    truncated["extract_truncated_fields"] = ["method", "reasoning_steps"]
+    assert readiness(truncated)["state"] == "incomplete_extract"
+    withdrawn = deepcopy(truncated)
+    withdrawn["retracted_by_artifact_ids"] = ["retraction"]
+    assert readiness(withdrawn)["state"] == "withdrawn"
+    narrative = {"method": "Compare conflicting archive sources."}
+    assert readiness(narrative)["state"] == "narrative_unverified"
+    assert readiness(narrative)["assumptions"] == "none_declared"
+    incomplete = {"reasoning_steps": [{"argument": "A hypothesis, not a finding."}]}
+    assert readiness(incomplete)["state"] == "unresolved_steps"
+
+
+def test_saved_followup_question_selection():
+    """A newer terminal outcome must block stale or unprovided follow-ups."""
+
+    def session(
+        number,
+        strategy_id,
+        decision="stop_budget_exhausted",
+        stop_reason="recoverable_objection",
+        assessment="continue",
+        retracted=False,
+    ):
+        artifact = {
+            "id": f"artifact-{number}",
+            "strategy_id": strategy_id,
+            "coordinator_decision": decision,
+            "next_question": "" if decision == "stop_budget_exhausted" else "New bounded test",
+            "skeptic_output": {
+                "stop_reason": stop_reason,
+                "assessment": assessment,
+                "next_question": "New bounded test",
+            },
+            "objective_review": {"status": "partial"},
+        }
+        if retracted:
+            artifact["retracted_by_artifact_ids"] = ["later-retraction"]
+        return {
+            "id": f"session-{number}",
+            "session_number": number,
+            "status": "ended",
+            "created_at": f"2026-10-25T00:00:{number:02d}Z",
+            "artifacts": [artifact],
+        }
+
+    older = session(1, "A")
+    current = session(2, "A")
+    peer = session(3, "B")
+    supplied = [
+        {
+            "strategy_id": strategy,
+            "id": f"artifact-{number}",
+            "session_id": f"session-{number}",
+            "next_question": "",
+            "skeptic_output": {"next_question": "New bounded test"},
+            "extract_truncated_fields": [],
+        }
+        for number, strategy in ((1, "A"), (2, "A"), (3, "B"))
+    ]
+    select = research_sessions._saved_followup_questions
+    result = select([older, current, peer], ["A", "B"], supplied)
+    assert result["A"]["artifact_id"] == "artifact-2"
+    assert result["A"]["source_field"] == "skeptic_output.next_question"
+    assert result["A"]["status"] == "model_suggested_unverified"
+    assert result["B"]["artifact_id"] == "artifact-3"
+    assert select([older, current], ["A"], supplied[:1]) == {}
+    # A shortened material scope cannot silently authorize carrying a question.
+    shortened: list[dict[str, Any]] = [dict(item) for item in supplied]
+    shortened[1]["extract_truncated_fields"] = ["assumptions"]
+    assert select([older, current], ["A"], shortened) == {}
+    # Truncating an unused source field does not invalidate the Skeptic's
+    # complete, separately supplied next question.
+    shortened[1]["extract_truncated_fields"] = ["next_question"]
+    assert select([older, current], ["A"], shortened)["A"]["artifact_id"] == "artifact-2"
+    shortened[1]["extract_truncated_fields"] = ["skeptic_output.next_question"]
+    assert select([older, current], ["A"], shortened) == {}
+    # A shortened *argument* does not invalidate a bounded next test by itself.
+    shortened[1]["extract_truncated_fields"] = ["reasoning_steps"]
+    assert select([older, current], ["A"], shortened)["A"]["artifact_id"] == "artifact-2"
+    for blocked in (
+        session(2, "A", stop_reason="decisive_counterexample"),
+        session(2, "A", stop_reason="productive_conclusion"),
+        session(2, "A", stop_reason="no_progress"),
+        session(2, "A", retracted=True),
+        session(2, "A", decision="stop_no_progress"),
+        session(2, "A", assessment="stop"),
+    ):
+        assert select([older, blocked], ["A"], supplied) == {}
+    assert select([older, peer], ["A"], supplied)["A"]["artifact_id"] == "artifact-1"
+    assert select([older], ["B"], supplied) == {}
+
+    # A matching artifact ID does not establish that the same complete
+    # question and historical session are visible in the frozen role context.
+    absent = deepcopy(supplied)
+    absent[1]["skeptic_output"] = {}
+    assert select([older, current], ["A"], absent) == {}
+    mismatch = deepcopy(supplied)
+    mismatch[1]["skeptic_output"]["next_question"] = "Conflicting proposal"
+    assert select([older, current], ["A"], mismatch) == {}
+    foreign = deepcopy(supplied)
+    foreign[1]["session_id"] = "session-1"
+    assert select([older, current], ["A"], foreign) == {}
+    missing_session = deepcopy(supplied)
+    del missing_session[1]["session_id"]
+    assert select([older, current], ["A"], missing_session) == {}
+    duplicate = deepcopy(supplied)
+    duplicate.append(deepcopy(duplicate[1]))
+    assert select([older, current], ["A"], duplicate) == {}
+    competing_strategy = deepcopy(supplied)
+    competing_strategy[1]["strategy_id"] = "B"
+    assert select([older, current], ["A"], competing_strategy) == {}
+
+    # A manually interrupted or failed later run is not a new automatic
+    # endorsement of the latest question. It also blocks stale fallback.
+    for state in ("queued", "running", "paused", "stopped", "failed"):
+        interrupted = deepcopy(current)
+        interrupted["status"] = state
+        assert select([older, interrupted], ["A"], supplied) == {}
+
+    # A completed record with its exact artifact question is also supported.
+    active = session(2, "A", decision="continue")
+    complete = deepcopy(supplied)
+    complete[1]["next_question"] = "New bounded test"
+    assert select([older, active], ["A"], complete)["A"]["source_field"] == (
+        "artifact.next_question"
+    )
+    complete[1]["next_question"] = "Incomplete or altered question"
+    assert select([older, active], ["A"], complete) == {}
+
+
+async def test_saved_followup_question_reaches_real_dispatch(path: Path):
+    """A budget-ended model suggestion is carried by ID, not treated as approval."""
+    view, strategy, credential, config = await setup(path)
+    other = create_strategy(
+        path, "Independent history inquiry", "Evaluate source reliability in a bounded archive."
+    ).project.strategies[-1]
+    limits = research_sessions.get_limits(str(path))
+    limits.update(research_rounds=1, model_calls=2)
+    research_sessions.save_limits(str(path), limits)
+    phase = "seed"
+    seen = []
+    later_dispatched = asyncio.Event()
+    question = (
+        "Check a specific edge case using the earlier observation, not a new project-wide claim."
+    )
+
+    async def handler(request):
+        nonlocal phase
+        payload = json.loads(request.content)
+        context = json.loads(payload["input"])
+        role = payload["text"]["format"]["name"]
+        seen.append((phase, role, context))
+        if phase == "later":
+            if context["strategy"]["id"] == strategy.id:
+                later_dispatched.set()
+            await asyncio.Event().wait()
+        if role == "research_investigator":
+            return httpx.Response(200, json=provider_response(investigation(1)))
+        response = skeptic(1, "continue", "recoverable_objection")
+        response["next_question"] = question
+        return httpx.Response(200, json=provider_response(response))
+
+    with (
+        patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+        patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+        patch.object(research_sessions, "execution_capabilities", return_value=[]),
+        patch(
+            "sigma.research_sessions.httpx.AsyncClient",
+            side_effect=lambda **kwargs: REAL_CLIENT(
+                transport=httpx.MockTransport(handler), **kwargs
+            ),
+        ),
+    ):
+        first = await research_sessions.start_session(
+            str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+        )
+        ended = await wait_for(path, first["id"])
+        assert ended["status"] == "ended" and len(ended["artifacts"]) == 1
+        artifact = ended["artifacts"][0]
+        assert artifact["coordinator_decision"] == "stop_budget_exhausted"
+        assert artifact["next_question"] == ""
+        assert artifact["skeptic_output"]["next_question"] == question
+        original_bytes = (path / "research-sessions" / f"{ended['id']}.json").read_bytes()
+
+        limits.update(model_calls=4)
+        research_sessions.save_limits(str(path), limits)
+        phase = "later"
+        next_session = await research_sessions.start_session(
+            str(path),
+            strategy.id,
+            str(uuid4()),
+            view.project.id,
+            credential["identity"],
+            strategy_ids=[strategy.id, other.id],
+        )
+        branches = {row["strategy_id"]: row for row in next_session["strategy_runs"]}
+        assert branches[strategy.id]["current_question"] == question
+        assert branches[other.id]["current_question"].startswith("Advance this strategy")
+        source = branches[strategy.id]["initial_question_source"]
+        assert source["artifact_id"] == artifact["id"]
+        assert source["session_id"] == ended["id"]
+        assert source["status"] == "model_suggested_unverified"
+        assert next_session["current_question"] == question
+        await asyncio.wait_for(later_dispatched.wait(), 2)
+        carried = next(
+            context
+            for stage, role, context in seen
+            if stage == "later"
+            and role == "research_investigator"
+            and context["strategy"]["id"] == strategy.id
+        )
+        assert carried["question"] == question
+        assert carried["question_source"] == source
+        assert artifact["id"] in carried["prior_session_artifact_ids"]
+        source_finding = next(
+            finding
+            for finding in carried["prior_session_findings"]
+            if finding["id"] == artifact["id"]
+        )
+        assert source_finding["skeptic_output"]["next_question"] == question
+        assert source_finding["source_readiness"]["independently_verified"] is False
+        assert source_finding["source_readiness"]["original_in_context"] is False
+        await research_sessions.control_session(str(path), next_session["id"], "stop")
+
+        # Researcher-approved continuations have priority over automatic suggestions.
+        approved = {
+            strategy.id: {
+                "question": "Researcher-approved, narrower follow-up",
+                "parent_strategy_id": strategy.id,
+                "sources": [],
+                "rejected_sources": [],
+                "packet_digest": "offline-test-only",
+            }
+        }
+        with (
+            patch("sigma.continuations.approved_packets", return_value=approved),
+            patch.object(research_sessions, "_worker", new=AsyncMock()),
+        ):
+            override = await research_sessions.start_session(
+                str(path), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            assert override["current_question"] == approved[strategy.id]["question"]
+            assert "initial_question_source" not in override
+            await research_sessions.control_session(str(path), override["id"], "stop")
+        assert (path / "research-sessions" / f"{ended['id']}.json").read_bytes() == original_bytes
+
+
+async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path):
+    """One saved question must carry across domains without answer-key tuning.
+
+    Real project persistence and provider dispatch are exercised; the roles
+    themselves are scripted local HTTP fixtures, not research judgments.
+    """
+    cases = (
+        (
+            "biology",
+            "Does an observed growth change survive control for batch effects?",
+            "Growth under different reagent conditions",
+            "Reagent and culture batches were assigned independently.",
+            "Compare within-batch replicate growth estimates before any causal claim.",
+        ),
+        (
+            "default",
+            "Which of two conflicting archive accounts has stronger provenance?",
+            "Source criticism and competing archive accounts",
+            "The two documents refer to the same recorded event.",
+            "Inspect custody and dating for each original source before reconciliation.",
+        ),
+        (
+            "military",
+            "Which routing plan satisfies bounded resource constraints?",
+            "Assess a fictional logistics scenario under stated limits",
+            "The simulated route capacity remains constant during the scenario.",
+            "Test whether the alternative route remains feasible under reduced capacity.",
+        ),
+        (
+            "mathematical",
+            "Does a bounded numerical pattern generalize?",
+            "Test a finite case without asserting a universal theorem",
+            "The proposed recurrence is restricted to nonnegative indices.",
+            "Check the first unsampled index against the proposed recurrence.",
+        ),
+    )
+    for index, (mode, question, approach, assumption, followup) in enumerate(cases):
+        root = path / f"domain-{index}.sigma"
+        view = initialize_project(root, f"Cross-domain case {index}", question, research_mode=mode)
+        strategy = create_strategy(root, "Bounded local test", approach).project.strategies[0]
+        limits = research_sessions.get_limits(str(root))
+        limits.update(research_rounds=1, model_calls=2)
+        research_sessions.save_limits(str(root), limits)
+        credential = {
+            "identity": "offline-case",
+            "mode": "api_key",
+            "token": "fixture-token",
+            "status": "connected",
+        }
+        config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+        state = {"phase": "seed", "captured": [], "dispatched": asyncio.Event()}
+
+        async def handler(request, *, case=(mode, assumption, followup), state=state):
+            case_mode, case_assumption, case_followup = case
+            context = json.loads(json.loads(request.content)["input"])
+            role = json.loads(request.content)["text"]["format"]["name"]
+            state["captured"].append((state["phase"], role, context))
+            if state["phase"] == "later":
+                state["dispatched"].set()
+                await asyncio.Event().wait()
+            if role == "research_investigator":
+                response = investigation(1)
+                response["claim"] = f"Unverified local claim for {case_mode}"
+                response["assumptions"] = [case_assumption]
+                response["evidence_status"] = "Scripted proposition, not verified."
+            else:
+                response = skeptic(1, "continue", "recoverable_objection")
+                response["assumptions_reviewed"] = [case_assumption]
+                response["next_question"] = case_followup
+            return httpx.Response(200, json=provider_response(response))
+
+        with (
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
+            patch.object(research_sessions, "execution_capabilities", return_value=[]),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            first = await research_sessions.start_session(
+                str(root), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            ended = await wait_for(root, first["id"])
+            assert ended["status"] == "ended"
+            assert ended["artifacts"][0]["coordinator_decision"] == "stop_budget_exhausted"
+            saved = (root / "research-sessions" / f"{ended['id']}.json").read_bytes()
+            state["phase"] = "later"
+            limits.update(model_calls=4)
+            research_sessions.save_limits(str(root), limits)
+            later = await research_sessions.start_session(
+                str(root), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            assert later["current_question"] == followup
+            assert later["initial_question_source"]["artifact_id"] == ended["artifacts"][0]["id"]
+            await asyncio.wait_for(state["dispatched"].wait(), 2)
+            contexts = [
+                context
+                for stage, role, context in state["captured"]
+                if stage == "later" and role == "research_investigator"
+            ]
+            assert contexts and contexts[0]["question"] == followup
+            assert contexts[0]["question_source"] == later["initial_question_source"]
+            finding = next(
+                row
+                for row in contexts[0]["prior_session_findings"]
+                if row["id"] == ended["artifacts"][0]["id"]
+            )
+            assert finding["skeptic_output"]["next_question"] == followup
+            assert finding["source_readiness"]["independently_verified"] is False
+            assert finding["source_readiness"]["assumptions"] == "model_reviewed"
+            assert finding["strategy_id"] == strategy.id
+            await research_sessions.control_session(str(root), later["id"], "stop")
+            assert (root / "research-sessions" / f"{ended['id']}.json").read_bytes() == saved
+
+
+def test_outcome_includes_derived_execution_provenance() -> None:
+    record = {
+        "id": "saved-session",
+        "status": "ended",
+        "artifacts": [
+            {
+                "id": "saved-finding",
+                "coordinator_decision": "continue",
+                "claim_or_question": "Unverified model proposal",
+                "skeptic_response": "No successful computation was observed.",
+                "investigator_output": {
+                    "python_execution": {
+                        "id": "saved-execution",
+                        "status": "timeout",
+                        "source": "print('unobserved')",
+                        "stderr": "Timed out",
+                    }
+                },
+            }
+        ],
+        "steps": [],
+    }
+    original = deepcopy(record)
+    outcome = research_sessions._outcome(record)
+    provenance = outcome["execution_provenance"]
+    assert provenance["completed_count"] == 0
+    assert provenance["records"][0]["id"] == "saved-execution"
+    assert provenance["records"][0]["statuses"] == ["timeout"]
+    assert provenance["records"][0]["artifact_ids"] == ["saved-finding"]
+    assert record == original
+
+
 def main():
+    test_outcome_includes_derived_execution_provenance()
+    test_epistemic_presentation_is_conservative_and_read_only()
+    test_source_readiness_distinguishes_content_from_verification()
+    test_saved_followup_question_selection()
+    test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)
         asyncio.run(test_disabled_strategy_never_starts_a_run(root / "disabled.sigma"))
         asyncio.run(test_three_cycles_and_idempotency(root / "cycles.sigma"))
+        asyncio.run(
+            test_legacy_worker_aggregates_usage_and_audits_inputs(root / "legacy-worker.sigma")
+        )
         asyncio.run(test_investigator_python_is_run_and_reviewed(root / "python-review.sigma"))
         asyncio.run(test_recovery_reuses_saved_python_execution(root / "python-recovery.sigma"))
         asyncio.run(test_restart_during_python_has_no_automatic_rerun(root / "python-crash.sigma"))
@@ -5255,6 +6862,12 @@ def main():
             test_stop_during_python_execution_preserves_provenance(root / "python-stop.sigma")
         )
         asyncio.run(test_new_session_receives_prior_saved_findings(root / "continuation.sigma"))
+        asyncio.run(
+            test_saved_followup_question_reaches_real_dispatch(
+                root / "saved-question-continuation.sigma"
+            )
+        )
+        asyncio.run(test_cross_domain_continuation_dispatch_with_offline_roles(root))
         asyncio.run(
             test_failed_attempt_guides_next_session_with_provenance(
                 root / "failed-continuation.sigma"
@@ -5283,6 +6896,7 @@ def main():
         asyncio.run(test_changed_bindings_pause_before_provider(root / "binding.sigma"))
         asyncio.run(test_storage_limit_pauses_without_artifact(root / "storage.sigma"))
         asyncio.run(test_remove_terminal_and_monotonic_number(root / "removal.sigma"))
+        test_deliberate_argument_gap_is_preserved_and_not_complete()
         asyncio.run(
             test_maximum_regions_solution_and_frozen_attribution(root / "maximum-regions.sigma")
         )
@@ -5334,6 +6948,11 @@ def main():
             )
         )
         asyncio.run(
+            test_portfolio_audits_mixed_preflight_failure_and_sibling_success(
+                root / "portfolio-preflight-mixed-wave.sigma"
+            )
+        )
+        asyncio.run(
             test_portfolio_preflight_timeout_pauses_without_spending_calls_and_recovers(
                 root / "portfolio-preflight-timeout.sigma"
             )
@@ -5382,6 +7001,10 @@ def main():
         )
         asyncio.run(test_generic_objective_review_on_binary_strings(root / "binary-strings.sigma"))
         test_outcome_classification()
+        test_session_listing_ignores_sequence_metadata(root / "session-sequence-metadata.sigma")
+        test_outcome_conclusions_are_bounded_honest_and_synthesized(
+            root / "outcome-conclusion.sigma"
+        )
         test_outcome_metrics_from_persisted_evidence(root / "outcome-metrics.sigma")
         assert research_sessions.coordinate_decision(
             "stop", "recoverable_objection", "Test the omitted boundary case", [], 1, 3, 2, 6

@@ -42,6 +42,7 @@ def fixture(path: Path):
     for key in ("ai_model", "reasoning_effort", "active_order"):
         raw.pop(key, None)
     raw.pop("difficulty", None)
+    raw.pop("show_advanced_outcome_details", None)
     for item in raw.get("strategies", []):
         item.pop("enabled", None)
     (path / STATE).write_text(json.dumps(raw))
@@ -127,7 +128,7 @@ def main() -> None:
             (" ", "Text"),
             ("Name", "\n"),
             ("x" * 201, "Text"),
-            ("Name", "x" * 10001),
+            ("Name", "x" * 50001),
         ):
             rejects(
                 lambda title=title, approach=approach: edit_strategy(
@@ -170,6 +171,14 @@ def main() -> None:
             mutate()  # Retry accepts the existing exact backup.
             assert inspect_project(target).project.schema_version == 3
         print("PASS both first-write migrations, backup/publication failure and retry")
+
+        long_edit = root / "long-edit.sigma"
+        _, long_item = fixture(long_edit)
+        long_approach = "A concrete operational detail. " * 400
+        edited_long = edit_strategy(long_edit, long_item.id, "Expanded plan", long_approach)
+        assert edited_long.project.strategies[0].approach == long_approach.strip()
+        assert inspect_project(long_edit).project.strategies[0].approach == long_approach.strip()
+        print("PASS strategy edits retain approaches beyond the legacy 10,000-character bound")
 
         concurrent = root / "concurrent.sigma"
         _, first = fixture(concurrent)

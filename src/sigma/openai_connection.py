@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import time
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,6 +19,36 @@ TTL = 60
 RETRY_COOLDOWN = 3
 TIMEOUT = 8
 MAX_BYTES = 1000000
+
+
+class AuthContext(Mapping[str, Any]):
+    """Internal auth snapshot whose bearer credential is inaccessible to dumps/logs."""
+
+    __slots__ = ("_safe", "_token")
+
+    def __init__(
+        self, *, token: str, mode: str, status: str, identity: str, account_label: str | None = None
+    ):
+        self._safe = {"mode": mode, "status": status, "identity": identity}
+        if account_label is not None:
+            self._safe["account_label"] = account_label
+        self._token = token
+
+    def __getitem__(self, key: str) -> Any:
+        if key == "token":
+            return self._token
+        return self._safe[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._safe)
+
+    def __len__(self) -> int:
+        return len(self._safe)
+
+    def __repr__(self) -> str:
+        return f"AuthContext(mode={self._safe['mode']!r}, status={self._safe['status']!r})"
+
+
 _cached: dict[str, Any] | None = None
 _at = 0.0
 _identity = ""
@@ -138,7 +169,7 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
     return dict(_cached)
 
 
-async def auth_context() -> dict[str, Any]:
+async def auth_context() -> AuthContext:
     # Google OIDC identifies a cloud workspace; it does not grant use of the
     # local operator's account or API key. Cloud inference uses only the
     # explicitly provisioned service credential and is bounded by the durable
@@ -146,31 +177,36 @@ async def auth_context() -> dict[str, Any]:
     from sigma import cloud_workspaces
 
     if cloud_workspaces.enabled():
-        token = os.environ.get("SIGMA_CLOUD_OPENAI_API_KEY", "").strip()
-        return {
-            "mode": "api_key",
-            "token": token,
-            "status": "connected" if token else "unconfigured",
-            "identity": "cloud_service_api_key" if token else "cloud_unconfigured",
-        }
+        from sigma.config_secrets import SecretConfigurationError, secret_value
+
+        try:
+            token = secret_value("SIGMA_CLOUD_OPENAI_API_KEY") or ""
+        except SecretConfigurationError:
+            token = ""
+        return AuthContext(
+            token=token,
+            mode="api_key",
+            status="connected" if token else "unconfigured",
+            identity="cloud_service_api_key" if token else "cloud_unconfigured",
+        )
     selected = await chatgpt_auth.session()
     mode = selected["mode"]
     if mode == "api_key":
         token = os.environ.get("OPENAI_API_KEY", "").strip()
-        return {
-            "mode": mode,
-            "token": token,
-            "status": "connected" if token else "unconfigured",
-            "identity": "api_key",
-        }
+        return AuthContext(
+            token=token,
+            mode=mode,
+            status="connected" if token else "unconfigured",
+            identity="api_key",
+        )
     account = selected.get("account") or {}
-    return {
-        "mode": mode,
-        "token": account.get("access_token", ""),
-        "status": selected.get("status", "disconnected"),
-        "identity": "chatgpt:" + str(selected.get("account_id", "")),
-        "account_label": account.get("email") or account.get("name"),
-    }
+    return AuthContext(
+        token=account.get("access_token", ""),
+        mode=mode,
+        status=selected.get("status", "disconnected"),
+        identity="chatgpt:" + str(selected.get("account_id", "")),
+        account_label=account.get("email") or account.get("name"),
+    )
 
 
 PLAN_MESSAGES = {
@@ -213,10 +249,13 @@ PLAN_MESSAGES = {
 }
 
 
-async def connection(refresh: bool = False, context: dict | None = None) -> dict[str, Any]:
+async def connection(
+    refresh: bool = False, context: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
     global _identity, _pending, _cached, _known
     try:
-        context = context or await auth_context()
+        if context is None:
+            context = await auth_context()
         from sigma import cloud_workspaces
 
         prefs = (
@@ -280,7 +319,7 @@ def inference_failure(status: str, guard: str | None = None) -> None:
     _at = time.monotonic()
 
 
-async def models(refresh: bool = False, context: dict | None = None) -> dict[str, Any]:
+async def models(refresh: bool = False, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
     state = await connection(refresh, context)
     verified = state["status"] == "connected"
     choices = [

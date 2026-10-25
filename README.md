@@ -2,54 +2,86 @@
 
 **Strategy Investigation, Generation, Measurement & Assessment**
 
-**A local research workspace with bounded AI investigation, computational experiments, and durable evidence.**
+SIGMA grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
 
-SIGMA helps people investigate difficult problems through multiple strategies. Its initial showcase is mathematical research, including the Riemann Hypothesis, but projects and sample investigations span other domains.
+The central proposition must withstand scrutiny: **does persistent, multi-agent investigation produce better-supported, more useful research than a simpler AI assistant operating with comparable resources?** That advantage has not been established. Testing it is part of SIGMA's purpose. And we're prepared to simplify SIGMA if the answer is no.
 
-Instead of treating a long conversation as the research record, SIGMA organizes work as **projects → research sessions → strategies → evidence artifacts**. Research findings, criticisms, experiments, and unresolved obligations can be inspected and revisited.
+SIGMA is a local research workspace for turning a difficult question into a set of trackable approaches, bounded AI research sessions, experiments, and inspectable evidence. It helps you keep the useful parts of an investigation together: what was tried, what the agents challenged, what the experiments showed, and what is still unresolved.
 
-## What you can do
+SIGMA can use AI to help investigate a question, but it does not establish that an answer is correct. Model agreement and computational results are evidence to inspect, not mathematical proof. The Riemann Hypothesis sample is an open problem, not a claimed solution.
 
-- **Create research projects and strategies.** Define a problem, choose its domain and difficulty, write or generate competing approaches, enable or disable strategies, and refine them without losing earlier work.
-- **Run bounded, concurrent research sessions.** Investigator and Skeptic agents work on selected strategies with a shared model-call budget, visible progress, stop/resume controls, and saved per-strategy histories. Sessions preserve evidence and can carry attributed findings into later work.
-- **Coordinate related investigations.** Evidence-linked cross-strategy findings can change a peer strategy's next research question. Contradictions, overlaps, complementary results, and later withdrawals remain inspectable. These relationships are model-reported and are **not automatically verified**.
-- **Execute scientific Python experiments.** When appropriate, Investigators can propose code for an isolated Docker sandbox with NumPy, SciPy, pandas, SymPy, and Matplotlib. The Skeptic receives the exact code, result, diagnostics, and execution provenance. Computations and captured files are retained as research evidence.
-- **Inspect and publish research artifacts.** View session evidence, export audits or deterministic reports, and use bounded AI authoring to create versioned research papers and compiled PDFs with claims linked to frozen evidence snapshots.
-- **Work locally and retain control.** Projects remain on your machine. Manual work does not require an AI account. You choose the connected AI provider and can supervise, stop, and review agent activity.
+For more background on the research approach and its underlying rationale, see [Product Rationale](docs/PRODUCT_RATIONALE.md).
 
-The included samples cover varying domains and difficulty levels. The Riemann Hypothesis example is an **open research problem**, not an existing proof or claim that SIGMA can solve it.
+## SIGMA in use
 
-## Getting started
+Create a project or start from a sample, write or generate strategies, then choose strategies for a research session. Investigator and Skeptic roles work through bounded steps; SIGMA saves findings, objections, optional computation, and unresolved questions so you can review and continue the work. You remain in control of starting, pausing, stopping, and evaluating investigations.
 
-SIGMA currently runs locally on macOS and Linux. You'll need Python 3.11+, [uv](https://docs.astral.sh/uv/), Node.js 20.19+, and npm.
+## Run SIGMA locally
 
-From the project directory:
+SIGMA's local development setup supports macOS and Linux. Install:
+
+- Python 3.11 or newer
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 20.19 or newer, with npm
+
+Clone the repository, enter it, then install the locked Python and frontend dependencies and start the application:
 
 ```sh
+git clone https://github.com/bkramerext/sigma.git
+cd sigma
 ./sigma setup
-./sigma start
+./sigma start --navigate
 ```
 
-Open **http://127.0.0.1:5173** if the browser does not launch automatically. Choose a sample project or create your own.
+SIGMA opens **http://127.0.0.1:5173** in your browser. If it does not, open that address yourself. Choose a sample or create a project. Press **Ctrl+C** in the terminal to stop both local servers; `./sigma shutdown` is also available. The default project location is `projects/` in the checkout. To use another existing absolute directory, set `SIGMA_PROJECTS_ROOT` in the environment before starting SIGMA.
 
-To use AI, select **Connect AI** and **Continue with ChatGPT**. Eligible requests use your ChatGPT plan allowance or credits, subject to limits. An optional API-key connection incurs separately billed API usage; SIGMA does not silently switch billing modes.
+Manual project and strategy work does not require an AI account. To use AI, choose **Connect AI** in SIGMA and continue with ChatGPT; eligible usage depends on your account and plan limits. You may instead choose the optional API-key mode, which uses separately billed API usage. To configure that mode, put `OPENAI_API_KEY` in the repository-root `.env` file or the server environment, then restart SIGMA. Keep secrets out of frontend configuration and project files.
+
+### Optional local Google administrator login
+
+The usual local launch is single-user and does not require an administrator account. If you want to exercise local Google sign-in and access management, configure a Google OAuth web client and bootstrap the first administrator:
+
+1. In the Google OAuth client, add `http://127.0.0.1:5173` as an authorized JavaScript origin and `http://127.0.0.1:5173/api/cloud-auth/callback` as the authorized redirect URI.
+2. Put the client ID and secret in the checkout's ignored `.env` file:
+
+   ```dotenv
+   GOOGLE_OIDC_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_OIDC_CLIENT_SECRET=your-client-secret
+   ```
+
+3. In the same shell you will use to launch SIGMA, set `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` to the operator's actual Google account, then start SIGMA:
+
+   ```sh
+   export SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL="you@gmail.com"
+   ./sigma start --navigate
+   ```
+
+   If you keep this setting in a shell startup file, load that file in the launching shell first. The first successful verified Google sign-in binds that account as administrator for this local installation. Local auth data is stored under `~/.sigma/local-cloud-auth`; other users need an explicit access grant. This local setup does not administer a hosted SIGMA deployment.
+
+For hosted setup, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md); do not reuse the local loopback OAuth settings for a hosted service.
 
 ### Optional scientific Python sandbox
 
-Research Python execution requires a working Docker-compatible container runtime and a locally built image:
+Research sessions can use a local Docker-compatible runtime for isolated Python experiments. Build the pinned image once:
 
 ```sh
 docker build -t sigma-research-python:0.1 sandbox-poc
 ```
 
-The runtime does not pull or install packages during an experiment. The container has no network access or host project mounts and runs with bounded resources. See [Getting Started](docs/GETTING-STARTED.md) and [Research Python Execution](docs/RESEARCH_PYTHON_EXECUTION.md) for setup, security assumptions, and resource limits.
+This capability is optional. See [Research Python Execution](docs/RESEARCH_PYTHON_EXECUTION.md) for its limits and security assumptions, and [Sage Execution](docs/SAGE_EXECUTION.md) for separate SageMath setup.
 
-## Research quality and current limits
+## Project documentation
 
-**Implemented engineering is not the same as demonstrated scientific discovery.** SIGMA has deterministic tests for orchestration, evidence handoff, cancellation/recovery, isolated computation, and reporting. Early live-agent trials have shown correct handling of a simple mathematical problem and one useful numerical experiment, but **robust independent work on Medium/Hard problems, subtle mathematical error detection, and reliable cross-strategy synthesis remain unproven**.
+- [Getting Started](docs/GETTING_STARTED.md): product workflow and local usage
+- [Status](docs/STATUS.md): implemented behavior, verification, and known limits
+- [Research Quality Charter](docs/RESEARCH_QUALITY_CHARTER.md): evidence and research-quality standards
+- [Research Python Execution](docs/RESEARCH_PYTHON_EXECUTION.md): optional computation setup and boundaries
+- [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md): hosted deployment and identity configuration
+- [Software Factory](docs/SOFTWARE_FACTORY.md): how SIGMA is developed and reviewed
+- [WOLF](WOLF.md): narrative about SIGMA's multi-agent system and engineering
 
-Research output must distinguish conjecture, finite computation, agent-reviewed argument, and independently verified theorem. Python and model consensus do not constitute formal proof. A Lean-based formal verification capability is only a future proposal.
+Run `./sigma --help` for CLI commands. The offline project checks are available with `./sigma test`.
 
-Future directions include improved evidence-driven coordination, broader scientific tooling such as SageMath, scholarly citation tracking, and deployment beyond local workstations. These are not represented here as shipped features.
+## How SIGMA is built
 
-SIGMA grew from an investigation into the Riemann Hypothesis and the idea that even an unsolved question should leave a useful, inspectable record of what was tried, what failed, and what remains unknown.
+SIGMA is developed through human-directed, AI-assisted software engineering (sometimes informally called “vibe coding”). Brian sets product direction and evaluates the running application; ChatGPT and Codex contribute design, implementation, testing, and review. [WOLF](WOLF.md) describes this collaboration.

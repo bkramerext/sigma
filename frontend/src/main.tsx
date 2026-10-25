@@ -1,4 +1,4 @@
-import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type Ref, type ReactNode } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type Ref, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import './style.css';
@@ -16,6 +16,7 @@ const RenderedMarkdown = lazy(() => import('./RenderedMarkdown'));
 // Prospective navigation rail; keep implementation available for later activation.
 const ENABLE_WORKSPACE_SIDEBAR = false;
 const SHOW_PROJECT_DETAILS_AND_HISTORY = false;
+const MAX_STRATEGY_APPROACH = 50000;
 
 type Stage = 'draft' | 'ready' | 'exploring' | 'hold';
 const stageLabels: Record<Stage, string> = { draft: 'Draft', ready: 'Ready to explore', exploring: 'Exploring', hold: 'On hold' };
@@ -62,6 +63,7 @@ type ProjectView = {
     ai_model: string;
     reasoning_effort: string;
     difficulty: ProjectDifficulty | null;
+    show_advanced_outcome_details: boolean;
     investigation_type: ResearchMode;
     events: { sequence: number; kind: string; timestamp: string; strategy_id?: string | null;
       project_change?: { previous: Settings; current: Settings } | null;
@@ -75,7 +77,7 @@ type ProjectView = {
 type ResearchArtifact = { id: string; session_id?: string; strategy_id?: string; strategy_cycle?: number; sequence: number; claim_or_question: string; method: string; assumptions: string[]; evidence_status: string; skeptic_response: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; note: string; investigator_output: Record<string, unknown>; skeptic_output: Record<string, unknown> };
 type ResearchEvent = { sequence: number; timestamp: string; kind: string; role?: string | null; message: string };
 type ContextManifest = { policy_version?: string; byte_limit?: number; assembled_context_bytes?: number; selected_count?: number; omitted_count?: number; note?: string; obligation_disposition_counts?: Record<string, number>; omitted_obligations?: { count: number; obligation_ids: string[]; reason: string }; omitted_peer_evidence?: { count: number; artifact_ids: string[]; reason: string }; omitted_project_strategies?: { count: number; strategy_ids: string[]; reason: string }; sources?: { source_ids?: string[]; category?: string; reason?: string; representation?: string; status?: string }[]; omitted_prior_session_findings?: { count: number; source_ids: string[]; reason: string }; omitted_prior_failures?: { count: number; attempt_ids: string[]; reason: string } };
-type ResearchStep = { id: string; strategy_id?: string | null; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; failure_kind?: string | null; provider_http_status?: number | null; interruption_reason?: string | null; context_artifact_ids?: string[]; prior_session_artifact_ids?: string[]; peer_strategy_artifact_ids?: string[]; peer_handoff_artifact_ids?: string[]; peer_handoff_ids?: string[]; human_intervention_ids?: string[]; context_manifest?: ContextManifest; output?: Record<string, unknown> };
+type ResearchStep = { id: string; strategy_id?: string | null; cycle: number; role: string; status: string; started_at: string; finished_at?: string; call_number: number; failure_kind?: string | null; provider_http_status?: number | null; interruption_reason?: string | null; context_artifact_ids?: string[]; prior_session_artifact_ids?: string[]; peer_strategy_artifact_ids?: string[]; peer_handoff_artifact_ids?: string[]; peer_handoff_ids?: string[]; human_intervention_ids?: string[]; context_manifest?: ContextManifest; provider_input_audit?: { kind: string; status: string; headers_included: boolean; request_body: Record<string, unknown> }; potential_truncation_fields?: string[]; token_usage_status?: string; output?: Record<string, unknown> };
 type InterventionDelivery = { strategy_id: string; role: 'investigator' | 'skeptic'; status: string; target_cycle?: number | 'next_eligible'; acknowledged_at?: string; uptake?: string; rationale?: string; attempts: { step_id: string; cycle?: number; status: string; delivered_at: string; acknowledged_at?: string; uptake?: string; rationale?: string }[] };
 type ResearchIntervention = { id: string; kind: 'objection' | 'evidence' | 'priority'; text: string; status: string; submitted_at: string; target_strategy_ids: string[]; target_roles: ('investigator' | 'skeptic')[]; rejection_reason?: string; superseded_by?: string; deliveries: InterventionDelivery[] };
 type PriorSessionFinding = { id: string; sequence: number; claim_or_question: string; method: string; assumptions?: string[]; evidence_status: string; objections: string[]; open_obligations: string[]; coordinator_decision: string; next_question: string; session_id: string; session_number: number; strategy_id: string; strategy_title: string; obligation_reviews?: { obligation_id: string; status: string; basis_artifact_ids: string[]; basis_step_ids: string[]; rationale: string; epistemic_status: string }[] };
@@ -86,14 +88,29 @@ type PortfolioRelation = { source_strategy_id: string; source_artifact_id: strin
 type PortfolioDecision = { status?: string; strategy_actions?: PortfolioStrategyAction[]; combination_candidates?: PortfolioCombination[]; conflict_candidates?: PortfolioRelation[]; overlap_warnings?: PortfolioRelation[]; limitations?: string[] };
 type OutcomeMetric = { label: string; value: string; detail?: string };
 type ResearchOutcomeMetrics = { operational: OutcomeMetric[]; research_quality: OutcomeMetric[]; sources: { session_id: string | null; step_ids: string[]; artifact_ids: string[]; execution_ids: string[]; strategy_ids: string[] } };
-type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; summary?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; argument_summary?: string; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
+type OutcomeArgumentStep = { number: number; title: string; argument: string; epistemic_status: string; basis_artifact_ids: string[]; research_artifact_id?: string; review?: { disposition: string; rationale: string; objection?: string; basis_artifact_ids: string[] } };
+type StrategyFinding = { strategy_id: string; strategy_title: string; status: string; execution_status?: string; failure_reason?: string; claim: string; research_artifact_id: string; research_artifact_ids?: string[]; reasoning_steps: OutcomeArgumentStep[]; skeptic_response: string; objections: string[]; open_obligations: string[] };
+type ExecutionProvenance = { records: { id: string; runtime: string; statuses: string[]; artifact_ids: string[]; step_ids: string[]; source_recorded: boolean; output_recorded: boolean }[]; unidentified_count: number; completed_count: number; completed_without_recorded_io_count?: number; other_count: number; note: string };
+type ResearchOutcome = { assessment: 'pending' | 'positive' | 'mixed' | 'negative'; label: string; verification_label?: string; argument_availability?: { status: 'structured' | 'narrative' | 'not_recorded'; label: string }; summary?: string; conclusion?: string; caveats?: string[]; basis_artifact_ids?: string[]; provisional: boolean; execution_provenance?: ExecutionProvenance; metrics?: ResearchOutcomeMetrics; solution_review?: { status: string; claim?: string; claim_scope?: 'conditional' | 'unconditional' | 'disputed'; argument_summary?: string; skeptic_response?: string; skeptic_objections?: string[]; open_obligations?: string[]; argument_steps?: OutcomeArgumentStep[]; strategy_findings?: StrategyFinding[]; assumptions?: string[]; proof_obligations?: string[]; verification_status?: string; unresolved_objections?: string[]; resolved_objections?: string[]; basis_artifact_ids?: string[] } | null };
 type StrategyAssessment = { strategy_id: string | null; strategy_title: string; assessment: 'contributed_to_solution' | 'productive' | 'unproductive' | 'not_used' | 'disabled' | 'unknown'; rationale: string; basis_artifact_ids: string[] };
-type ResearchSession = { id: string; project_id?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type ResearchSession = { approved_continuations?: Record<string, { parent_strategy_id: string; question: string; packet_digest: string; sources: { artifact_id: string; source: EvidencePointer; status: string; verification: string; claim: string; strategy_title: string; artifact: Record<string, unknown> }[]; rejected_sources: { artifact_id: string; rationale: string }[] }>; id: string; project_id?: string; problem?: string; session_number: number; strategy_id: string; strategy_title: string; strategy_text?: string; strategy_ids?: string[]; strategy_snapshot?: Record<string, unknown>; strategy_runs?: ResearchStrategyRun[]; portfolio_decision?: PortfolioDecision | null; peer_handoffs_prompted?: unknown[]; interventions?: ResearchIntervention[]; status: 'queued' | 'running' | 'paused' | 'stopped' | 'completed' | 'ended' | 'failed'; model: string; reasoning_effort: string; mode: string; calls_used: number; call_limit: number; cycle: number; cycle_limit?: number; current_question: string; current_action: string; message: string; artifacts: ResearchArtifact[]; prior_session_findings?: PriorSessionFinding[]; strategy_assessments?: StrategyAssessment[]; steps: ResearchStep[]; events: ResearchEvent[]; created_at: string; updated_at: string; started_at?: string; elapsed_seconds?: number; output_token_limit?: number; tokens_used?: number | null; token_usage_status?: string; estimated_cost_usd?: number | null; cost_status?: string; outcome: ResearchOutcome };
+type EvidencePointer = { project_id: string; session_id: string; session_number: number; strategy_id: string; artifact_id: string; artifact_sequence: number; record_path: string; available: boolean };
+type CurrentFinding = { id: string; text: string; investigated_claim: string; source: EvidencePointer; status: string; verification: string; strategy_title: string; objections: string[]; evidence_kind: string };
+type CurrentQuestion = { id: string; text: string; status: string; actionable: boolean; sources: EvidencePointer[]; narrative_resolution_sources: EvidencePointer[]; note: string; dispositions: { source: EvidencePointer; valid: boolean; rationale: string }[] };
+type CurrentUnderstanding = { version: number; project_id: string; session_count: number; project_status: string; scope_note: string; findings: CurrentFinding[]; current_finding_ids: string[]; obligations: CurrentQuestion[]; changes: { kind: string; text: string; source: EvidencePointer; earlier: EvidencePointer | null; caution: string }[]; next_investigations: { obligation_id: string; question: string; source: EvidencePointer; qualification: string }[]; failures: { session_id: string; session_number: number; status: string; note: string }[]; limitations: string[] };
 type ResearchLimits = { research_rounds: number; model_calls: number; session_duration_minutes: number; output_tokens_per_call: number; maximum_estimated_cost_usd: number | null };
 type DurationUnit = 'minutes' | 'hours' | 'days';
 type ResearchLimitsDraft = { research_rounds: string; model_calls: string; session_duration_value: string; session_duration_unit: DurationUnit; output_tokens_per_call: string; maximum_estimated_cost_usd: string };
 function outcomeArtifactReferences(ids: string[] | undefined, session: ResearchSession): string {
   return ids?.map(id => `Artifact ${session.artifacts.find(artifact => artifact.id === id)?.sequence ?? '?'}`).join(', ') || 'No artifact references';
+}
+
+// Labels come from the shared Python research-epistemics projection, including exports.
+function outcomeVerificationLabel(outcome: ResearchOutcome): string {
+  return outcome.verification_label || 'Not recorded';
+}
+function outcomeArgumentLabel(outcome: ResearchOutcome): string {
+  return outcome.argument_availability?.label || 'Argument availability was not recorded; inspect the saved research artifacts.';
 }
 
 function researchOutcomeMarkdown(session: ResearchSession): string {
@@ -102,12 +119,81 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
   if (outcome.basis_artifact_ids?.length) lines.push('', `**Outcome evidence:** ${outcomeArtifactReferences(outcome.basis_artifact_ids, session)}`);
   const review = outcome.solution_review;
   if (review) {
-    lines.push('', '### Solution review', '', `**Solution claim:** ${review.claim || 'No solution claim recorded.'}`, '', `**Argument:** ${review.argument_summary || 'No argument summary recorded.'}`, '', `**Assumptions:** ${review.assumptions?.join(' · ') || 'None recorded'}`, '', `**Proof obligations:** ${review.proof_obligations?.join(' · ') || 'None recorded'}`, '', `**Evidence:** ${outcomeArtifactReferences(review.basis_artifact_ids, session)}`);
+    lines.push('', '### Solution review', '', `**Investigated:** ${session.problem || 'Project objective unavailable in this historical record.'}`, '', `**Bounded strategy:** ${session.strategy_text || session.strategy_title || 'Strategy details unavailable.'}`, '', `**Solution claim:** ${review.claim || 'No solution claim recorded.'}`, '', `**Argument:** ${review.argument_summary || 'No argument summary recorded.'}`, '', `**Skeptic response:** ${review.skeptic_response || 'No substantive Skeptic response recorded.'}`, '', `**Assumptions:** ${review.assumptions?.join(' · ') || 'None recorded'}`, '', `**Proof obligations considered:** ${review.proof_obligations?.join(' · ') || 'None recorded'}`, '', `**Still open:** ${review.open_obligations?.join(' · ') || 'None recorded'}`, '', `**Evidence:** ${outcomeArtifactReferences(review.basis_artifact_ids, session)}`);
+    if (review.argument_steps?.length) lines.push('', '### Reviewed reasoning', '', ...review.argument_steps.flatMap(step => [`#### ${step.number}. ${step.title}`, '', `**Kind:** ${step.epistemic_status}`, '', step.argument, '', `**Skeptic review:** ${step.review?.disposition || 'Not recorded'} — ${step.review?.rationale || 'No rationale recorded'}`, ...(step.review?.objection ? ['', `**Objection:** ${step.review.objection}`] : []), '', `**Sources:** ${outcomeArtifactReferences([...(step.basis_artifact_ids || []), ...(step.research_artifact_id ? [step.research_artifact_id] : [])], session)}`, '']));
+    else lines.push('', '### Reviewed reasoning', '', outcomeArgumentLabel(outcome));
+    if ((review.strategy_findings?.length ?? 0) > 0) lines.push('', '### Findings by strategy', '', ...review.strategy_findings!.flatMap(item => [`#### ${item.strategy_title} · ${item.status}`, '', item.claim, ...(item.execution_status ? ['', `**Execution status:** ${item.execution_status}`] : []), ...(item.failure_reason ? [`**Failure detail:** ${item.failure_reason}`] : []), '', ...item.reasoning_steps.flatMap(step => [`**${step.number}. ${step.title} (${step.epistemic_status}):** ${step.argument}`, `**Review:** ${step.review?.disposition || 'Not recorded'} — ${step.review?.rationale || item.skeptic_response}`, '']), ...(item.objections.length ? [`**Objections:** ${item.objections.join(' · ')}`] : []), ...(item.open_obligations.length ? [`**Open obligations:** ${item.open_obligations.join(' · ')}`] : []), `**Sources:** ${outcomeArtifactReferences(item.research_artifact_ids?.length ? item.research_artifact_ids : (item.research_artifact_id ? [item.research_artifact_id] : []), session)}`, '']));
+    if (review.unresolved_objections?.length) lines.push('', '### Unresolved objections', '', ...review.unresolved_objections.map(item => `- ${item}`));
+    if (review.resolved_objections?.length) lines.push('', '### Objections addressed', '', ...review.resolved_objections.map(item => `- ${item}`));
     if (review.resolved_objections?.length) lines.push('', `**Resolved review notes:** ${review.resolved_objections.join(' · ')}`);
     if (review.unresolved_objections?.length) lines.push('', `**Unresolved objections:** ${review.unresolved_objections.join(' · ')}`);
-    if (review.verification_status && review.verification_status !== 'unknown') lines.push('', `**Verification:** ${review.verification_status === 'verified' ? 'Verified' : 'Convincing but unverified'}`);
+    lines.push('', `**Verification:** ${outcomeVerificationLabel(outcome)}`);
   }
   if (outcome.caveats?.length) lines.push('', '### Caveats', '', ...outcome.caveats.map(caveat => `- ${caveat}`));
+  return lines.join('\n');
+}
+
+function researchConclusionMarkdown(session: ResearchSession): string {
+  return session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
+}
+
+function simpleOutcomeLead(session: ResearchSession): { text: string; shortened: boolean } {
+  const saved = (session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.').trim();
+  const firstSection = session.outcome.conclusion ? saved.split(/\n(?=#{2,6}\s)/, 2)[0] : saved;
+  const lead = firstSection.replace(/^#{2,6}\s+[^\n]+\n+/, '').trim() || session.outcome.summary || saved;
+  if (lead.length <= 900) return { text: lead, shortened: firstSection.length < saved.length };
+  const boundary = lead.lastIndexOf(' ', 900);
+  return { text: `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`, shortened: true };
+}
+
+function researchReasoningMarkdown(session: ResearchSession): string {
+  const review = session.outcome.solution_review;
+  if (!review) return 'No structured reasoning or proof review was saved for this session.';
+  const lines = [
+    '# Reasoning / proof', '',
+    '## Investigated problem', '',
+    session.problem || 'Project objective unavailable in this historical record.', '',
+    '## Strategy', '',
+    session.strategy_text || session.strategy_title || 'Strategy details unavailable.', '',
+    '## Claim', '',
+    review.claim || 'No claim recorded.', '',
+    '## Argument summary', '',
+    review.argument_summary || 'No argument summary recorded.', '',
+    '## Skeptic response', '',
+    review.skeptic_response || 'No substantive Skeptic response recorded.', '',
+    '## Skeptic objections', '',
+    ...(review.skeptic_objections?.length ? review.skeptic_objections.map(item => `- ${item}`) : ['None recorded']), '',
+    '## Assumptions', '',
+    ...(review.assumptions?.length ? review.assumptions.map(item => `- ${item}`) : ['None recorded']), '',
+    '## Proof obligations', '',
+    ...(review.proof_obligations?.length ? review.proof_obligations.map(item => `- ${item}`) : ['None recorded']), '',
+    '## Open obligations', '',
+    ...(review.open_obligations?.length ? review.open_obligations.map(item => `- ${item}`) : ['None recorded']), '',
+    '## Unresolved objections', '',
+    ...(review.unresolved_objections?.length ? review.unresolved_objections.map(item => `- ${item}`) : ['None recorded']), '',
+    '## Resolved objections', '',
+    ...(review.resolved_objections?.length ? review.resolved_objections.map(item => `- ${item}`) : ['None recorded']), '',
+    '## Reviewed reasoning steps', '',
+    ...(review.argument_steps?.length ? review.argument_steps.flatMap(step => [
+      `### ${step.number}. ${step.title} · ${step.epistemic_status}`, '', step.argument, '',
+      `**Skeptic review:** ${step.review?.disposition || 'Not recorded'} — ${step.review?.rationale || 'No rationale recorded'}`,
+      ...(step.review?.objection ? ['', `**Objection:** ${step.review.objection}`] : []),
+      `**Sources:** ${outcomeArtifactReferences([...(step.basis_artifact_ids || []), ...(step.research_artifact_id ? [step.research_artifact_id] : [])], session)}`, '',
+    ]) : ['No step-by-step argument was preserved.']),
+  ];
+  for (const finding of review.strategy_findings ?? []) {
+    lines.push(`## ${finding.strategy_title} · ${finding.status}`, '', finding.claim, '',
+      `**Execution status:** ${finding.execution_status || 'Not recorded'}`,
+      ...(finding.failure_reason ? [`**Failure detail:** ${finding.failure_reason}`] : []), '',
+      ...(finding.reasoning_steps.length ? finding.reasoning_steps.flatMap(step => [
+        `### ${step.number}. ${step.title} · ${step.epistemic_status}`, '', step.argument, '',
+        `**Review:** ${step.review?.disposition || 'Not recorded'} — ${step.review?.rationale || finding.skeptic_response || 'No rationale recorded'}`,
+        ...(step.review?.objection ? ['', `**Objection:** ${step.review.objection}`] : []), '',
+      ]) : ['No structured reasoning steps were preserved for this finding.', '']),
+      ...(finding.objections.length ? ['**Objections:**', ...finding.objections.map(item => `- ${item}`), ''] : []),
+      ...(finding.open_obligations.length ? ['**Open obligations:**', ...finding.open_obligations.map(item => `- ${item}`), ''] : []),
+      `**Sources:** ${outcomeArtifactReferences(finding.research_artifact_ids?.length ? finding.research_artifact_ids : finding.research_artifact_id ? [finding.research_artifact_id] : [], session)}`, '');
+  }
   return lines.join('\n');
 }
 
@@ -212,7 +298,7 @@ function displayStrategyTitle(strategy: Strategy | undefined): string {
   return firstLine ? `${firstLine.slice(0, 72)}${firstLine.length > 72 ? '…' : ''}` : 'Untitled strategy';
 }
 
-type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number; strategyChoices?: Strategy[]; selectedStrategyIds?: string[]; selectionLimit?: number; onStrategySelectionChange?: (strategyId: string, selected: boolean) => void };
+type ProcessControls = { play: () => void; stop: () => void; playDisabled: boolean; stopDisabled: boolean; playLabel: string; confirming?: boolean; start?: () => void; cancel?: () => void; nextSessionNumber?: number };
 
 function DisclosureChevron({ expanded }: { expanded: boolean }) {
   return <svg aria-hidden="true" className={`disclosure-chevron${expanded ? ' is-expanded' : ''}`} viewBox="0 0 12 12"><path d="m4 2 4 4-4 4"/></svg>;
@@ -237,22 +323,23 @@ function ContextManifestNotes({ manifest }: { manifest: ContextManifest }) {
   return <ul className="context-omission-notes">{notes.map(item => <li key={item.key}>{item.text}</li>)}</ul>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
+function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
   path: string;
-  session: ResearchSession; expanded: boolean; busy: boolean;
+  session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
   onViewStrategy: (id: string) => void;
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
 }) {
   const [outcomeMarkdown, setOutcomeMarkdown] = useState(false);
+  const [conclusionMarkdown, setConclusionMarkdown] = useState(false);
+  const [reasoningMarkdown, setReasoningMarkdown] = useState(false);
   const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
   const [interventionKind, setInterventionKind] = useState<ResearchIntervention['kind']>('priority');
   const [interventionText, setInterventionText] = useState('');
   const [interventionStrategy, setInterventionStrategy] = useState('*');
-  const [targetInvestigator, setTargetInvestigator] = useState(true);
-  const [targetSkeptic, setTargetSkeptic] = useState(true);
+  const [targetAgentRole, setTargetAgentRole] = useState<'investigator' | 'skeptic'>('investigator');
   const [interventionBusy, setInterventionBusy] = useState(false);
   const [interventionError, setInterventionError] = useState('');
   useEffect(() => {
@@ -260,8 +347,27 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   }, [session.status]);
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
+  const approvedPackets = Object.values(session.approved_continuations ?? {});
+  const approvedSourceIds = new Set(approvedPackets.flatMap(packet => packet.sources.map(source => source.artifact_id)));
+  const otherPriorFindings = (session.prior_session_findings ?? []).filter(finding => !approvedSourceIds.has(finding.id));
   const review = session.outcome.solution_review;
-  const hasEvidence = !!review || session.artifacts.length > 0;
+  const primaryEvidenceIds = [...new Set([...(session.outcome.basis_artifact_ids ?? []), ...(review?.basis_artifact_ids ?? [])])];
+  const hasEvidence = session.artifacts.length > 0 || primaryEvidenceIds.length > 0;
+  const historicalSummary = !session.outcome.conclusion && !['queued', 'running', 'paused'].includes(session.status);
+  const resultLabel = session.outcome.conclusion ? 'Conclusion' : historicalSummary ? 'Historical session summary' : 'Session summary';
+  const resultText = session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
+  const simpleResult = simpleOutcomeLead(session);
+  const verificationLabel = review?.verification_status === 'verified' ? 'Verified in the session record' : review?.verification_status === 'convincing_unverified' ? 'Convincing but unverified' : review?.verification_status === 'incomplete' ? 'Evidence incomplete' : 'Not independently verified';
+  const qualificationItems = [...new Set([...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? []), ...(session.outcome.caveats ?? [])])];
+  const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
+  const provenance = session.outcome.execution_provenance;
+  const provenancePrelude = <div className="outcome-evidence-prelude" aria-label="Recorded computation provenance">
+    <strong>Recorded computations:</strong> {provenance
+      ? `${provenance.completed_count} reported completed of ${provenance.records.length} identified saved execution${provenance.records.length === 1 ? '' : 's'}${provenance.unidentified_count ? ` · ${provenance.unidentified_count} missing IDs` : ''}`
+      : 'Provenance projection unavailable for this historical Outcome.'}
+    {provenance && <p>{provenance.note}</p>}{!!provenance?.completed_without_recorded_io_count && <p>Warning: {provenance.completed_without_recorded_io_count} completed-status record(s) do not include saved source and output.</p>}
+    {!!provenance?.records.length && <details><summary>Execution IDs and saved statuses</summary><ul>{provenance.records.map(row => <li key={`${row.runtime}:${row.id}`}><strong>{row.runtime} · {row.id}</strong> · {row.statuses.join(' / ')} · {row.artifact_ids.length ? `artifacts ${row.artifact_ids.join(', ')}` : row.step_ids.length ? `steps ${row.step_ids.join(', ')}` : 'owner not recorded'} · source {row.source_recorded ? 'saved' : 'unavailable'}, output {row.output_recorded ? 'saved' : 'unavailable'}</li>)}</ul></details>}
+  </div>;
   const metricSources = session.outcome.metrics?.sources;
   const artifactNumber = (id: string) => session.artifacts.find(artifact => artifact.id === id)?.sequence;
   const idList = (ids: string[] | undefined) => ids?.length ? ids.map(id => `Artifact ${artifactNumber(id) ?? '?'} · ${id}`).join(', ') : 'None recorded';
@@ -272,10 +378,13 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   const canIntervene = supportsIntervention && interventionWindowOpen
     && interventionCount.filter(item => item.status !== 'rejected').length < 24
     && interventionCount.length < 32;
+  const interventionHelp = session.status === 'paused' || session.status === 'stopped'
+    ? 'Applies after resume; no call starts now.'
+    : 'Applies on a later call; no call starts now.';
   async function submitIntervention(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const agentRoles = [targetInvestigator ? 'investigator' : null, targetSkeptic ? 'skeptic' : null].filter((role): role is 'investigator' | 'skeptic' => role !== null);
-    if (!interventionText.trim() || !agentRoles.length) return;
+    const agentRoles = [targetAgentRole];
+    if (!interventionText.trim()) return;
     setInterventionBusy(true); setInterventionError('');
     try {
       await post<ResearchSession>(`research-sessions/${session.id}/interventions`, {
@@ -293,6 +402,8 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
     } finally { setInterventionBusy(false); }
   }
   const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
+  const conclusionFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} aria-pressed={conclusionMarkdown} data-tooltip={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} title={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} onClick={() => setConclusionMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
+  const reasoningFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} aria-pressed={reasoningMarkdown} data-tooltip={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} title={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} onClick={() => setReasoningMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
     {items?.length ? <dl>{items.map((item, index) => <div className="outcome-label-value" key={`${item.label}:${index}`}><dt>{item.label}</dt><dd><span>{item.value}</span>{item.detail && <small>{item.detail}</small>}</dd></div>)}</dl> : <p className="outcome-unavailable">No {title.toLowerCase()} metrics are available for this session.</p>}
@@ -300,34 +411,78 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
   return <div id={`session-content-${session.id}`} className="session-row-content" hidden={!expanded}>
     <section className={`session-outcome outcome-${session.outcome.assessment}`} aria-label="Research outcome">
       <div className="outcome-heading"><div className="outcome-heading-title"><h3>Outcome</h3>{outcomeFormatToggle}<span className={`outcome-label outcome-${session.outcome.assessment}`}>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</span></div></div>
-      {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div> : <div className="outcome-general"><div className="outcome-summary-text"><p>{session.outcome.summary || 'No outcome summary was recorded.'}</p>{!!session.outcome.basis_artifact_ids?.length && <p><strong>Outcome evidence:</strong> {outcomeArtifactReferences(session.outcome.basis_artifact_ids, session)}</p>}</div>{!!session.outcome.caveats?.length && <div className="outcome-caveats"><strong>Caveats:</strong><ul>{session.outcome.caveats.map((caveat, index) => <li key={index}>{caveat}</li>)}</ul></div>}</div>}
-
-      {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <section className="human-interventions" aria-label="Human research guidance">
-        <h4>Human guidance</h4>
-        {!supportsIntervention && <p className="human-intervention-note">Guidance is unavailable for this legacy session because it has no strategy-bound execution steps.</p>}
-        {supportsIntervention && interventionWindowOpen && interventionCount.filter(item => item.status !== 'rejected').length >= 24 && <p className="human-intervention-note">This session reached its 24-guidance limit.</p>}
-        {canIntervene && <form className="human-intervention-form" onSubmit={submitIntervention}>
-          <label>Type<select value={interventionKind} onChange={event => setInterventionKind(event.target.value as ResearchIntervention['kind'])}><option value="priority">Priority</option><option value="objection">Objection</option><option value="evidence">New evidence</option></select></label>
-          <label>Strategy<select value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
-          <fieldset><legend>Send to</legend><label><input type="checkbox" checked={targetInvestigator} onChange={event => setTargetInvestigator(event.target.checked)}/> Investigator</label><label><input type="checkbox" checked={targetSkeptic} onChange={event => setTargetSkeptic(event.target.checked)}/> Skeptic</label></fieldset>
-          <label className="human-intervention-text">Guidance<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a bounded research instruction or evidence note."/></label>
-          <div className="human-intervention-submit"><small>{interventionText.length}/1,200 · delivered at a later agent step; no call is made on submit.</small><button type="submit" className="text-view-link" disabled={interventionBusy || busy || !interventionText.trim() || (!targetInvestigator && !targetSkeptic)}>{interventionBusy ? 'Queueing…' : 'Send guidance'}</button></div>
-          {interventionError && <p className="error" role="alert">{interventionError}</p>}
-          {session.status === 'paused' || session.status === 'stopped' ? <p className="human-intervention-note">Guidance is saved for delivery if you resume this session.</p> : <p className="human-intervention-note">Already-running calls keep their original prompts. Existing findings are never rewritten.</p>}
-        </form>}
-        {!!session.interventions?.length && <ol className="human-intervention-history">{session.interventions.slice(-8).reverse().map(item => <li key={item.id}>
-          <div><strong>{item.kind.replaceAll('_', ' ')}</strong><span>{item.status.replaceAll('_', ' ')}</span></div>
-          <p>{item.text}</p>
-          {item.rejection_reason && <small>{item.rejection_reason}</small>}
-          {!!item.deliveries.length && <ul>{item.deliveries.map((delivery, index) => <li key={`${delivery.strategy_id}:${delivery.role}:${index}`}><span>{targetStrategies.find(strategy => strategy.strategy_id === delivery.strategy_id)?.strategy_title ?? 'Strategy'} · {delivery.role}{delivery.target_cycle ? ` · cycle ${delivery.target_cycle === 'next_eligible' ? 'pending' : delivery.target_cycle}` : ''}</span><span>{delivery.status}{delivery.uptake ? ` · ${delivery.uptake}` : ''}</span>{delivery.rationale && <small>{delivery.rationale}</small>}{delivery.attempts.length > 1 && <small>{delivery.attempts.length} delivery attempts; interrupted attempts remain in the audit.</small>}</li>)}</ul>}
-        </li>)}</ol>}
-      </section>}
-
-      <div className="outcome-subsections">
+      {provenancePrelude}
+      {!advancedOutcomeDetails && <div className="outcome-simple">
+        <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
+          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult.text}</p>}><RenderedMarkdown body={simpleResult.text}/></Suspense></div> : <p>{simpleResult.text}</p>}
+          {simpleResult.shortened && <small>Opening excerpt from the saved {session.outcome.conclusion ? 'Conclusion' : 'summary'}; the full text is in Advanced Outcome.</small>}
+          {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
+          <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
+        </div>
+        {qualificationItems.length > 0 && <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong><ul>{simpleQualifications.map((item, index) => <li key={index}>{item}</li>)}</ul>{qualificationItems.length > simpleQualifications.length && <small>{qualificationItems.length - simpleQualifications.length} more saved qualification{qualificationItems.length - simpleQualifications.length === 1 ? '' : 's'} in Advanced Outcome.</small>}</div>}
+      </div>}
+      {advancedOutcomeDetails && <div className="outcome-subsections outcome-advanced">
+        <details className="outcome-subsection outcome-conclusion" open>
+          <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
+          <div className="outcome-subsection-content outcome-conclusion-content">
+            {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
+            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}</div>}
+            {session.outcome.conclusion && conclusionMarkdown
+              ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchConclusionMarkdown(session)}/></Suspense></div>
+              : !session.outcome.conclusion && outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
+                : <div className="outcome-conclusion-source">{resultText}</div>}
+            {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
+            <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
+            {(session.outcome.caveats?.length || review?.open_obligations?.length || review?.unresolved_objections?.length) ? <div className="outcome-qualifications"><strong>Qualifications and unresolved questions</strong>{!!session.outcome.caveats?.length && <ul>{session.outcome.caveats.map((item, index) => <li key={`caveat-${index}`}>{item}</li>)}</ul>}{!!review?.open_obligations?.length && <ul>{review.open_obligations.map((item, index) => <li key={`obligation-${index}`}>{item}</li>)}</ul>}{!!review?.unresolved_objections?.length && <ul>{review.unresolved_objections.map((item, index) => <li key={`objection-${index}`}>{item}</li>)}</ul>}</div> : null}
+          </div>
+        </details>
+        {approvedPackets.length > 0 && <details className="outcome-subsection continuation-evidence">
+          <summary><DisclosureChevron expanded={false}/>Researcher-approved inherited evidence · {approvedSourceIds.size} source{approvedSourceIds.size === 1 ? '' : 's'}</summary>
+          <div className="outcome-subsection-content">
+            <p>These frozen artifacts were explicitly approved for transfer. Other available project evidence was not approved by this action. Delivery is recorded in exact provider inputs; the model's interpretation remains unverified.</p>
+            {approvedPackets.map(packet => <section key={packet.packet_digest}>
+              <p><strong>Approved question:</strong> {packet.question}</p>
+              <p><button type="button" className="text-view-link" onClick={() => onViewStrategy(packet.parent_strategy_id)}>Inspect parent strategy</button></p>
+              <ul>{packet.sources.map(source => <li key={source.artifact_id}>
+                <button type="button" className="text-view-link" onClick={() => onViewPriorSession(source.source.session_id)}>Approved source · Session #{source.source.session_number} · {source.strategy_title}</button>
+                <p>{source.claim}</p><p>{source.status} · {source.verification}</p>
+                <details><summary>Frozen artifact {source.artifact_id}</summary><pre>{JSON.stringify(source.artifact, null, 2)}</pre></details>
+              </li>)}</ul>
+              {packet.rejected_sources.length > 0 && <details><summary>{packet.rejected_sources.length} explicitly rejected transfer{packet.rejected_sources.length === 1 ? '' : 's'}</summary><ul>{packet.rejected_sources.map(row => <li key={row.artifact_id}>{row.artifact_id} — {row.rationale}</li>)}</ul></details>}
+            </section>)}
+          </div>
+        </details>}
+        {review && <details className="outcome-subsection outcome-reasoning-subsection"><summary><DisclosureChevron expanded={false}/>Reasoning / proof</summary><div className="outcome-subsection-content"><div className="outcome-reasoning-actions"><h4>Reasoning / proof</h4>{reasoningFormatToggle}</div>{reasoningMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{review.argument_summary || review.claim || 'No reasoning was saved.'}</p>}><RenderedMarkdown body={researchReasoningMarkdown(session)}/></Suspense></div> : <div className="solution-review"><p><strong>Investigated:</strong> {session.problem || 'Project objective unavailable in this historical record.'}</p><p><strong>Bounded strategy:</strong> {session.strategy_text || session.strategy_title || 'Strategy details unavailable.'}</p><p><strong>Claim:</strong> {review.claim || 'No claim recorded.'}</p><p><strong>Skeptic response:</strong> {review.skeptic_response || 'No substantive Skeptic response recorded.'}</p>{!!review.skeptic_objections?.length && <p><strong>Skeptic objections:</strong> {review.skeptic_objections.join(' · ')}</p>}{review.argument_steps?.length ? <ol>{review.argument_steps.map(step => <li key={`${step.research_artifact_id ?? ''}:${step.number}`}><strong>{step.title}</strong> <span>({step.epistemic_status})</span><p>{step.argument}</p><p><strong>Skeptic review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || 'No rationale recorded'}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences([...(step.basis_artifact_ids || []), ...(step.research_artifact_id ? [step.research_artifact_id] : [])], session)}</p></li>)}</ol> : <p>No step-by-step argument was preserved. See the saved research artifacts before relying on this claim.</p>}{(review.strategy_findings?.length ?? 0) > 0 && <div><h4>Findings by strategy</h4>{review.strategy_findings!.map(item => <section key={item.strategy_id}><h5>{item.strategy_title} · {item.status}</h5><p>{item.claim}</p>{!!item.execution_status && <p><strong>Execution status:</strong> {item.execution_status}</p>}{!!item.failure_reason && <p><strong>Failure detail:</strong> {item.failure_reason}</p>}{item.reasoning_steps.length ? <ol>{item.reasoning_steps.map(step => <li key={step.number}><strong>{step.title}</strong> ({step.epistemic_status})<p>{step.argument}</p><p><strong>Review:</strong> {step.review?.disposition || 'Not recorded'} — {step.review?.rationale || item.skeptic_response}</p>{!!step.review?.objection && <p><strong>Objection:</strong> {step.review.objection}</p>}</li>)}</ol> : <p>No structured reasoning steps were preserved for this finding.</p>}{!!item.objections.length && <p><strong>Objections:</strong> {item.objections.join(' · ')}</p>}{!!item.open_obligations.length && <p><strong>Open obligations:</strong> {item.open_obligations.join(' · ')}</p>}<p><strong>Sources:</strong> {outcomeArtifactReferences(item.research_artifact_ids?.length ? item.research_artifact_ids : (item.research_artifact_id ? [item.research_artifact_id] : []), session)}</p></section>)}</div>}<p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations considered:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Still open:</strong> {review.open_obligations?.join(' · ') || 'None recorded'}</p>{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{!!review.resolved_objections?.length && <p><strong>Objections addressed:</strong> {review.resolved_objections.join(' · ')}</p>}</div>}</div></details>}
+        {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection">
+          <summary><DisclosureChevron expanded={false}/>Citations, evidence &amp; obligations</summary>
+          <div className="outcome-subsection-content">
+            {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h4>Research artifacts</h4><button type="button" className="sigma-render-toggle" aria-label={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} aria-pressed={artifactsMarkdown} data-tooltip={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} title={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} onClick={() => setArtifactsMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div><ol>{session.artifacts.map(artifact => {
+              const sage = !!artifact.investigator_output.sage_execution;
+              const executionField = sage ? 'sage_execution' : 'python_execution';
+              const toolName = sage ? 'SageMath' : 'Python';
+              const execution = artifact.investigator_output[executionField] && typeof artifact.investigator_output[executionField] === 'object' ? artifact.investigator_output[executionField] as Record<string, unknown> : null;
+              const captured = execution && Array.isArray(execution.artifacts) ? execution.artifacts as Record<string, unknown>[] : [];
+              const reused = artifact.investigator_output[executionField + '_reuse_reason'];
+              return <li key={artifact.id} id={`research-artifact-${session.id}-${artifact.id}`}>{artifactsMarkdown ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(artifact)}/></Suspense></div> : <details>
+                <summary>Cycle {artifact.strategy_cycle ?? artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
+                <div className="research-artifact-content"><p><strong>Method:</strong> {artifact.method}</p><p><strong>Assumptions:</strong> {artifact.assumptions.join(' · ') || 'None stated'}</p><p><strong>Evidence status:</strong> {artifact.evidence_status}</p><p><strong>Skeptic response:</strong> {artifact.skeptic_response}</p><p><strong>Objections:</strong> {artifact.objections.join(' · ') || 'No concrete objection recorded'}</p><p><strong>Open obligations:</strong> {artifact.open_obligations.join(' · ') || 'None recorded'}</p>{Array.isArray(artifact.skeptic_output.obligation_reviews) && artifact.skeptic_output.obligation_reviews.length > 0 && <p><strong>Obligation dispositions:</strong> {(artifact.skeptic_output.obligation_reviews as Record<string, unknown>[]).map(review => `${String(review.status ?? 'unknown')} · ${String(review.rationale ?? '')} [${Array.isArray(review.basis_artifact_ids) ? review.basis_artifact_ids.join(', ') : 'no artifact source'}]`).join(' · ')}. Model-reported and unverified.</p>}<p><strong>Coordinator decision:</strong> {artifact.coordinator_decision}</p><p><strong>Next question:</strong> {artifact.next_question || 'No further question; the session ended.'}</p>
+                  {execution && <section className="outcome-python-evidence"><h5>{toolName} execution · {String(execution.status ?? 'status unavailable')}</h5><details className="research-execution-record"><summary>Execution source and output</summary><pre>{JSON.stringify(execution, null, 2)}</pre></details><p><strong>Execution ID:</strong> {String(execution.id ?? 'Unavailable')}</p>{typeof execution.exit_code === 'number' && <p><strong>Exit code:</strong> {execution.exit_code}</p>}{typeof reused === 'string' && <p><strong>Reuse:</strong> {reused}</p>}<p>{typeof execution.source === 'string' ? 'Exact source is retained in the execution record.' : 'Source unavailable in this record.'} Computation status is not proof of a mathematical claim.</p>{!!captured.length && <div><strong>Captured files</strong><ul>{captured.map((file, index) => <li key={index}>{String(file.filename ?? 'Unnamed file')} · {typeof file.size_bytes === 'number' ? `${file.size_bytes} bytes` : 'size unavailable'} · SHA-256 {String(file.sha256 ?? 'unavailable')}</li>)}</ul></div>}</section>}
+                  <details><summary>Full validated role outputs</summary><h5>Investigator</h5>{Object.entries(artifact.investigator_output).filter(([key]) => !['python_execution', 'sage_execution'].includes(key)).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {Array.isArray(value) ? value.join(' · ') : typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}</p>)}<h5>Skeptic</h5>{Object.entries(artifact.skeptic_output).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {Array.isArray(value) ? value.join(' · ') : typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}</p>)}</details><small>{artifact.note}</small>
+                </div></details>}</li>;
+            })}</ol></section>}
+          </div>
+        </details>}
         <details className="outcome-subsection">
+          <summary><DisclosureChevron expanded={false}/>Metrics</summary>
+          <div className="outcome-subsection-content">
+            {session.outcome.metrics ? <div className="outcome-metrics-groups">{renderMetricGroup('Operational', session.outcome.metrics.operational)}{renderMetricGroup('Research quality', session.outcome.metrics.research_quality)}</div> : <p className="outcome-unavailable">Metrics are not available for this historical session.</p>}
+          </div>
+        </details>
+        <section className="outcome-other-details" aria-label="Other Outcome details"><h4>Other Outcome details</h4>
+          <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Status</summary>
           <div className="outcome-subsection-content">
-            <div className="outcome-label-value"><dt>Session lifecycle</dt><dd>{session.status}</dd></div>
+            <div className="outcome-label-value"><dt>Session lifecycle</dt><dd>{session.status}</dd></div><div className="outcome-label-value"><dt>Token usage</dt><dd>{session.tokens_used == null ? `Unavailable (${session.token_usage_status ?? 'not reported'})` : `${session.tokens_used.toLocaleString()} tokens · ${session.token_usage_status ?? 'reported'}`}</dd></div>
             <div className="outcome-label-value"><dt>Research result</dt><dd>{session.outcome.label}{session.outcome.provisional ? ' · provisional' : ''}</dd></div>
             <div className="outcome-label-value"><dt>Verification</dt><dd>{review?.verification_status && review.verification_status !== 'unknown' ? review.verification_status === 'verified' ? 'Verified (session record)' : 'Convincing but unverified' : 'Not independently verified'}</dd></div>
             <p className="outcome-integrity-note">A completed session or successful computation does not establish a mathematical proof.</p>
@@ -339,8 +494,7 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
             <div className="research-session-actions"><a className="text-view-link" title={`View strategy: ${session.strategy_title}`} href={`#strategy-${session.strategy_id}`} onClick={event => { event.preventDefault(); onViewStrategy(session.strategy_id); }}>Go to strategy: {session.strategy_title}</a>{!!session.artifacts.length && <button type="button" className="text-view-link" onClick={() => onForkFromFindings(session)}>Fork strategy from findings</button>}</div>
           </div>
         </details>
-
-        <details className="outcome-subsection">
+          <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Strategy Assessments</summary>
           <div className="outcome-subsection-content">
             <p className="outcome-subsection-intro">Each assessment records a strategy’s contribution to the project objective in this session.</p>
@@ -356,56 +510,121 @@ function ResearchSessionContents({ path, session, expanded, busy, onViewStrategy
             </section> : null}
           </div>
         </details>
-
-        <details className="outcome-subsection">
-          <summary><DisclosureChevron expanded={false}/>Metrics</summary>
-          <div className="outcome-subsection-content">
-            {session.outcome.metrics ? <div className="outcome-metrics-groups">{renderMetricGroup('Operational', session.outcome.metrics.operational)}{renderMetricGroup('Research quality', session.outcome.metrics.research_quality)}</div> : <p className="outcome-unavailable">Metrics are not available for this historical session.</p>}
-          </div>
-        </details>
-
-        <details className="outcome-subsection">
+          <details className="outcome-subsection">
           <summary><DisclosureChevron expanded={false}/>Provenance</summary>
           <div className="outcome-subsection-content">
             <div className="outcome-provenance-group"><h4>Session and configuration</h4><div className="outcome-label-value"><dt>Session ID</dt><dd>{session.id}</dd></div>{session.project_id && <div className="outcome-label-value"><dt>Project ID</dt><dd>{session.project_id}</dd></div>}<div className="outcome-label-value"><dt>Selected strategy</dt><dd>{session.strategy_title || 'Strategy'} · {session.strategy_ids?.length ? session.strategy_ids.join(', ') : session.strategy_id || 'ID unavailable'}</dd></div>{session.strategy_snapshot && <div className="outcome-label-value"><dt>Strategy snapshot</dt><dd>{String(session.strategy_snapshot.title ?? session.strategy_title)}{typeof session.strategy_snapshot.approach === 'string' ? ` · ${session.strategy_snapshot.approach}` : ''}</dd></div>}<div className="outcome-label-value"><dt>Model and thinking</dt><dd>{session.model || 'Unavailable'} · {thinkingLabels[session.reasoning_effort] ?? session.reasoning_effort ?? 'Unavailable'} · configured at session level, not an independent provider receipt</dd></div><div className="outcome-label-value"><dt>Billing mode</dt><dd>{session.mode === 'api_key' ? 'API key billing' : session.mode === 'chatgpt' ? 'ChatGPT plan allowance; actual allowance consumption unavailable' : session.mode || 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Started / updated</dt><dd>{session.started_at ? dateLabel(session.started_at) : 'Start time unavailable'} · {session.updated_at ? dateLabel(session.updated_at) : 'Update time unavailable'}</dd></div></div>
             {metricSources && <div className="outcome-provenance-group"><h4>Metric source inventory</h4><p className="outcome-subsection-intro">These session-scoped IDs identify records used by the metrics projection; they are not a per-measurement source map.</p>{([['Steps', metricSources.step_ids], ['Artifacts', metricSources.artifact_ids], ['Computation executions', metricSources.execution_ids], ['Strategies', metricSources.strategy_ids]] as [string, string[]][]).map(([label, ids]) => <div className="outcome-label-value" key={label}><dt>{label}</dt><dd>{ids.length ? ids.join(', ') : 'None recorded'}</dd></div>)}</div>}
-            {session.steps.length > 0 && <div className="outcome-provenance-group"><h4>Model call attempts</h4><ol className="outcome-provenance-list">{session.steps.map(step => <li key={step.id}><div className="outcome-label-value"><dt>{step.role} · {step.status}</dt><dd>Step {step.id} · Cycle {step.cycle} · Call {step.call_number}{step.strategy_id ? ` · Strategy ${step.strategy_id}` : ''}</dd></div><p>{step.started_at ? dateLabel(step.started_at) : 'Start time unavailable'}{step.finished_at ? ` · ${dateLabel(step.finished_at)}` : ' · no finish time recorded'}{step.provider_http_status ? ` · HTTP ${step.provider_http_status}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}{step.interruption_reason ? ` · ${step.interruption_reason}` : ''}</p>{!!(step.context_artifact_ids?.length || step.prior_session_artifact_ids?.length || step.peer_strategy_artifact_ids?.length || step.peer_handoff_artifact_ids?.length) && <p><strong>Context artifacts:</strong> {idList([...(step.context_artifact_ids ?? []), ...(step.prior_session_artifact_ids ?? []), ...(step.peer_strategy_artifact_ids ?? []), ...(step.peer_handoff_artifact_ids ?? [])])}</p>}{!!step.peer_handoff_ids?.length && <p><strong>Peer handoffs:</strong> {step.peer_handoff_ids.join(', ')}</p>}{step.context_manifest && <details className="context-used-disclosure"><summary>Context used · {step.context_manifest.selected_count ?? step.context_manifest.sources?.filter(source => source.status === 'selected').length ?? 0} current artifacts selected · {step.context_manifest.omitted_count ?? 0} omitted</summary><p>{step.context_manifest.note ?? 'Deterministic extracts from saved records; originals remain in session history.'}</p>{typeof step.context_manifest.assembled_context_bytes === 'number' && <p>Serialized context: {step.context_manifest.assembled_context_bytes.toLocaleString()} bytes of {step.context_manifest.byte_limit?.toLocaleString() ?? 'bounded'} UTF-8 input</p>}{step.context_manifest.sources?.length ? <ul>{step.context_manifest.sources.slice(0, 32).map((source, index) => <li key={`${source.source_ids?.[0] ?? 'source'}-${index}`}><strong>{source.category?.replaceAll('_', ' ') ?? 'Source'} · {source.status ?? 'recorded'}:</strong> {source.source_ids?.join(', ') ?? 'ID unavailable'} — {source.reason ?? source.representation ?? 'See saved source'}</li>)}</ul> : <p>No source-level manifest was recorded for this historical step.</p>}{(step.context_manifest.sources?.length ?? 0) > 32 && <p>{(step.context_manifest.sources?.length ?? 0) - 32} additional manifest entries omitted from this view.</p>}{step.context_manifest.omitted_prior_session_findings?.count ? <p>{step.context_manifest.omitted_prior_session_findings.count} older session findings omitted; source IDs: {step.context_manifest.omitted_prior_session_findings.source_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}{step.context_manifest.omitted_prior_failures?.count ? <p>{step.context_manifest.omitted_prior_failures.count} older operational failures omitted; attempt IDs: {step.context_manifest.omitted_prior_failures.attempt_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}<ContextManifestNotes manifest={step.context_manifest}/></details>}</li>)}</ol></div>}
+            {session.steps.length > 0 && <div className="outcome-provenance-group"><h4>Model call attempts</h4><ol className="outcome-provenance-list">{session.steps.map(step => <li key={step.id}><div className="outcome-label-value"><dt>{step.role} · {step.status}</dt><dd>Step {step.id} · Cycle {step.cycle} · Call {step.call_number}{step.strategy_id ? ` · Strategy ${step.strategy_id}` : ''}</dd></div><p>{step.started_at ? dateLabel(step.started_at) : 'Start time unavailable'}{step.finished_at ? ` · ${dateLabel(step.finished_at)}` : ' · no finish time recorded'}{step.provider_http_status ? ` · HTTP ${step.provider_http_status}` : ''}{step.failure_kind ? ` · ${step.failure_kind}` : ''}{step.interruption_reason ? ` · ${step.interruption_reason}` : ''}</p>{!!(step.context_artifact_ids?.length || step.prior_session_artifact_ids?.length || step.peer_strategy_artifact_ids?.length || step.peer_handoff_artifact_ids?.length) && <p><strong>Context artifacts:</strong> {idList([...(step.context_artifact_ids ?? []), ...(step.prior_session_artifact_ids ?? []), ...(step.peer_strategy_artifact_ids ?? []), ...(step.peer_handoff_artifact_ids ?? [])])}</p>}{!!step.peer_handoff_ids?.length && <p><strong>Peer handoffs:</strong> {step.peer_handoff_ids.join(', ')}</p>}{step.context_manifest && <details className="context-used-disclosure"><summary>Context used · {step.context_manifest.selected_count ?? step.context_manifest.sources?.filter(source => source.status === 'selected').length ?? 0} current artifacts selected · {step.context_manifest.omitted_count ?? 0} omitted</summary><p>{step.context_manifest.note ?? 'Deterministic extracts from saved records; originals remain in session history.'}</p>{typeof step.context_manifest.assembled_context_bytes === 'number' && <p>Serialized context: {step.context_manifest.assembled_context_bytes.toLocaleString()} bytes of {step.context_manifest.byte_limit?.toLocaleString() ?? 'bounded'} UTF-8 input</p>}{step.context_manifest.sources?.length ? <ul>{step.context_manifest.sources.slice(0, 32).map((source, index) => <li key={`${source.source_ids?.[0] ?? 'source'}-${index}`}><strong>{source.category?.replaceAll('_', ' ') ?? 'Source'} · {source.status ?? 'recorded'}:</strong> {source.source_ids?.join(', ') ?? 'ID unavailable'} — {source.reason ?? source.representation ?? 'See saved source'}</li>)}</ul> : <p>No source-level manifest was recorded for this historical step.</p>}{(step.context_manifest.sources?.length ?? 0) > 32 && <p>{(step.context_manifest.sources?.length ?? 0) - 32} additional manifest entries omitted from this view.</p>}{step.context_manifest.omitted_prior_session_findings?.count ? <p>{step.context_manifest.omitted_prior_session_findings.count} older session findings omitted; source IDs: {step.context_manifest.omitted_prior_session_findings.source_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}{step.context_manifest.omitted_prior_failures?.count ? <p>{step.context_manifest.omitted_prior_failures.count} older operational failures omitted; attempt IDs: {step.context_manifest.omitted_prior_failures.attempt_ids.join(', ') || 'bounded pointer list unavailable'}.</p> : null}<ContextManifestNotes manifest={step.context_manifest}/></details>}{step.potential_truncation_fields?.length ? <p className="research-output-warning" role="status"><strong>Potentially truncated output:</strong> {step.potential_truncation_fields.join(', ')} reached a structured output field limit. Review the saved source text before relying on it.</p> : null}{step.provider_input_audit && <details className="context-used-disclosure"><summary>Exact provider input · {step.provider_input_audit.status}</summary><p>Saved request body before dispatch; authorization headers and credentials are excluded.</p><h5>Role instructions</h5><pre>{String(step.provider_input_audit.request_body.instructions ?? '')}</pre><h5>Submitted input</h5><pre>{JSON.stringify(step.provider_input_audit.request_body.input, null, 2)}</pre></details>}</li>)}</ol></div>}
             {session.artifacts.length > 0 && <div className="outcome-provenance-group"><h4>Saved artifact origins</h4><ul className="outcome-provenance-list">{session.artifacts.map(artifact => <li key={artifact.id}><div className="outcome-label-value"><dt>Artifact {artifact.sequence}</dt><dd>{artifact.id}</dd></div><p>{artifact.session_id ? `Session ${artifact.session_id}` : 'Source session unavailable'} · {artifact.strategy_id ? `Strategy ${artifact.strategy_id}` : 'Strategy unavailable'} · {typeof artifact.strategy_cycle === 'number' ? `Cycle ${artifact.strategy_cycle}` : 'Cycle unavailable'}</p></li>)}</ul></div>}
-            {!!session.prior_session_findings?.length && <div className="outcome-provenance-group"><h4>Prior session sources</h4><ul className="outcome-provenance-list">{session.prior_session_findings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session #{finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
+            {otherPriorFindings.length > 0 && <div className="outcome-provenance-group"><h4>Other prior session sources</h4><p>Available history; these sources are not implied to be researcher-approved transfers.</p><ul className="outcome-provenance-list">{otherPriorFindings.map(finding => <li key={`${finding.session_id}:${finding.id}`}><p><button type="button" className="text-view-link" onClick={() => onViewPriorSession(finding.session_id)}>Session #{finding.session_number} · {finding.strategy_title} · Artifact {finding.sequence}</button></p><p>{finding.id} · {finding.claim_or_question}</p><p><strong>Method:</strong> {finding.method}</p>{!!finding.assumptions?.length && <p><strong>Assumption/domain scope:</strong> {finding.assumptions.join(' · ')}</p>}<p><strong>Evidence status:</strong> {finding.evidence_status} · <strong>Coordinator:</strong> {finding.coordinator_decision}</p>{!!finding.objections.length && <p><strong>Objections:</strong> {finding.objections.join(' · ')}</p>}{!!finding.open_obligations.length && <p><strong>Open obligations:</strong> {finding.open_obligations.join(' · ')}</p>}{!!finding.obligation_reviews?.length && <ul>{finding.obligation_reviews.map(review => <li key={review.obligation_id}><strong>Prior obligation disposition ({review.status}, {review.epistemic_status}):</strong> {review.rationale} · Basis artifacts: {review.basis_artifact_ids.join(', ') || 'none recorded'}</li>)}</ul>}{!!finding.next_question && <p><strong>Next question:</strong> {finding.next_question}</p>}</li>)}</ul></div>}
             {!!session.peer_handoffs_prompted?.length && <div className="outcome-provenance-group"><h4>Peer handoffs prompted</h4><ul className="outcome-provenance-list">{session.peer_handoffs_prompted.map((handoff, index) => <li key={index}><pre>{JSON.stringify(handoff, null, 2)}</pre></li>)}</ul></div>}
             <div className="outcome-provenance-group"><h4>Session facts</h4><div className="outcome-label-value"><dt>Elapsed wall time</dt><dd>{typeof session.elapsed_seconds === 'number' ? formatDuration(session.elapsed_seconds) : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Output limit</dt><dd>{typeof session.output_token_limit === 'number' ? `${session.output_token_limit} tokens per call` : 'Unavailable'}</dd></div><div className="outcome-label-value"><dt>Current action</dt><dd>{session.current_action || 'Unavailable'}</dd></div>{lastActivity && <div className="outcome-label-value"><dt>Last activity</dt><dd><time dateTime={lastActivity.timestamp}>{dateLabel(lastActivity.timestamp)}</time> · {lastActivity.message}</dd></div>}</div>
             {!!session.events.length && <section className="research-activity" aria-label="Recent session activity"><h4><button type="button" title={`${activityExpanded ? 'Collapse' : 'Expand'} recent activity`} aria-expanded={activityExpanded} aria-controls={`session-activity-${session.id}`} onClick={() => setActivityExpanded(value => !value)}><DisclosureChevron expanded={activityExpanded}/>Recent activity</button></h4><ol id={`session-activity-${session.id}`} hidden={!activityExpanded}>{session.events.slice(-8).map(event => <li key={event.sequence}><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time><span>{event.message}</span></li>)}</ol></section>}
           </div>
         </details>
-
-        {hasEvidence && <details className="outcome-subsection outcome-evidence-subsection">
-          <summary><DisclosureChevron expanded={false}/>Citations, Evidence &amp; Obligations</summary>
-          <div className="outcome-subsection-content">
-            {review && !outcomeMarkdown && <div className="solution-review"><h4>Solution review</h4><p><strong>Solution claim:</strong> {review.claim || 'No solution claim recorded.'}</p><p><strong>Argument:</strong> {review.argument_summary || 'No argument summary recorded.'}</p><p><strong>Assumptions:</strong> {review.assumptions?.join(' · ') || 'None recorded'}</p><p><strong>Proof obligations:</strong> {review.proof_obligations?.join(' · ') || 'None recorded'}</p><p><strong>Evidence:</strong> {outcomeArtifactReferences(review.basis_artifact_ids, session)}</p>{!!review.resolved_objections?.length && <p><strong>Resolved review notes:</strong> {review.resolved_objections.join(' · ')}</p>}{!!review.unresolved_objections?.length && <p><strong>Unresolved objections:</strong> {review.unresolved_objections.join(' · ')}</p>}{review.verification_status && review.verification_status !== 'unknown' && <p><strong>Verification:</strong> {review.verification_status === 'verified' ? 'Verified (session record)' : 'Convincing but unverified'}</p>}</div>}
-            {!!session.artifacts.length && <section className="research-artifacts" aria-label="Research artifacts"><div className="research-artifacts-heading"><h4>Research artifacts</h4><button type="button" className="sigma-render-toggle" aria-label={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} aria-pressed={artifactsMarkdown} data-tooltip={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} title={artifactsMarkdown ? 'Show plain research artifacts' : 'Render research artifacts as Markdown'} onClick={() => setArtifactsMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button></div><ol>{session.artifacts.map(artifact => {
-              const sage = !!artifact.investigator_output.sage_execution;
-              const executionField = sage ? 'sage_execution' : 'python_execution';
-              const toolName = sage ? 'SageMath' : 'Python';
-              const execution = artifact.investigator_output[executionField] && typeof artifact.investigator_output[executionField] === 'object' ? artifact.investigator_output[executionField] as Record<string, unknown> : null;
-              const captured = execution && Array.isArray(execution.artifacts) ? execution.artifacts as Record<string, unknown>[] : [];
-              const reused = artifact.investigator_output[executionField + '_reuse_reason'];
-              return <li key={artifact.id}>{artifactsMarkdown ? <div className="research-artifact-content research-artifact-markdown"><Suspense fallback={<p>{artifact.method}</p>}><RenderedMarkdown body={researchArtifactMarkdown(artifact)}/></Suspense></div> : <details>
-                <summary>Cycle {artifact.strategy_cycle ?? artifact.sequence} · {artifact.claim_or_question} <span>{artifact.evidence_status}</span></summary>
-                <div className="research-artifact-content"><p><strong>Method:</strong> {artifact.method}</p><p><strong>Assumptions:</strong> {artifact.assumptions.join(' · ') || 'None stated'}</p><p><strong>Evidence status:</strong> {artifact.evidence_status}</p><p><strong>Skeptic response:</strong> {artifact.skeptic_response}</p><p><strong>Objections:</strong> {artifact.objections.join(' · ') || 'No concrete objection recorded'}</p><p><strong>Open obligations:</strong> {artifact.open_obligations.join(' · ') || 'None recorded'}</p>{Array.isArray(artifact.skeptic_output.obligation_reviews) && artifact.skeptic_output.obligation_reviews.length > 0 && <p><strong>Obligation dispositions:</strong> {(artifact.skeptic_output.obligation_reviews as Record<string, unknown>[]).map(review => `${String(review.status ?? 'unknown')} · ${String(review.rationale ?? '')} [${Array.isArray(review.basis_artifact_ids) ? review.basis_artifact_ids.join(', ') : 'no artifact source'}]`).join(' · ')}. Model-reported and unverified.</p>}<p><strong>Coordinator decision:</strong> {artifact.coordinator_decision}</p><p><strong>Next question:</strong> {artifact.next_question || 'No further question; the session ended.'}</p>
-                  {execution && <section className="outcome-python-evidence"><h5>{toolName} execution · {String(execution.status ?? 'status unavailable')}</h5><details className="research-execution-record"><summary>Execution source and output</summary><pre>{JSON.stringify(execution, null, 2)}</pre></details><p><strong>Execution ID:</strong> {String(execution.id ?? 'Unavailable')}</p>{typeof execution.exit_code === 'number' && <p><strong>Exit code:</strong> {execution.exit_code}</p>}{typeof reused === 'string' && <p><strong>Reuse:</strong> {reused}</p>}<p>{typeof execution.source === 'string' ? 'Exact source is retained in the execution record.' : 'Source unavailable in this record.'} Computation status is not proof of a mathematical claim.</p>{!!captured.length && <div><strong>Captured files</strong><ul>{captured.map((file, index) => <li key={index}>{String(file.filename ?? 'Unnamed file')} · {typeof file.size_bytes === 'number' ? `${file.size_bytes} bytes` : 'size unavailable'} · SHA-256 {String(file.sha256 ?? 'unavailable')}</li>)}</ul></div>}</section>}
-                  <details><summary>Full validated role outputs</summary><h5>Investigator</h5>{Object.entries(artifact.investigator_output).filter(([key]) => !['python_execution', 'sage_execution'].includes(key)).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {Array.isArray(value) ? value.join(' · ') : typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}</p>)}<h5>Skeptic</h5>{Object.entries(artifact.skeptic_output).map(([key, value]) => <p key={key}><strong>{key.replaceAll('_', ' ')}:</strong> {Array.isArray(value) ? value.join(' · ') : typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}</p>)}</details><small>{artifact.note}</small>
-                </div></details>}</li>;
-            })}</ol></section>}
-          </div>
-        </details>}
-      </div>
+          {(canIntervene || !!session.interventions?.length || (interventionWindowOpen && !supportsIntervention)) && <details className="human-interventions outcome-subsection" aria-label="Human research feedback">
+        <summary><DisclosureChevron expanded={false}/>Human feedback</summary>
+        <div className="human-interventions-content">
+        {!supportsIntervention && <p className="human-intervention-note">Feedback is unavailable for this legacy session because it has no strategy-bound execution steps.</p>}
+        {supportsIntervention && interventionWindowOpen && interventionCount.filter(item => item.status !== 'rejected').length >= 24 && <p className="human-intervention-note">This session reached its 24-feedback limit.</p>}
+        {canIntervene && <form className="human-intervention-form" onSubmit={submitIntervention}>
+          <fieldset className="human-intervention-type" aria-label="Feedback type"><label><input type="radio" name={`feedback-type-${session.id}`} value="priority" checked={interventionKind === 'priority'} onChange={() => setInterventionKind('priority')}/> Priority</label><label><input type="radio" name={`feedback-type-${session.id}`} value="objection" checked={interventionKind === 'objection'} onChange={() => setInterventionKind('objection')}/> Objection</label><label><input type="radio" name={`feedback-type-${session.id}`} value="evidence" checked={interventionKind === 'evidence'} onChange={() => setInterventionKind('evidence')}/> New Evidence</label></fieldset>
+          <fieldset className="human-intervention-target" aria-label="Feedback recipient"><label><input type="radio" name={`feedback-target-${session.id}`} value="investigator" checked={targetAgentRole === 'investigator'} onChange={() => setTargetAgentRole('investigator')}/> For investigator</label><label><input type="radio" name={`feedback-target-${session.id}`} value="skeptic" checked={targetAgentRole === 'skeptic'} onChange={() => setTargetAgentRole('skeptic')}/> For skeptic</label></fieldset>
+          <label className="human-intervention-strategy"><span className="sr-only">Strategy</span><select aria-label="Strategy" value={interventionStrategy} onChange={event => setInterventionStrategy(event.target.value)}><option value="*">All strategies</option>{targetStrategies.map(item => <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_title}</option>)}</select></label>
+          <label className="human-intervention-text">Feedback<textarea value={interventionText} maxLength={1200} rows={3} onChange={event => setInterventionText(event.target.value)} placeholder="Add a research instruction or evidence note."/></label>
+          <div className="human-intervention-submit"><button type="submit" className="text-view-link" aria-describedby={`human-feedback-help-${session.id}`} disabled={interventionBusy || busy || !interventionText.trim()}>{interventionBusy ? 'Adding…' : 'Add'}</button><small id={`human-feedback-help-${session.id}`}>{interventionText.length}/1,200 · {interventionHelp}</small></div>
+          {interventionError && <p className="error" role="alert">{interventionError}</p>}
+        </form>}
+        {!!session.interventions?.length && <ol className="human-intervention-history">{session.interventions.slice(-8).reverse().map(item => <li key={item.id}>
+          <div><strong>{item.kind.replaceAll('_', ' ')}</strong>{item.status !== 'queued' && <span>{item.status.replaceAll('_', ' ')}</span>}</div>
+          <p>{item.text}</p>
+          {item.rejection_reason && <small>{item.rejection_reason}</small>}
+          {!!item.deliveries.length && <ul>{item.deliveries.map((delivery, index) => <li key={`${delivery.strategy_id}:${delivery.role}:${index}`}><span>{targetStrategies.find(strategy => strategy.strategy_id === delivery.strategy_id)?.strategy_title ?? 'Strategy'} · {delivery.role}{delivery.target_cycle ? ` · cycle ${delivery.target_cycle === 'next_eligible' ? 'pending' : delivery.target_cycle}` : ''}</span>{delivery.status !== 'queued' && <span>{delivery.status}{delivery.uptake ? ` · ${delivery.uptake}` : ''}</span>}{delivery.rationale && <small>{delivery.rationale}</small>}{delivery.attempts.length > 1 && <small>{delivery.attempts.length} delivery attempts; interrupted attempts remain in the audit.</small>}</li>)}</ul>}
+        </li>)}</ol>}
+        </div>
+      </details>}
+        </section>
+      </div>}
     </section>
   </div>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
+function CurrentUnderstandingView({ state, onEvidence, onSession }: { state: CurrentUnderstanding; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
+  const sourceButton = (source: EvidencePointer, context: string) => <button type="button" className="text-view-link" disabled={!source.available} aria-label={`${context}: Session ${source.session_number}, Artifact ${source.artifact_sequence || 'unnumbered'}`} onClick={() => onEvidence(source)}>Session #{source.session_number} · {source.artifact_sequence ? `Artifact ${source.artifact_sequence}` : 'Saved evidence'}</button>;
+  const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (saved text continues)` : text;
+  const findings = state.current_finding_ids.map(id => state.findings.find(row => row.id === id)).filter((row): row is CurrentFinding => !!row);
+  const questions = [...state.obligations].sort((a, b) => (Number(b.actionable) * 4 + Number(b.status === 'historical_unreconciled') * 2) - (Number(a.actionable) * 4 + Number(a.status === 'historical_unreconciled') * 2));
+  const suggested = state.next_investigations[0];
+  const visibleQuestions = questions.filter(row => row.id !== suggested?.obligation_id && !['resolved_reported', 'superseded_reported', 'retracted_reported'].includes(row.status)).slice(0, 2);
+  const remainingQuestions = questions.filter(row => row.id !== suggested?.obligation_id && !visibleQuestions.includes(row));
+  const findingRow = (row: CurrentFinding) => <li key={row.id}><strong>{row.strategy_title || 'Historical strategy'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.verification}</p><p>{sourceButton(row.source, 'Inspect finding')}</p></li>;
+  const changeRow = (row: CurrentUnderstanding['changes'][number], index: number) => <li key={`${row.kind}-${row.source.session_id}-${row.source.artifact_id}-${index}`}><strong>{({ obligation_addressed: 'Resolution reported', obligation_superseded: 'Supersession reported', obligation_retracted: 'Retraction reported', local_refutation_reported: 'Local counterexample reported', later_finding_available: 'Later review saved', supersedes: 'Supersession reported', refutes: 'Refutation reported' } as Record<string, string>)[row.kind] || 'Saved assessment'}</strong><p>{excerpt(row.text)}</p><p className="hint">{row.caution}</p><p>{sourceButton(row.source, 'Inspect later evidence')}{row.earlier && <> · {sourceButton(row.earlier, 'Inspect earlier evidence')}</>}</p></li>;
+  const questionRow = (row: CurrentQuestion) => <li key={row.id}><p>{excerpt(row.text)}</p><p className="hint">{row.status.replaceAll('_', ' ')} · {row.note}</p>{row.sources.length > 0 && <p>{sourceButton(row.sources.at(-1)!, 'Inspect obligation')}{row.narrative_resolution_sources.slice(-1).map(source => <span key={source.record_path}> · {sourceButton(source, 'Inspect narrative resolution')}</span>)}{row.dispositions.filter(item => item.valid).slice(-1).map(item => <span key={item.source.record_path}> · {sourceButton(item.source, 'Inspect disposition')}</span>)}</p>}</li>;
+  return <details className="outcome-subsection current-understanding" aria-label="Current understanding" open>
+    <summary>Current understanding <small>{state.session_count} saved {state.session_count === 1 ? 'session' : 'sessions'}</small></summary>
+    <p className="hint current-understanding-scope">{state.scope_note}</p>
+    <div className="current-understanding-columns">
+      <section><h3>Current findings</h3>{findings.length ? <><ol>{findings.slice(0, 2).map(findingRow)}</ol>{findings.length > 2 && <details><summary>{findings.length - 2} more local findings</summary><ol>{findings.slice(2).map(findingRow)}</ol></details>}</> : <p>No reviewed finding is saved. An empty or failed run establishes no answer.</p>}</section>
+      <section><h3>What changed / superseded</h3>{state.changes.length ? <><ol>{state.changes.slice(0, 2).map(changeRow)}</ol>{state.changes.length > 2 && <details><summary>{state.changes.length - 2} more recorded changes</summary><ol>{state.changes.slice(2).map(changeRow)}</ol></details>}</> : <p>No explicit change or supersession is recorded. Different wording is not a contradiction.</p>}{state.failures.length > 0 && <details><summary>Execution states and unsuccessful branches</summary><ul>{state.failures.map((row, index) => <li key={`${row.session_id}-${index}`}>{row.status}: {row.note} <button className="text-view-link" type="button" onClick={() => onSession(row.session_id)}>Session #{row.session_number}</button></li>)}</ul></details>}</section>
+      <section><h3>Open or not yet reconciled</h3>
+        <h4>Possible next investigation</h4>{suggested ? <div><p>{suggested.question}</p><p className="hint">{suggested.qualification}</p>{sourceButton(suggested.source, 'Inspect suggested question')}</div> : <p>No current evidence-linked next investigation is determined. Inspect unreconciled history before choosing a new run.</p>}
+        {visibleQuestions.length ? <ol>{visibleQuestions.map(questionRow)}</ol> : !questions.length && <p>No explicit obligation is recorded; this does not mean the question is solved.</p>}
+        {remainingQuestions.length > 0 && <details><summary>{remainingQuestions.length} more recorded questions / dispositions</summary><ol>{remainingQuestions.map(questionRow)}</ol></details>}
+      </section>
+    </div>
+    <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map(note => <li key={note}>{note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
+  </details>;
+}
+
+type ContinuationProposal = { preview_digest: string; question: string; caution: string; obligation: { id: string } | null; sources: { artifact_id: string; source: EvidencePointer; strategy_title: string; claim: string; status: string; verification: string; mandatory: boolean; artifact: Record<string, unknown> }[] };
+function ContinuationApproval({ path, strategies, state, onEvidence, onSaved, onInvestigate }: { path: string; strategies: Strategy[]; state: CurrentUnderstanding; onEvidence: (source: EvidencePointer) => void; onSaved: (view: ProjectView) => void; onInvestigate: (ids: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [parent, setParent] = useState(strategies[0]?.id || '');
+  const [obligation, setObligation] = useState('');
+  const [preview, setPreview] = useState<ContinuationProposal | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [rejections, setRejections] = useState<Record<string, string>>({});
+  const [title, setTitle] = useState('Bounded continuation');
+  const [question, setQuestion] = useState('');
+  const [savedId, setSavedId] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function inspect() {
+    setBusy(true); setError(''); setSavedId('');
+    try {
+      const response = await fetch(`/api/projects/continuations/proposal?${new URLSearchParams({ path, parent_strategy_id: parent, ...(obligation ? { obligation_id: obligation } : {}) })}`);
+      const data = await response.json(); if (!response.ok) throw new Error(data.error);
+      setPreview(data); setQuestion(data.question); setSelected(data.sources.filter((row: { mandatory: boolean }) => row.mandatory).map((row: { artifact_id: string }) => row.artifact_id)); setRejections({});
+    } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
+  }
+  async function approve() {
+    if (!preview) return;
+    setBusy(true); setError('');
+    try {
+      const next = await post<ProjectView>('continuations/approve', { path, parent_strategy_id: parent, title, question, obligation_id: preview.obligation?.id || null, preview_digest: preview.preview_digest, source_artifact_ids: selected, rejected_sources: Object.entries(rejections).filter(([id, reason]) => !selected.includes(id) && reason.trim()).map(([artifact_id, rationale]) => ({ artifact_id, rationale })) });
+      const id = next.project.strategies.at(-1)!.id;
+      setSavedId(id); setPreview(null); onSaved(next);
+    } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
+  }
+  return <details className="outcome-subsection continuation-approval" open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary>Continue from saved evidence</summary>
+    <p>Inspect sources, narrow a question, then explicitly approve a new strategy. Original strategies and history remain saved. Approval does not start a session.</p>
+    <label>Parent strategy<select aria-label="Parent strategy" value={parent} onChange={event => { setParent(event.target.value); setObligation(''); setPreview(null); }}>{strategies.filter(row => !row.removed_at).map(row => <option key={row.id} value={row.id}>{row.title}</option>)}</select></label>
+    <label>Open obligation<select aria-label="Open obligation" value={obligation} onChange={event => { setObligation(event.target.value); setPreview(null); }}><option value="">Write a bounded follow-up</option>{state.obligations.filter(row => row.actionable && row.sources.some(source => source.strategy_id === parent)).map(row => <option key={row.id} value={row.id}>{row.text}</option>)}</select></label>
+    <button type="button" className="text-view-link" disabled={busy || !parent} onClick={() => void inspect()}>Inspect continuation proposal</button>
+    {preview && <div><p className="hint">{preview.caution}</p><label>Continuation title<input value={title} maxLength={200} onChange={event => setTitle(event.target.value)}/></label><label>Approved next question<textarea aria-label="Approved next question" value={question} maxLength={1000} onChange={event => setQuestion(event.target.value)}/></label>
+      <ol>{preview.sources.map(row => <li key={row.artifact_id}><label><input type="checkbox" checked={selected.includes(row.artifact_id)} disabled={row.mandatory} onChange={event => setSelected(ids => event.target.checked ? [...ids, row.artifact_id] : ids.filter(id => id !== row.artifact_id))}/>{row.strategy_title}{row.mandatory ? ' · required local evidence' : ''}</label><p>{row.claim}</p><p className="hint">{row.status} · {row.verification}</p><p><button type="button" className="text-view-link" onClick={() => onEvidence(row.source)}>Inspect source Session #{row.source.session_number}</button> <code>{row.artifact_id}</code></p><details><summary>Frozen source evidence</summary><pre>{JSON.stringify(row.artifact, null, 2)}</pre></details>{!selected.includes(row.artifact_id) && <label>Reason to reject transfer (optional)<input value={rejections[row.artifact_id] || ''} maxLength={600} onChange={event => setRejections(current => ({ ...current, [row.artifact_id]: event.target.value }))}/></label>}</li>)}</ol>
+      <button type="button" className="text-view-link" disabled={busy || question.trim().length < 10 || !selected.length} onClick={() => void approve()}>Approve continuation fork</button>
+    </div>}
+    {savedId && <p role="status">Continuation saved with frozen source evidence. <button type="button" className="text-view-link" onClick={() => onInvestigate([savedId])}>Investigate approved continuation</button></p>}
+    {error && <p role="alert">{error}</p>}
+  </details>;
+}
+
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
+  const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
   const selectedSessionId = useRef('');
   const sessionsLoaded = useRef(false);
   const [pendingStrategyIds, setPendingStrategyIds] = useState<string[]>([]);
@@ -432,6 +651,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     if (!response.ok) throw new Error(data.error ?? 'Could not read research sessions');
     const nextSessions = data.sessions as ResearchSession[];
     setSessions(nextSessions);
+    setCurrentUnderstanding(data.current_understanding?.project_id === projectId ? data.current_understanding as CurrentUnderstanding : null);
     readErrorReported.current = false;
     setReadError('');
     const requestedId = preferredId ?? selectedSessionId.current;
@@ -455,7 +675,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
       lastAnnouncement.current = transition;
     }
     return chosen;
-  }, [path]);
+  }, [path, projectId]);
 
   const reportReadFailure = useCallback((cause: unknown) => {
     const message = errorMessage(cause);
@@ -481,7 +701,8 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', poll); stopWatching(); };
   }, [activeSession?.id, activeSession?.status, load, path, projectId, reportReadFailure]);
 
-  async function begin() {
+  async function begin(onlyIds?: string[]) {
+    const chosenIds = onlyIds || eligible.map(strategy => strategy.id);
     setBusy(true); setError('');
     try {
       const response = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`);
@@ -493,13 +714,17 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
       if (!validateLimitDraft(draftLimits(currentLimits)).value) {
         throw new Error('Saved research limits need attention. Update them in Project Settings → Limits before starting a session.');
       }
-      const selectionLimit = Math.min(12, Math.floor(currentLimits.model_calls / 2));
-      setPendingStrategyIds(current => {
-        const retained = current.filter(id => eligible.some(strategy => strategy.id === id)).slice(0, selectionLimit);
-        return retained.length ? retained : eligible.slice(0, 1).map(strategy => strategy.id);
-      });
-      setConfig(current); setLimits(currentLimits);
       if (!current.available) throw new Error(current.message ?? 'Connect the selected AI account before investigating');
+      if (chosenIds.length > 12) {
+        throw new Error('A session can include at most 12 enabled strategies. Disable strategies before starting.');
+      }
+      if (chosenIds.length * 2 > currentLimits.model_calls) {
+        throw new Error(
+          `The ${chosenIds.length} enabled strategies need at least ${chosenIds.length * 2} model calls for their Investigator/Skeptic pairs, but the budget allows ${currentLimits.model_calls}. Disable strategies or increase the model-call limit in Project Settings.`,
+        );
+      }
+      setPendingStrategyIds(chosenIds);
+      setConfig(current); setLimits(currentLimits);
       setConfirmStart(true);
     } catch (cause) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -532,7 +757,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
 
   const interventionSaved = useCallback(async (sessionId: string) => {
     await load(sessionId);
-    setAnnouncement('Human guidance queued for a later agent step. No provider call was made.');
+    setAnnouncement('Human feedback added for a later agent step. No provider call was made.');
   }, [load]);
 
   function requestResume(target: ResearchSession) {
@@ -547,6 +772,28 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(id)}"]`);
       row?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }));
+  }
+
+  function revealEvidence(source: EvidencePointer) {
+    if (source.project_id !== projectId || !source.available) return;
+    revealSession(source.session_id);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-session-id="${CSS.escape(source.session_id)}"]`);
+      const evidence = row?.querySelector<HTMLDetailsElement>('.outcome-evidence-subsection');
+      if (evidence) evidence.open = true;
+      const artifact = document.getElementById(`research-artifact-${source.session_id}-${source.artifact_id}`);
+      if (artifact) {
+        const disclosure = artifact.querySelector<HTMLDetailsElement>('details');
+        if (disclosure) disclosure.open = true;
+        artifact.tabIndex = -1;
+        artifact.focus({ preventScroll: true });
+        artifact.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setAnnouncement(`Opened saved evidence from Session #${source.session_number}.`);
+      } else if (row) {
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setAnnouncement('The owning session is open; inspect its saved evidence.');
+      }
     }));
   }
 
@@ -575,28 +822,20 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     if (activeSession || !eligible.length) return;
     setConfirmStart(false);
     void begin();
-  }, [activeSession, busy, eligible.length, readError, path]);
+  }, [activeSession, busy, eligible, readError, path]);
   const stop = useCallback(() => {
     if (activeSession?.status === 'running' && !busy && !readError) void control('stop', activeSession);
   }, [activeSession, busy, readError]);
   useEffect(() => {
     onControlsChange({
       play, stop, confirming: confirmStart, start: () => void start(), cancel: () => setConfirmStart(false), nextSessionNumber: Math.max(0, ...sessions.map(item => item.session_number)) + 1,
-      strategyChoices: eligible,
-      selectedStrategyIds: pendingStrategyIds,
-      selectionLimit: Math.floor((limits?.model_calls ?? 0) / 2),
-      onStrategySelectionChange: (strategyId, selected) => setPendingStrategyIds(current => {
-        const maximum = Math.floor((limits?.model_calls ?? 0) / 2);
-        if (selected) return current.includes(strategyId) || current.length >= maximum ? current : [...current, strategyId];
-        return current.filter(id => id !== strategyId);
-      }),
       playDisabled: busy || !!readError || confirmStart || (activeSession
         ? true
         : !eligible.length),
       stopDisabled: busy || !!readError || activeSession?.status !== 'running',
       playLabel,
     });
-  }, [activeSession, busy, confirmStart, eligible, limits?.model_calls, onControlsChange, pendingStrategyIds, stop, play, playLabel, readError, sessions]);
+  }, [activeSession, busy, confirmStart, eligible.length, onControlsChange, stop, play, playLabel, readError, sessions]);
 
   const orderedSessions = [...sessions].sort((left, right) => left.session_number - right.session_number);
 
@@ -608,6 +847,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
+    {currentUnderstanding && <><CurrentUnderstandingView state={currentUnderstanding} onEvidence={revealEvidence} onSession={revealSession}/><ContinuationApproval path={path} strategies={strategies} state={currentUnderstanding} onEvidence={revealEvidence} onSaved={onContinuationSaved} onInvestigate={ids => void begin(ids)}/></>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
@@ -628,7 +868,7 @@ function ResearchWorkspace({ path, projectId, strategies, onViewStrategy, onFork
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
               </div>
             </div>
-            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} busy={busy} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
+            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
@@ -692,9 +932,9 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   const input = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const defaultStem = `sigma-${(title || 'project').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'project'}`;
-  const [exportType, setExportType] = useState<'audit' | 'text' | 'html' | 'tex'>('audit');
+  const [exportType, setExportType] = useState<'audit' | 'text' | 'html'>('audit');
   const isReport = exportType !== 'audit';
-  const reportFormat = exportType === 'text' ? 'txt' : exportType === 'tex' ? 'tex' : 'html';
+  const reportFormat = exportType === 'text' ? 'txt' : 'html';
   const [filename, setFilename] = useState(defaultStem);
   const [openInTab, setOpenInTab] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -747,7 +987,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
           opened.document.body.replaceChildren(pre);
         }
       }
-      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : exportType === 'tex' ? 'application/x-tex;charset=utf-8' : 'text/plain;charset=utf-8';
+      const mimeType = exportType === 'audit' ? 'application/json;charset=utf-8' : exportType === 'html' ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
       const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
       const link = document.createElement('a');
       link.href = url; link.download = downloadName;
@@ -774,7 +1014,6 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
           <label><input type="radio" name="export-type" value="audit" checked={exportType === 'audit'} onChange={() => setExportType('audit')}/> Project Audit</label>
           <label><input type="radio" name="export-type" value="text" checked={exportType === 'text'} onChange={() => setExportType('text')}/> Text file</label>
           <label><input type="radio" name="export-type" value="html" checked={exportType === 'html'} onChange={() => setExportType('html')}/> HTML report</label>
-          <label><input type="radio" name="export-type" value="tex" checked={exportType === 'tex'} onChange={() => setExportType('tex')}/> LaTeX report</label>
         </fieldset>
         <label htmlFor="export-project-filename">Filename</label>
         <div className="export-filename-field"><input ref={input} id="export-project-filename" value={filename} maxLength={260} disabled={busy} spellCheck={false}
@@ -790,7 +1029,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
   </dialog>;
 }
 
-type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number } };
+type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
 function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
@@ -802,7 +1041,10 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   const [binding, setBinding] = useState('');
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
+  const [effort, setEffort] = useState('');
+  const [checkpoint, setCheckpoint] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [longForm, setLongForm] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -818,8 +1060,17 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       const list = await listResponse.json(); const config = await configResponse.json();
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); }
-      else { setBinding(config.binding); setModel(config.model); setMode(config.mode); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpoint(null); }
+      else {
+        setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
+        const params = new URLSearchParams({
+          path, long_form: String(longForm), expected_project_id: projectId, expected_binding: config.binding,
+          mode: config.mode, model: config.model, reasoning_effort: config.reasoning_effort,
+        });
+        const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
+        const preflight = await preflightResponse.json();
+        if (preflightResponse.ok) setCheckpoint(preflight);
+      }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
         const response = await fetch(`/api/projects/papers/${encodeURIComponent(nextId)}?${query}`, { cache: 'no-store' });
@@ -837,24 +1088,112 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       setSelected(record as PaperRecord); setError('');
     } catch (cause) { setError(errorMessage(cause)); }
   }
+  async function restartCheckpoint() {
+    if (busy || !checkpoint?.checkpoint_can_restart || !binding) return;
+    const prior = Number(checkpoint.provider_calls_previous_runs ?? 0) + Number(checkpoint.provider_calls_attempted ?? 0);
+    const restartCostCeiling = mode === 'api_key'
+      ? ' At 12,000 requested output tokens per call, a fresh run may request up to ' + Number(checkpoint.maximum_fresh_run_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar quote.'
+      : ' The new run is subject to your ChatGPT-plan allowance.';
+    if (!window.confirm(
+      `Restart long-form authoring from the beginning? This discards the current checkpointed work and can repeat up to ${Number(checkpoint.maximum_provider_calls).toLocaleString()} provider calls. The ${prior.toLocaleString()} calls already attempted will remain recorded. ${restartCostCeiling} ${mode === 'api_key' ? 'Additional calls can incur API-key charges.' : ''}`
+    )) return;
+    setBusy(true); setError(''); setPhase('Resetting the long-form checkpoint…');
+    try {
+      const response = await fetch('/api/projects/papers/restart', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path, expected_project_id: projectId, expected_binding: binding,
+          expected_snapshot_sha256: checkpoint.snapshot_sha256, confirm_restart: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
+      setPhase(`Checkpoint reset. ${Number(result.provider_calls_previous_runs).toLocaleString()} previous provider call attempts remain recorded.`);
+      await refresh(selected?.paper_id);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  }
   async function generatePaper() {
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Freezing the complete evidence snapshot…'); setError('');
-    const finishProvider = beginProviderRequest('ai-paper');
-    const timer = window.setTimeout(() => setPhase('Authoring, validating evidence references, and compiling PDF…'), 350);
+    setBusy(true); setPhase('Checking the frozen evidence size…'); setError('');
+    let finishProvider = () => {};
+    let timer = 0;
     try {
+      const preflightParams = new URLSearchParams({
+        path, long_form: String(longForm), expected_project_id: projectId, expected_binding: binding,
+        mode, model, reasoning_effort: effort,
+      });
+      const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal });
+      const preflight = await preflightResponse.json();
+      if (!preflightResponse.ok) throw new Error(preflight.error ?? 'Could not size the evidence snapshot.');
+      if (preflight.checkpoint_exists && !preflight.resume_available) {
+        throw new Error('A checkpoint exists for different project or provider settings. Use Restart checkpoint to preserve its attempt history before generating.');
+      }
+      const resumeDisclosure = preflight.resume_available
+        ? ' This resumes after ' + Number(preflight.completed_batches).toLocaleString() + ' completed evidence batches, ' + Number(preflight.reduction_groups_completed).toLocaleString() + ' index-reduction groups' + (preflight.outline_complete ? ', with the outline saved' : '') + ', and ' + Number(preflight.completed_sections).toLocaleString() + ' sections. ' + Number(preflight.provider_calls_attempted).toLocaleString() + ' calls were already attempted in this run; ' + Number(preflight.provider_calls_previous_runs).toLocaleString() + ' in prior runs. Up to ' + Number(preflight.provider_calls_remaining).toLocaleString() + ' more calls may be made.'
+        : '';
+      const callBreakdown = preflight.long_form
+        ? ' Call ceiling by stage: ' + preflight.maximum_evidence_calls + ' evidence, up to ' + preflight.maximum_index_reduction_calls + ' index reduction, 1 outline, and up to ' + preflight.maximum_section_calls + ' sections.'
+        : ' This uses one provider call.';
+      const tokenCeiling = ' Structured stage-input limits total up to ' + (Number(preflight.maximum_structured_input_bytes) / 1_000_000).toFixed(1) + ' MB.' + (mode === 'api_key'
+        ? ' At 12,000 requested output tokens per API-key call, the run could request up to ' + Number(preflight.maximum_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar estimate.'
+        : ' ChatGPT-plan use is subject to provider allowance; this client cannot convert it to a dollar estimate.');
+      if (preflight.long_form && !window.confirm(
+        'This frozen snapshot is ' + Number(preflight.snapshot_bytes).toLocaleString() + ' bytes across ' + Number(preflight.source_count).toLocaleString() + ' saved sources. Long-form authoring will use ' + Number(preflight.evidence_batches).toLocaleString() + ' evidence batches, then a plan and separate section calls. The run may use up to ' + Number(preflight.maximum_provider_calls).toLocaleString() + ' calls.' + callBreakdown + tokenCeiling + resumeDisclosure + ' ' + (mode === 'api_key' ? 'API-key mode can incur separate usage charges.' : 'ChatGPT-plan usage is subject to provider allowance.') + ' Continue?'
+      )) {
+        setPhase('Large paper generation was not started; no provider calls were made.');
+        return;
+      }
+      finishProvider = beginProviderRequest('ai-paper');
+      setPhase(preflight.long_form
+        ? `Indexing ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then authoring the planned sections…`
+        : 'Authoring and validating the paper, then compiling the PDF…');
+      timer = window.setTimeout(() => setPhase(preflight.long_form
+        ? 'Long-form evidence indexing and section authoring are in progress…'
+        : 'Authoring, validating evidence references, and compiling PDF…'), 350);
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding }) });
-      const result = await response.json().catch(() => null);
-      if (!result) throw new Error(`Paper generation failed with an invalid server response (${response.status}). No version was published.`);
-      if (!response.ok) throw new Error(result.error ?? 'Paper generation failed; no version was published.');
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: longForm }) });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => null);
+        throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
+      }
+      if (!response.headers.get('content-type')?.includes('text/event-stream') || !response.body)
+        throw new Error(`Paper generation failed with an invalid server response (${response.status}). No version was published.`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let result: { paper_id: string } | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const frames = buffer.split('\n\n'); buffer = frames.pop() ?? '';
+        for (const frame of frames) {
+          const line = frame.split('\n').find(item => item.startsWith('data: '));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6));
+          if (event.type === 'error') throw new Error(event.error ?? 'Paper generation failed.');
+          if (event.type === 'complete') result = event.result as { paper_id: string };
+          if (event.type === 'progress') {
+            const stage = event.stage === 'snapshot' ? 'Frozen the complete evidence snapshot'
+              : event.stage === 'evidence' ? `Indexing evidence batch ${event.completed} of ${event.total}`
+              : event.stage === 'index' ? 'Consolidating the source-linked evidence index'
+              : event.stage === 'outline' ? 'Planning the complete paper outline'
+              : event.stage === 'compile' ? 'Compiling the complete TeX document and validating the PDF'
+              : `Authoring paper section ${event.completed} of ${event.total}`;
+            setPhase(`${stage}…`);
+          }
+        }
+        if (done) break;
+      }
+      if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
       setPhase('Saved a new immutable paper version.');
       await refresh(result.paper_id);
     } catch (cause) {
-      if (!controller.signal.aborted) { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
-      else setPhase('Generation cancelled. No new version was published.');
-    } finally { window.clearTimeout(timer); finishProvider(); if (request.current === controller) request.current = null; setBusy(false); }
+      if (controller.signal.aborted) setPhase('Generation cancelled. No new version was published.');
+      else { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+      await refresh(selected?.paper_id);
+    } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
@@ -862,8 +1201,14 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
-      <p className="settings-hint"><strong>Limits:</strong> complete evidence snapshot up to 100,000 bytes; larger snapshots are rejected without omitting evidence. One provider call, up to 12,000 output tokens and a 1 MB response cap in API-key mode, a 4 MB streamed-response cap in ChatGPT-plan mode, and a 120-second timeout. Up to 50 saved versions, each capped at 12 MB including its PDF.</p>
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
+      <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
+      <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
+      {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
+        {checkpoint.resume_available
+          ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
+          : `A checkpoint exists but does not match current settings. It records ${checkpoint.provider_calls_attempted} calls in its current run and ${checkpoint.provider_calls_previous_runs} in earlier runs; restart to keep this accounting before authoring.`}
+      </p>}
+      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
       {(busy || phase.startsWith('Generation cancelled.')) && <p role="status" aria-live="polite">{phase}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
@@ -878,7 +1223,10 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
         <h4>Methods and evidence</h4>{selected.draft.methods.map((text, index) => <p key={`method-${index}`}>{text}</p>)}
         <p className="settings-hint">Claim links: {selected.draft.methods_claim_ids.join(', ') || 'None'}</p>
         <p><strong>Snapshot.</strong> SHA-256 {selected.snapshot_sha256} · {selected.snapshot.sources.length} stable evidence sources</p>
-        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}</p>
+        <p><strong>Generated.</strong> {selected.generation.model} ({selected.generation.mode}) · {dateLabel(selected.created_at)}{selected.generation.long_form ? ` · ${selected.generation.evidence_batch_count} evidence batches · ${selected.generation.provider_calls_attempted} calls this run · ${selected.generation.provider_calls_prior_runs} prior-run calls · ${selected.generation.provider_calls_lifetime_total} lifetime calls` : ''}</p>
+        {!!selected.generation.omitted_evidence?.length && <details><summary>Evidence fields omitted from the generated index ({selected.generation.evidence_fields_omitted})</summary>{selected.generation.omitted_evidence.map(item => <p className="ai-paper-warning" key={item.field_ref}><code>{item.source_ref}{item.field}</code>: {item.reason}</p>)}</details>}
+        {!!selected.generation.reduction_source_refs_omitted?.length && <details><summary>Sources omitted during index reduction ({selected.generation.reduction_source_refs_omitted.length})</summary>{selected.generation.reduction_source_refs_omitted.map(source => <p className="ai-paper-warning" key={source}><code>{source}</code></p>)}<p className="settings-hint">The complete original source records remain in the archived snapshot.</p></details>}
+        {!!selected.generation.evidence_conflicts?.length && <details><summary>Potential conflicts and gaps identified by the evidence index ({selected.generation.evidence_conflict_note_count})</summary>{selected.generation.evidence_conflicts.map((conflict, index) => <p className="ai-paper-warning" key={`conflict-${index}`}>{conflict.statement} <strong>Sources:</strong> {conflict.evidence_refs.map(source => <code key={source}>{source} </code>)}</p>)}</details>}
         {selected.validation_warnings.map((warning, index) => <p className="ai-paper-warning" key={`system-${index}`}>Evidence validation: {warning}</p>)}
         {(selected.author_review_warnings ?? []).map((warning, index) => <p className="ai-paper-warning" key={`author-${index}`}>Author self-review (not independent): {warning}</p>)}
         {selected.draft.sections.map(section => <section key={section.heading}><h4>{section.heading}</h4>{section.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<p className="settings-hint">Claim links: {section.claim_ids.join(', ') || 'None'}</p></section>)}
@@ -1152,7 +1500,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
       {scope === 'project' ? <div className="project-text-actions">{viewActions}</div> : viewActions}
     </div>
     {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
-      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : 10000} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
+      <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : MAX_STRATEGY_APPROACH} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
     </form> : current && version ? selected === 'rendered'
       ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
@@ -1202,6 +1550,258 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
   </div>;
 }
 
+function AboutArchitecture() {
+  const descriptions = {
+    project: 'A project holds the central research question and multiple persistent research directions. Results from a local investigation do not automatically settle the entire question.',
+    strategies: 'Strategies are durable, bounded research ideas. They may be tested, revised or forked, and failed attempts retain their evidence and history.',
+    strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
+    strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
+    strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
+    session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
+    orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
+    investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
+    investigatorFollowup: 'A later Investigator turn can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
+    tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
+    workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
+    skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
+    decision: 'After a review, SIGMA applies the recorded assessment, next question and remaining work within resource limits. A strategy can remain available for later revision or another session.',
+    savedEvidence: 'Persisted artifacts preserve findings, reasoning, objections, execution results and open questions. Researchers can revisit prior evidence to guide later sessions or strategy revisions.',
+  } as const;
+  type DiagramNode = keyof typeof descriptions;
+  const [activeInfoNode, setActiveInfoNode] = useState<DiagramNode | null>(null);
+  const [sessionExpanded, setSessionExpanded] = useState(false);
+  const sessionToggle = useRef<HTMLButtonElement>(null);
+  const sessionPanel = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<number | null>(null);
+  const pointerType = useRef('');
+  const activeAnchor = useRef<HTMLElement | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number; visibility: 'hidden' | 'visible' }>({ left: 0, top: 0, visibility: 'hidden' });
+  const tooltipId = (key: DiagramNode) => 'about-diagram-tooltip-' + key;
+
+  function cancelHide() {
+    if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  }
+  function scheduleHide() {
+    cancelHide();
+    hideTimer.current = window.setTimeout(() => setActiveInfoNode(null), 130);
+  }
+  function positionTooltip(key = activeInfoNode, anchor = activeAnchor.current) {
+    if (!key || !anchor) return;
+    const dialog = anchor.closest('dialog');
+    if (!dialog) return;
+    const anchorRect = anchor.getBoundingClientRect();
+    const dialogRect = dialog.getBoundingClientRect();
+    const margin = 12;
+    const tipWidth = Math.min(360, window.innerWidth - 62, dialogRect.width - 24);
+    const lineWidth = Math.max(24, (tipWidth - 26) / 5.5);
+    const lines = Math.ceil(descriptions[key].length / lineWidth);
+    const tipHeight = Math.min(240, lines * 17 + 22);
+    const left = Math.max(dialogRect.left + margin, Math.min(anchorRect.left + anchorRect.width / 2 - tipWidth / 2, dialogRect.right - tipWidth - margin));
+    const preferredTop = anchorRect.bottom + 8;
+    const lowerBound = dialogRect.top + margin;
+    const upperBound = dialogRect.bottom - tipHeight - margin;
+    const aboveTop = anchorRect.top - tipHeight - 8;
+    const top = preferredTop <= upperBound || aboveTop < lowerBound
+      ? Math.max(lowerBound, Math.min(preferredTop, upperBound))
+      : Math.max(lowerBound, aboveTop);
+    setTooltipPosition({ left, top, visibility: 'visible' });
+  }
+  function revealNode(key: DiagramNode, anchor: HTMLElement, revealToKeyboardOrTouch = false) {
+    cancelHide();
+    activeAnchor.current = anchor;
+    positionTooltip(key, anchor);
+    setActiveInfoNode(key);
+    if (revealToKeyboardOrTouch) requestAnimationFrame(() => positionTooltip(key, anchor));
+  }
+  useLayoutEffect(() => {
+    if (!activeInfoNode) return;
+    positionTooltip(activeInfoNode);
+    const pointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-about-info-node]')) return;
+      setActiveInfoNode(null);
+    };
+    const keyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setActiveInfoNode(null);
+      }
+    };
+    const repositionTooltip = () => positionTooltip();
+    document.addEventListener('pointerdown', pointerDown, true);
+    document.addEventListener('keydown', keyDown, true);
+    document.addEventListener('scroll', repositionTooltip, true);
+    window.addEventListener('resize', repositionTooltip);
+    return () => {
+      document.removeEventListener('pointerdown', pointerDown, true);
+      document.removeEventListener('keydown', keyDown, true);
+      document.removeEventListener('scroll', repositionTooltip, true);
+      window.removeEventListener('resize', repositionTooltip);
+    };
+  }, [activeInfoNode]);
+  useEffect(() => () => cancelHide(), []);
+
+  function help(key: DiagramNode, label: string) {
+    const active = activeInfoNode === key;
+    return <button
+      type="button"
+      className="about-diagram-help"
+      aria-label={"Explain " + label}
+      aria-describedby={active ? tooltipId(key) : undefined}
+      onPointerDown={event => { pointerType.current = event.pointerType; }}
+      onFocus={event => revealNode(key, (event.currentTarget.closest('.about-info-region') as HTMLElement | null) ?? event.currentTarget, true)}
+      onBlur={scheduleHide}
+      onClick={event => {
+        const touch = pointerType.current === 'touch' || window.matchMedia('(hover: none)').matches;
+        if (touch) {
+          // Touch generates focus before click; keep the newly revealed tip open.
+          if (activeInfoNode !== key) revealNode(key, (event.currentTarget.closest('.about-info-region') as HTMLElement | null) ?? event.currentTarget, true);
+        }
+        pointerType.current = '';
+      }}
+    >i</button>;
+  }
+  function infoRegion(key: DiagramNode, content: ReactNode, tone: 'copper' | 'blue' = 'copper') {
+    return <div
+      className="about-info-region"
+      data-about-info-node={key}
+      onPointerEnter={event => { if (event.pointerType === 'mouse') revealNode(key, event.currentTarget); }}
+      onPointerLeave={event => { if (event.pointerType === 'mouse') scheduleHide(); }}
+    >
+      {content}
+      {activeInfoNode === key && <div id={tooltipId(key)} className="about-diagram-tooltip" data-tone={tone} role="tooltip" style={{ left: tooltipPosition.left, top: tooltipPosition.top, visibility: tooltipPosition.visibility }} onPointerEnter={cancelHide} onPointerLeave={scheduleHide}>{descriptions[key]}</div>}
+    </div>;
+  }
+  function card(key: DiagramNode, title: string, subtitle: string, tone: 'copper' | 'blue' = 'copper') {
+    return infoRegion(key, <div className={"about-diagram-node about-diagram-node--" + tone}>
+      <span className="about-diagram-node-title">{title}</span>
+      <span className="about-diagram-node-subtitle">{subtitle}</span>
+      {help(key, title)}
+    </div>, tone);
+  }
+  const strategyExamples = [
+    { id: 'strategyA' as const, title: 'Strategy A', subtitle: 'Explore a pattern' },
+    { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another model' },
+    { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Challenge assumptions' },
+  ];
+  function toggleSession() {
+    const next = !sessionExpanded;
+    if (!next && activeInfoNode === 'session') setActiveInfoNode(null);
+    if (!next && sessionPanel.current?.contains(document.activeElement)) {
+      requestAnimationFrame(() => sessionToggle.current?.focus());
+    }
+    setSessionExpanded(next);
+  }
+
+  return <section className="about-architecture" aria-label="How SIGMA Works: Multi-Agentic Research">
+    <div className="about-research-flow">
+      <div className="about-flow-project">{card('project', 'Research Project', 'The overarching hard question')}</div>
+      <div className="about-flow-connector"><span>Branches into distinct research directions</span><i aria-hidden="true"/></div>
+      <div className="about-strategy-group">
+        {infoRegion('strategies', <div className="about-strategy-group-heading"><span>Project Strategies</span>{help('strategies', 'Project Strategies')}</div>)}
+        <div className="about-strategy-cards">
+          {strategyExamples.map(strategy => {
+            return infoRegion(strategy.id, <div className="about-strategy-card">
+              <div className="about-strategy-node">
+                <span className="about-diagram-node-title">{strategy.title}</span>
+                <span className="about-diagram-node-subtitle">{strategy.subtitle}</span>
+              </div>
+              {help(strategy.id, strategy.title)}
+            </div>);
+          })}
+        </div>
+      </div>
+      <div className="about-flow-connector about-strategy-parallel-note"><span>Several selected directions can advance side by side</span><i aria-hidden="true"/></div>
+      <div className="about-session-frame">
+        <div className="about-session-heading">{card('session', 'Research Session', 'Brings specialist agent turns together')}</div>
+        <div className="about-agent-cycle-preview">
+          <span className="about-agent-role">Investigator<small>AI agent</small></span>
+          <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <span className="about-agent-role">Skeptic<small>AI agent</small></span>
+          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show Me') + ' Investigator and Skeptic details'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show Me'}</button>
+        </div>
+        <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
+          <div className="about-session-detail-inner">
+            <h4 id="about-session-detail-heading">Different minds take turns on the same hard question</h4>
+            <p className="about-multi-agent-intro">SIGMA brings specialist AI agents into the research. Investigators develop ideas and test possibilities. Skeptics challenge assumptions and probe the evidence. Investigators return with the critique in view, and the exchange can continue. Each turn adds another perspective while the work stays together in the research session.</p>
+            <section className="about-agent-instantiation" aria-label="Different AI agents contribute successive research turns">
+              <h5>One investigation. Multiple agent turns.</h5>
+              <div className="about-agent-turns">
+                <div className="about-agent-turn">
+                  <span className="about-turn-number">01 · INVESTIGATE</span>
+                  {card('investigator', 'Investigator', 'Develops an approach and tests ideas', 'blue')}
+                  <span className="about-turn-detail">Explores the direction</span>
+                </div>
+                <span className="about-turn-arrow" aria-hidden="true">→</span>
+                <div className="about-agent-turn">
+                  <span className="about-turn-number">02 · CHALLENGE</span>
+                  {card('skeptic', 'Skeptic', 'Questions assumptions and probes evidence', 'blue')}
+                  <span className="about-turn-detail">Finds gaps and next questions</span>
+                </div>
+                <div className="about-agent-return">
+                  <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-turn-return-metal" x1="1" x2="0"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M510 3 V27 H170 V72 M162 62 L170 72 L178 62" fill="none" stroke="url(#about-turn-return-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <span>The Skeptic's critique feeds the next Investigator turn</span>
+                  <b aria-hidden="true">↓</b>
+                </div>
+                <div className="about-agent-turn about-agent-turn--return">
+                  <span className="about-turn-number">03 · BUILD ON IT</span>
+                  {card('investigatorFollowup', 'Investigator', 'Takes up the critique and continues', 'blue')}
+                  <span className="about-turn-detail">Carries the research forward</span>
+                </div>
+              </div>
+              <div className="about-agent-turn-more"><span aria-hidden="true">···</span> More Investigator and Skeptic turns can follow as the research develops</div>
+              <p className="about-agent-instantiation-note">Investigator turns can draw on tools such as SciPy and SageMath. Every turn and its research stay with the session for complete recoverability and auditing.</p>
+            </section>
+            <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
+            <p className="about-multiple-strategies-note">A project can explore several strategies. Each gives agents another direction to investigate, and the saved findings remain available for later work.</p>
+            <p className="about-multiple-sessions-note">Multiple sessions let researchers revisit a strategy with new evidence, try revised approaches, and compare results over time.</p>
+          </div>
+        </div>
+      </div>
+      <div className="about-flow-connector"><span>Save findings</span><i aria-hidden="true"/></div>
+      <div className="about-flow-evidence">{card('savedEvidence', 'Saved Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
+      <div className="about-history-return"><span aria-hidden="true">↶</span> Findings may inform later sessions or researcher-approved strategy revisions.</div>
+    </div>
+    <p className="about-architecture-caption">SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find.</p>
+  </section>;
+}
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    closeButton.current?.focus();
+  }, []);
+  return <dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
+    <div className="about-dialog-content">
+      <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
+      <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
+      <details className="about-disclosure">
+        <summary>Key Features</summary>
+        <div className="about-disclosure-content">
+      <section className="about-feature"><h4>Multi-Strategy Exploration</h4><p>Hard problems often need more than one approach. Each strategy explores a particular angle, rather than proposing an answer. Strategies can be tested, revised, or combined as the research develops. Even failed approaches can teach us something useful.</p></section>
+      <section className="about-feature"><h4>Multiple Research Agents</h4><p>Different agents investigate ideas, challenge assumptions, and look for weaknesses in the reasoning.</p></section>
+      <section className="about-feature"><h4>Research History</h4><p>SIGMA keeps a record of strategies, research sessions, experiments, and findings so earlier work isn't lost. Failed approaches remain available for review and further investigation.</p></section>
+      <section className="about-feature"><h4>Research That Builds on Earlier Work</h4><p>Researchers can use earlier findings to guide later investigations, including findings that ruled out an approach. SIGMA does not automatically combine discoveries across strategies.</p></section>
+      <section className="about-feature"><h4>Human Guidance</h4><p>Researchers can provide feedback, revise strategies, and choose which directions to pursue.</p></section>
+      <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
+      <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
+      <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
+          <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
+        </div>
+      </details>
+      <details className="about-disclosure about-architecture-disclosure">
+        <summary>How SIGMA Works: Multi-Agentic Research</summary>
+        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
+      </details>
+    </div>
+    <small className="about-build-commit">Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
+  </dialog>;
+}
+
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   const cloud = useCloudIdentity();
@@ -1222,6 +1822,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <GoogleIdentityPill compact/>
       <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>?</button>
     </div>
   </header>;
 }
@@ -1304,10 +1905,10 @@ function ProjectEntryDialog({ initialPath, onOpen, onCancel }: {
   </dialog>;
 }
 
-type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null };
+type Settings = { title: string; problem: string; investigation_type: ResearchMode; ai_model: string; reasoning_effort: string; difficulty: ProjectDifficulty | null; show_advanced_outcome_details: boolean };
 type CatalogChoice = { id: string; label: string; description: string; efforts: string[]; relative_cost: '$' | '$$' | '$$$'; availability: 'available' | 'unavailable' | 'unverified' };
 const thinkingLabels: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high' };
-const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty });
+const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title, problem: view.project.problem, investigation_type: view.project.investigation_type, ai_model: view.project.ai_model, reasoning_effort: view.project.reasoning_effort, difficulty: view.project.difficulty, show_advanced_outcome_details: view.project.show_advanced_outcome_details });
 
 function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
   const ai = useAI();
@@ -1538,7 +2139,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium' });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -1546,7 +2147,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const [previewBusy, setPreviewBusy] = useState(!initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState<'main' | 'limits'>('main');
+  const [activeTab, setActiveTab] = useState<'main' | 'limits' | 'preferences'>('main');
   const [limitDraft, setLimitDraft] = useState<ResearchLimitsDraft>(() => draftLimits({ research_rounds: 3, model_calls: 30, session_duration_minutes: 60, output_tokens_per_call: 12000, maximum_estimated_cost_usd: null }));
   const [limitsLoaded, setLimitsLoaded] = useState(!initial);
   const limitValidation = validateLimitDraft(limitDraft);
@@ -1606,9 +2207,10 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   return <dialog ref={dialog} className={`project-settings-dialog ${initial ? 'edit-project-dialog' : 'new-project-dialog'}`} aria-labelledby="project-settings-heading" aria-describedby="project-settings-help" onCancel={event => { event.preventDefault(); if (!submitting.current) onCancel(); }}>
     <form onSubmit={save}>
       <header className="settings-header"><h2 id="project-settings-heading">{initial ? 'Settings' : 'New Project'}</h2><div className="settings-actions">{initial ? <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !limitsLoaded || !limitValidation.value}>{busy ? 'Saving…' : 'Save'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></> : <><button type="submit" disabled={busy || !values.ai_model || !compatible || !!pairError || !values.problem.trim() || previewBusy || !destination?.path || destination.exists}>{busy ? 'Creating…' : 'Create'}</button><button className="settings-cancel" type="button" disabled={busy} onClick={() => { if (!submitting.current) onCancel(); }}>Cancel</button></>}</div></header>
-      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const next = event.key === 'Home' ? 'main' : event.key === 'End' ? 'limits' : activeTab === 'main' ? 'limits' : 'main'; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
-        <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Main</button>
+      {initial && <div role="tablist" aria-label="Project settings" className="settings-tabs" onKeyDown={event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tabs = ['main', 'limits', 'preferences'] as const; const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[2] : tabs[(tabs.indexOf(activeTab) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]; setActiveTab(next); dialog.current?.querySelector<HTMLButtonElement>(`[data-settings-tab="${next}"]`)?.focus(); } }}>
+        <button type="button" role="tab" data-settings-tab="main" id="settings-tab-main" aria-selected={activeTab === 'main'} aria-controls="settings-panel-main" tabIndex={activeTab === 'main' ? 0 : -1} onClick={() => setActiveTab('main')}>Research</button>
         <button type="button" role="tab" data-settings-tab="limits" id="settings-tab-limits" aria-selected={activeTab === 'limits'} aria-controls="settings-panel-limits" tabIndex={activeTab === 'limits' ? 0 : -1} onClick={() => setActiveTab('limits')}>Limits</button>
+        <button type="button" role="tab" data-settings-tab="preferences" id="settings-tab-preferences" aria-selected={activeTab === 'preferences'} aria-controls="settings-panel-preferences" tabIndex={activeTab === 'preferences' ? 0 : -1} onClick={() => setActiveTab('preferences')}>Preferences</button>
       </div>}
       <div className="settings-body" id={initial ? 'settings-panel-main' : undefined} role={initial ? 'tabpanel' : undefined} aria-labelledby={initial ? 'settings-tab-main' : undefined} hidden={!!initial && activeTab !== 'main'}><p id="project-settings-help">{initial ? 'Choose this project’s research type and AI settings. Edit its title and description directly on the project page.' : 'Name a project and choose its research category.'}</p>
       <fieldset disabled={busy}>
@@ -1616,17 +2218,19 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       <label htmlFor="project-problem">Research problem</label><textarea id="project-problem" required maxLength={20000} rows={4} value={values.problem} onChange={event => change('problem', event.target.value)}/></>}
       <div className="settings-classification-row"><div><label id="project-mode-label">{initial ? 'Research type' : 'Research category'}</label><ResearchTypePicker fieldLabel={initial ? 'Research type' : 'Research category'} value={values.investigation_type} onChange={value => change('investigation_type', value)}/></div>
       <div><label htmlFor="project-difficulty">Difficulty</label><select id="project-difficulty" value={values.difficulty ?? ''} onChange={event => change('difficulty', (event.target.value || null) as ProjectDifficulty | null)}>{values.difficulty === null && <option value="">Not set</option>}<option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select></div></div>
-      <label htmlFor="project-model">LLM Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
+      <div className="settings-model-row">
+      <div><label htmlFor="project-model">Model</label><select id="project-model" required value={values.ai_model} onChange={event => change('ai_model', event.target.value)} aria-describedby="project-model-help">
         {!values.ai_model && <option value="" disabled>Loading reviewed choices…</option>}
         {values.ai_model && !selected && <option value={values.ai_model}>{values.ai_model} · unavailable/unreviewed</option>}
         {orderedCatalog.map(model => <option key={model.id} value={model.id}>{model.label.replace(/\s*\([^)]*\)$/, '').trim()} · {model.relative_cost}{model.availability === 'available' ? '' : model.availability === 'unavailable' ? ' · unavailable' : ' · access unverified'}</option>)}
       </select>
-      <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately. ' : 'ChatGPT plan allowance or credits · connection required for generation. '}{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p>
-      <label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
+      <p id="project-model-help" className="settings-hint">{ai.info?.mode === 'api_key' ? 'OpenAI API · billed separately. ' : 'ChatGPT plan allowance or credits · connection required for generation. '}{selected?.description} {catalogMessage}{selected?.availability === 'unavailable' ? ' Your selected model is unavailable; it will not be replaced automatically.' : ''}</p></div>
+      <div><label htmlFor="project-thinking">Thinking level</label><select id="project-thinking" value={values.reasoning_effort} onChange={event => change('reasoning_effort', event.target.value)}>
         {!selected?.efforts.includes(values.reasoning_effort) && <option value={values.reasoning_effort}>{thinkingLabels[values.reasoning_effort] ?? values.reasoning_effort} · {selected ? 'unsupported' : 'preserved'}</option>}
         {(selected?.efforts ?? []).map(effort => <option key={effort} value={effort}>{thinkingLabels[effort] ?? effort}</option>)}
       </select>
-      <p className="settings-hint">Applies to future AI proposals. Higher thinking can take longer and consume more usage. API cost tiers are relative; <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">current token prices</a>. Earlier strategy provenance stays unchanged.</p>
+      <p className="settings-hint">Applies to future AI proposals. Higher thinking can take longer and consume more usage. API cost tiers are relative; <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noreferrer">current token prices</a>. Earlier strategy provenance stays unchanged.</p></div>
+      </div>
       {pairError && <p className="error" role="alert">{pairError}</p>}
       <p className="project-destination"><span>Project location</span><code>{initial ? initial.path : previewBusy ? 'Checking location…' : destination?.path ?? destination?.root ?? 'Location unavailable'}</code><small>{initial ? 'Editing the display name never renames or moves this directory.' : 'The project name determines its directory; existing files are never overwritten.'}</small></p>
       {locationError && <p className="error" role="alert">{locationError}</p>}
@@ -1634,16 +2238,24 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
       {error && <p className="error" role="alert">{error}</p>}
     </fieldset></div>
     {initial && <section id="settings-panel-limits" className="settings-body research-limits-panel" role="tabpanel" aria-labelledby="settings-tab-limits" hidden={activeTab !== 'limits'}>
-      <p>These limits apply to future sessions. Existing sessions keep the limits captured when they started.</p>
+      <p>Research limits apply to future sessions. For local strategy generation, the model-call limit also sets the call budget. Existing sessions keep the limits captured when they started.</p>
       {cloud?.enabled && <p className="settings-hint">Cloud research is capped at six calls, 15 minutes, and $0.25 estimated cost per session. Values above these limits are saved at the cloud cap.</p>}
       <fieldset disabled={busy || !limitsLoaded}>
         <label htmlFor="research-rounds">Skeptic iterations</label><input id="research-rounds" type="number" min={1} max={5} step={1} value={limitDraft.research_rounds} aria-invalid={!!limitValidation.errors.research_rounds} aria-describedby="research-rounds-help research-rounds-error" onChange={event => setLimitDraft(value => ({ ...value, research_rounds: event.target.value }))}/><p id="research-rounds-help" className="settings-hint">Investigator/Skeptic iterations, from 1 to 5.</p>{limitValidation.errors.research_rounds && <p id="research-rounds-error" className="limit-error" role="alert">{limitValidation.errors.research_rounds}</p>}
-        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2} max={30} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
+        <label htmlFor="research-calls">Maximum agent calls</label><input id="research-calls" type="number" min={2} max={30} step={1} value={limitDraft.model_calls} aria-invalid={!!limitValidation.errors.model_calls} aria-describedby="research-calls-help research-calls-error" onChange={event => setLimitDraft(value => ({ ...value, model_calls: event.target.value }))}/><p id="research-calls-help" className="settings-hint">Provider request allowance, 2 to 30. At least two calls per iteration are required for Investigator and Skeptic; local strategy generation uses this as its call ceiling.</p>{limitValidation.errors.model_calls && <p id="research-calls-error" className="limit-error" role="alert">{limitValidation.errors.model_calls}</p>}
         <label htmlFor="research-duration-value">Maximum session duration</label><div className="research-duration-controls"><input id="research-duration-value" type="number" min={1} max={Math.floor(MAX_SESSION_DURATION_MINUTES / durationUnitMinutes[limitDraft.session_duration_unit])} step={1} value={limitDraft.session_duration_value} aria-invalid={!!limitValidation.errors.session_duration_value} aria-describedby="research-duration-help research-duration-error" onChange={event => setLimitDraft(value => ({ ...value, session_duration_value: event.target.value }))}/><select id="research-duration-unit" aria-label="Maximum session duration unit" value={limitDraft.session_duration_unit} onChange={event => setLimitDraft(value => ({ ...value, session_duration_unit: event.target.value as DurationUnit }))}><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><p id="research-duration-help" className="settings-hint">Elapsed wall time from start, 1 minute to 7 days. Time spent paused counts.</p>{limitValidation.errors.session_duration_value && <p id="research-duration-error" className="limit-error" role="alert">{limitValidation.errors.session_duration_value}</p>}
         <label htmlFor="research-output-tokens">Maximum output tokens per call</label><input id="research-output-tokens" type="number" min={256} max={16384} step={1} value={limitDraft.output_tokens_per_call} aria-invalid={!!limitValidation.errors.output_tokens_per_call} aria-describedby="research-output-help research-output-error" onChange={event => setLimitDraft(value => ({ ...value, output_tokens_per_call: event.target.value }))}/><p id="research-output-help" className="settings-hint">256 to 16,384 tokens. SIGMA sends this limit where supported and enforces it against reported output usage or a conservative response-size bound.</p>{limitValidation.errors.output_tokens_per_call && <p id="research-output-error" className="limit-error" role="alert">{limitValidation.errors.output_tokens_per_call}</p>}
         <label htmlFor="research-cost-limit">Maximum estimated session cost (USD)</label><input id="research-cost-limit" type="text" inputMode="decimal" placeholder="Unlimited" value={limitDraft.maximum_estimated_cost_usd} aria-invalid={!!limitValidation.errors.maximum_estimated_cost_usd} aria-describedby="research-cost-help research-cost-error" onChange={event => setLimitDraft(value => ({ ...value, maximum_estimated_cost_usd: event.target.value }))}/><p id="research-cost-help" className="settings-hint">API-key billing only: $0.01 to $100.00, or blank for unlimited. ChatGPT subscription usage is not converted to dollars. Estimates use published prices and reported tokens; unknown prices or missing usage pause further calls when a cap is set.</p>{limitValidation.errors.maximum_estimated_cost_usd && <p id="research-cost-error" className="limit-error" role="alert">{limitValidation.errors.maximum_estimated_cost_usd}</p>}
       </fieldset>
       {!limitsLoaded && <p role="status">Loading saved research limits…</p>}{error && <p role="alert" className="error">{error} <button type="button" className="text-view-link" onClick={async () => { setError(''); try { const response = await fetch(`/api/projects/research-limits?${new URLSearchParams({ path: initial.path })}`); const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Research limits could not be read'); setLimitDraft(draftLimits(data)); setLimitsLoaded(true); } catch (cause) { setError(errorMessage(cause)); } }}>Retry</button></p>}
+    </section>}
+    {initial && <section id="settings-panel-preferences" className="settings-body project-preferences-panel" role="tabpanel" aria-labelledby="settings-tab-preferences" hidden={activeTab !== 'preferences'}>
+      <p>Choose how research outcomes are presented for this project. This preference does not change saved sessions or their evidence.</p>
+      <fieldset disabled={busy}>
+        <label className="project-preference-checkbox" htmlFor="show-advanced-outcome-details"><input id="show-advanced-outcome-details" type="checkbox" checked={values.show_advanced_outcome_details} onChange={event => change('show_advanced_outcome_details', event.target.checked)}/>Show advanced Outcome details</label>
+        <p className="settings-hint">When enabled, each saved outcome opens with its conclusion and provides expandable reasoning, evidence, metrics and session details. When disabled, SIGMA shows a concise result with its qualifications.</p>
+      </fieldset>
+      {error && <p role="alert" className="error">{error}</p>}
     </section>}
     </form>
   </dialog>;
@@ -1677,10 +2289,13 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     catch (error) { setError(errorMessage(error)); }
     finally { pending.current = false; setOpening(''); }
   }
-  const recentGroups = projects.reduce<Array<{ type: string | null; projects: RecentProject[] }>>((groups, project) => {
-    const group = groups.find(item => item.type === project.investigation_type);
+  const recentGroups = projects.reduce<Array<{ type: ResearchMode; projects: RecentProject[] }>>((groups, project) => {
+    const type: ResearchMode = project.investigation_type && Object.hasOwn(researchTypeLabels, project.investigation_type)
+      ? project.investigation_type as ResearchMode
+      : 'default';
+    const group = groups.find(item => item.type === type);
     if (group) group.projects.push(project);
-    else groups.push({ type: project.investigation_type, projects: [project] });
+    else groups.push({ type, projects: [project] });
     return groups;
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
@@ -1796,6 +2411,9 @@ function Home({ initialPath, onOpen }: {
 }) {
   const cloud = useCloudIdentity();
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
+  const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
@@ -1804,7 +2422,7 @@ function Home({ initialPath, onOpen }: {
   const nextCreditPlunk = useRef(0);
   const turbulenceAnimation = useRef<SVGAnimateElement>(null);
   const displacementAnimation = useRef<SVGAnimateElement>(null);
-  const [creditStreaks, setCreditStreaks] = useState<number[]>([]);
+  const [creditStreaks, setCreditStreaks] = useState<Array<{ id: number; line: 'name' | 'models' }>>([]);
   const [creditPlunk, setCreditPlunk] = useState<number | null>(null);
   useEffect(() => { document.title = 'SIGMA · Research workspace'; heading.current?.focus(); }, []);
   useEffect(() => {
@@ -1833,12 +2451,17 @@ function Home({ initialPath, onOpen }: {
     const trigger = entry === 'open' ? openButton : newButton;
     setEntry(null); requestAnimationFrame(() => trigger.current?.focus());
   }
+  function closeAbout() {
+    setAboutOpen(false);
+    requestAnimationFrame(() => aboutButton.current?.focus());
+  }
   function launchCreditStreak() {
-    const id = ++nextCreditStreak.current;
-    setCreditStreaks(current => [...current, id]);
+    const nameId = ++nextCreditStreak.current;
+    const modelsId = ++nextCreditStreak.current;
+    setCreditStreaks(current => [...current, { id: nameId, line: 'name' }, { id: modelsId, line: 'models' }]);
   }
   function removeCreditStreak(id: number) {
-    setCreditStreaks(current => current.filter(streak => streak !== id));
+    setCreditStreaks(current => current.filter(streak => streak.id !== id));
   }
   function launchCreditPlunk() {
     const id = ++nextCreditPlunk.current;
@@ -1855,10 +2478,9 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      {cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Administrator Settings</a>}
-      <div className="home-topline"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div>
+      <div className="home-topline"><div className="home-auth-pills"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
-      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="cloud-home-prompt"><p>Private research workspace</p><h1>Sign in to access projects</h1><span>Your projects and research are available after an administrator authorizes your Google account.</span></section>}
+      {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
@@ -1868,9 +2490,10 @@ function Home({ initialPath, onOpen }: {
         <HomeCatalog onOpen={onOpen}/>
       </section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={launchCreditStreak} onClick={launchCreditPlunk}><span>By Brian Kramer, ChatGPT &amp; Codex</span><time dateTime="2026-10">October 2026</time>{creditStreaks.map(id => <span key={id} className="home-credit-streak" aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
+      {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     </div>
   </div>;
 }
@@ -1972,7 +2595,7 @@ function NewStrategy({ path, onSaved, onCancel, initialDraft }: {
       <input ref={titleInput} id="strategy-title" value={title} maxLength={200} required
         onChange={event => setTitle(event.target.value)} />
       <label htmlFor="strategy-approach">Hypothesis / approach</label>
-      <textarea id="strategy-approach" value={approach} maxLength={10000} required rows={5}
+      <textarea id="strategy-approach" value={approach} maxLength={MAX_STRATEGY_APPROACH} required rows={5}
         onChange={event => setApproach(event.target.value)} />
       {error && <p role="alert" className="error">{error}</p>}
     </fieldset>
@@ -1991,12 +2614,7 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
 function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
-        {!!controls.strategyChoices?.length && controls.strategyChoices.length > 1 && <details className="research-strategy-selection"><summary>Strategies ({controls.selectedStrategyIds?.length ?? 0} selected)</summary><p>Select up to {controls.selectionLimit} strategies. Each selected strategy gets an Investigator/Skeptic pair within the shared call limit.</p><fieldset><legend>Enabled strategies</legend>{controls.strategyChoices.map(strategy => {
-          const selected = controls.selectedStrategyIds?.includes(strategy.id) ?? false;
-          const atLimit = (controls.selectedStrategyIds?.length ?? 0) >= (controls.selectionLimit ?? 0);
-          return <label key={strategy.id}><input type="checkbox" checked={selected} disabled={disabled || !selected && atLimit} onChange={event => controls.onStrategySelectionChange?.(strategy.id, event.target.checked)}/><span>{strategy.title}</span></label>;
-        })}</fieldset></details>}
-        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled || !(controls.selectedStrategyIds?.length) || (controls.selectedStrategyIds?.length ?? 0) > (controls.selectionLimit ?? 0)} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
+        <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
@@ -2028,8 +2646,8 @@ async function readAgenticStream(response: Response, onEvent: (event: AgenticEve
       if (terminal) throw new Error('The server sent progress after its terminal event. You can retry; nothing was saved.');
       sequence = event.sequence; runId = event.run_id;
       const activityKind = event.kind === 'explore' || event.kind === 'challenge' || event.kind === 'revise';
-      if (event.type === 'run.started' && event.max_calls !== 6) throw new Error('The server sent an invalid run limit. You can retry; nothing was saved.');
-      if (event.type.startsWith('activity.') && (!activityKind || !Number.isInteger(event.attempt) || (event.attempt ?? 0) < 1 || (event.attempt ?? 0) > 2)) throw new Error('The server sent an invalid activity event. You can retry; nothing was saved.');
+      if (event.type === 'run.started' && (!Number.isInteger(event.max_calls) || (event.max_calls ?? 0) < 2 || (event.max_calls ?? 0) > 30)) throw new Error('The server sent an invalid run limit. You can retry; nothing was saved.');
+      if (event.type.startsWith('activity.') && (!activityKind || !Number.isInteger(event.attempt) || (event.attempt ?? 0) < 1 || (event.attempt ?? 0) > 15)) throw new Error('The server sent an invalid activity event. You can retry; nothing was saved.');
       if (event.type === 'activity.completed' && typeof event.summary !== 'string') throw new Error('The server sent an incomplete activity result. You can retry; nothing was saved.');
       if (event.type === 'activity.completed' && event.kind === 'challenge' && (!event.assessment || !Array.isArray(event.objections) || typeof event.missing_obligations !== 'string' || typeof event.mechanism_comparison !== 'string')) throw new Error('The server sent an incomplete reviewer summary. You can retry; nothing was saved.');
       if (event.type === 'decision' && (!['revise', 'retry', 'present', 'stop'].includes(event.outcome ?? '') || typeof event.summary !== 'string')) throw new Error('The server sent an invalid coordinator decision. You can retry; nothing was saved.');
@@ -2118,7 +2736,7 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
           setCurrentActivity('');
         }
         if (event.type === 'decision') { setActivities(previous => [...previous, `Decision · ${event.outcome}: ${event.summary}`]); setCurrentActivity(''); }
-        if (event.type === 'run.started') setCurrentActivity('Starting bounded run · up to 6 model calls');
+        if (event.type === 'run.started') setCurrentActivity(`Starting bounded run · up to ${event.max_calls ?? 'configured'} model calls`);
       });
       if (terminal.type === 'run.completed' && terminal.draft && terminal.receipt && terminal.provenance) {
         const next: ProposalResult = { draft: terminal.draft, receipt: terminal.receipt, provenance: terminal.provenance };
@@ -2147,12 +2765,12 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
   return <div ref={composer} className="strategy-form proposal-dialog inline-proposal" role="region" aria-labelledby="proposal-heading" aria-describedby="proposal-help" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
     <div className="proposal-heading-row"><h2 id="proposal-heading">Generate a strategy</h2><button type="button" className="text-view-link proposal-heading-generate" disabled={(!config?.available && !needsConnection) || busy || saving || ai.connecting} onClick={() => void generate()}>{busy ? cancelling ? 'Cancelling…' : ai.connecting ? 'Connecting…' : 'Generating…' : result ? 'Regenerate' : 'Generate'}</button>{result && <button type="submit" form="proposal-save-form" className="text-view-link proposal-heading-save" disabled={busy || saving}>{saving ? 'Accepting…' : 'Accept'}</button>}<button type="button" className="text-view-link proposal-heading-cancel" disabled={saving || cancelling} onClick={() => void cancel()}>{busy ? cancelling ? 'Cancelling…' : "Cancel request" : "Cancel"}</button></div>
     {!busy && <p id="proposal-help" className="hint">Explore and independently challenge a candidate, then review the editable, unsaved draft before accepting.</p>}
-    <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'} · maximum 6 calls / 2 candidates{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
+    <p className="provider-context">{config ? `${config.mode === 'api_key' ? 'OpenAI API · billed separately' : 'Using ChatGPT plan'} · ${config.model} · ${thinkingLabels[config.reasoning_effort] ?? config.reasoning_effort}` : 'Reading AI settings…'} · call limit from this project’s settings{config?.mode === 'chatgpt' && <ManageUsage/>}</p>
     {config && !config.available && <p role="status" className="hint">{config.message}</p>}
     <details className="proposal-context" open={!result}><summary>Generation context &amp; starting point (optional)</summary>
     <label htmlFor="proposal-seed" className="sr-only">Starting point (optional)</label>
     <textarea id="proposal-seed" rows={3} maxLength={4000} value={seed} disabled={busy || saving} onChange={event => setSeed(event.target.value)} aria-describedby="seed-help"/>
-    <p id="seed-help" className="hint">An optional idea or proposed mechanism, not an assumption to accept uncritically. Leave empty for an independent solution.</p>
+    <p id="seed-help" className="hint">An optional idea or mechanism to investigate, not an assumption to accept uncritically. Leave empty for an independent research direction.</p>
     <p className="hint">Generation sends this problem, mode, all strategy titles/approaches (including removed ones), and the starting point to OpenAI. Cancelling disconnects the active run; provider usage may already count toward the selected plan or billing mode.</p>
     </details>
     {(busy || activities.length > 0 || currentActivity) && <section className="agentic-activity" aria-label="Generation progress" aria-live="polite">
@@ -2172,7 +2790,7 @@ function GenerateStrategy({ path, projectId, sourceGuard, onSaved, onCancel }: {
         <legend>Unsaved draft · Review before accepting</legend>
         <label htmlFor="proposal-title">Title</label><input id="proposal-title" required maxLength={200} value={title} onChange={event => setTitle(event.target.value)}/>
         <label htmlFor="proposal-summary">Description</label><input id="proposal-summary" required maxLength={300} value={summary} onChange={event => setSummary(event.target.value)}/>
-        <label htmlFor="proposal-approach">Plan</label><textarea id="proposal-approach" required maxLength={10000} rows={9} value={approach} onChange={event => setApproach(event.target.value)}/>
+        <label htmlFor="proposal-approach">Plan</label><textarea id="proposal-approach" required maxLength={MAX_STRATEGY_APPROACH} rows={12} value={approach} onChange={event => setApproach(event.target.value)}/>
         <p className="hint">AI-assisted suggestion · {result.provenance.provider} / {result.provenance.model}{result.provenance.reasoning_effort ? ` · ${thinkingLabels[result.provenance.reasoning_effort] ?? result.provenance.reasoning_effort} thinking` : ''}. Accepting saves your edits and records your acceptance; reviewer obligations remain open as shown above.</p>
       </fieldset>}
     </form>
@@ -2326,9 +2944,9 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       evidence ? `\nSaved findings and criticism:\n${evidence}` : '',
       '\nParent approach follows:',
     ].filter(Boolean).join('\n');
-    const available = Math.max(0, 10000 - prefix.length - 120);
+    const available = Math.max(0, MAX_STRATEGY_APPROACH - prefix.length - 120);
     const clippedParent = parentApproach.slice(0, available);
-    const approach = `${prefix}\n${clippedParent}${parentApproach.length > clippedParent.length ? '\n[Parent approach shortened to fit; see the source session for the complete saved strategy.]' : ''}`.slice(0, 10000);
+    const approach = `${prefix}\n${clippedParent}${parentApproach.length > clippedParent.length ? '\n[Parent approach shortened to fit; see the source session for the complete saved strategy.]' : ''}`.slice(0, MAX_STRATEGY_APPROACH);
     setManualDraft({
       title: `${session.strategy_title} (Session ${session.session_number} fork)`.slice(0, 200),
       summary: `Fork of ${session.strategy_title} informed by Session #${session.session_number}`.slice(0, 300),
@@ -2418,7 +3036,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId} onManual={startNewStrategy} onAI={startGeneration}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={startGeneration}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
           <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
         </div>
@@ -2438,8 +3056,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
         <ol className="strategy-list" aria-label="Strategies" aria-busy={ordering}>
         {strategies.map(strategy => <li className={`strategy-row${strategies.length === 1 ? ' is-only-strategy' : ''}${!strategy.enabled ? ' is-disabled' : ''}${dragId === strategy.id ? ' is-lifted' : ''}`} key={strategy.id} data-strategy-id={strategy.id}>
           <div className="strategy-row-main">
-            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null} onCommand={(mode, strategy) => {
-              if (ordering || dragId || activeMode !== null) return;
+            <StrategyTitleEditor strategy={strategy} path={view.path} onSaved={setView} modeDisabled={activeMode !== null && activeMode !== `strategy-title-${strategy.id}`} descriptionDraft={combinedTextDrafts[`strategy:${strategy.id}`] ?? strategy.approach} onEnterMode={() => enterMode(`strategy-title-${strategy.id}`)} onExitMode={() => exitMode(`strategy-title-${strategy.id}`)} onEditDescription={() => requestTextEdit(`strategy:${strategy.id}`)} expanded={!collapsedStrategies.has(strategy.id)} onToggle={() => setCollapsedStrategies(current => { const next = new Set(current); if (next.has(strategy.id)) next.delete(strategy.id); else next.add(strategy.id); return next; })} commands={<StrategyCommands strategy={strategy} disabled={activeMode !== null || processControls.confirming} onCommand={(mode, strategy) => {
+              if (ordering || dragId || activeMode !== null || processControls.confirming) return;
               if (mode === 'toggle') {
                 const owner = `strategy-toggle-${strategy.id}`;
                 if (!enterMode(owner)) return;
@@ -2481,7 +3099,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (
@@ -2497,7 +3115,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <ol className="event-list">{project.events.map(event => <li key={event.sequence}>
         <span className="sequence">{String(event.sequence).padStart(2, '0')}</span>
         <div><span>{event.kind}</span><time dateTime={event.timestamp}>{dateLabel(event.timestamp)}</time>
-          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', investigation_type: 'Research type', ai_model: 'AI model', reasoning_effort: 'Thinking level', difficulty: 'Difficulty' })[key]}</dt><dd>Before: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.previous[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.previous[key] as ProjectDifficulty | null) : event.project_change!.previous[key]}<br/>After: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.current[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.current[key] as ProjectDifficulty | null) : event.project_change!.current[key]}</dd></div>)}</dl></details>}
+          {event.project_change && <details className="edit-history"><summary>View project changes</summary><dl>{(Object.keys(event.project_change.current) as (keyof Settings)[]).filter(key => event.project_change!.previous[key] !== event.project_change!.current[key]).map(key => <div key={key}><dt>{({ title: 'Project name', problem: 'Research problem', investigation_type: 'Research type', ai_model: 'AI model', reasoning_effort: 'Thinking level', difficulty: 'Difficulty', show_advanced_outcome_details: 'Advanced Outcome details' })[key]}</dt><dd>Before: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.previous[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.previous[key] as ProjectDifficulty | null) : event.project_change!.previous[key]}<br/>After: {key === 'investigation_type' ? researchTypeLabel(String(event.project_change!.current[key])) : key === 'difficulty' ? difficultyLabel(event.project_change!.current[key] as ProjectDifficulty | null) : event.project_change!.current[key]}</dd></div>)}</dl></details>}
           {event.stage_change && <p>Manually tracked: {stageLabels[event.stage_change.previous]} → {stageLabels[event.stage_change.stage]}</p>}
           {event.order && <details><summary>Saved order</summary><ol>{event.order.map(id => <li key={id}>{byId.get(id)?.title ?? id}</li>)}</ol></details>}
           {event.change && <details className="edit-history"><summary>View changes</summary>
@@ -2547,7 +3165,7 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null };
+type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudFunding = { target: 'local' | 'hosted'; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean };
@@ -2575,7 +3193,7 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
   }, []);
   const project = audit?.project;
   return <main className="cloud-demo-page">
-    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Continue with Google</a>}</nav></header>
+    <header className="cloud-demo-header"><a className="cloud-demo-brand" href="/">SIGMA</a><nav aria-label="Demo navigation"><a href={deniedEmail ? '/?access=denied' : '/'}>{deniedEmail ? 'Invitation request' : 'Home'}</a>{authenticated ? <><span>{user?.email}</span><button onClick={async () => { await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); window.location.assign('/demo'); }}>Sign out</button></> : <a className="cloud-demo-signin" href="/api/cloud-auth/login">Sign in with Google</a>}</nav></header>
     <section className="cloud-demo-intro"><p className="cloud-auth-kicker">Public read-only preview</p><h1>Explore a SIGMA research project</h1><p>Inspect a curated saved project, its strategies, research sessions, outcomes, computational evidence and report exports. This shared Demo does not create a workspace or run agents.</p></section>
     {error && <section className="cloud-demo-state" role="alert"><h2>Demo unavailable</h2><p>{error}</p></section>}
     {!audit && !error && <p className="cloud-demo-state" role="status">Loading saved Demo data…</p>}
@@ -2594,10 +3212,38 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
   const [open, setOpen] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
+  const disclosure = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const [error, setError] = useState('');
-  useEffect(() => { if (open && !dialog.current?.open) dialog.current?.showModal(); }, [open]);
-  const target = cloud?.target === 'hosted' ? 'Hosted SIGMA service' : 'Local SIGMA';
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = disclosure.current?.getBoundingClientRect();
+      if (!rect || !panel.current) return;
+      const panelRect = panel.current.getBoundingClientRect();
+      const below = rect.bottom + 8 + panelRect.height <= window.innerHeight - 8;
+      const right = Math.min(Math.max(8, window.innerWidth - rect.right), Math.max(8, window.innerWidth - panelRect.width - 8));
+      setPosition({ top: below ? rect.bottom + 8 : Math.max(8, rect.top - panelRect.height - 8), right });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      panel.current?.querySelector<HTMLElement>('button:not(:disabled), a[href]')?.focus();
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
+      if (event.key !== 'Tab' || !panel.current) return;
+      const items = Array.from(panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]')).filter(item => item.offsetParent !== null);
+      if (!items.length) { event.preventDefault(); panel.current.focus(); return; }
+      const first = items[0]; const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', escape);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', escape); };
+  }, [open]);
+  function close() { setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
+  function dismissBackdrop(event: ReactPointerEvent<HTMLDivElement>) { if (event.target === event.currentTarget) close(); }
   async function signOut() {
     setError('');
     try {
@@ -2606,27 +3252,41 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
       window.location.assign('/');
     } catch (cause) { setError(errorMessage(cause)); }
   }
-  const description = cloud?.authenticated ? 'Open Google account settings' : cloud?.enabled ? 'Open Google sign-in' : 'Google sign-in is unavailable in this local workspace.';
+  const canSignIn = !!cloud?.enabled && cloud.ready;
+  const setupMissing = cloud?.local_setup_missing ?? [];
+  const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
-    <button type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip={description} disabled={!cloud?.enabled} onClick={() => setOpen(true)}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-active' : ''}`} aria-hidden="true"/><span>Google Sign-in</span><small>{cloud?.authenticated ? 'Signed in' : cloud?.enabled ? 'Sign in' : 'Coming soon'}</small>
+    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
     </button>
-    {open && createPortal(<dialog ref={dialog} className="google-account-dialog" aria-labelledby="google-account-title" onCancel={event => { event.preventDefault(); dialog.current?.close(); setOpen(false); }} onClose={() => setOpen(false)}>
-      <p className="cloud-auth-kicker">Verified Google account</p>
-      <h2 id="google-account-title">Google Sign-in</h2>
-      <p className="google-account-target">Authorization target: <strong>{target}</strong></p>
-      {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
-      {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-      {!cloud?.authenticated && <a className="cloud-text-button" href="/api/cloud-auth/login">Continue with Google</a>}
-      {cloud?.authenticated && <><button type="button" className="cloud-text-button" onClick={() => { window.location.assign('/api/cloud-auth/login'); }}>Use another Google account</button><button type="button" className="cloud-text-button" onClick={() => void signOut()}>Sign out</button></>}
+    {open && createPortal(<>
+      <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
+      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
+      {!cloud ? <>
+        <h2 id="google-account-title">Checking Google sign-in</h2>
+        <p>SIGMA is checking the local Google authentication configuration.</p>
+      </> : !canSignIn && !cloud.authenticated ? <>
+        <h2 id="google-account-title">Google sign-in setup required</h2>
+        <p>Local Google sign-in is unavailable because the current SIGMA launch is missing required configuration.</p>
+        {setupMissing.length > 0 && <p className="google-setup-missing">Missing: {setupMissing.map(name => <code key={name}>{name}</code>)}</p>}
+        {setupMissing.length === 0 && <p>Local Google authentication is not enabled for this server process. Restart using <code>./sigma start --nav</code> after exporting the required settings.</p>}
+        <p>Set the missing values in the environment used to start SIGMA. Put the Google OAuth client ID and secret in this checkout’s <code>.env</code>. Set <code>SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL</code> to the operator’s actual Gmail address. If that value is in <code>~/.bashrc</code>, run <code>source ~/.bashrc</code> in the launching shell, then restart with <code>./sigma start --nav</code>.</p>
+        <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
+      </> : <>
+        {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
+        {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
+        {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
+        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Sign in with Google</a>}
+        {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
+      </>}
       {error && <p role="alert">{error}</p>}
-      <button type="button" className="cloud-text-button google-account-close" onClick={() => { dialog.current?.close(); setOpen(false); }}>Close</button>
-    </dialog>, document.body)}
+      </div>
+    </>, document.body)}
   </>;
 }
 function allowanceInput(value: number | null) { return value === null ? '' : value.toFixed(2); }
-function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, error, busy, onClose, onAdd, onSave, onRevoke }: {
-  target: 'local' | 'hosted'; bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
+function AccessManagementDialog({ bootstrapAdmin, grants, sessions, error, busy, onClose, onAdd, onSave, onRevoke }: {
+  bootstrapAdmin: string; grants: CloudGrant[]; sessions: CloudAccountSession[];
   error: string; busy: boolean; onClose: () => void;
   onAdd: (entry: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }) => Promise<void>;
   onSave: (updates: { kind: 'email' | 'domain'; value: string; role: 'member' | 'admin'; allowance_usd: number | null }[]) => Promise<void>;
@@ -2639,12 +3299,97 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
   const [newValue, setNewValue] = useState('');
   const [newRole, setNewRole] = useState<'member' | 'admin'>('member');
   const [newAllowance, setNewAllowance] = useState('');
+  const addButton = useRef<HTMLButtonElement>(null);
+  const newEntryPanel = useRef<HTMLDivElement>(null);
+  const [newEntryPosition, setNewEntryPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  const [confirmRemoveKey, setConfirmRemoveKey] = useState('');
+  const [removeConfirmationPosition, setRemoveConfirmationPosition] = useState<{ left: number; top: number } | null>(null);
+  const removeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const removeConfirmation = useRef<HTMLDivElement>(null);
+  const removeConfirmButton = useRef<HTMLButtonElement>(null);
   const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'access' | 'usage'>('access');
   useEffect(() => {
     setDrafts(Object.fromEntries(grants.map(grant => [`${grant.kind}:${grant.value}`, { role: grant.role, allowance: allowanceInput(grant.allowance_usd) }])));
   }, [grants]);
   useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
-  const ordered = [...grants].sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
+  useEffect(() => {
+    if (!addOpen) {
+      setNewEntryPosition(null);
+      return;
+    }
+    const place = () => {
+      const panel = newEntryPanel.current?.getBoundingClientRect();
+      const parent = dialog.current?.getBoundingClientRect();
+      if (!parent) return;
+      const width = panel?.width ?? Math.min(340, parent.width - 24);
+      const height = panel?.height ?? 300;
+      const maxHeight = Math.max(140, Math.min(window.innerHeight - 16, parent.height - 24));
+      const left = parent.left + (parent.width - width) / 2;
+      const top = parent.top + (parent.height - Math.min(height, maxHeight)) / 2;
+      setNewEntryPosition({ left, top, maxHeight });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      newEntryPanel.current?.querySelector<HTMLInputElement>('input')?.focus();
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelAdd();
+      }
+    };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape, true);
+    };
+  }, [addOpen]);
+  useEffect(() => {
+    if (!confirmRemoveKey) {
+      setRemoveConfirmationPosition(null);
+      return;
+    }
+    const place = () => {
+      const anchor = removeButtons.current.get(confirmRemoveKey)?.getBoundingClientRect();
+      const popover = removeConfirmation.current?.getBoundingClientRect();
+      const parent = dialog.current?.getBoundingClientRect();
+      if (!anchor || !parent) return;
+      const width = popover?.width ?? Math.min(280, window.innerWidth - 24);
+      const height = popover?.height ?? 100;
+      const left = Math.max(parent.left + 12, Math.min(anchor.right - width, parent.right - width - 12));
+      const belowSpace = Math.max(0, parent.bottom - anchor.bottom - 8);
+      const aboveSpace = Math.max(0, anchor.top - parent.top - 8);
+      const below = height <= belowSpace || belowSpace >= aboveSpace;
+      const top = below ? Math.min(anchor.bottom + 8, parent.bottom - height - 8) : Math.max(parent.top + 8, anchor.top - height - 8);
+      setRemoveConfirmationPosition({ left, top });
+    };
+    const frame = requestAnimationFrame(() => {
+      place();
+      removeConfirmButton.current?.focus();
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setConfirmRemoveKey('');
+      }
+    };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    document.addEventListener('keydown', escape, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      document.removeEventListener('keydown', escape, true);
+      requestAnimationFrame(() => removeButtons.current.get(confirmRemoveKey)?.focus());
+    };
+  }, [confirmRemoveKey]);
+  const ordered = grants.filter(grant => grant.active === 1).sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: 'base' }) || a.kind.localeCompare(b.kind));
   const changed = ordered.filter(grant => {
     const key = `${grant.kind}:${grant.value}`; const draft = drafts[key];
     return grant.active === 1 && draft && (draft.role !== grant.role || draft.allowance.trim() !== allowanceInput(grant.allowance_usd));
@@ -2653,7 +3398,7 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
   const draftsValid = changed.every(grant => validation(drafts[`${grant.kind}:${grant.value}`]?.allowance ?? ''));
   const hasDrafts = changed.length > 0;
   function requestClose() {
-    if (hasDrafts && !window.confirm('Discard only the unsaved role or allowance edits? Completed Add, Revoke, and Save actions remain in effect.')) return;
+    if (hasDrafts && !window.confirm('Discard only the unsaved role or allowance edits? Completed Add, Remove, and Save actions remain in effect.')) return;
     dialog.current?.close(); onClose();
   }
   async function addEntry() {
@@ -2661,8 +3406,13 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
     if (!value || !validation(newAllowance) || value.includes('@') !== (newKind === 'email')) return;
     try {
       await onAdd({ kind: newKind, value, role: newKind === 'domain' ? 'member' : newRole, allowance_usd: newAllowance.trim() ? Number(newAllowance) : null });
-      setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('Authorization added.');
+      setNewValue(''); setNewAllowance(''); setAddOpen(false); setMessage('');
+      requestAnimationFrame(() => addButton.current?.focus());
     } catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be added.'); }
+  }
+  function cancelAdd() {
+    setNewValue(''); setNewAllowance(''); setNewKind('email'); setNewRole('member'); setAddOpen(false);
+    requestAnimationFrame(() => addButton.current?.focus());
   }
   async function saveUpdates() {
     if (!hasDrafts || !draftsValid) return;
@@ -2674,44 +3424,57 @@ function AccessManagementDialog({ target, bootstrapAdmin, grants, sessions, erro
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Updates could not be saved.'); }
   }
   async function revoke(grant: CloudGrant) {
-    if (!window.confirm(`Revoke ${grant.value}? Recorded usage will be retained.`)) return;
-    try { await onRevoke(grant); setMessage(`Revoked ${grant.value}.`); }
+    try { await onRevoke(grant); setConfirmRemoveKey(''); setMessage(''); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Authorization could not be revoked.'); }
   }
   const currency = (value: number | null | undefined) => value === null || value === undefined ? '—' : `$${value.toFixed(2)}`;
   return <dialog ref={dialog} className="cloud-access-dialog" aria-labelledby="cloud-access-title" onCancel={event => { event.preventDefault(); requestClose(); }}>
     <div className="admin-dialog-heading"><h2 id="cloud-access-title">Administrator Settings</h2><button type="button" className="admin-text-action" onClick={requestClose}>Close</button></div>
-    <p className="admin-target">{target === 'local' ? 'Local SIGMA access rules' : 'Hosted SIGMA access rules'}</p>
-    <div className="admin-tabs" role="tablist" aria-label="Administrator settings"><button type="button" role="tab" aria-selected="true" aria-controls="access-management-panel" id="access-management-tab">Access Management</button></div>
-    <section id="access-management-panel" role="tabpanel" aria-labelledby="access-management-tab" className="admin-access-panel">
+    <div className="admin-tabs" role="tablist" aria-label="Administrator settings" onKeyDown={event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 'access' : event.key === 'End' ? 'usage' : event.key === 'ArrowRight' ? (activeTab === 'access' ? 'usage' : 'access') : (activeTab === 'usage' ? 'access' : 'usage');
+      setActiveTab(next); requestAnimationFrame(() => document.getElementById(next === 'access' ? 'access-management-tab' : 'account-usage-tab')?.focus());
+    }}>
+      <button type="button" role="tab" id="access-management-tab" aria-controls="access-management-panel" aria-selected={activeTab === 'access'} tabIndex={activeTab === 'access' ? 0 : -1} onClick={() => setActiveTab('access')}>Access Management</button>
+      <button type="button" role="tab" id="account-usage-tab" aria-controls="account-usage-panel" aria-selected={activeTab === 'usage'} tabIndex={activeTab === 'usage' ? 0 : -1} onClick={() => setActiveTab('usage')}>Account usage</button>
+    </div>
+    <section id="access-management-panel" role="tabpanel" tabIndex={0} aria-labelledby="access-management-tab" className="admin-access-panel" hidden={activeTab !== 'access'}>
       <p className="admin-access-note">Authorized email and domain rules. Domain allowances apply separately to each person; email rules take precedence.</p>
-      <p className="cloud-access-bootstrap">Bootstrap administrator: {bootstrapAdmin || 'not configured'}</p>
-      <details className="admin-spending-disclosure"><summary>Recorded account usage</summary>
-        {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th>Email</th><th>Access</th><th>Allowance</th><th>Estimated</th><th>Held</th><th>Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
-      </details>
-      <div className="admin-table-heading"><h3>Authorizations</h3><button type="button" className="admin-add-toggle" aria-label={addOpen ? 'Hide new authorization row' : 'Add authorization'} aria-expanded={addOpen} onClick={() => setAddOpen(value => !value)}>+</button></div>
-      <div className="admin-table-scroll"><table className="admin-grants-table"><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
+      <p className="cloud-access-bootstrap">Built-in administrator: {bootstrapAdmin || 'not configured'}</p>
+      <div className="admin-table-heading"><h3>Authorized users</h3></div>
+      <div className="admin-table-scroll"><table className="admin-grants-table"><colgroup><col style={{ width: '35%' }}/><col style={{ width: '14%' }}/><col style={{ width: '32%' }}/><col style={{ width: '19%' }}/></colgroup><thead><tr><th scope="col">Email / Domain</th><th scope="col">Role</th><th scope="col">ChatGPT Allowance</th><th scope="col">Actions</th></tr></thead><tbody>
         {ordered.map(grant => {
           const key = `${grant.kind}:${grant.value}`; const draft = drafts[key] ?? { role: grant.role, allowance: allowanceInput(grant.allowance_usd) };
           const isBootstrap = grant.kind === 'email' && grant.value.toLowerCase() === bootstrapAdmin.toLowerCase();
           return <tr key={key} className={grant.active ? '' : 'is-revoked'}>
-            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Revoked'}</small></th>
+            <th scope="row"><span className="admin-entry-value">{grant.value}</span><small>{grant.kind === 'email' ? 'Email' : 'Domain'}{grant.active ? '' : ' · Removed'}</small></th>
             <td>{grant.kind === 'domain' ? <span>Member</span> : <select aria-label={`Role for ${grant.value}`} value={draft.role} disabled={!grant.active || isBootstrap || busy} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, role: event.target.value } }))}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
             <td><label className="admin-allowance-input"><span className="sr-only">ChatGPT allowance for {grant.value}</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={draft.allowance} disabled={!grant.active || busy} aria-invalid={!validation(draft.allowance)} aria-describedby={`allowance-${grant.kind}-${grant.value}`} onChange={event => setDrafts(value => ({ ...value, [key]: { ...draft, allowance: event.target.value } }))}/></label><small id={`allowance-${grant.kind}-${grant.value}`}>{validation(draft.allowance) ? `Effective ${currency(grant.effective_allowance_usd)}` : 'Enter $0.01 to $15.00'}</small></td>
-            <td>{grant.active === 1 && !isBootstrap && <button type="button" className="admin-text-action admin-revoke" disabled={busy} onClick={() => void revoke(grant)}>Revoke</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
+            <td>{grant.active === 1 && !isBootstrap && <button ref={element => { if (element) removeButtons.current.set(key, element); else removeButtons.current.delete(key); }} type="button" className="admin-text-action admin-remove" aria-expanded={confirmRemoveKey === key} disabled={busy} onClick={() => setConfirmRemoveKey(current => current === key ? '' : key)}>Remove</button>}{isBootstrap && <span className="admin-protected-entry">Protected</span>}</td>
           </tr>;
         })}
-        {addOpen && <tr className="admin-new-entry-row">
-          <th scope="row"><label><span className="sr-only">Entry type</span><select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label><input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></th>
-          <td>{newKind === 'domain' ? <span>Member</span> : <select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select>}</td>
-          <td><label className="admin-allowance-input"><span className="sr-only">New ChatGPT allowance</span><span aria-hidden="true">$</span><input type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></label><small>Blank uses the configured default</small></td>
-          <td><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button></td>
-        </tr>}
-        {!ordered.length && !addOpen && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
+        {!ordered.length && <tr><td colSpan={4} className="admin-empty-row">No authorization entries yet.</td></tr>}
+        <tr className="admin-add-row"><td/><td/><td/><td><button ref={addButton} type="button" className="admin-text-action" aria-expanded={addOpen} onClick={() => setAddOpen(true)}>New</button></td></tr>
       </tbody></table></div>
       {hasDrafts && <div className="admin-save-row"><p>{draftsValid ? `${changed.length} unsaved change${changed.length === 1 ? '' : 's'}.` : 'Correct invalid allowance values before saving.'}</p><button type="button" className="admin-text-action" disabled={busy || !draftsValid} onClick={() => void saveUpdates()}>Save Updates</button></div>}
       {(message || error) && <p role={error || message.includes('could not') ? 'alert' : 'status'} className="admin-feedback">{error || message}</p>}
     </section>
+    <section id="account-usage-panel" role="tabpanel" tabIndex={0} aria-labelledby="account-usage-tab" className="admin-usage-panel" hidden={activeTab !== 'usage'}>
+      <h3>Account usage</h3>
+      {sessions.length ? <div className="admin-table-scroll"><table className="admin-usage-table"><thead><tr><th scope="col">Email</th><th scope="col">Access</th><th scope="col">Allowance</th><th scope="col">Estimated</th><th scope="col">Held</th><th scope="col">Remaining</th></tr></thead><tbody>{sessions.map(session => <tr key={session.email}><th scope="row">{session.email}</th><td>{session.status} · {session.role}</td><td>{currency(session.allowance_usd)}</td><td>{currency(session.spending?.estimated_usage_usd)}</td><td>{currency(session.spending?.held_usd)}</td><td>{currency(session.spending?.remaining_usd)}</td></tr>)}</tbody></table></div> : <p className="cloud-access-bootstrap">No account usage has been recorded.</p>}
+    </section>
+    {addOpen && createPortal(<div ref={newEntryPanel} className="admin-new-entry-panel" role="group" aria-label="Add authorized user" style={newEntryPosition ? { left: newEntryPosition.left, top: newEntryPosition.top, maxHeight: newEntryPosition.maxHeight } : { left: -10000, top: -10000 }}>
+      <h3>New Email or Domain</h3>
+      <div className="admin-new-entry-classification"><label>Entry type<select value={newKind} onChange={event => setNewKind(event.target.value as 'email' | 'domain')}><option value="email">Email</option><option value="domain">Domain</option></select></label>{newKind === 'email' && <label>Role<select aria-label="New authorization role" value={newRole} onChange={event => setNewRole(event.target.value as 'member' | 'admin')}><option value="member">Member</option><option value="admin">Admin</option></select></label>}</div>
+      <label>{newKind === 'email' ? 'Email address' : 'Domain'}<input aria-label={newKind === 'email' ? 'New email address' : 'New domain'} value={newValue} placeholder={newKind === 'email' ? 'person@example.org' : 'example.org'} onChange={event => setNewValue(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void addEntry(); } }}/></label>
+      <label>ChatGPT allowance<span className="admin-allowance-input"><span aria-hidden="true">$</span><input aria-label="New ChatGPT allowance" type="text" inputMode="decimal" value={newAllowance} placeholder="Default" aria-invalid={!validation(newAllowance)} onChange={event => setNewAllowance(event.target.value)}/></span><small>Blank uses the configured default</small></label>
+      <div className="admin-new-entry-actions"><button type="button" className="admin-text-action" disabled={busy || !newValue.trim() || !validation(newAllowance) || newValue.includes('@') !== (newKind === 'email')} onClick={() => void addEntry()}>Add</button><button type="button" className="admin-text-action" disabled={busy} onClick={cancelAdd}>Cancel</button></div>
+    </div>, dialog.current ?? document.body)}
+    {confirmRemoveKey && createPortal(<div ref={removeConfirmation} className="admin-remove-confirm" role="group" aria-label={`Confirm remove access for ${confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}`} style={removeConfirmationPosition ? { left: removeConfirmationPosition.left, top: removeConfirmationPosition.top } : { left: -10000, top: -10000 }}>
+      <p>Remove access for {confirmRemoveKey.slice(confirmRemoveKey.indexOf(':') + 1)}? Recorded usage will be retained.</p>
+      <div className="admin-remove-confirm-actions"><button ref={removeConfirmButton} type="button" className="admin-text-action admin-remove" disabled={busy} onClick={() => { const grant = grants.find(item => `${item.kind}:${item.value}` === confirmRemoveKey); if (grant) void revoke(grant); }}>Confirm</button><button type="button" className="admin-text-action" disabled={busy} onClick={() => setConfirmRemoveKey('')}>Cancel</button></div>
+    </div>, dialog.current ?? document.body)}
   </dialog>;
 }
 
@@ -2799,13 +3562,12 @@ function CloudAuthGate() {
     } finally { setBusy(false); }
   }
   const funding: CloudFunding = { target: status?.target ?? 'local', budget, loading: budgetLoading, error: budgetError, authorized: !!status?.authenticated };
-  const context: CloudIdentityState | null = status?.enabled ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
+  const context: CloudIdentityState | null = status ? { ...status, deniedEmail, funding, openAccessManagement: () => { setAccessOpen(true); setFailure(''); void loadGrants().catch(error => setFailure(error instanceof Error ? error.message : 'Access rules could not be loaded.')); } } : null;
   if (!status) return <main className="cloud-auth-shell"><p role="status">Checking access…</p></main>;
-  if (!status.enabled) return <AIProvider><App/></AIProvider>;
+  if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (!status.ready) return <main className="cloud-auth-shell"><section className="cloud-auth-card"><h1>SIGMA is not ready</h1><p>{failure}</p></section></main>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
-  const target = status.target ?? 'hosted';
-  return <CloudIdentityContext.Provider value={context}><AIProvider>{status.authenticated ? <App/> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}</AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog target={target} bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}><AIProvider>{status.authenticated ? <App/> : <main className="home-page"><Home initialPath="" onOpen={() => {}}/></main>}</AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant}/>}</CloudIdentityContext.Provider>;
 }
 
 function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail: string | null }) {

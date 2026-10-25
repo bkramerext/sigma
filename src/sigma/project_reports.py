@@ -11,6 +11,12 @@ import subprocess
 import tempfile
 from typing import Any, cast
 
+from sigma.research_epistemics import (
+    argument_availability,
+    execution_provenance,
+    verification_label,
+)
+
 
 def _value(value: Any) -> str:
     if value is None:
@@ -106,12 +112,64 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
             f"Started: {_value(session.get('started_at') or session.get('created_at'))}",
             "",
         ]
+        # Show independently persisted execution facts before any authored narrative.
+        # A model's conclusion may claim measurements that never ran.
+        provenance = execution_provenance(session)
+        lines += [
+            "Recorded computation provenance",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+            provenance["note"],
+            (
+                f"Persisted executions: {len(provenance['records'])} identified; "
+                f"{provenance['unidentified_count']} without an ID; "
+                f"{provenance['completed_count']} with unambiguous completed status."
+            ),
+        ]
+        if provenance["completed_without_recorded_io_count"]:
+            lines.append(
+                "Warning: "
+                f"{provenance['completed_without_recorded_io_count']} "
+                "completed-status execution record(s) lack saved source or output. "
+                "A completion label alone is not a measured result."
+            )
+        for execution in provenance["records"]:
+            refs = (
+                "; ".join(
+                    [f"artifact {value}" for value in execution["artifact_ids"]]
+                    + [f"step {value}" for value in execution["step_ids"]]
+                )
+                or "no owning artifact/step reference recorded"
+            )
+            lines.append(
+                f"Execution {_value(execution['id'])}: {_value(execution['runtime'])} · "
+                f"status {' / '.join(execution['statuses'])} · {refs}; "
+                f"source {'recorded' if execution['source_recorded'] else 'unavailable'}, "
+                f"output {'recorded' if execution['output_recorded'] else 'unavailable'}"
+            )
+        lines += [
+            "",
+            (
+                "Authored conclusion below is agent-reported; a recorded execution does not "
+                "independently validate its interpretation."
+            ),
+            "",
+        ]
         if outcome.get("summary"):
             lines += [f"Outcome summary: {_value(outcome.get('summary'))}", ""]
+        conclusion = outcome.get("conclusion")
+        if isinstance(conclusion, str) and conclusion.strip():
+            lines += ["Conclusion", "~~~~~~~~~~", conclusion.strip(), ""]
         if _items(outcome.get("caveats")):
             lines += ["Outcome caveats:"]
             lines += [f"- {item}" for item in _items(outcome.get("caveats"))]
             lines.append("")
+        review_raw = outcome.get("solution_review")
+        presentation_review = review_raw if isinstance(review_raw, dict) else None
+        lines += [f"Verification: {verification_label(presentation_review)}"]
+        lines += [
+            argument_availability(presentation_review, _rows(session.get("artifacts")))["label"],
+            "",
+        ]
         metrics_raw = outcome.get("metrics")
         metrics = cast(dict[str, Any], metrics_raw) if isinstance(metrics_raw, dict) else {}
         operational = _rows(metrics.get("operational"))
@@ -126,24 +184,83 @@ def _report_lines(data: dict[str, Any]) -> list[str]:
                     continue
                 lines += [heading, "~" * len(heading)]
                 for item in items:
-                    lines.append(f"{_value(item.get('label'))}: {_value(item.get('value'))}")
+                    value = (
+                        verification_label(presentation_review)
+                        if item.get("label") in {"Verification", "Verification status"}
+                        else _value(item.get("value"))
+                    )
+                    lines.append(f"{_value(item.get('label'))}: {value}")
                 lines.append("")
         solution_review = outcome
         solution_review = solution_review.get("solution_review")
         review = solution_review
         if isinstance(review, dict):
             lines += [
+                f"Claim scope: {_value(review.get('claim_scope', 'not recorded'))}",
                 f"Solution claim: {_value(review.get('claim'))}",
                 f"Argument: {_value(review.get('argument_summary'))}",
+                f"Skeptic response: {_value(review.get('skeptic_response'))}",
                 f"Assumptions reviewed: {'; '.join(_items(review.get('assumptions'))) or 'Not recorded'}",
-                f"Proof obligations: {'; '.join(_items(review.get('proof_obligations'))) or 'Not recorded'}",
+                f"Proof obligations considered: {'; '.join(_items(review.get('proof_obligations'))) or 'Not recorded'}",
+                f"Still open: {'; '.join(_items(review.get('open_obligations'))) or 'None recorded'}",
                 f"Solution evidence references: {'; '.join(_items(review.get('basis_artifact_ids'))) or 'Not recorded'}",
                 f"Unresolved objections: {'; '.join(_items(review.get('unresolved_objections'))) or 'None recorded'}",
                 f"Resolved review notes: {'; '.join(_items(review.get('resolved_objections'))) or 'None recorded'}",
                 "",
             ]
+            lines += [
+                f"Skeptic objection: {item}" for item in _items(review.get("skeptic_objections"))
+            ]
+            if _items(review.get("skeptic_objections")):
+                lines.append("")
             if review.get("verification_status", "unknown") != "unknown":
-                lines.insert(-1, f"Verification status: {_value(review['verification_status'])}")
+                lines.insert(
+                    -1, f"Saved verification code: {_value(review['verification_status'])}"
+                )
+            argument_steps = _rows(review.get("argument_steps"))
+            if argument_steps:
+                lines += ["Reviewed reasoning", "~~~~~~~~~~~~~~~~~"]
+                for step in argument_steps:
+                    lines += [
+                        f"Step {step.get('number', '?')}: {_value(step.get('title'))}",
+                        f"Epistemic status: {_value(step.get('epistemic_status'))}",
+                        _value(step.get("argument")),
+                        f"Research artifact: {_value(step.get('research_artifact_id'))}",
+                        f"Source artifacts: {'; '.join(_items(step.get('basis_artifact_ids'))) or 'Current research artifact'}",
+                    ]
+                    step_review = step.get("review")
+                    if isinstance(step_review, dict):
+                        lines += [
+                            f"Skeptic disposition: {_value(step_review.get('disposition'))}",
+                            f"Skeptic rationale: {_value(step_review.get('rationale'))}",
+                        ]
+                    lines.append("")
+            for finding in _rows(review.get("strategy_findings")):
+                lines += [
+                    f"Strategy finding: {_value(finding.get('strategy_title'))} · {_value(finding.get('status'))}",
+                    f"Strategy execution status: {_value(finding.get('execution_status'))}",
+                    f"Strategy failure detail: {_value(finding.get('failure_reason'))}",
+                    f"Claim: {_value(finding.get('claim'))}",
+                    f"Source artifacts: {'; '.join(_items(finding.get('research_artifact_ids'))) or _value(finding.get('research_artifact_id'))}",
+                ]
+                for step in _rows(finding.get("reasoning_steps")):
+                    lines += [
+                        f"Step {step.get('number', '?')}: {_value(step.get('title'))} ({_value(step.get('epistemic_status'))})",
+                        _value(step.get("argument")),
+                    ]
+                    step_review = step.get("review")
+                    if isinstance(step_review, dict):
+                        lines.append(
+                            f"Skeptic review: {_value(step_review.get('disposition'))} · {_value(step_review.get('rationale'))}"
+                        )
+                        if step_review.get("objection"):
+                            lines.append(f"Objection: {_value(step_review.get('objection'))}")
+                for label, key in (
+                    ("Objection", "objections"),
+                    ("Open obligation", "open_obligations"),
+                ):
+                    lines += [f"{label}: {item}" for item in _items(finding.get(key))]
+                lines.append("")
         assessments = _rows(session.get("strategy_assessments"))
         if assessments:
             lines += ["Strategy Assessments", "--------------------"]
@@ -790,16 +907,22 @@ def _latex_document(data: dict[str, Any], lines: list[str]) -> str:
     return "\n".join(output) + "\n"
 
 
-def _compile_pdf(tex: str) -> bytes:
+def _compile_pdf(
+    tex: str,
+    *,
+    max_source_bytes: int = 2_000_000,
+    timeout_seconds: int = 45,
+    max_pdf_bytes: int = 20_000_000,
+) -> bytes:
     executable = shutil.which(os.environ.get("SIGMA_TECTONIC", "tectonic"))
     if not executable:
         raise RuntimeError(
             "PDF export requires Tectonic. Install Tectonic and retry; no file was downloaded."
         )
     with tempfile.TemporaryDirectory(prefix="sigma-report-") as directory:
-        if len(tex.encode("utf-8")) > 2_000_000:
+        if len(tex.encode("utf-8")) > max_source_bytes:
             raise RuntimeError(
-                "Research report is too large to typeset (2 MB limit). No file was downloaded."
+                f"Research report is too large to typeset ({max_source_bytes} byte source limit). No file was downloaded."
             )
         source = os.path.join(directory, "report.tex")
         with open(source, "w", encoding="utf-8") as file:
@@ -824,12 +947,12 @@ def _compile_pdf(tex: str) -> bytes:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                timeout=45,
+                timeout=timeout_seconds,
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(
-                "PDF compilation exceeded 45 seconds. No file was downloaded."
+                f"PDF compilation exceeded {timeout_seconds} seconds. No file was downloaded."
             ) from exc
         pdf_path = os.path.join(directory, "report.pdf")
         if result.returncode != 0 or not os.path.isfile(pdf_path):
@@ -838,10 +961,10 @@ def _compile_pdf(tex: str) -> bytes:
                 "Tectonic could not compile this report. No PDF was downloaded. " + detail
             )
         with open(pdf_path, "rb") as file:
-            pdf = file.read(20_000_001)
-        if not pdf.startswith(b"%PDF-") or len(pdf) > 20_000_000:
+            pdf = file.read(max_pdf_bytes + 1)
+        if not pdf.startswith(b"%PDF-") or len(pdf) > max_pdf_bytes:
             raise RuntimeError(
-                "PDF compiler output was invalid or exceeded 20 MB. No file was downloaded."
+                f"PDF compiler output was invalid or exceeded {max_pdf_bytes} bytes. No file was downloaded."
             )
         return pdf
 

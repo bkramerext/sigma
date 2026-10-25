@@ -1,9 +1,13 @@
 .connection-details { max-height: min(560px, calc(100dvh - 170px)); overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+.connection-details :is(.account-label, .google-account-email) { margin: 0 0 12px; color: #f0cca0; font: 400 15px/1.7 Inter, ui-sans-serif, system-ui, sans-serif; }
 .connection-details button { margin: 4px 6px 6px 0; min-height: 36px; }
 .connection-details a, .plan-welcome a { color: #e4b87f; display: inline-block; padding: 6px 0; }
 .connection-details label { display: block; font-size: 12px; margin: 10px 0; }
 .connection-details select { width: 100%; background: #07111e; color: #dce7f0; border: 1px solid #826442; padding: 8px; font-size: 12px; }
-.chatgpt-sign-in, .connection-details .chatgpt-sign-in { background: #fff; color: #111; border: 1px solid #fff; border-radius: 6px; font: 600 14px/1.5 ui-sans-serif, system-ui, sans-serif; padding: 10px 14px; min-height: 44px; }
+.chatgpt-sign-in, .connection-details .chatgpt-sign-in { display: inline-flex; align-items: center; justify-content: center; gap: 5px; background: linear-gradient(112deg, #b98149, #edc48b 52%, #bd874e); color: #1e1409; border: 1px solid #dfb476; border-radius: 5px; box-shadow: inset 0 1px 0 #ffe0ab80, 0 0 16px #aa74351a; font: 600 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; padding: 9px 12px; min-height: 38px; cursor: pointer; }
+.chatgpt-sign-in:hover:not(:disabled), .connection-details .chatgpt-sign-in:hover:not(:disabled) { background: linear-gradient(112deg, #d09a61, #f5d4a0 52%, #ce9a60); color: #1e1409; }
+.chatgpt-sign-in:focus-visible, .connection-details .chatgpt-sign-in:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+.chatgpt-sign-in:disabled, .connection-details .chatgpt-sign-in:disabled { opacity: .65; cursor: not-allowed; }
 .ai-connect-actions p { margin: 8px 0; }
 .advanced-ai { margin-top: 10px; font-size: 12px; }
 .advanced-ai summary { cursor: pointer; padding: 8px 0; }
@@ -15,4 +19,12 @@
 .plan-welcome-toast { position: fixed; bottom: 18px; right: 18px; width: min(360px, calc(100vw - 36px)); z-index: 100; }
 .ai-connect-actions { margin: 10px 0; }
 .provider-context a { margin-left: 8px; }
-.chatgpt-sign-in img { display: inline-block; vertical-align: middle; margin-right: 9px; }
+.chatgpt-sign-in img { display: inline-block; vertical-align: middle; margin-right: 4px; }
+.connection-details .connection-text-action, .connection-details .google-text-action { display: inline; width: auto; min-height: 0; margin: 5px 12px 4px 0; padding: 2px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #e3b485; font: 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.connection-details .connection-text-action:hover:not(:disabled), .connection-details .google-text-action:hover:not(:disabled) { background: transparent; box-shadow: none; color: #f4d0a2; }
+.connection-details .connection-text-action:focus-visible, .connection-details .google-text-action:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
+.connection-details .connection-text-action:disabled { color: #929da5; opacity: .75; cursor: not-allowed; }
+.google-connection-details h2 { margin: 0 0 10px; color: #e5ad8f; font: 400 19px/1.25 Georgia, serif; }
+.google-connection-details .cloud-auth-button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; margin: 0; padding: 9px 12px; border: 1px solid #dfb476; border-radius: 5px; background: linear-gradient(112deg, #b98149, #edc48b 52%, #bd874e); box-shadow: inset 0 1px 0 #ffe0ab80, 0 0 16px #aa74351a; color: #1e1409; font: 600 12px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: none; }
+.google-connection-details .cloud-auth-button:hover { background: linear-gradient(112deg, #d09a61, #f5d4a0 52%, #ce9a60); }
+.google-connection-details .cloud-auth-button:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }

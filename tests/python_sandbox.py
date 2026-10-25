@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -140,6 +141,20 @@ def rejects(action) -> None:
 
 def main() -> None:
     test_host_boundary_failures()
+    with patch.dict(
+        os.environ,
+        {"SIGMA_RESEARCH_DOCKER_HOST": "unix:///run/sigma-sandbox/docker.sock"},
+        clear=False,
+    ):
+        assert python_sandbox._runtime_environment()["DOCKER_HOST"] == (
+            "unix:///run/sigma-sandbox/docker.sock"
+        )
+    with patch.dict(
+        os.environ,
+        {"SIGMA_RESEARCH_DOCKER_HOST": "tcp://127.0.0.1:2375"},
+        clear=False,
+    ):
+        rejects(python_sandbox._runtime_environment)
     with TemporaryDirectory() as temporary:
         test_expanded_output_and_interrupted_reservation(Path(temporary) / "evidence.sigma")
     args = python_sandbox.docker_command()

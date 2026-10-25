@@ -10,6 +10,8 @@ from playwright.sync_api import expect, sync_playwright
 
 source = Path("samples/counting-constrained-binary-strings/project.json")
 original = source.read_bytes()
+fixture_url = os.environ.get("SIGMA_BROWSER_FIXTURE_URL", "http://127.0.0.1:8002")
+ui_url = os.environ.get("SIGMA_BROWSER_BASE_URL", "http://127.0.0.1:5173")
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(
         executable_path=os.environ.get(
@@ -23,6 +25,7 @@ with sync_playwright() as playwright:
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
+
     def select_samples():
         tab = page.get_by_role("tab", name="Samples", exact=True)
         if tab.get_attribute("aria-selected") != "true":
@@ -30,31 +33,17 @@ with sync_playwright() as playwright:
 
     page.route(
         "**/api/**",
-        lambda route: route.continue_(
-            url=route.request.url.replace("127.0.0.1:5173", "127.0.0.1:8002")
-        ),
+        lambda route: route.continue_(url=route.request.url.replace(ui_url, fixture_url)),
     )
-    page.goto("http://127.0.0.1:5173")
+    page.goto(ui_url)
     select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Maximum Regions Formed by Lines"
     ).click()
     expect(
-        page.get_by_role("heading", name=re.compile(r"Maximum Regions Formed by Lines, v\d+"))
+        page.get_by_role("heading", name=re.compile(r"Maximum Regions Formed by Lines,? v\d+"))
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(1)
-    download_trigger = page.get_by_role("button", name="Download project")
-    expect(download_trigger).to_be_visible()
-    assert download_trigger.inner_text() == ""
-    page.get_by_role("button", name="Download project").click()
-    download_dialog = page.get_by_role("dialog", name="Download project")
-    expect(download_dialog.get_by_label("Proposed filename")).to_have_value(re.compile(r"\.json$"))
-    assert download_dialog.get_by_role("button").count() == 2
-    assert download_dialog.locator(".settings-header, .export-project-help").count() == 0
-    expect(download_dialog.get_by_role("button", name="Download", exact=True)).to_be_visible()
-    expect(download_dialog.get_by_role("button", name="Cancel", exact=True)).to_be_visible()
-    download_dialog.get_by_role("button", name="Cancel", exact=True).click()
-    expect(download_dialog).not_to_be_visible()
     maximum_path = page.evaluate("new URL(location.href).searchParams.get('path')")
     maximum_state = Path(maximum_path) / "project.json"
     maximum_before = maximum_state.read_bytes()
@@ -77,15 +66,13 @@ with sync_playwright() as playwright:
     assert len(maximum_export["agentic_runs"]) == 1
     assert maximum_export["agentic_runs"][0]["terminal"]["status"] == "completed"
     maximum_composer.get_by_role("button", name="Cancel", exact=True).click()
-    page.get_by_role("button", name="Close project").click()
+    page.get_by_role("button", name="Back to home", exact=True).click()
     select_samples()
     page.get_by_role("tabpanel", name="Samples", exact=True).get_by_role(
         "button", name="Open Counting Constrained Binary Strings"
     ).click()
     expect(
-        page.get_by_role(
-            "heading", name=re.compile(r"Counting Constrained Binary Strings, v\d+")
-        )
+        page.get_by_role("heading", name=re.compile(r"Counting Constrained Binary Strings,? v\d+"))
     ).to_be_visible()
     expect(page.locator(".strategy-row")).to_have_count(0)
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
@@ -179,7 +166,7 @@ with sync_playwright() as playwright:
         "challenge",
     ]
     composer.get_by_label("Title", exact=True).fill("Human reviewed recurrence")
-    composer.get_by_role("button", name="Save strategy", exact=True).click()
+    composer.get_by_role("button", name="Accept", exact=True).click()
     expect(page.locator(".strategy-row")).to_have_count(1)
     saved = json.loads(project_file.read_bytes())
     assert saved["strategies"][0]["title"] == "Human reviewed recurrence"
@@ -195,10 +182,23 @@ with sync_playwright() as playwright:
     assert export_after["agentic_runs"][-1]["terminal"]["status"] == "completed"
     composer.get_by_role("button", name="Cancel", exact=True).click()
     expect(page.locator(".strategy-row")).to_have_count(1)
+    page.get_by_role("button", name="Generate", exact=True).click()
+    composer = page.locator(".inline-proposal")
+    composer.get_by_label("Starting point (optional)").fill("long-fixture")
+    composer.get_by_role("button", name="Generate", exact=True).click()
+    expect(composer.get_by_label("Title", exact=True)).to_have_value(
+        "Long strategy field regression"
+    )
+    long_approach = composer.get_by_label("Plan", exact=True).input_value()
+    assert len(long_approach) > 10_000
+    composer.get_by_role("button", name="Accept", exact=True).click()
+    expect(page.locator(".strategy-row")).to_have_count(2)
+    long_saved = json.loads(project_file.read_bytes())["strategies"][-1]["approach"]
+    assert long_saved == long_approach
     assert source.read_bytes() == original
     assert not errors, errors
     print(
-        "PASS real Chrome A16: Maximum Regions baseline gets a distinct Euler mechanism; ordered Explore/Challenge progress, reduced motion, disconnect cancellation and retained evidence, error recovery, unsaved editable draft, explicit save/reopen, distinct follow-up candidate, project export, immutable Sample sources"
+        "PASS real Chrome A16: Maximum Regions baseline gets a distinct Euler mechanism; ordered Explore/Challenge progress, reduced motion, disconnect cancellation and retained evidence, error recovery, unsaved editable draft, explicit save/reopen, distinct follow-up candidate, >10k strategy editing and save/reopen, project export, immutable Sample sources"
     )
     page.unroute_all(behavior="ignoreErrors")
     browser.close()

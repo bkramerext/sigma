@@ -37,7 +37,107 @@ async def handler(request):
         )
     body = json.loads(request.content)
     context = json.loads(body["input"])
-    if body["text"]["format"]["name"] == "sigma_research_paper":
+    schema_name = body["text"]["format"]["name"]
+    if schema_name in {
+        "sigma_paper_evidence_batch",
+        "sigma_paper_evidence_reduction",
+        "sigma_long_paper_plan",
+        "sigma_long_paper_section",
+    }:
+        if schema_name in {"sigma_paper_evidence_batch", "sigma_paper_evidence_reduction"}:
+            if schema_name == "sigma_paper_evidence_batch":
+                refs = list(dict.fromkeys(field["source_ref"] for field in context["fields"]))[:3]
+            else:
+                refs = list(
+                    dict.fromkeys(ref for note in context for ref in note["evidence_refs"])
+                )[:3]
+            output = {
+                "notes": [
+                    {
+                        "statement": "The frozen record contains a saved research objective and source-linked study context.",
+                        "kind": "context",
+                        "evidence_refs": [reference],
+                    }
+                    for reference in refs
+                ],
+                "conflicts_or_gaps": [],
+                "covered_field_refs": (
+                    [field["field_ref"] for field in context["fields"]]
+                    if schema_name == "sigma_paper_evidence_batch"
+                    else []
+                ),
+                "omitted_fields": [],
+            }
+        elif schema_name == "sigma_long_paper_plan":
+            reference = context["indexed_source_ids"][0]
+            output = {
+                "title": "A Long-Form Experimental Research Synthesis",
+                "abstract": "This paper organizes the saved experimental question, its evidence base, and the limitations recorded in the frozen research snapshot. The manuscript distinguishes observations from hypotheses and proposed future tests.",
+                "abstract_claim_ids": ["C1"],
+                "problem_framing": [
+                    "The saved project defines an experimentally anchored question whose interpretation depends on the available records."
+                ],
+                "problem_framing_claim_ids": ["C1"],
+                "methods": [
+                    "We organized the frozen source record into bounded evidence batches and retained each source reference."
+                ],
+                "methods_claim_ids": ["C1"],
+                "claims": [
+                    {
+                        "id": "C1",
+                        "statement": "The frozen project records an experimental research objective.",
+                        "status": "established",
+                        "evidence_refs": [reference],
+                        "reasoning": "The objective appears in the saved project source in the complete snapshot.",
+                    }
+                ],
+                "sections": [
+                    {
+                        "heading": "Experimental question and prior context",
+                        "purpose": "Describe the saved question and distinguish established context from open hypotheses.",
+                        "evidence_refs": [reference],
+                        "claim_ids": ["C1"],
+                    },
+                    {
+                        "heading": "Evidence, limitations, and next tests",
+                        "purpose": "Explain the available records, gaps, and discriminating experimental work.",
+                        "evidence_refs": [reference],
+                        "claim_ids": ["C1"],
+                    },
+                ],
+                "limitations": [
+                    "This deterministic browser fixture is not biological evidence or an independent review."
+                ],
+                "open_obligations": [
+                    "Review the underlying biological sources and validate the proposed experiments."
+                ],
+                "conclusions": [
+                    "The saved evidence supports an exploratory synthesis, not a validated biological mechanism."
+                ],
+                "conclusion_claim_ids": ["C1"],
+                "validation_warnings": [],
+            }
+        else:
+            output = {
+                "paragraphs": [
+                    "The saved material is described with explicit source references and with its uncertainty intact. The research question is treated as an experimental problem; hypotheses and future interventions are not presented as observations.",
+                    "The appropriate interpretation is limited by the records currently preserved. Independent samples, suitable controls, and a falsifiable perturbation would be needed before claiming a new mechanism.",
+                ]
+            }
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "model": body["model"],
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": json.dumps(output)}],
+                    }
+                ],
+            },
+        )
+    if schema_name == "sigma_research_paper":
         sources = context["sources"]
         project_source = next(item for item in sources if item["kind"] == "project")
         project_data = project_source["data"]
@@ -213,6 +313,7 @@ async def handler(request):
                     "claim": "The maximum is R(n) = 1 + n(n+1)/2 for every n >= 0.",
                     "method": "Each region is a nonempty intersection of open half-planes with one chosen side of each line, hence convex and connected; different pieces of an inserted line lie in different old regions. Insert lines one at a time. The kth line has at most k-1 distinct intersections and is split into at most k pieces, each increasing the region count by at most one. The lines y=kx+k^2 have pairwise distinct intersections along each newly added line, so each of its k pieces lies in a distinct convex prior region and attains the bound. For n=0 there is one region.",
                     "assumptions": ["Lines are distinct straight lines in the Euclidean plane."],
+                    "claim_is_conditional": True,
                     "evidence_status": "Complete unverified mathematical argument; no proof checker was run.",
                     "open_obligations": [],
                     "python_code": None,
@@ -226,6 +327,7 @@ async def handler(request):
                     "claim": f"Fixture claim {cycle}: a candidate consequence follows from the saved strategy.",
                     "method": f"Use the stated mechanism to derive consequence {cycle}.",
                     "assumptions": [f"Fixture assumption {cycle}"],
+                    "claim_is_conditional": False,
                     "evidence_status": "Unverified model derivation; no tool was run.",
                     "open_obligations": [f"Check obligation {cycle}"],
                     "python_code": None,
@@ -272,6 +374,7 @@ async def handler(request):
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
                     "obligation_reviews": [],
+                    "claim_is_conditional": True,
                     "computational_citations": [],
                 }
                 if maximum_regions
@@ -297,8 +400,79 @@ async def handler(request):
                     "peer_handoff_reviews": [],
                     "human_guidance_reviews": [],
                     "obligation_reviews": [],
+                    "claim_is_conditional": False,
                     "computational_citations": [],
                 }
+            )
+        if body["text"]["format"]["name"] == "research_investigator":
+            result["reasoning_steps"] = (
+                [
+                    {
+                        "title": "Assumptions and domain",
+                        "argument": "Lines are distinct straight lines in the Euclidean plane.",
+                        "epistemic_status": "assumption",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Insertion upper bound",
+                        "argument": "The kth line has at most k−1 distinct intersections with earlier lines, giving at most k pieces; each piece can split at most one old region, so at most k new regions are added.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Distinct regions are split",
+                        "argument": "Old regions are convex intersections of open half-planes. Two pieces separated by an earlier-line crossing cannot lie in one old region, and openness gives points on both sides of each crossing, so each met region splits.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Attainment construction",
+                        "argument": "For L_k:y=kx+k², intersections with L_i occur at x=−(i+k), distinct for each i<k. There are no triple intersections, so insertion k creates k pieces in k distinct old regions.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Recurrence and base case",
+                        "argument": "The upper bound and attaining family give R(k)=R(k−1)+k. With no lines the plane is one region, so R(0)=1.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                    {
+                        "title": "Closed form",
+                        "argument": "Induction on the recurrence yields R(n)=1+Σ(k=1…n)k=1+n(n+1)/2.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    },
+                ]
+                if maximum_regions
+                else [
+                    {
+                        "title": "Bounded fixture finding",
+                        "argument": "This fixture makes a local consequence under its stated premise; it does not establish the project's full objective.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    }
+                ]
+            )
+        else:
+            result["reasoning_assessments"] = [
+                {
+                    "step_number": index,
+                    "disposition": "accepted",
+                    "rationale": (
+                        "The stated geometric step follows from the explicit intersections and convexity argument."
+                        if maximum_regions
+                        else "The limited consequence follows from its recorded premise; it does not resolve the full objective."
+                    ),
+                    "objection": "",
+                    "basis_artifact_ids": [],
+                }
+                for index, _ in enumerate(
+                    context.get("investigator_output", {}).get("reasoning_steps", []), 1
+                )
+            ]
+            result["assumptions_reviewed"] = context.get("investigator_output", {}).get(
+                "assumptions", []
             )
         result["human_guidance_reviews"] = [
             {
@@ -414,6 +588,16 @@ async def handler(request):
             "assumptions": "The disk boundary meets each line in two points and contains all pairwise intersections; general position means no parallel pair and no triple intersection.",
             "failure_modes": "Miscounting boundary edges or confusing the exterior face with a region changes the Euler calculation.",
         }
+    if agentic and seed == "long-fixture":
+        details = "\n".join(
+            f"Review item {index}: record the controlling assumption, confirming evidence, decision owner, deadline, alternate path, and consequence if unconfirmed."
+            for index in range(1, 100)
+        )
+        draft = {
+            **draft,
+            "title": "Long strategy field regression",
+            "approach": f"{draft['approach']}\n\n{details}",
+        }
     if agentic and body["text"]["format"]["name"] == "strategy_challenge":
         if regions:
             draft = {
@@ -448,6 +632,7 @@ async def handler(request):
     elif agentic:
         draft = {
             **draft,
+            "prior_finding_ids": [],
             "mechanism": "Euler's formula turns the line arrangement into a planar face count."
             if regions
             else "A position-shift bijection converts the spacing condition into an ordinary subset count."

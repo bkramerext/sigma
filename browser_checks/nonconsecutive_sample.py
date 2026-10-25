@@ -43,6 +43,17 @@ with sync_playwright() as playwright:
     sample.click()
     page.wait_for_url("**/project?*")
 
+    # This check inspects all saved reasoning and execution artifacts, so opt into
+    # the project-level advanced Outcome presentation through Project Settings.
+    page.get_by_role("button", name="Project settings", exact=True).click()
+    settings = page.get_by_role("dialog", name="Settings")
+    settings.get_by_role("tab", name="Preferences").click()
+    advanced = settings.get_by_role("checkbox", name="Show advanced Outcome details")
+    expect(advanced).not_to_be_checked()
+    advanced.check()
+    settings.get_by_role("button", name="Save", exact=True).click()
+    expect(settings).to_be_hidden()
+
     research = page.locator(".sessions-pane")
     rows = research.locator("li[data-session-id]")
     expect(rows).to_have_count(5)
@@ -63,7 +74,7 @@ with sync_playwright() as playwright:
             assert "Negative · counterexample reported" not in summary
         for subsection in row.locator(".outcome-subsection").all():
             label = subsection.locator(":scope > summary").inner_text().strip()
-            if label in ("Status", "Strategy Assessments", "Metrics", "Provenance"):
+            if label in ("Status", "Strategy Assessments", "Metrics", "Session history and provenance", "Conclusion", "Reasoning / proof", "Citations, evidence & obligations"):
                 if subsection.get_attribute("open") is None:
                     subsection.locator(":scope > summary").click()
                 assert subsection.get_attribute("open") is not None, (index + 1, label)

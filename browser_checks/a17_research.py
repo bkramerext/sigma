@@ -66,6 +66,25 @@ with sync_playwright() as playwright:
     )
 
     def forward(route):
+        if route.request.url.endswith("/api/cloud-auth/status"):
+            # The local app now gates workspace access on Google identity. Keep
+            # this browser acceptance run deterministic with a member fixture;
+            # it neither calls OAuth nor grants administrator privileges.
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "target": "local",
+                        "enabled": True,
+                        "ready": True,
+                        "authenticated": True,
+                        "user": {"email": "a17-member@example.test", "role": "member"},
+                        "admin_contact_email": None,
+                    }
+                ),
+            )
+            return
         if fail_export["enabled"] and "/api/projects/export" in route.request.url:
             route.fulfill(status=503, json={"error": "fixture export failure"})
             return
@@ -145,10 +164,27 @@ with sync_playwright() as playwright:
             disclosure.click()
         expect(session.locator(".session-row-content")).to_be_visible()
 
+    def enable_advanced_outcome(path):
+        result = page.evaluate(
+            """async path => {
+              const opened = await (await fetch('/api/projects/open', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path})})).json();
+              const p = opened.project;
+              const fields = ['title','problem','investigation_type','ai_model','reasoning_effort','difficulty','show_advanced_outcome_details'];
+              const expected = Object.fromEntries(fields.map(key => [key, p[key] ?? (key === 'show_advanced_outcome_details' ? false : null)]));
+              const response = await fetch('/api/projects/update', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path, ...expected, expected, show_advanced_outcome_details:true})});
+              return {status:response.status, body:await response.json()};
+            }""",
+            path,
+        )
+        assert result["status"] == 200, result
+        page.goto(f"{browser_base_url}/project?{urlencode({'path': path})}")
+
     page.goto(browser_base_url)
     home_credit = page.locator(".home-art-credit")
-    expect(home_credit.locator("span")).to_have_text("By Brian Kramer, ChatGPT & Codex")
-    expect(home_credit.locator("time")).to_have_text("October 2026")
+    expect(
+        home_credit.locator(":scope > span:not(.home-credit-streak):not(.home-credit-plunk)")
+    ).to_have_text(["Brian Kramer", "& OpenAI Models"])
+    expect(home_credit.locator("time")).to_have_count(0)
     credit_box = home_credit.bounding_box()
     assert credit_box and credit_box["x"] + credit_box["width"] <= 1440
     assert credit_box["y"] + credit_box["height"] <= 900
@@ -273,10 +309,10 @@ with sync_playwright() as playwright:
         == "rgb(224, 196, 160)"
     )
     expect(first_export.get_by_role("radio", name="Project Audit")).to_be_checked()
-    # Current main adds the fourth fixed report type; no format dropdown is
-    # used for any of the four choices.
-    expect(first_export.get_by_role("radio")).to_have_count(4)
-    expect(first_export).to_contain_text("LaTeX report")
+    # The current export dialog has the two deterministic report types and
+    # Project Audit; AI-authored papers use their separate saved-version flow.
+    expect(first_export.get_by_role("radio")).to_have_count(3)
+    expect(first_export).not_to_contain_text("LaTeX report")
     expect(first_export.locator("select")).to_have_count(0)
     expect(first_export.get_by_label("Open in browser tab")).not_to_be_checked()
     export_title_box = first_export.locator("#export-project-heading").bounding_box()
@@ -335,7 +371,7 @@ with sync_playwright() as playwright:
         < 3
     )
     expect(settings.locator(".settings-footer")).to_have_count(0)
-    expect(settings.get_by_role("tab", name="Main")).to_have_attribute("aria-selected", "true")
+    expect(settings.get_by_role("tab", name="Research")).to_have_attribute("aria-selected", "true")
     settings.get_by_role("tab", name="Limits").focus()
     page.keyboard.press("ArrowRight")
     expect(settings.get_by_role("tab", name="Limits")).to_have_attribute("aria-selected", "true")
@@ -493,6 +529,7 @@ with sync_playwright() as playwright:
     expect(connection_dialog).to_be_hidden()
     expect(connection.locator("summary")).to_be_focused()
     path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    enable_advanced_outcome(path)
     workspace_title = f"A17.1 Workspace {uuid4().hex[:8]}"
     project_file = Path(path) / "project.json"
     result = page.evaluate(
@@ -658,16 +695,19 @@ with sync_playwright() as playwright:
     page.locator("#proposal-seed").fill("delay-fixture")
     dot = page.locator(".api-connection .connection-dot")
     proposal.get_by_role("button", name="Generate", exact=True).click()
-    expect(dot).to_have_class(re.compile("connection-active"), timeout=10000)
+    expect(dot).to_have_class(re.compile("connection-connected"), timeout=10000)
+    # The compact project-header pill is intentionally static during work; the
+    # old A17 check expected the Home-only activity pulse on this control.
+    expect(dot).not_to_have_class(re.compile("connection-active"))
     page.get_by_role("button", name="Render research problem as Markdown", exact=True).click()
     expect(
         page.get_by_role("button", name="Show plain research problem", exact=True)
     ).to_be_visible(timeout=10000)
-    expect(dot).to_have_class(re.compile("connection-active"))
+    expect(dot).to_have_class(re.compile("connection-connected"))
     expect(proposal.get_by_label("Title", exact=True)).to_have_value(
         "Moment matrix obstruction", timeout=45000
     )
-    expect(dot).not_to_have_class(re.compile("connection-active"))
+    expect(dot).to_have_class(re.compile("connection-connected"))
     proposal.get_by_role("button", name="Accept", exact=True).click()
     expect(page.locator(".strategy-row")).to_have_count(2)
 
@@ -813,11 +853,11 @@ with sync_playwright() as playwright:
         assert abs(item_rect - summary_rect) < 1.5, (summary_selector, summary_rect, item_rect)
     page.screenshot(path="/tmp/sigma-a177-after-session-card.png")
     expect(research).to_contain_text("Cycle 3 of 3")
-    expect(research).to_contain_text("6/30 calls")
+    expect(research).to_contain_text("12/30 calls")
     expect(first_session.locator(".session-status")).to_have_text("ended")
     expect(first_session.locator(".session-row-content")).to_be_visible()
     artifacts = research.locator("section.research-artifacts")
-    expect(artifacts.locator("li")).to_have_count(3)
+    expect(artifacts.locator("li")).to_have_count(6)
     expect(artifacts).to_contain_text("Independent fixture review for cycle 1")
     expect(artifacts).to_contain_text("Unverified research note")
     open_outcome_section(first_session, "Status")
@@ -832,7 +872,7 @@ with sync_playwright() as playwright:
     assert "Saved findings and criticism" in fork_text
     assert "Open obligations:" in fork_text
     fork_form.get_by_role("button", name="Cancel", exact=True).click()
-    open_outcome_section(first_session, "Provenance")
+    open_outcome_section(first_session, "Session history and provenance")
     events = research.get_by_label("Recent session activity")
     expect(events.locator("li").last).to_contain_text(
         "All strategy branches finished or the shared call budget was exhausted"
@@ -858,7 +898,7 @@ with sync_playwright() as playwright:
     page.reload()
     restored_session = page.locator("li[data-session-id]").first
     open_session(restored_session)
-    prior_context = open_outcome_section(restored_session, "Provenance")
+    prior_context = open_outcome_section(restored_session, "Session history and provenance")
     expect(prior_context).to_be_visible()
     expect(prior_context).to_contain_text("Prior session sources")
     expect(prior_context).to_contain_text("Session #0 · Prior fixture strategy · Artifact 2")
@@ -874,14 +914,14 @@ with sync_playwright() as playwright:
         page.locator("li[data-session-id]").first.locator(".session-row-content")
     ).to_be_visible()
     open_outcome_section(
-        page.locator("li[data-session-id]").first, "Citations, Evidence & Obligations"
+        page.locator("li[data-session-id]").first, "Citations, evidence & obligations"
     )
-    expect(page.locator(".research-artifacts li")).to_have_count(3)
+    expect(page.locator(".research-artifacts li")).to_have_count(6)
     restored = page.evaluate(
         "async ({path,id}) => await (await fetch('/api/projects/research-sessions/' + id + '?' + new URLSearchParams({path}))).json()",
         {"path": path, "id": session_one["id"]},
     )
-    assert len(restored["artifacts"]) == 3 and restored["session_number"] == 1
+    assert len(restored["artifacts"]) == 6 and restored["session_number"] == 1
 
     # Exercise Pause, Resume, and terminal Stop while a local provider request is delayed.
     page.get_by_role(
@@ -911,12 +951,13 @@ with sync_playwright() as playwright:
     )
     expect(pause_row.locator(".session-status")).to_contain_text("running")
     dot = page.locator(".api-connection .connection-dot")
-    expect(dot).to_have_class(re.compile("connection-active"), timeout=10000)
+    expect(dot).to_have_class(re.compile("connection-connected"), timeout=10000)
+    expect(dot).not_to_have_class(re.compile("connection-active"))
     page.emulate_media(reduced_motion="reduce")
     expect(dot).to_have_css("animation-name", "none")
     expect(dot).to_have_css("background-color", "rgb(117, 177, 140)")
     page.emulate_media(reduced_motion="no-preference")
-    expect(dot).to_have_css("animation-name", "connection-dot-pulse")
+    expect(dot).to_have_css("animation-name", "none")
     page.get_by_role("button", name="Stop research session", exact=True).click()
     expect(pause_row.locator(".session-status")).to_contain_text("stopped", timeout=5000)
     expect(pause_row.locator(".outcome-provider-attempts")).to_be_visible()
@@ -969,10 +1010,36 @@ with sync_playwright() as playwright:
     expect(research.locator(".section-count")).to_have_text("2 sessions, 0 running")
     page.get_by_role("button", name="Start a new research session", exact=True).click()
     page.get_by_role("button", name="Start new session #3", exact=True).click()
-    failure_row = research.locator("li[data-session-id]").filter(has_text="Session #3")
-    expect(failure_row.locator(".session-status")).to_contain_text("failed", timeout=10000)
-    expect(page.locator(".request-toast")).to_have_count(1)
-    page.get_by_role("button", name="Dismiss request error").click()
+    failure_row = research.locator("li[data-session-id]").filter(
+        has=page.get_by_role("button", name="Session #3", exact=True)
+    )
+    # A portfolio fails terminally only when every selected strategy branch
+    # fails. One failed branch remains visible while successful siblings retain
+    # their findings and the session ends with a portfolio-level result.
+    expect(failure_row.locator(".session-status")).to_have_text("ended", timeout=20000)
+    mixed_result = page.evaluate(
+        """async path => (await (await fetch('/api/projects/research-sessions?' + new URLSearchParams({path}))).json()).sessions.find(session => session.session_number === 3)""",
+        path,
+    )
+    assert any(branch["status"] == "failed" for branch in mixed_result["strategy_runs"])
+    assert any(branch["artifacts"] for branch in mixed_result["strategy_runs"])
+    assert mixed_result["portfolio_decision"] is not None
+    assert any(
+        action["action"] == "hold_after_failure"
+        for action in mixed_result["portfolio_decision"]["strategy_actions"]
+    )
+    failed_branch = next(
+        branch for branch in mixed_result["strategy_runs"] if branch["status"] == "failed"
+    )
+    findings = mixed_result["outcome"]["solution_review"]["strategy_findings"]
+    failed_finding = next(
+        (finding for finding in findings if finding["strategy_id"] == failed_branch["strategy_id"]),
+        None,
+    )
+    assert failed_finding is not None, (mixed_result["strategy_runs"], findings)
+    assert failed_finding["execution_status"] == "failed"
+    assert failed_finding["status"] == "execution_failed"
+    assert failed_finding["research_artifact_ids"] == []
     expect(research.locator(".section-count")).to_have_text("3 sessions, 0 running")
     assert research.locator(".session-row-title").all_text_contents() == [
         "Session #1",
@@ -980,6 +1047,10 @@ with sync_playwright() as playwright:
         "Session #3",
     ]
     expect(failure_row).to_contain_text("Failure fixture strategy")
+    failure_row.get_by_role("button", name=re.compile("Session #3")).click()
+    failed_review_text = "\n".join(failure_row.locator(".solution-review").all_text_contents())
+    assert "Execution status: failed" in failed_review_text, failed_review_text
+    assert "No research artifact was saved for this strategy." in failed_review_text
 
     saved_before_fallback = project_file.read_bytes()
     legacy_titleless["enabled"] = True
@@ -1050,19 +1121,14 @@ with sync_playwright() as playwright:
         for pair in first_session.locator(".outcome-label-value").all()
     )
     subsection_summaries = first_session.locator(".outcome-subsection > summary")
-    expect(subsection_summaries).to_have_count(5)
-    expect(subsection_summaries).to_contain_text(
-        [
-            "Status",
-            "Strategy Assessments",
-            "Metrics",
-            "Provenance",
-            "Citations, Evidence & Obligations",
-        ]
-    )
+    labels = [item.strip() for item in subsection_summaries.all_inner_texts()]
+    assert labels[:4] == ["Conclusion", "Reasoning / proof", "Citations, evidence & obligations", "Metrics"], labels
+    assert "Status" in labels and "Strategy Assessments" in labels and "Session history and provenance" in labels
+    assert first_session.locator(".outcome-conclusion").get_attribute("open") is not None
     for section in first_session.locator(".outcome-subsection").all():
-        assert section.get_attribute("open") is None, section.inner_text()
-    status_detail = first_session.locator(".outcome-subsection").nth(0)
+        if "Conclusion" not in section.locator(":scope > summary").inner_text():
+            assert section.get_attribute("open") is None, section.inner_text()
+    status_detail = open_outcome_section(first_session, "Status")
     status_summary = status_detail.locator(":scope > summary")
     status_summary.focus()
     status_summary.press("Enter")
@@ -1078,7 +1144,7 @@ with sync_playwright() as playwright:
     assert metrics_detail.locator("table").count() == 0
     metric_value = metrics_detail.locator(".outcome-label-value dd").first.inner_text().strip()
     assert metric_value and metric_value != "—", metric_value
-    provenance_detail = open_outcome_section(first_session, "Provenance")
+    provenance_detail = open_outcome_section(first_session, "Session history and provenance")
     expect(provenance_detail).to_contain_text("Session ID")
     provenance_detail.get_by_text("Model call attempts", exact=True).wait_for()
     context_used = provenance_detail.locator(".context-used-disclosure").first
@@ -1153,7 +1219,7 @@ with sync_playwright() as playwright:
     expect(
         first_session.get_by_role("button", name="Render outcome as Markdown")
     ).to_have_attribute("aria-pressed", "false")
-    evidence_detail = open_outcome_section(first_session, "Citations, Evidence & Obligations")
+    evidence_detail = open_outcome_section(first_session, "Citations, evidence & obligations")
     artifact_section = evidence_detail.locator("section.research-artifacts")
     artifact_markdown_toggle = artifact_section.get_by_role(
         "button", name="Render research artifacts as Markdown"
@@ -1162,11 +1228,11 @@ with sync_playwright() as playwright:
     expect(
         artifact_section.get_by_role("button", name="Show plain research artifacts")
     ).to_have_attribute("aria-pressed", "true")
-    expect(artifact_section.locator(".research-artifact-markdown")).to_have_count(3)
+    expect(artifact_section.locator(".research-artifact-markdown")).to_have_count(6)
     for cycle in range(1, 4):
         expect(artifact_section).to_contain_text(f"Cycle {cycle}:")
     artifact_section.get_by_role("button", name="Show plain research artifacts").click()
-    expect(artifact_section.locator(":scope > ol > li > details")).to_have_count(3)
+    expect(artifact_section.locator(":scope > ol > li > details")).to_have_count(6)
     expect(page.locator("#strategies-pane-content")).to_be_visible()
     page.get_by_role("button", name="Strategies", exact=True).click()
     expect(page.locator("#strategies-pane-content")).to_be_hidden()
@@ -1306,7 +1372,7 @@ with sync_playwright() as playwright:
 
     page.get_by_role("button", name="Export project", exact=True).click()
     export_dialog = page.get_by_role("dialog", name="Export Project")
-    expect(export_dialog.get_by_role("radio")).to_have_count(4)
+    expect(export_dialog.get_by_role("radio")).to_have_count(3)
     export_dialog.get_by_role("radio", name="Text file").check()
     expect(export_dialog.locator(".export-filename-field span")).to_have_text(".txt")
     export_dialog.get_by_label("Filename").fill("a17-blocked-tab")
@@ -1385,6 +1451,7 @@ with sync_playwright() as playwright:
     ).click()
     page.wait_for_url("**/project?*")
     max_regions_path = page.evaluate("new URL(location.href).searchParams.get('path')")
+    enable_advanced_outcome(max_regions_path)
     max_regions_strategy = page.locator("li[data-strategy-id]").first
     max_regions_strategy.locator(".strategy-row-disclosure").click()
     page.get_by_role("button", name="Start a new research session", exact=True).click()
@@ -1399,7 +1466,7 @@ with sync_playwright() as playwright:
         "Contributed to solution"
     )
     expect(max_assessments.locator(".outcome-assessment-list")).to_contain_text("Artifact 1")
-    max_evidence = open_outcome_section(max_session, "Citations, Evidence & Obligations")
+    max_evidence = open_outcome_section(max_session, "Citations, evidence & obligations")
     expect(max_evidence.locator(".solution-review")).to_contain_text("R(n) = 1 + n(n+1)/2")
     page.mouse.move(1435, 895)
     page.wait_for_timeout(150)
@@ -1421,21 +1488,12 @@ with sync_playwright() as playwright:
     )
     markdown_outcome = max_session.locator(".outcome-markdown")
     expect(markdown_outcome.locator(".katex").first).to_be_visible()
-    for label in (
-        "Solution claim:",
-        "Argument:",
-        "Assumptions:",
-        "Proof obligations:",
-        "Evidence:",
-        "Verification:",
-        "Caveats",
-    ):
-        expect(markdown_outcome).to_contain_text(label)
+    expect(markdown_outcome).to_contain_text("For every integer")
     expect(max_session.locator(".outcome-general")).to_have_count(0)
     assert len(provider_calls) == calls_before_math_toggle
     max_session.get_by_role("button", name="Show plain outcome text").click()
-    max_evidence = open_outcome_section(max_session, "Citations, Evidence & Obligations")
-    expect(max_evidence.locator(".solution-review")).to_contain_text("Solution claim:")
+    max_evidence = open_outcome_section(max_session, "Citations, evidence & obligations")
+    expect(max_session.locator(".outcome-reasoning-subsection")).to_contain_text("Solution claim:")
     expect(max_session.locator(".outcome-markdown")).to_have_count(0)
     maximum_strategy = page.locator("li[data-strategy-id]").first
     maximum_strategy.get_by_role("button", name="Disable", exact=True).click()
@@ -1555,9 +1613,9 @@ with sync_playwright() as playwright:
     for report_type, extension, checks in (
         ("Text file", ".txt", ("Research sessions", "Positive", "unverified")),
         (
-            "LaTeX report",
-            ".tex",
-            (r"\documentclass[11pt]{article}", r"\section{Research sessions}", "unverified"),
+            "HTML report",
+            ".html",
+            ("Research sessions", "Positive", "unverified"),
         ),
     ):
         page.get_by_role("button", name="Export project", exact=True).click()
@@ -1610,23 +1668,23 @@ with sync_playwright() as playwright:
     if session_disclosure.get_attribute("aria-expanded") != "true":
         session_disclosure.click()
     expect(max_session.locator(".session-row-content")).to_be_visible()
-    expect(max_session.locator(".outcome-general .outcome-summary-text")).to_contain_text(
+    expect(max_session.locator(".outcome-conclusion")).to_contain_text(
         "No outcome summary was recorded."
     )
     max_session.get_by_role("button", name="Render outcome as Markdown").click()
     expect(max_session.locator(".outcome-markdown")).to_contain_text(
         "No outcome summary was recorded."
     )
-    expect(max_session.locator(".outcome-markdown")).to_contain_text("Solution claim:")
+    expect(max_session.locator(".outcome-markdown")).not_to_contain_text("Solution claim:")
     max_session.get_by_role("button", name="Show plain outcome text").click()
-    expect(max_session.locator(".outcome-general .outcome-summary-text")).to_contain_text(
+    expect(max_session.locator(".outcome-conclusion")).to_contain_text(
         "No outcome summary was recorded."
     )
     legacy_outcome["enabled"] = False
 
-    # Exercise the multi-strategy selection and live activity surface against
-    # the isolated provider. The second branch deliberately waits so that the
-    # concurrent running state is observable before the session is stopped.
+    # Enabled strategy rows determine the complete session portfolio. The
+    # second branch deliberately waits so that concurrent activity is
+    # observable before the session is stopped.
     created_strategy = page.evaluate(
         """async path => {
           const response = await fetch('/api/projects/strategies', {
@@ -1664,16 +1722,7 @@ with sync_playwright() as playwright:
         == 6
     )
     page.get_by_role("button", name="Start a new research session", exact=True).click()
-    selection = page.locator(".research-strategy-selection")
-    expect(selection).to_be_visible()
-    selection.locator("summary").click()
-    checkboxes = selection.get_by_role("checkbox")
-    expect(checkboxes).to_have_count(2)
-    expect(checkboxes.nth(0)).to_be_checked()
-    assert checkboxes.nth(1).is_enabled(), selection.inner_text()
-    checkboxes.nth(1).click()
-    expect(selection.locator("summary")).to_contain_text("2 selected", timeout=2000)
-    expect(selection.locator("summary")).to_contain_text("2 selected")
+    expect(page.locator(".research-strategy-selection")).to_have_count(0)
     page.get_by_role("button", name="Start new session #2", exact=True).click()
     portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
     open_session(portfolio)
@@ -1683,7 +1732,12 @@ with sync_playwright() as playwright:
         "Pause and stop fixture strategy"
     )
     expect(portfolio.locator(".research-strategy-activity")).to_contain_text("running")
-    assert len(start_payloads[-1]["strategy_ids"]) == 2, start_payloads[-1]
+    enabled_strategy_ids = [
+        strategy["id"]
+        for strategy in created_strategy["project"]["strategies"]
+        if strategy["enabled"] and not strategy.get("removed_at")
+    ]
+    assert start_payloads[-1]["strategy_ids"] == enabled_strategy_ids, start_payloads[-1]
     page.reload()
     portfolio = page.locator("li[data-session-id]").filter(has_text="Session #2")
     open_session(portfolio)

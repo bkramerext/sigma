@@ -54,6 +54,15 @@ def main() -> None:
             investigator = {
                 "claim": "An induction suggests the recurrence bound.",
                 "method": "Apply the recurrence once and check the base case.",
+                "reasoning_steps": [
+                    {
+                        "title": "Recurrence consequence",
+                        "argument": "The recurrence supports the stated local consequence under the supplied assumption.",
+                        "epistemic_status": "deduction",
+                        "basis_artifact_ids": [],
+                    }
+                ],
+                "claim_is_conditional": False,
                 "assumptions": ["The recurrence is valid at positive indices."],
                 "evidence_status": "Unverified model derivation.",
                 "open_obligations": ["Check the base case."],
@@ -78,6 +87,16 @@ def main() -> None:
                 "unresolved_objections": ["Verify the first value."],
                 "supporting_cycles": [1],
                 "verification_status": "incomplete",
+                "reasoning_assessments": [
+                    {
+                        "step_number": 1,
+                        "disposition": "accepted",
+                        "rationale": "The stated local consequence follows from its supplied premise.",
+                        "objection": "",
+                        "basis_artifact_ids": [],
+                    }
+                ],
+                "claim_is_conditional": False,
                 "strategy_contribution": "productive",
                 "contribution_rationale": "The remaining check is now explicit.",
                 "cross_strategy_relations": [],

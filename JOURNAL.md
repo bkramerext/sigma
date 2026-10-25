@@ -164,17 +164,122 @@ The day reinforced three standards for that next step: **simplify the user's con
 
 ## Day 3 — October 23, 2026
 
-**Theme: converging on a five-worker software factory and an explicit process for distributing and integrating work.**
+**Theme: turn the research prototype into an integrated, testable alpha while preparing a controlled cloud launch.**
 
-- The development team reached a clear division: **Blue, Green, Red, Gray and ChatGPT** are five AI workers. The human owns product ideation, manual UI inspection and passing instructions between Codex windows. ChatGPT owns architectural coordination, ticket authorship, code review, integration decisions and PR merges. Codex workers own bounded implementation and automated verification.
-- Replaced the informal assignment handoff with **T-numbered tickets** under `tickets/` and a root `TICKET_TRACKING.md` ledger. Discuss feedback before committing it to a ticket; record behavior, limits, tests and economical model/thinking recommendations; route to a color specialist; work in separate branches and PRs; review and revise before merging.
-- Every colored checkout completed `./sigma setup` and `./sigma test`, resolving Gray's missing TypeScript dependency without a manual package-install workaround.
-- Merged **PR #11** for ticket migration, **PR #13** for Green's outcome metrics/provenance, and **PR #12** for Blue's project-header model/thinking controls, in that order. ChatGPT reviewed each; Blue and Green revised issues found during review and integrated the updated branch before merge. Tests and browser checks were reported passing. A final combined-main smoke check and human UI review remain distinct from those PR-level checks.
+- Integrated the overnight **A18 multi-strategy research engine** and **A19 isolated Python execution**, then added agent-aware **SageMath** support. Research can now coordinate bounded concurrent investigations and use computational tools while retaining session history and evidence.
+- Improved the quality and inspectability of research: richer **Outcome** views, evidence handoffs and citations, research memory, human intervention during active sessions, and adversarial evaluation cases. A bounded **live answer-free trial** produced a mathematically sound candidate with substantive Skeptic criticism, but exposed audit limitations that were corrected in code.
+- Completed a broad **local alpha acceptance pass**, including real-browser checks of session controls, settings, samples, exports, and responsive UI. Continued polishing the project header, session controls, and Outcome presentation rather than treating UI quality as a final cosmetic pass.
+- Established a **five-worker software factory** with scoped T-numbered tickets, tracked ownership, separate branches, independent reviews, and coordinator-managed merges. Added CI checks to make integration more repeatable.
+- Advanced cloud readiness through **Google authentication, private workspaces, durable bounded research execution, public read-only Demo, account administration, and per-user spending limits**. After evaluating Cloudflare and Google Cloud, prepared a Google Compute Engine deployment package and provisioning runbook. Selected `sigma-research.duckdns.org` as the public hostname. **No cloud resources were provisioned today.**
 
-### Process and roles
+### Research engine and computational evidence
 
-**The human remains actively involved**, but is no longer responsible for personally organizing each implementation detail. The human directs the product, forwards messages between isolated agent sessions and judges the actual interface. **ChatGPT is a fifth worker**, not only a conversational adviser: it writes scoped tickets, reviews implementation, updates GitHub and takes responsibility for merge order and decisions. **Blue, Green, Red and Gray** are implementation specialists with separate working copies and responsibilities. Red's cloud work and Gray's Outcome UI work are future assignments; planned work is not recorded as shipped.
+The overnight work moved SIGMA beyond isolated agent responses. **A18** introduced bounded concurrent research across strategies, with explicit coordination and recorded outcomes. **A19** supplied a sandboxed Python execution path for experiments, and **T26** extended computational work to SageMath. These tools support research, but their existence is not evidence that a mathematical claim has been proved.
 
-The new production cycle is **ideation → agreed ticket → owner and branch → implementation/tests → PR review → revision → dependency-ordered merge → combined verification → manual UI feedback**. Persistent GitHub artifacts bridge context gaps between agents. No Codex worker self-merges. Quality gates distinguish tests reported by the worker, independent diff review, full integrated behavior and human visual judgment. This system proved workable during the day's three-PR sequence, but message-passing overhead, shared-state coordination and real research effectiveness remain open challenges.
+Subsequent work strengthened the connection between an agent's conclusion and its basis. **T27** improved handoffs and research history; **T28** made computational evidence inspectable and citable; **T29** enabled human intervention during active research; and **T37** addressed selection and reuse of trustworthy research memory. The Outcome UI was reorganized to make results, limitations, and provenance easier to inspect. Together, these changes moved the product toward an evidence-bearing research process rather than a persuasive conversation transcript.
 
-**Day 3 observation:** SIGMA is now being developed by a recognizable software factory, with a product owner and five AI contributors. The meaningful innovation is not the worker count; it is that **work creation, delegation, verification and integration have become explicit, repeatable and accountable**.
+We also expanded the sample catalog beyond mathematics, including biology, chemistry, and a creative-research investigation, and added workflows for turning exported projects into reusable samples. An exact Riemann Hypothesis adversarial oracle and other evaluation cases provide ways to challenge agent behavior without assuming that an attractive response is a correct discovery.
+
+### Live research trial and the limits of acceptance
+
+A key test was the **answer-free “Maximum Regions Formed by Lines” investigation**, run through the connected ChatGPT provider within an explicitly bounded budget. The Investigator first established an upper bound but had not justified attainability. The Skeptic identified that gap, and a later cycle supplied a line construction with distinct pairwise intersections, supporting the result `1 + n(n + 1)/2`. The session correctly labeled its outcome a **solution candidate (unverified)**, not a formally verified theorem.
+
+The trial demonstrated meaningful mathematical criticism and revision. It also exposed important audit weaknesses: exact role inputs had not been preserved, long outputs were truncated without clear signaling, aggregate token usage was inconsistent, and some obligation and portfolio labels disagreed. The original run's answer independence therefore **cannot be established retrospectively**. Green's independent assessment documented those limits; Blue implemented request-input auditing, usage and outcome corrections, saved-session browser checks, and a final concurrency fix binding each audit to its exact call step. The corrected implementation passed the full suite and was merged through **PR #53**. No second live trial was run, and the original trial is not retroactively certified by the repair.
+
+**What we learned:** a good answer and a good critique are necessary but insufficient. Trustworthy autonomous research also requires faithful request records, consistent accounting, reproducible evidence, and a clear distinction between a candidate result and verification.
+
+### Local alpha quality and the software factory
+
+The day's acceptance work exercised SIGMA as a product: project and strategy workflows, session supervision, settings, generated reports and audit exports, saved-session inspection, and desktop/mobile browser behavior. **T21** recorded a full local acceptance pass, with targeted corrections to session and header behavior. Further improvements to the Outcome hierarchy, model/thinking controls, keyboard and control placement, and launcher reliability helped bring previously separate features into a coherent interface. A green local suite and successful browser checks establish a stronger alpha baseline, not universal reliability.
+
+The development process matured alongside the product. **Blue, Green, Red, and Gray** worked in separate Codex checkouts, with **ChatGPT** coordinating architecture, tickets, review, integration, and merges. The human remained responsible for product direction, manual visual judgment, and relaying messages among isolated workers. We replaced informal handoffs with **T-numbered tickets**, a tracking ledger, branch/PR ownership, documented acceptance conditions, and CI coverage for tests, lint, types, and frontend build.
+
+This organization made substantial parallel progress possible, but the final T17.8 review also revealed the cost of excessive handoffs. The useful discipline is to **converge on a bounded correction and merge decision**, not to create repeated review loops after the material issues have been identified.
+
+### Cloud architecture and launch preparation
+
+Cloud work progressed from feasibility to a concrete deployment plan. The team evaluated Cloudflare's constraints, then pursued a **Google Cloud trial-based alpha** with Google sign-in, invited access, per-user private workspaces, durable bounded jobs, and a curated public Demo. Local account-management UI and per-user spending controls were added to support an operator-controlled launch. The cloud deployment package, authentication fixes, and provisioning documentation were integrated; local Compose and test validation were reported passing.
+
+The chosen hostname is **`sigma-research.duckdns.org`**, with DuckDNS intended to point to a static cloud IP. The runbook separates pre-launch preparation from actions that create billable resources and documents staged checks for authentication, persistence, access isolation, and cost. **Actual Google Cloud provisioning and public launch were deferred to Day 4.** Passing local cloud-mode tests is not the same as validating a running public service.
+
+### Day 3 retrospective
+
+SIGMA finished the day with a materially stronger **research engine, computational tooling, evidence model, operator interface, and deployment foundation**. The team integrated a large amount of parallel work and completed local acceptance without claiming that the live trial proved general mathematical reliability or that the cloud service was already online.
+
+Three lessons stand out: **research progress must be backed by inspectable evidence; a polished control surface is part of operational correctness; and parallel AI development succeeds only when review and integration converge.** Day 4's priority is provisioning and validating the hosted alpha, with real access, isolation, persistence, and spending behavior checked against the prepared launch gates.
+
+
+## Day 4 — October 24, 2026
+
+**Theme: improve the substance and continuity of research, simplify the product's explanations, and confront the limits of autonomous development coordination.**
+
+- Integrated **T70 substantive research outcomes**, **T45 resumable long-form papers**, **T47 persisted Outcome conclusions**, and **T46 About SIGMA**, with corresponding browser and regression work. Strengthened reasoning preservation, report fidelity, and the separation of qualified findings from proof.
+- Reworked strategy generation toward **bounded research directions**, not solution-sized plans. Continued consolidating the documentation and backlog, while preserving the distinction between durable strategies and individual session outcomes.
+- Launched a new Blue research-quality initiative in short increments: conservative verification labels, a current-research-state view, explicit evidence continuations, and real Python/SageMath execution feedback. **Blue Increment 5** reconciled these capabilities with Green's Simple/Advanced Outcome modes and was merged through **PR #77**.
+- Refined Home presentation, account/status pills, copper background artwork, and the About diagram. Discovered that Red's supposedly authoritative About branch had diverged from the branch containing its latest implementation; began a clean selective integration on current `main` through **PR #78**.
+- Reworked the Blue/coordinator mailbox protocol to support repeated 30-second polling after each completed increment. Established that the coordinator's hourly automation does **not** provide an equivalent low-latency handoff, and did not claim that an indefinitely sleeping assistant could solve that limitation.
+
+### Research conclusions, papers, and bounded strategies
+
+The first half of Day 4 continued the prior day's push to make outcomes intellectually useful rather than merely polished. **T70** preserved structured Investigator arguments and step-level Skeptic review in outcomes, sessions, reports, and paper evidence. Assumptions remain explicit premises, conditional conclusions retain their scope, and failed strategies retain attribution and reasons rather than acquiring invented supporting artifacts. A failed branch need not fail a mixed portfolio when a sibling completes. Limits on step count or length should produce a named gap or partial result, not silently discard reasoning. T70 was integrated through **PR #70**.
+
+**T47** added a persisted session-level Outcome conclusion with explicit qualifications and verification warnings, integrated through **PR #72**. **T45** addressed the practical limits of generating a long LaTeX paper in one model response: resumable stages preserve research evidence and continuity instead of forcing a deceptively compressed argument. It was integrated through **PR #68**. These changes improve the fidelity of presentation and export; they do not certify the mathematical validity of generated proofs.
+
+Strategy generation was corrected to emphasize **narrow, testable directions** within a project's overarching problem. The project's question, a durable strategy, and a particular session attempt remain distinct. A strategy may fail locally, be revised and rerun, or lead to a child strategy without erasing the evidence of previous attempts. We also refined Getting Started and the backlog, consolidated overlapping cloud and collaboration documentation, and pruned superseded material. Documentation cleanup is useful only when it retains consequential design rationale and recoverable history.
+
+### Blue's research-quality increments
+
+Blue's new initiative deliberately separated an operational research loop from claims of autonomous mathematical discovery. **Increment 1** unified conservative verification labels and surfaced saved argument narratives. It avoided presenting agent confidence, numerical checks, or a candidate conclusion as an independently verified proof. **Increment 2** projected a compact **Current Research State** from explicitly saved evidence, including unresolved source references and recorded resolutions, without rewriting prior sessions or turning the summary into a new source of truth. Actual project exports and browser acceptance evidence were requested for review rather than relying solely on an agent's account of its work.
+
+**Increment 3** exercised cross-strategy continuation: researcher-approved evidence could be selected for a later role dispatch, and the work retained the source's identity and limits. The evaluation distinguished real causal use of an earlier artifact from simply mentioning it in a generated narrative. **Increment 4** connected observed sandboxed Python/SageMath results to subsequent Investigator and Skeptic work and reduced repeated context without discarding information. The recorded offline exercises involved **scripted model responses**, not an autonomous live-model discovery. Finite computational tests remain evidence about the cases executed, not proofs of general claims.
+
+**Increment 5** was the integration and provenance pass. It reconciled Blue's research changes with Green's current UI, retained explicit computational attribution, kept experimental context pooling opt-in, strengthened audit/export checks, and prepared a **blind research-quality gate** for eventual comparison against a simpler single-role baseline. **PR #77** merged into `main` at `4e25bd3`, with the reported post-merge verification green. The resulting machine can preserve and feed back evidence; whether the coordinated agents produce better research than a matched-budget baseline remains an open empirical question. Blue's next increment was assigned release verification and evaluation preparation, not a declaration of research success.
+
+### Outcome and About: clearer explanations without overstating capability
+
+**Green's Outcome hierarchy**, merged through **PR #76**, added project-level **Simple/Advanced** presentation choices and tightened concise conclusions and qualifications. The distinction is presentational: Simple should be readable without hiding uncertainty; Advanced should retain evidence and provenance. Preferences and research settings were preserved across the Blue integration. The Markdown icon visibility issue was also corrected.
+
+**T46**, merged through **PR #73**, introduced an About SIGMA entry point and an accessible product explanation. Red subsequently developed a richer, interactive diagram depicting multiple strategy directions and the Investigator → Skeptic → Investigator critique loop, with expandable detail, tooltips, and a build identifier. This illustrates the intended research workflow without inventing a third AI 'coordinator' agent or suggesting that agent agreement constitutes proof. The visual work also included stacked account and administration pills and a revised copper Home background. The image was maintained in both `assets/` and `frontend/public/`.
+
+The Home artwork received detailed manual review: the zeta summation was moved downward, the critical-line depiction was made dotted, the spurious glowing point at the origin was removed, and the intended symmetric first-zero markers were refined without numerical labels. These visual changes were directed at the **source asset**, not at a screenshot of the UI. The final source image was later found on Red's substantive branch rather than the branch Red had designated authoritative.
+
+### Branch recovery and integration discipline
+
+By evening, both Red and Blue worker sessions had stopped. Red had repeatedly checked out **`red/substantive-research-outcomes`** despite identifying **`red/about-green-integration`** as authoritative. The branches diverged: the latter retained the detailed About design specification, while the former held the newer About interactions, Home controls, and image assets. The substantive branch was also based on much older mainline history. Neither was safe to merge wholesale without risking more recent Blue and Green work.
+
+The coordinator therefore created **`integration/red-home-about-20261024`** from current `main`, selectively transplanted the About/Home source and CSS, restored both matching copper image assets, added About browser acceptance checks, and preserved `docs/ABOUT_AGENT_COORDINATION_DIAGRAM.md` from the other Red branch. **PR #78** was opened against `main` with both original Red branches untouched as recovery points. GitHub reported it mergeable, but its initial **`verify` check failed**. The integration is therefore **not yet accepted or merged**; the CI failure and real-Chrome Home/About/auth/Outcome regressions require follow-up. Git mergeability is not a substitute for validation.
+
+### Autonomous coordination and its limits
+
+The Blue mailbox uses committed `messages/blue_in_N.md` and `messages/blue_out_M.md` on `blue_session`. After finishing an increment, Blue repeatedly fetches and polls approximately every 30 seconds until the next coordinator instruction appears, then repeats the process after the following increment. Inbound and outbound numbers are independent; treating them as matching caused avoidable confusion. The coordinator was required to inspect real diffs, tests, project exports, and evidence before accepting an increment or assigning another.
+
+The remaining limitation is asymmetric: **Blue can poll every 30 seconds, but the standard coordinator automation wakes at most hourly**. The user rightly challenged the possibility of an overnight handoff waiting nearly an hour. A blocking `sleep` inside an active tool execution cannot guarantee an indefinitely self-running assistant after the conversation ends. Event-driven external orchestration was discussed as a possible remedy, but **was not installed or authorized**, and no continuous sub-hourly coordinator was claimed to exist. Short-lived branches, frequent integration, and truthful handoffs remain essential even with more automation.
+
+### Day 4 retrospective
+
+Day 4 advanced SIGMA from a functioning multi-agent workflow toward a more **evidence-preserving, cumulatively useful research machine**. It improved the fidelity of outcomes and papers, made the current research state inspectable, and connected actual computation to later research steps. The next scientific test is whether these mechanisms improve unscripted research quality against a simpler matched-budget baseline. The day's branch recovery also exposed a different reliability requirement: multiple coding agents need one unambiguous source of truth, not just successful local tests and confident handoff messages.
+
+The day ended with **Blue Increment 5 integrated in `main`**, a further release-quality increment assigned, and **Red's newer Home/About work preserved in PR #78 but blocked on failed CI and browser acceptance**. No claim of autonomous discovery, formal proof, continuously active overnight coordination, or completed public cloud launch is warranted.
+
+### Ticket throughput (snapshot: October 25, 2026 UTC)
+
+The following cumulative counts include **GitHub issues and pull requests**. They are grouped by UTC date, so the final point includes activity after the Day 4 calendar boundary.
+
+```mermaid
+xychart-beta
+    title "SIGMA tickets opened vs. closed (cumulative)"
+    x-axis ["Oct 21", "Oct 22", "Oct 23", "Oct 24", "Oct 25"]
+    y-axis "Tickets" 0 --> 80
+    line [1, 3, 56, 74, 79]
+    line [0, 1, 46, 64, 70]
+```
+
+| UTC date | Opened (cumulative) | Closed (cumulative) | Open backlog |
+| --- | ---: | ---: | ---: |
+| Oct 21 | 1 | 0 | 1 |
+| Oct 22 | 3 | 1 | 2 |
+| Oct 23 | 56 | 46 | 10 |
+| Oct 24 | 74 | 64 | 10 |
+| Oct 25 | 79 | 70 | 9 |
+
+**Interpretation:** 70 of 79 tracked items were closed (**89%**), with nine remaining open. The backlog stayed near ten despite a sharp increase in ticket creation, indicating strong completion throughput relative to intake. This is encouraging delivery momentum, not by itself evidence of software quality or research validity. In the chart, the first line represents **opened** and the second **closed**.

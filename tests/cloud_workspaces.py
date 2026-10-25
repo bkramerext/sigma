@@ -7,11 +7,24 @@ import socket
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 import httpx
+
+
+def storage_root_for_test(root: Path) -> Path:
+    if os.environ.get("SIGMA_T100_PERSISTENT_DISK") == "1":
+        disk = root / "persistent-disk"
+        disk.mkdir(mode=0o700, exist_ok=True)
+        return disk
+    return root
+
+
+def workspaces_root_for_test(root: Path) -> Path:
+    return storage_root_for_test(root) / "workspaces"
 
 
 def free_port() -> int:
@@ -35,6 +48,20 @@ class Server:
                 "SIGMA_STATE_DIR": str(root / "shared-local-state"),
             }
         )
+        if os.environ.get("SIGMA_T100_PERSISTENT_DISK") == "1":
+            persistent_root = storage_root_for_test(root)
+            environment.update(
+                {
+                    "SIGMA_STORAGE_BACKEND": "persistent_disk",
+                    "SIGMA_STORAGE_ROOT": str(persistent_root),
+                    "SIGMA_CLOUD_WORKSPACES_ROOT": str(persistent_root / "workspaces"),
+                    "GOOGLE_OIDC_CLIENT_ID": "fixture.apps.googleusercontent.com",
+                    "GOOGLE_OIDC_CLIENT_SECRET": "fixture-secret",
+                    "SIGMA_CLOUD_PUBLIC_ORIGIN": "https://sigma.test",
+                    "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "admin@example.test",
+                    "SIGMA_CLOUD_ADMIN_CONTACT_EMAIL": "admin@example.test",
+                }
+            )
         test_path = os.pathsep.join(
             (str(Path(__file__).parent), str(Path(__file__).parents[1] / "src"))
         )
@@ -134,7 +161,7 @@ def check_proposal_cancellation_scope() -> None:
     asyncio.run(exercise_cancel_scope())
 
 
-def exercise(root: Path) -> tuple[str, str, str, str]:
+def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
     server = Server(root)
     try:
         with (
@@ -149,7 +176,7 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             a_empty = request(user_a, "GET", "/api/projects/recent").json()["projects"]
             b_empty = request(user_b, "GET", "/api/projects/recent").json()["projects"]
             assert a_empty == [] and b_empty == []
-            workspaces = root / "workspaces"
+            workspaces = workspaces_root_for_test(root)
             database = workspaces / "workspaces.sqlite3"
             import sqlite3
 
@@ -192,6 +219,47 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             a_path, b_path = a_project["path"], b_project["path"]
             a_id, b_id = a_project["project"]["id"], b_project["project"]["id"]
             assert a_id != b_id and Path(a_path).parent != Path(b_path).parent
+            from sigma import papers
+
+            paper_id = uuid4().hex
+            paper_pdf = b"%PDF-1.4\n% T100 deterministic persistence fixture\n%%EOF\n"
+            papers._save(
+                a_path,
+                {
+                    "paper_id": paper_id,
+                    "project_id": a_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "snapshot_sha256": "a" * 64,
+                    "draft": {"title": "T100 private paper fixture"},
+                    "validation_warnings": [],
+                    "generation": {},
+                    "source": {"fixture": "deterministic storage-only source"},
+                },
+                paper_pdf,
+            )
+            listed_papers = request(user_a, "GET", "/api/projects/papers", params={"path": a_path})
+            assert listed_papers.status_code == 200
+            assert listed_papers.json()["papers"][0]["pdf_available"] is True
+            paper_record = request(
+                user_a, "GET", f"/api/projects/papers/{paper_id}", params={"path": a_path}
+            )
+            assert paper_record.status_code == 200
+            assert paper_record.json()["source"]["fixture"] == "deterministic storage-only source"
+            paper_download = request(
+                user_a,
+                "GET",
+                f"/api/projects/papers/{paper_id}/pdf",
+                params={"path": a_path},
+            )
+            assert paper_download.content == paper_pdf
+            expect_hidden(
+                request(
+                    user_b,
+                    "GET",
+                    f"/api/projects/papers/{paper_id}/pdf",
+                    params={"path": a_path},
+                )
+            )
             inference_body = {
                 "path": a_path,
                 "seed": "Generate a short proposal",
@@ -203,7 +271,12 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
                 ("/api/projects/proposals/agentic", inference_body),
                 (
                     "/api/projects/papers",
-                    {"path": a_path, "expected_binding": "unused", "expected_project_id": a_id},
+                    {
+                        "path": a_path,
+                        "expected_binding": "unused",
+                        "expected_project_id": a_id,
+                        "expected_snapshot_sha256": "0" * 64,
+                    },
                 ),
                 (
                     "/api/projects/text/convert",
@@ -403,7 +476,7 @@ def exercise(root: Path) -> tuple[str, str, str, str]:
             assert stat_mode(workspaces) == 0o700
             assert stat_mode(Path(a_path).parent) == 0o700
             assert stat_mode(workspaces / "workspaces.sqlite3") == 0o600
-            return a_id, b_id, execution_id, b_path
+            return a_id, b_id, execution_id, b_path, a_path, paper_id
     finally:
         server.stop()
 
@@ -426,7 +499,7 @@ def main() -> None:
             "legacy local project sentinel", encoding="utf-8"
         )
 
-        first_a, first_b, execution_id, b_path = exercise(root)
+        first_a, first_b, execution_id, b_path, a_path, paper_id = exercise(root)
         # Restart the real uvicorn process, then prove the same subject mapping,
         # recent index, session-independent execution record and bytes persist.
         restarted = Server(root)
@@ -443,6 +516,14 @@ def main() -> None:
                     params={"path": b_path},
                 )
                 assert saved.content == b"persistent private artifact\n"
+            with httpx.Client(base_url=restarted.url, headers=identity("subject-a")) as user_a:
+                paper = request(
+                    user_a,
+                    "GET",
+                    f"/api/projects/papers/{paper_id}/pdf",
+                    params={"path": a_path},
+                )
+                assert paper.content.startswith(b"%PDF-1.4") and paper.content.endswith(b"%%EOF\n")
         finally:
             restarted.stop()
 
@@ -450,10 +531,11 @@ def main() -> None:
         # stopped. Restore into a clean location and repeat tenant/artifact reads.
         backup = root / "backup-workspaces"
         restore = root / "restored-workspaces"
-        shutil.copytree(root / "workspaces", backup)
+        workspaces_root = workspaces_root_for_test(root)
+        shutil.copytree(workspaces_root, backup)
         shutil.copytree(backup, restore)
-        (root / "workspaces").rename(root / "workspaces-original")
-        restore.rename(root / "workspaces")
+        workspaces_root.rename(workspaces_root.with_name("workspaces-original"))
+        restore.rename(workspaces_root)
         restored = Server(root)
         try:
             for subject, expected_id in (("subject-a", first_a), ("subject-b", first_b)):
@@ -472,11 +554,19 @@ def main() -> None:
                     params={"path": b_path},
                 )
                 assert response.content == b"persistent private artifact\n"
+            with httpx.Client(base_url=restored.url, headers=identity("subject-a")) as user_a:
+                paper = request(
+                    user_a,
+                    "GET",
+                    f"/api/projects/papers/{paper_id}/pdf",
+                    params={"path": a_path},
+                )
+                assert paper.content.startswith(b"%PDF-1.4") and paper.content.endswith(b"%%EOF\n")
         finally:
             restored.stop()
 
         print(
-            "PASS two isolated production API workspaces; copied paths, IDs, traversal, symlinks, exports, reports, sessions, executions, artifacts and mutations denied; restart, revocation retention and offline backup/restore preserved owners and artifact bytes"
+            "PASS two isolated workspaces; traversal/symlink/export/report/session/execution/artifact/paper access denied across owners; restart and backup/restore preserved owner mappings, paper source/PDF, execution artifacts and Recent indexes"
         )
 
 

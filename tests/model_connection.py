@@ -51,6 +51,17 @@ def client_factory(handler):
 
 async def checks():
     await chatgpt_auth.select("api_key")
+    with patch.dict(os.environ, {"OPENAI_API_KEY": KEY}):
+        auth_context = await connection.auth_context()
+        assert auth_context["token"] == KEY
+        assert KEY not in repr(auth_context)
+        assert "token" not in dict(auth_context)
+        try:
+            json.dumps(auth_context)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("AuthContext must not be JSON serializable")
     calls = []
 
     async def success(request):
@@ -196,8 +207,7 @@ async def checks():
             payload = json.loads(request.content)
             assert payload["model"] == "gpt-6-luna" and payload["reasoning"] == {"effort": "xhigh"}
             assert (
-                payload["max_output_tokens"] == 25000
-                and payload["text"]["format"]["strict"] is True
+                payload["max_output_tokens"] == 8000 and payload["text"]["format"]["strict"] is True
             )
             request_started.set()
             await release.wait()

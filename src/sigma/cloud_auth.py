@@ -26,6 +26,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
+from sigma.config_secrets import SecretConfigurationError, secret_value
+
 router = APIRouter(prefix="/api/cloud-auth", tags=["cloud-auth"])
 SESSION_COOKIE = "__Host-sigma_session"
 FLOW_COOKIE = "__Host-sigma_oidc_flow"
@@ -108,12 +110,17 @@ def config() -> Config:
     if not enabled:
         return Config(False, None, None, None, None, None, None, None, False)
     client_id = os.environ.get("GOOGLE_OIDC_CLIENT_ID", "").strip() or None
-    client_secret = os.environ.get("GOOGLE_OIDC_CLIENT_SECRET", "").strip() or None
+    secret_error = False
+    try:
+        client_secret = secret_value("GOOGLE_OIDC_CLIENT_SECRET")
+    except SecretConfigurationError:
+        client_secret = None
+        secret_error = True
     origin = os.environ.get("SIGMA_CLOUD_PUBLIC_ORIGIN", "").strip().rstrip("/") or None
     bootstrap = os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip()
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
-    error = None
+    error = "Cloud authentication secret configuration is invalid." if secret_error else None
     if (
         not client_id
         or not client_secret
@@ -364,7 +371,10 @@ async def middleware(request: Request, call_next):
         return response
     if path.startswith("/api/cloud-auth/admin/") and principal.role != "admin":
         return JSONResponse({"error": "Administrator access required."}, status_code=403)
-    if path.startswith("/api/ai/"):
+    # Local Google identity gates project access but does not replace the
+    # separate local ChatGPT account flow. Hosted SIGMA must never proxy a
+    # user's personal ChatGPT authorization through the service.
+    if path.startswith("/api/ai/") and not cfg.local:
         return JSONResponse(
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )
@@ -380,6 +390,17 @@ async def middleware(request: Request, call_next):
 @router.get("/status")
 def status(request: Request):
     cfg = config()
+    local_setup_missing = []
+    if not cfg.enabled or cfg.local:
+        local_setup_missing = [
+            key
+            for key in (
+                "GOOGLE_OIDC_CLIENT_ID",
+                "GOOGLE_OIDC_CLIENT_SECRET",
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL",
+            )
+            if not os.environ.get(key, "").strip()
+        ]
     try:
         principal = (
             resolve_session(request.cookies.get(_cookie_name(SESSION_COOKIE, cfg)))
@@ -387,10 +408,19 @@ def status(request: Request):
             else None
         )
     except (sqlite3.Error, OSError, RuntimeError):
-        return {"enabled": cfg.enabled, "ready": False, "authenticated": False, "user": None}
+        return {
+            "enabled": cfg.enabled,
+            "ready": False,
+            "local_setup_missing": local_setup_missing,
+            "authenticated": False,
+            "user": None,
+        }
     return {
         "enabled": cfg.enabled,
         "ready": not cfg.error if cfg.enabled else True,
+        # Names only: the setup panel can explain missing local prerequisites
+        # without ever returning OAuth secrets or the configured admin email.
+        "local_setup_missing": local_setup_missing,
         "authenticated": principal is not None,
         "user": principal.public() if principal else None,
         "admin_contact_email": cfg.admin_contact_email if cfg.enabled and not cfg.error else None,

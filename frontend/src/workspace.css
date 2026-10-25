@@ -41,7 +41,8 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content; grid-template-areas: "difficulty model google" ". thinking chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content max-content; grid-template-areas: "difficulty model google about" ". thinking chatgpt ."; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
+.workspace-page .project-art-header .about-action { grid-area: about; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; max-width: min(54vw, 760px); padding-top: 12px; }
 .workspace-page .project-art-back-row { position: absolute; z-index: 2; top: -6px; left: clamp(140px, calc(min(34vw, 390px) - 172px), 218px); }
@@ -187,7 +188,9 @@
   .workspace-page .project-art-back-row { left: auto; right: 40px; }
   .workspace-page .project-back-label { display: none; }
   .workspace-page .current-project { padding-top: 0; }
-  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "difficulty difficulty" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
+  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto; grid-template-areas: "difficulty difficulty" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
+  .workspace-page .project-art-header .about-action { position: absolute; top: 0; right: 0; grid-area: auto; justify-self: end; }
+  .workspace-page .project-art-header .project-difficulty-badge { width: calc(100% - 52px); justify-self: start; align-self: center; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
   .workspace-page .expansion { font-size: 8px; letter-spacing: .06em; max-width: 240px; }
   .workspace-page .header-controls { align-self: flex-start; gap: 0; }
@@ -251,8 +254,9 @@
 .workspace-page .project-model-pill > span { margin: 0; }
 .workspace-page .project-thinking-pill { grid-area: thinking; }
 .workspace-page .cloud-home-controls.compact { grid-area: google; }
-.workspace-page .project-google-signin { grid-area: google; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 27px; padding: 4px 9px; border: 1px solid #5b5148; border-radius: 999px; background: #091824ed; color: #a8b3bb; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
-.workspace-page .project-google-signin small { color: #82909a; font: inherit; font-size: 9px; }
+.workspace-page .project-google-signin { grid-area: google; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; margin-left: 0; padding: 7px 9px; border: 1px solid #a9654875; border-radius: 999px; background: #07111ef2; box-shadow: 0 4px 18px #0007, inset 0 1px 0 #cd927020; color: #e0d0c8; font: 400 10px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; white-space: nowrap; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+.workspace-page .project-google-signin:hover, .workspace-page .project-google-signin[aria-expanded="true"] { border-color: #cd9270; background: #172536fa; box-shadow: 0 5px 22px #0009, inset 0 1px 0 #cd927045; color: #fff2e9; }
+.workspace-page .project-google-signin:focus-visible { outline: 2px solid #e5a785; outline-offset: 3px; }
 .workspace-page .project-chatgpt-signin { min-width: 0; max-width: none; }
 .workspace-page .project-chatgpt-signin > summary { margin-left: 0; padding-inline: 9px; font-size: 10px; }
 button.project-control-pill { cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
@@ -274,8 +278,7 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
   .workspace-page .project-header-title-row { gap: 5px; }
   .workspace-page .project-header-title-row .research-type-icon { flex-basis: 22px; width: 22px; height: 22px; }
   .workspace-page .project-control-pill { min-height: 26px; padding-inline: 8px; font-size: 9px; }
-  .workspace-page .project-google-signin { min-height: 26px; padding-inline: 8px; gap: 5px; font-size: 9px; }
-  .workspace-page .project-google-signin small { font-size: 8px; }
+  .workspace-page .project-google-signin { min-height: 28px; padding: 4px; gap: 7px; font-size: 9px; line-height: 1.2; }
   .workspace-page .cloud-home-controls.compact { min-width: 0; max-width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: center; }
   .workspace-page .cloud-home-controls.compact .cloud-user-email { max-width: 100%; }
   .workspace-page .cloud-home-controls.compact > * { max-width: 100%; white-space: normal; }
@@ -294,3 +297,33 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }
 .workspace-page .latex-lowered-e { display: inline-block; font-size: .79em; transform: translateY(.28em); margin-left: -.1em; margin-right: -.045em; }
+
+/* Current understanding is a compact reading entry point, not new header controls. */
+.current-understanding { margin: 0 0 1rem; padding: 0.8rem; }
+.current-understanding > summary { color: var(--workspace-copper, #e4b57c); cursor: pointer; }
+.current-understanding > summary small { margin-left: 0.6rem; font-weight: normal; }
+.current-understanding-scope { margin: 0.7rem 0; }
+.current-understanding-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.2rem; }
+.current-understanding-columns section { min-width: 0; overflow-wrap: anywhere; }
+.current-understanding-columns h3 { font-size: 1rem; color: var(--workspace-copper, #e4b57c); }
+.current-understanding-columns h4 { font-size: 0.95rem; }
+.current-understanding ol, .current-understanding ul { padding-left: 1.2rem; }
+.current-understanding li { margin-bottom: 0.9rem; }
+.current-understanding li p { margin: 0.4rem 0; }
+.current-understanding .text-view-link { white-space: normal; text-align: left; }
+.current-understanding-limits { margin-top: 0.8rem; }
+.research-artifacts li:focus { outline: 1px solid var(--workspace-copper, #e4b57c); outline-offset: 4px; }
+@media (max-width: 900px) { .current-understanding-columns { grid-template-columns: 1fr; gap: 0.4rem; } }
+
+.workspace-page .current-understanding button.text-view-link { padding: 2px 0; min-height: 32px; border: 0; background: transparent; box-shadow: none; color: var(--workspace-copper); font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.workspace-page .current-understanding button.text-view-link:hover { color: #ffe2b9; }
+.workspace-page .current-understanding button.text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
+@media (max-width: 600px) { .workspace-page .current-understanding button.text-view-link { min-height: 44px; } }
+
+.continuation-approval label { display: block; margin-block: .6rem; }
+.continuation-approval select, .continuation-approval textarea, .continuation-approval input:not([type="checkbox"]) { display: block; width: 100%; max-width: 100%; box-sizing: border-box; }
+.continuation-approval textarea { min-height: 7rem; }
+.continuation-approval code { overflow-wrap: anywhere; }
+.continuation-approval pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.continuation-evidence pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.continuation-evidence p, .continuation-evidence summary { overflow-wrap: anywhere; }

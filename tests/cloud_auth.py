@@ -18,6 +18,7 @@ from jwt.algorithms import RSAAlgorithm
 
 from sigma import cloud_auth
 from sigma.api import app
+from sigma.projects import initialize_project
 
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 CLIENT_ID = "sigma-test.apps.googleusercontent.com"
@@ -96,6 +97,8 @@ class CloudAuthTests(TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "auth"
         self.root.mkdir(mode=0o700)
+        self.project_path = Path(self.temp.name) / "project"
+        self.project_path.mkdir(mode=0o700)
         self.env = patch.dict(
             os.environ,
             {
@@ -150,7 +153,7 @@ class CloudAuthTests(TestCase):
     def test_successful_signin_admin_invite_and_revocation(self):
         self.assertEqual(
             self.client.get(
-                "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                "/api/projects/research-sessions", params={"path": str(self.project_path)}
             ).status_code,
             401,
         )
@@ -234,7 +237,7 @@ class CloudAuthTests(TestCase):
         self.assertEqual(public_demo.json()["project"]["title"], "Counting Pairwise Handshakes")
         self.assertEqual(
             self.client.get(
-                "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                "/api/projects/research-sessions", params={"path": str(self.project_path)}
             ).status_code,
             401,
         )
@@ -305,15 +308,29 @@ class CloudAuthTests(TestCase):
             self.assertEqual([row["email"] for row in rows], ["member@example.org"])
 
     def test_local_mode_keeps_project_and_provider_apis_unauthenticated(self):
+        local_project = self.root / "local-project.sigma"
+        initialize_project(local_project, "Local test", "Test local API access")
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
             self.assertEqual(self.client.get("/api/cloud-auth/status").json()["enabled"], False)
             self.assertNotEqual(
                 self.client.get(
-                    "/api/projects/research-sessions", params={"path": "projects/rh.sigma"}
+                    "/api/projects/research-sessions", params={"path": str(local_project)}
                 ).status_code,
                 401,
             )
             self.assertNotEqual(self.client.get("/api/ai/connection").status_code, 401)
+
+    def test_hosted_google_auth_still_blocks_personal_chatgpt_auth(self):
+        signed_in = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        response = self.client.get("/api/ai/connection")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["error"],
+            "AI provider authorization is unavailable in cloud mode.",
+        )
 
     def test_exact_domain_and_revocation_of_existing_session(self):
         admin_context = TestClient(app)
@@ -543,6 +560,12 @@ class CloudAuthTests(TestCase):
             status = self.client.get("/api/cloud-auth/status").json()
             self.assertEqual(status["target"], "local")
             self.assertEqual(status["user"]["role"], "admin")
+            provider_status = self.client.get("/api/ai/connection")
+            self.assertEqual(provider_status.status_code, 200, provider_status.text)
+            self.assertNotEqual(
+                provider_status.json().get("guidance"),
+                "AI provider authorization is unavailable in cloud mode.",
+            )
             self.assertFalse((self.root / "workspaces" / "workspaces.sqlite3").exists())
             self.assertEqual(self.client.get("/api/projects/recent").status_code, 200)
         with patch.dict(
@@ -614,15 +637,15 @@ class CloudAuthTests(TestCase):
 
     def test_every_api_group_is_protected_and_origin_is_checked(self):
         for path in [
-            "/api/projects/inspect?path=projects/rh.sigma",
-            "/api/projects/research-sessions?path=projects/rh.sigma",
-            "/api/projects/research-executions?path=projects/rh.sigma",
+            f"/api/projects/inspect?path={self.project_path}",
+            f"/api/projects/research-sessions?path={self.project_path}",
+            f"/api/projects/research-executions?path={self.project_path}",
             "/api/projects/recent",
         ]:
             self.assertEqual(self.client.get(path).status_code, 401, path)
         rejected = self.client.post(
             "/api/projects/close",
-            json={"path": "projects/rh.sigma"},
+            json={"path": str(self.project_path)},
             headers={"Origin": "https://attacker.test"},
         )
         self.assertEqual(rejected.status_code, 403)
@@ -646,6 +669,24 @@ class CloudAuthTests(TestCase):
         with patch.dict(os.environ, {"SIGMA_CLOUD_AUTH_ENABLED": "false"}):
             self.assertFalse(self.client.get("/api/cloud-auth/status").json()["enabled"])
             self.assertEqual(self.client.get("/api/research-tools").status_code, 200)
+
+    def test_local_status_reports_missing_bootstrap_without_exposing_credentials(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SIGMA_CLOUD_AUTH_ENABLED": "false",
+                "GOOGLE_OIDC_CLIENT_ID": CLIENT_ID,
+                "GOOGLE_OIDC_CLIENT_SECRET": "local-test-secret",
+                "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL": "",
+            },
+        ):
+            response = self.client.get("/api/cloud-auth/status")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["enabled"])
+        self.assertEqual(body["local_setup_missing"], ["SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL"])
+        self.assertNotIn("local-test-secret", response.text)
+        self.assertNotIn("admin@example.org", response.text)
 
 
 if __name__ == "__main__":

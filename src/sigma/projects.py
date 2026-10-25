@@ -19,6 +19,8 @@ from uuid import UUID, uuid4
 
 from sigma.model_catalog import EFFORTS, legacy_model, validate_pair, validate_stored
 
+MAX_STRATEGY_APPROACH = 50_000
+
 
 class ProjectError(ValueError):
     """An invalid request or a project that cannot safely be used."""
@@ -109,6 +111,7 @@ class ProjectSettings:
     ai_model: str
     reasoning_effort: str
     difficulty: Difficulty | None = None
+    show_advanced_outcome_details: bool = False
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -136,9 +139,12 @@ def _settings(raw: Any) -> ProjectSettings:
     if (
         not isinstance(raw, dict)
         or not required <= set(raw)
-        or set(raw) - required - {"difficulty"}
+        or set(raw) - required - {"difficulty", "show_advanced_outcome_details"}
     ):
         raise ProjectError("Invalid project settings fields")
+    advanced_outcome = raw.get("show_advanced_outcome_details", False)
+    if type(advanced_outcome) is not bool:
+        raise ProjectError("Advanced Outcome preference must be a boolean")
     try:
         validate_stored(raw["ai_model"], raw["reasoning_effort"])
     except (ValueError, TypeError) as exc:
@@ -150,6 +156,7 @@ def _settings(raw: Any) -> ProjectSettings:
         raw["ai_model"],
         raw["reasoning_effort"],
         _difficulty(raw.get("difficulty")),
+        advanced_outcome,
     )
 
 
@@ -193,6 +200,7 @@ class Project:
     ai_model: str = "gpt-6.1-sol"
     reasoning_effort: str = "high"
     difficulty: Difficulty | None = None
+    show_advanced_outcome_details: bool = False
 
     @property
     def research_mode(self) -> ResearchMode:
@@ -255,9 +263,9 @@ def _decode(raw: Any) -> Project:
     if (
         not isinstance(raw, dict)
         or type(raw.get("schema_version")) is not int
-        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8)
+        or raw["schema_version"] not in (1, 2, 3, 4, 5, 6, 7, 8, 9)
     ):
-        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 8)")
+        raise ProjectError("Unsupported or missing project schema_version (expected 1 through 9)")
     version = raw["schema_version"]
     fields = {"schema_version", "id", "title", "problem", "events"}
     if version >= 2:
@@ -270,10 +278,14 @@ def _decode(raw: Any) -> Project:
         fields.update({"ai_model", "reasoning_effort"})
     if version >= 8:
         fields.add("difficulty")
+    if version >= 9:
+        fields.add("show_advanced_outcome_details")
     if set(raw) != fields:
         raise ProjectError("Invalid project fields")
-    if version >= 8 and raw["difficulty"] is None:
+    if version == 8 and raw["difficulty"] is None:
         raise ProjectError("Schema v8 projects must have an Easy, Medium, or Hard difficulty")
+    if version >= 9 and type(raw["show_advanced_outcome_details"]) is not bool:
+        raise ProjectError("Advanced Outcome preference must be a boolean")
     for key in ("id", "title", "problem"):
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise ProjectError(f"Project {key} must be a nonempty string")
@@ -288,6 +300,7 @@ def _decode(raw: Any) -> Project:
                 "ai_model": raw.get("ai_model", legacy_model()),
                 "reasoning_effort": raw.get("reasoning_effort", "high"),
                 "difficulty": raw.get("difficulty"),
+                "show_advanced_outcome_details": raw.get("show_advanced_outcome_details", False),
             }
         )
         if version >= 6
@@ -315,7 +328,7 @@ def _decode(raw: Any) -> Project:
             UUID(item["id"])
             seen.add(item["id"])
             _text(item["title"], "Strategy title", 200)
-            _text(item["approach"], "Hypothesis / approach", 10000)
+            _text(item["approach"], "Hypothesis / approach", MAX_STRATEGY_APPROACH)
             if item["author_kind"] != "human":
                 raise ProjectError("Only human-authored strategies are supported")
             _timestamp(item["created_at"])
@@ -424,8 +437,8 @@ def _decode(raw: Any) -> Project:
             for field, limit in (
                 ("previous_title", 200),
                 ("title", 200),
-                ("previous_approach", 10000),
-                ("approach", 10000),
+                ("previous_approach", MAX_STRATEGY_APPROACH),
+                ("approach", MAX_STRATEGY_APPROACH),
             ):
                 _text(change[field], field, limit)
             previous_edit = edits.get(strategy_id)
@@ -558,6 +571,7 @@ def _decode(raw: Any) -> Project:
         settings.ai_model,
         settings.reasoning_effort,
         settings.difficulty,
+        settings.show_advanced_outcome_details,
     )
 
 
@@ -565,6 +579,8 @@ def _document(project: Project) -> bytes:
     raw = asdict(project)
     if project.schema_version < 8:
         del raw["difficulty"]
+    if project.schema_version < 9:
+        del raw["show_advanced_outcome_details"]
     if project.schema_version < 7:
         for strategy in raw["strategies"]:
             del strategy["enabled"]
@@ -656,7 +672,7 @@ def initialize_project(
         if any(p.name != ".gitkeep" for p in path.iterdir()):
             raise ProjectError("Initialization requires an empty directory (or .gitkeep only)")
         project = Project(
-            8,
+            9,
             str(uuid4()),
             title.strip(),
             problem.strip(),
@@ -737,10 +753,12 @@ def create_strategy(
     approach: str,
     summary: str = "",
     provenance: Provenance | None = None,
+    *,
+    _continuation_writer: Callable[[Project, Strategy], None] | None = None,
 ) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
-    approach = _text(approach, "Hypothesis / approach", 10000)
+    approach = _text(approach, "Hypothesis / approach", MAX_STRATEGY_APPROACH)
 
     if not isinstance(summary, str) or len(summary) > 300 or "\n" in summary or "\r" in summary:
         raise ProjectError("Summary must be one line, at most 300 characters")
@@ -756,6 +774,8 @@ def create_strategy(
             summary=summary.strip(),
             provenance=provenance,
         )
+        if _continuation_writer is not None:
+            _continuation_writer(project, strategy)
         return replace(
             project,
             schema_version=max(
@@ -848,7 +868,7 @@ def edit_strategy(
 ) -> ProjectView:
     """Update name/description while preserving identity and earlier text in history."""
     title = _text(title, "Strategy name", 200)
-    approach = _text(approach, "Strategy description", 10000)
+    approach = _text(approach, "Strategy description", MAX_STRATEGY_APPROACH)
 
     def edit(project: Project) -> Project:
         strategy = next((s for s in project.strategies if s.id == strategy_id), None)
@@ -963,6 +983,10 @@ def projects_root() -> Path:
     workspace = cloud_workspaces.current()
     if workspace is not None:
         return workspace.path
+    from sigma.storage import persistent_disk_enabled
+
+    if persistent_disk_enabled():
+        raise ProjectError("Authenticated persistent workspace is unavailable.")
     try:
         configured = Path(
             os.environ.get("SIGMA_PROJECTS_ROOT", str(ROOT / "projects"))
@@ -1165,6 +1189,7 @@ def project_settings(project: Project) -> ProjectSettings:
         project.ai_model,
         project.reasoning_effort,
         project.difficulty,
+        project.show_advanced_outcome_details,
     )
 
 
@@ -1178,6 +1203,7 @@ def update_project(
     expected: dict[str, Any],
     text_format: str | None = None,
     difficulty: str | None = None,
+    show_advanced_outcome_details: bool | None = None,
 ) -> ProjectView:
     wanted = _settings(
         {
@@ -1187,6 +1213,11 @@ def update_project(
             "ai_model": ai_model,
             "reasoning_effort": reasoning_effort,
             "difficulty": difficulty if difficulty is not None else expected.get("difficulty"),
+            "show_advanced_outcome_details": (
+                show_advanced_outcome_details
+                if show_advanced_outcome_details is not None
+                else expected.get("show_advanced_outcome_details", False)
+            ),
         }
     )
     prior = _settings(expected)
@@ -1211,13 +1242,21 @@ def update_project(
                 raise ProjectError(str(exc)) from exc
         return replace(
             project,
-            schema_version=max(8 if wanted.difficulty is not None else 7, project.schema_version),
+            schema_version=max(
+                9
+                if wanted.show_advanced_outcome_details
+                else 8
+                if wanted.difficulty is not None
+                else 7,
+                project.schema_version,
+            ),
             title=wanted.title,
             problem=wanted.problem,
             investigation_type=wanted.investigation_type,
             ai_model=wanted.ai_model,
             reasoning_effort=wanted.reasoning_effort,
             difficulty=wanted.difficulty,
+            show_advanced_outcome_details=wanted.show_advanced_outcome_details,
             events=(
                 *project.events,
                 Event(

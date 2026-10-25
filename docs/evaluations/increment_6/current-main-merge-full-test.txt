@@ -1,0 +1,338 @@
+command=['env', '-u', 'SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL', './sigma', 'test']
+current_main_sha=afebf33f901f3662bcfc286c82693111a15416b7
+merged_candidate_sha=06cb8c46f460bdb041780845b0e95dbbbc2dd1be
+start_utc=2026-10-25T08:06:35.592852+00:00
+end_utc=2026-10-25T08:07:42.646570+00:00
+elapsed_seconds=67.1
+exit_code=0
+
+
+> uv run --locked --no-sync python tests/lifecycle.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS seed initialization, close/reopen, identity, ordered immutable reads
+PASS explicit creation, invalid inputs, existing research protected
+PASS failed publication cleanup and no-replace collision handling
+PASS malformed JSON, incompatible schema, metadata and event validation
+PASS API open/inspect/events/close/init, errors, origin and host boundaries
+All lifecycle scenarios passed.
+
+> uv run --locked --no-sync python tests/project_creation.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS all research types serialized/reopened, destination preview, collision and strategy integrity
+PASS name/problem/mode validation, Unicode slug, arbitrary files and symlink protection
+PASS publication rollback, concurrent data preservation and exclusive name reservation
+PASS API create/preview/errors and both CLI research modes
+PASS v1/v2/v3 default-mode reads without rewriting and retained history on writes
+PASS explicit default/configured roots, missing parents, ownership and root symlinks
+All project-creation scenarios passed.
+
+> uv run --locked --no-sync python tests/recents.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS sample discovery and independent copies, retained edits, collision safety, source immutability, API/CLI and four-per-category recents
+
+> uv run --locked --no-sync python tests/test_sample_copies.py
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.150s
+
+OK
+
+> uv run --locked --no-sync python tests/make_sample.py
+{
+  "sample": "t30-exported",
+  "path": "/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-make-sample-682fwxmy/samples/t30-exported"
+}
+PASS exported project -> make_sample -> sample loader preserves sessions, outcomes, evidence and provenance safely
+
+> uv run --locked --no-sync python tests/example_math.py
+PASS independent residue/adjacency DP and enumeration; a_12=128; initial values [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79]; recurrence through n=120
+PASS exact period-three traces/determinants/Cayley-Hamilton over Z[omega] in all three phases; analytic recurrence/density proof is in docs/example-math-verification.md
+
+> uv run --locked --no-sync python tests/research_ladder.py
+PASS five staged sample projects, independent copies, exact finite Euler/eta identities, and theta-transform spot checks
+NOTE finite computations validate examples only; they do not prove analytic continuation, the functional equation, or the Riemann Hypothesis
+
+> uv run --locked --no-sync python tests/rh_adversarial.py
+PASS exact degree-six polynomial countermodel: reflection/conjugation symmetry, finite-height on-line zeros, and a zero-free right half-plane coexist with off-critical zeros
+PASS exact finite eta identity for signed integer exponents and bounded m
+NOTE these are mathematical oracles, not RH results or agent judgment
+
+> uv run --locked --no-sync python tests/t39_evaluation.py
+PASS T39 manifest redaction, review provenance, score validation and transcript integrity
+
+> uv run --locked --no-sync python tests/project_settings.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS v1-v9 no-write/unknown/no-op reads, exact migration backups, stable identity/path/order/archives and auditable edit/reopen
+PASS explicit model/High creation, field/pair rejection, atomic failures, stale editors and independent strategy changes
+PASS strict project audit corruption rejection and consistent API/CLI update/conflict behavior
+
+> uv run --locked --no-sync python tests/model_connection.py
+PASS bounded curated account intersection, coalesced initial requests, TTL, retry cooldown and refresh
+PASS missing/auth/permission/rate/provider/network/timeout/redirect/bad/oversized responses; no raw secret/error exposure or invented readiness
+PASS per-project model/actual effort request, changed-model draft rejection, signed acceptance, unavailable choice/no fallback and offline metadata edits
+
+> uv run --locked --no-sync python tests/chatgpt.py
+PASS public OSS registration/PKCE, exact real loopback exchange, signed OIDC, safe payloads, stable host, retained issued ID, welcome once, serial rotating refresh and earliest-refresh boundary
+PASS invalid state/origin/nonce/signature/issuer/audience/expiry/subject/client, missing tokens, declined/cancelled sign-in, duplicate callback race and endpoint mixup never replace credentials
+PASS scope decline/enable, multi-account isolation, mode-specific catalogs, strict streamed Responses completion/failures/limits, no generation/save on sign-in, no billing fallback, project/account intent binding, key mode without flag, terminal refresh and confirmed/unconfirmed revoke
+
+> uv run --locked --no-sync python tests/chatgpt_restart.py
+PASS restart/session reuse and real cross-process rotating refresh serialize to one exchange; stable host/account/client and private atomic storage
+
+> uv run --locked --no-sync python tests/strategy_tracking.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS v1/v2/v3/v4 no-write reads, creation-order/Draft defaults and exact v5 migration backups
+PASS active-only reorder, no-op, removed history, stable identities, reload, stale order and failed writes
+PASS concurrent order/stage/edit persistence and strict corrupt history/metadata rejection
+PASS API and CLI tracking through common services
+
+> uv run --locked --no-sync python tests/proposals.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS exact Responses request/strict schema/full context, empty/seed, nonmutation, human-edited acceptance and signed provenance
+PASS ASGI endpoint disconnection through middleware cancels transport and releases request slot
+PASS unavailable/invalid configuration, malformed/refused/incomplete/rate errors, duplicate, hard timeout, cancellation, concurrency and oversized-context nonmutation
+
+> uv run --locked --no-sync python tests/agentic.py
+PASS sample zero-pool, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source
+PASS settings-backed call budgets, extended candidate fields, narrow-passage sample flow, skeptical revision and no mutation
+PASS malformed provider output fails with terminal event and releases run gate
+PASS binding/identity changes, duplicate run, cancellation, timeout and clean gate release
+PASS ChatGPT-plan streamed Responses adapter preserves selected model/effort and request mode
+PASS ASGI browser disconnect cancels active agentic provider work
+PASS durable run evidence round-trip, failed/incomplete work, storage failure and immutable Sample source
+
+> uv run --locked --no-sync python tests/agentic_evidence.py
+PASS evidence persistence, cross-project isolation, private modes, run/byte retention, size cap and symlink rejection
+
+> uv run --locked --no-sync python tests/research_sessions.py
+PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.737s
+Persistent research session scenarios passed.
+
+> uv run --locked --no-sync python tests/research_state.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS read-only current understanding: original archives, explicit dispositions/relations, no semantic matching, stable ordering/IDs, path isolation, missing/failed history, no provider work
+
+> uv run --locked --no-sync python tests/continuations.py
+PASS continuation approval, mandatory refutation, foreign IDs, overflow, frozen cross-strategy dispatch, archive preservation, corrupt/edited approval and stale preview
+
+> uv run --locked --no-sync python tests/research_feedback.py
+PASS lossless evidence pooling, exact negative constraints and source coverage; missing/foreign/status/hash/citation/follow-up checks; execution failure cannot be a counterexample
+
+> uv run --locked --no-sync python tests/python_sandbox.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS fixed isolated command, source bounds, project-scoped artifact persistence, metadata validation, and HTTP execution/list API
+
+> uv run --locked --no-sync python tests/sage_execution.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS Sage agent advertisement, typed selection, persisted evidence/API/artifacts/metrics, failure revision and crash-safe recovery
+
+> uv run --locked --no-sync python tests/computational_evidence.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+Computational evidence previews and cross-session citation scenarios passed.
+
+> uv run --locked --no-sync python tests/project_reports.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS empty and populated reports, lifecycle/outcome distinction, UTF-8 and escaping
+PASS report API formats and unchanged Project Audit export
+
+> uv run --locked --no-sync python tests/papers.py
+Paper snapshots, citation validation, version retention and bounded rendering passed.
+
+> uv run --locked --no-sync python tests/text_views.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS large strategy conversions above 128 KB and the explicit 1 MB response cap
+PASS v1-v6 read-only legacy access, lazy portable cache, sample source immutability, explicit two-way conversion, stale revision and no cached calls
+PASS in-flight source conflict, cancellation and gate release, unavailable model, truncated output and account change preserve source
+PASS ChatGPT HTTP rejection preserves source and suppresses provider error fields
+PASS ChatGPT plan untyped SSE recovery, partial/missing-text rejection, and malformed-body classification
+PASS ChatGPT-plan terminal text omission is recovered from complete streamed deltas
+PASS strategy approach shares the service and ChatGPT-plan preserves the selected billing path
+PASS ASGI browser disconnect interrupts conversion before companion publication
+
+> uv run --locked --no-sync python tests/strategies.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS read-only v1 access, first-save migration, exact backup, stable identity/history
+PASS validation, failed replacement/flush, unchanged state and staging cleanup
+PASS failed migration retry and existing backup protection
+PASS backup failure, external-edit conflict, unsafe lock and missing-project protection
+PASS concurrent writers preserve all strategies, stable IDs and ordered events
+PASS corrupt strategy records, unsupported authors and unmatched history rejected
+PASS API create/list, shared persistence, validation and safe error responses
+All strategy scenarios passed.
+
+> uv run --locked --no-sync python tests/strategy_changes.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS isolated strategy workflow leaves external Recent index byte-for-byte intact
+PASS edit audit trail, unchanged identity, no-op, exact v2 backup, durable pool removal
+PASS create after removal, validation, failed edits/removals leave state unchanged
+PASS both first-write migrations, backup/publication failure and retry
+PASS strategy edits retain approaches beyond the legacy 10,000-character bound
+PASS concurrent create/edit/remove preserve all records and ordered history
+PASS inconsistent edit/removal histories rejected without repair
+PASS strategy eligibility schema-v7 migration, durable toggles, audit consistency and no-op
+PASS API edit/remove/list and validation through the shared services
+All edit/removal scenarios passed.
+
+> uv run --locked --no-sync python tests/cli_smoke.py
+PASS CLI lifecycle, strategy create/edit/remove/list/reopen, agentic evidence list/export and safe failure
+
+> uv run --locked --no-sync python tests/tooling.py
+PASS maintenance, UI lifecycle, verified suspended-owner recovery and shutdown
+
+> uv run --locked --no-sync python tests/local_config.py
+PASS checkout dotenv syntax, missing file, environment precedence, no evaluation/expansion, atomic rejection and safe errors
+
+> uv run --locked --no-sync python tests/cloud_demo.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.068s
+
+OK
+
+> uv run --locked --no-sync python tests/cloud_auth.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.325s
+
+OK
+
+> uv run --locked --no-sync python tests/cloud_workspaces.py
+PASS two isolated production API workspaces; copied paths, IDs, traversal, symlinks, exports, reports, sessions, executions, artifacts and mutations denied; restart, revocation retention and offline backup/restore preserved owners and artifact bytes
+
+> uv run --locked --no-sync python tests/cloud_research.py
+PASS cloud research admission, user/global accounting, restart recovery, local compatibility, and workspace isolation
+
+> uv run --locked --no-sync python tests/cloud_research_api.py
+/private/tmp/sigma-blue-main-release-6/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+PASS authenticated HTTP research start/status/idempotency and cross-workspace status/control denial with deterministic provider
+
+> uv run --locked --no-sync python tests/deployment_package.py
+Deployment package structure and secret-source checks passed.
+
+> uv run --locked --no-sync python tests/instance_ownership.py
+PASS canonical checkout identity/symlink changes, private state, stale recovery, wrong handshake/no shutdown and unsafe lock rejection
+
+> uv run --locked --no-sync python tests/ui_registry.py
+Stopping existing SIGMA instance…
+Stopping existing SIGMA instance…
+Stopping existing SIGMA instance…
+PASS global cross-checkout shutdown, stale owner/socket/temp cleanup and no PID signaling
+
+> uv run --locked --no-sync python tests/ui_orphans.py
+Stopping orphaned SIGMA server on port 8000 (PID 123)…
+Stopping orphaned SIGMA server on port 5173 (PID 124)…
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmpnj22ojif/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmpnj22ojif/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+PASS cross-checkout orphan discovery, command/marker verification, occupied-port reporting and PID reuse protection
+
+> uv run --locked --no-sync ruff check src tests sigma
+All checks passed!
+
+> uv run --locked --no-sync ruff format --check src tests sigma
+87 files already formatted
+
+> uv run --locked --no-sync pyright
+0 errors, 0 warnings, 0 informations
+
+> npm --prefix frontend run typecheck
+
+> sigma-browser@0.1.0 typecheck
+> tsc --noEmit
+
+
+> npm --prefix frontend run build
+
+> sigma-browser@0.1.0 build
+> tsc --noEmit && vite build
+
+vite v6.4.4 building for production...
+transforming...
+✓ 235 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                         0.37 kB │ gzip:   0.28 kB
+dist/assets/KaTeX_Size3-Regular-CTq5MqoE.woff           4.42 kB
+dist/assets/KaTeX_Size4-Regular-Dl5lxZxV.woff2          4.93 kB
+dist/assets/KaTeX_Size2-Regular-Dy4dx90m.woff2          5.21 kB
+dist/assets/KaTeX_Size1-Regular-mCD8mA8B.woff2          5.47 kB
+dist/assets/KaTeX_Size4-Regular-BF-4gkZK.woff           5.98 kB
+dist/assets/KaTeX_Size2-Regular-oD1tc_U0.woff           6.19 kB
+dist/assets/KaTeX_Size1-Regular-C195tn64.woff           6.50 kB
+dist/assets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2    6.91 kB
+dist/assets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2       6.91 kB
+dist/assets/KaTeX_Size3-Regular-DgpXs0kz.ttf            7.59 kB
+dist/assets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff     7.66 kB
+dist/assets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff        7.72 kB
+dist/assets/KaTeX_Script-Regular-D3wIWfF6.woff2         9.64 kB
+dist/assets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2     10.34 kB
+dist/assets/KaTeX_Size4-Regular-DWFBv043.ttf           10.36 kB
+dist/assets/KaTeX_Script-Regular-D5yQViql.woff         10.59 kB
+dist/assets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2       11.32 kB
+dist/assets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2          11.35 kB
+dist/assets/KaTeX_Size2-Regular-B7gKUWhC.ttf           11.51 kB
+dist/assets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2      12.03 kB
+dist/assets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2        12.22 kB
+dist/assets/KaTeX_Size1-Regular-Dbsnue_I.ttf           12.23 kB
+dist/assets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff      12.32 kB
+dist/assets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf     12.34 kB
+dist/assets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf        12.37 kB
+dist/assets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff        13.21 kB
+dist/assets/KaTeX_Fraktur-Bold-BsDP51OF.woff           13.30 kB
+dist/assets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2    13.57 kB
+dist/assets/KaTeX_SansSerif-Italic-DN2j7dab.woff       14.11 kB
+dist/assets/KaTeX_SansSerif-Bold-DbIhKOiC.woff         14.41 kB
+dist/assets/KaTeX_Typewriter-Regular-C0xS9mPB.woff     16.03 kB
+dist/assets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2       16.40 kB
+dist/assets/KaTeX_Math-Italic-t53AETM-.woff2           16.44 kB
+dist/assets/KaTeX_Script-Regular-C5JkGWo-.ttf          16.65 kB
+dist/assets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2       16.78 kB
+dist/assets/KaTeX_Main-Italic-NWA7e6Wa.woff2           16.99 kB
+dist/assets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff        18.67 kB
+dist/assets/KaTeX_Math-Italic-DA0__PXp.woff            18.75 kB
+dist/assets/KaTeX_Main-BoldItalic-SpSLRI95.woff        19.41 kB
+dist/assets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf       19.44 kB
+dist/assets/KaTeX_Fraktur-Regular-CB_wures.ttf         19.57 kB
+dist/assets/KaTeX_Fraktur-Bold-BdnERNNW.ttf            19.58 kB
+dist/assets/KaTeX_Main-Italic-BMLOBm91.woff            19.68 kB
+dist/assets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf        22.36 kB
+dist/assets/KaTeX_SansSerif-Bold-CFMepnvq.ttf          24.50 kB
+dist/assets/KaTeX_Main-Bold-Cx986IdX.woff2             25.32 kB
+dist/assets/KaTeX_Main-Regular-B22Nviop.woff2          26.27 kB
+dist/assets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf      27.56 kB
+dist/assets/KaTeX_AMS-Regular-BQhdFMY1.woff2           28.08 kB
+dist/assets/KaTeX_Main-Bold-Jm3AIy58.woff              29.91 kB
+dist/assets/KaTeX_Main-Regular-Dr94JaBh.woff           30.77 kB
+dist/assets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf         31.20 kB
+dist/assets/KaTeX_Math-Italic-flOr_0UB.ttf             31.31 kB
+dist/assets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf         32.97 kB
+dist/assets/KaTeX_AMS-Regular-DMm9YOAa.woff            33.52 kB
+dist/assets/KaTeX_Main-Italic-3WenGoN9.ttf             33.58 kB
+dist/assets/KaTeX_Main-Bold-waoOVXN0.ttf               51.34 kB
+dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf            53.58 kB
+dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf             63.63 kB
+dist/assets/RenderedMarkdown-DdZNUVNG.css              30.25 kB │ gzip:   8.09 kB
+dist/assets/index-DGIUZMzX.css                        211.65 kB │ gzip:  35.33 kB
+dist/assets/RenderedMarkdown-De19eXc5.js              397.41 kB │ gzip: 120.62 kB
+dist/assets/index-Cy2S34-a.js                         489.31 kB │ gzip: 141.23 kB
+✓ built in 842ms
+
+sigma test: all steps passed.

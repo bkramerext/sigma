@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
-from sigma.projects import ProjectError, inspect_project
+from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
 from sigma.proposals import configuration
 from sigma.text_views import Format, _format, inspect_text, store_conversion
 
@@ -21,7 +21,7 @@ _gate = asyncio.Lock()
 
 class Converted(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    body: str = Field(min_length=1, max_length=20000)
+    body: str = Field(min_length=1, max_length=MAX_STRATEGY_APPROACH)
     warnings: list[str] = Field(max_length=5)
 
 
@@ -87,7 +87,7 @@ async def _convert_text(
                 return source
             source_format: Format = source["source_format"]
             source_body: str = source[source_format]["body"]
-            limit = 20000 if scope == "project" else 10000
+            limit = 20000 if scope == "project" else MAX_STRATEGY_APPROACH
             if len(source_body) > limit:
                 raise ProjectError("Source text exceeds the conversion limit")
             binding = await auth_context()

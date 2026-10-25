@@ -5,6 +5,7 @@
   font-synthesis: none;
 }
 * { box-sizing: border-box; }
+html { scrollbar-gutter: stable; }
 body { margin: 0; }
 main { max-width: 1000px; margin: 0 auto; padding: 30px 44px 60px; }
 .site-header { display: flex; align-items: flex-start; gap: 20px; justify-content: space-between; padding-bottom: 58px; }
@@ -186,7 +187,9 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
  pointer-events: none; user-select: none;
 }
 .home-page .home-art-credit { --credit-bottom: clamp(14px, 2.5vh, 26px); position: fixed; z-index: 1; right: clamp(18px, 4vw, 58px); bottom: var(--credit-bottom); display: grid; justify-items: end; gap: 3px; color: #9ac7f0; font: 400 12px/1.25 Noteworthy, "Bradley Hand", "Comic Sans MS", cursive; letter-spacing: .015em; text-align: right; text-shadow: 0 1px 8px #05101dcc, 0 0 16px #3982bb88; pointer-events: auto; user-select: none; }
-.home-page .home-credit-streak { position: fixed; z-index: 2; left: -120px; bottom: calc(var(--credit-bottom) + 20px); display: block; width: 120px; height: 1px; background: linear-gradient(90deg, transparent 0%, #4b85b5 24%, #79b7ed 68%, #e0f2ff 94%, transparent 100%); opacity: 0; filter: drop-shadow(0 0 4px #8bc6ff); pointer-events: none; animation: home-credit-streak 520ms linear both; }
+.home-page .home-credit-streak { position: fixed; z-index: 2; left: -120px; bottom: calc(var(--home-credit-edge, 5px) + 1.95em + 2px); display: block; width: 120px; height: 1px; background: linear-gradient(90deg, transparent 0%, #4b85b5 24%, #79b7ed 68%, #e0f2ff 94%, transparent 100%); opacity: 0; filter: drop-shadow(0 0 4px #8bc6ff); pointer-events: none; animation: home-credit-streak 520ms linear both; }
+.home-page .home-credit-streak--models { bottom: calc(var(--home-credit-edge, 5px) + .65em); animation-delay: 200ms; }
+.home-page .home-credit-plunk { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: hidden; pointer-events: none; }
 .home-page .home-credit-shimmer { position: fixed; z-index: 1; top: 47vh; right: clamp(18px, 7vw, 100px); display: block; width: min(36vw, 460px); height: min(24vh, 210px); border-radius: 50%; background: radial-gradient(ellipse at 68% 52%, #ffd69b9c 0%, #e5995d7a 18%, #75b7ef52 42%, transparent 74%); mix-blend-mode: screen; opacity: 0; filter: blur(5px) drop-shadow(0 0 18px #e8a86480); pointer-events: none; animation: home-credit-shimmer 900ms ease-out both; }
 .home-page .home-credit-shimmer::before { content: ""; position: absolute; top: -25%; left: 40%; width: 18%; height: 150%; border-radius: 50%; background: linear-gradient(90deg, transparent, #82c3f66e 25%, #fff0cfde 50%, #e3a0639e 70%, transparent); filter: blur(3px); transform: rotate(24deg) translateX(-260%); animation: home-credit-glint 900ms ease-out both; }
 .home-page .home-art-credit:hover { cursor: default; }
@@ -208,7 +211,6 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   76% { opacity: .65; transform: rotate(24deg) translateX(360%); }
   100% { opacity: 0; transform: rotate(24deg) translateX(420%); }
 }
-.home-page .home-art-credit time { color: #75a9d6; font: 500 9px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .22em; }
 .home-page .home-topline .api-connection { position: relative; z-index: 1; margin-left: auto; }
 .home-page .home-hero { margin-top: clamp(170px, 28vh, 320px); max-width: 560px; animation: none; }
 .home-page :is(.home-hero, .home-entry-actions, .home-catalog) { margin-left: clamp(26px, 5.4vw, 90px); }
@@ -232,12 +234,13 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .home-page .home-atmosphere { z-index: -1; }
 @media (max-width: 700px) {
  .home-page .home-topline { font-size: 9px; letter-spacing: .08em; }
- .home-page .home-topline .api-connection.api-connection { top: 8px; }
+ .home-page .home-topline { height: auto; min-height: 70px; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px 12px; padding: 0; }
+ .home-page .home-auth-pills > .api-connection.api-connection { top: 0; justify-self: end; min-width: 0; width: max-content; max-width: min(240px, calc(100vw - 32px)); margin-left: 0; }
+ .home-page .home-topline .api-connection > summary { max-width: 100%; white-space: normal; }
+ .home-page .home-topline .api-connection > summary [role="status"] { min-width: 0; white-space: normal; }
  .home-page .home-slogan { width: min(84vw, 320px); top: -32px; }
  .home-page .home-art-credit { --credit-bottom: 10px; right: 12px; font-size: 11px; }
- .home-page .home-credit-streak { bottom: calc(var(--credit-bottom) + 16px); }
  .home-page .home-credit-shimmer { top: 55vh; right: 6vw; width: 72vw; height: 18vh; }
- .home-page .home-art-credit time { font-size: 8px; }
  .home-atmosphere { background-position: 35% top; }
  .home-page .home-hero { margin-top: clamp(340px, 44vh, 400px); }
  .home-page .open-form { padding: 18px; }
@@ -360,3 +363,12 @@ dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
 .cloud-demo-project{display:flex;justify-content:space-between;gap:2rem;align-items:flex-start;padding:1.5rem 1.7rem;background:#1a1a18;border:1px solid #39362f;border-top:2px solid #a8794f;border-radius:6px}.cloud-demo-project h2{font-size:1.8rem;margin:.3rem 0 .8rem}.cloud-demo-markdown{color:#d1cbc0;line-height:1.65}.cloud-demo-export{background:#a8794f;border:1px solid #bc9067;color:#171411;border-radius:4px;padding:.7rem 1rem;font-weight:700;cursor:pointer;white-space:nowrap}.cloud-demo-section{padding-top:2.2rem}.cloud-demo-section>h2{border-bottom:1px solid #39362f;padding-bottom:.7rem;font-size:1.35rem}.cloud-demo-section>h2 span{font-size:.75rem;color:#d3a273;margin-left:.45rem}.cloud-demo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,27rem),1fr));gap:1rem}.cloud-demo-card{background:#191a18;border:1px solid #39362f;border-radius:5px;padding:1rem 1.1rem;margin:.8rem 0;color:#d7d0c5}.cloud-demo-card summary{cursor:pointer;display:flex;justify-content:space-between;gap:1rem;align-items:center;color:#e5d8c7}.cloud-demo-card summary span{font-weight:650}.cloud-demo-card summary small,.cloud-demo-evidence small{color:#b49a7f}.cloud-demo-card h3{font-size:.95rem;color:#d5a46d}.cloud-demo-columns{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;padding-top:.8rem}.cloud-demo-evidence{border-left:2px solid #806044;padding:.2rem 0 .2rem .8rem;margin:.9rem 0;color:#c9c2b8}.cloud-demo-evidence p{line-height:1.55}.cloud-demo-footer{margin-top:2rem;border-top:1px solid #39362f;padding:1.3rem 0;display:flex;justify-content:space-between;align-items:center;color:#a8a095}.cloud-demo-state{max-width:1180px;margin:2rem auto;padding:1.2rem;border:1px solid #59402e;color:#e4d5c3}.cloud-demo-session{padding:1.2rem}.cloud-demo-footer .cloud-demo-export{white-space:normal}
 @media(max-width:640px){.cloud-demo-page{padding:0 1rem 2rem}.cloud-demo-header{height:auto;min-height:4rem;gap:.8rem}.cloud-demo-header nav{gap:.55rem;flex-wrap:wrap;justify-content:flex-end;font-size:.78rem}.cloud-demo-intro{padding:2rem 0 1.2rem}.cloud-demo-project{display:block;padding:1.1rem}.cloud-demo-project>.cloud-demo-export{margin-top:1rem}.cloud-demo-columns{grid-template-columns:1fr;gap:.5rem}.cloud-demo-card summary{align-items:flex-start;flex-direction:column;gap:.25rem}.cloud-demo-footer{align-items:flex-start;flex-direction:column;gap:.8rem}}
 .cloud-demo-page pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;box-sizing:border-box}
+
+/* Outcome integrity: persisted tool facts precede model-authored conclusions. */
+.outcome-evidence-prelude { margin: 12px 0 18px; padding: 12px 15px; border: 1px solid #876847; border-radius: 5px; background: #201c18; color: #e4d8c8; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.outcome-evidence-prelude > strong { color: #f1c992; }
+.outcome-evidence-prelude p { margin: 5px 0 0; color: #cbbdac; }
+.outcome-evidence-prelude details { margin-top: 8px; }
+.outcome-evidence-prelude summary { cursor: pointer; color: #e8bd82; }
+.outcome-evidence-prelude ul { margin: 8px 0 0; padding-left: 22px; }
+.outcome-evidence-prelude li { margin: 5px 0; }

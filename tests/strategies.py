@@ -40,6 +40,7 @@ def legacy(path: Path) -> bytes:
     for key in ("ai_model", "reasoning_effort", "active_order"):
         raw.pop(key, None)
     raw.pop("difficulty", None)
+    raw.pop("show_advanced_outcome_details", None)
     contents = (json.dumps(raw, indent=2) + "\n").encode()
     (path / STATE).write_bytes(contents)
     return contents
@@ -81,7 +82,7 @@ def main() -> None:
             (" ", "Text"),
             ("Title", "\n"),
             ("x" * 201, "Text"),
-            ("Title", "x" * 10001),
+            ("Title", "x" * 50001),
         ):
             rejects(lambda title=title, approach=approach: create_strategy(path, title, approach))
             assert (path / STATE).read_bytes() == snapshot
@@ -93,6 +94,11 @@ def main() -> None:
             rejects(lambda: create_strategy(path, "Failure", "Keep the original"))
         assert (path / STATE).read_bytes() == snapshot
         assert not list(path.glob(".sigma-write-*"))
+        longer = "A concrete strategy detail. " * 400
+        created_long = create_strategy(path, "Long strategy", longer)
+        assert created_long.project.strategies[-1].approach == longer.strip()
+        assert len(created_long.project.strategies[-1].approach) > 10_000
+        assert inspect_project(path).project.strategies[-1].approach == longer.strip()
         print("PASS validation, failed replacement/flush, unchanged state and staging cleanup")
 
         failed = root / "failed-migration.sigma"
@@ -154,9 +160,9 @@ def main() -> None:
                 )
             )
         concurrent = inspect_project(path).project
-        assert len(concurrent.strategies) == 9
-        assert len({strategy.id for strategy in concurrent.strategies}) == 9
-        assert [event.sequence for event in concurrent.events] == list(range(1, 11))
+        assert len(concurrent.strategies) == 10
+        assert len({strategy.id for strategy in concurrent.strategies}) == 10
+        assert [event.sequence for event in concurrent.events] == list(range(1, 12))
         assert concurrent.strategies[0].id == strategy.id
         assert (path / "project.v1.json").read_bytes() == before
         print("PASS concurrent writers preserve all strategies, stable IDs and ordered events")
@@ -200,7 +206,7 @@ def main() -> None:
             assert api_strategy["author_kind"] == "human"
             assert list_strategies(path)[-1].id == api_strategy["id"]
             response = client.get("/api/projects/strategies", params={"path": str(path)})
-            assert response.status_code == 200 and len(response.json()["strategies"]) == 10
+            assert response.status_code == 200 and len(response.json()["strategies"]) == 11
             snapshot = (path / STATE).read_bytes()
             assert (
                 client.post(

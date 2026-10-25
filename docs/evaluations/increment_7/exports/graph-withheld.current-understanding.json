@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+  "session_count": 1,
+  "project_status": "not_determined",
+  "scope_note": "Latest saved local reviews by strategy. Project completion and independent correctness are not inferred.",
+  "findings": [
+    {
+      "id": "finding:2f44bea5-45b7-424d-aa91-dab0038d23d3:aa9d0772-ffa3-416e-8268-00d09f1873ee:0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+      "text": "Only a bounded computational observation supports the local candidate.",
+      "investigated_claim": "OFFLINE SCRIPT ASSERTION: a graph computation supports the guard, despite no saved execution.",
+      "source": {
+        "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+        "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+        "session_number": 1,
+        "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+        "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "available": true
+      },
+      "review_ref": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d/objective_review",
+      "review_status": "partial",
+      "status": "partial_reported",
+      "verification": "Incomplete",
+      "local_scope": "unconditional",
+      "strategy_title": "Test the local guard",
+      "strategy_text": "Test a three-vertex witness, then investigate a reachability repair and proof duty.",
+      "assumptions": [],
+      "objections": [
+        "Finite checks cannot prove the arbitrary-size claim.",
+        "Check boundary case 1"
+      ],
+      "evidence_kind": "Offline scripted role output; actual local execution, if any, is separate evidence.",
+      "related_by": []
+    }
+  ],
+  "current_finding_ids": [
+    "finding:2f44bea5-45b7-424d-aa91-dab0038d23d3:aa9d0772-ffa3-416e-8268-00d09f1873ee:0c71ccc5-6624-44e6-a44c-1deaac7b611d"
+  ],
+  "obligations": [
+    {
+      "id": "9fd2e4c5b486362a880ae01c99f65580c49749fb03fc302c458cf0a9c17665a9",
+      "text": "Prove the arbitrary-size insertion condition and characterize update cost.",
+      "kind": "obligation",
+      "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+          "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+          "session_number": 1,
+          "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+          "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "f467653f17cf5b855ebf5e24460c58af038878400e9082ed8f6e33002d56a113",
+      "text": "Run a bounded graph check before claiming evidence.",
+      "kind": "obligation",
+      "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+          "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+          "session_number": 1,
+          "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+          "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "9614a8a81407cef5633d279bc3d9fe529fd7734f95c58e0a3db164178b079ad3",
+      "text": "General proof and complexity remain open.",
+      "kind": "obligation",
+      "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+          "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+          "session_number": 1,
+          "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+          "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "f45f2ee4de37c8cbc9963d6dae2900c77b2d6ede6176d94fa2392703f6dad4e7",
+      "text": "Check boundary case 1",
+      "kind": "obligation",
+      "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+          "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+          "session_number": 1,
+          "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+          "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    },
+    {
+      "id": "8449d0211642f06ddd1f8a0305da4d64541e04f6315f2972999c6ad50c822703",
+      "text": "Finite checks cannot prove the arbitrary-size claim.",
+      "kind": "obligation",
+      "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+      "status": "open_reported",
+      "actionable": true,
+      "sources": [
+        {
+          "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+          "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+          "session_number": 1,
+          "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+          "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "artifact_sequence": 1,
+          "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+          "available": true
+        }
+      ],
+      "dispositions": [],
+      "narrative_resolution_sources": [],
+      "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
+    }
+  ],
+  "next_investigations": [
+    {
+      "obligation_id": "9fd2e4c5b486362a880ae01c99f65580c49749fb03fc302c458cf0a9c17665a9",
+      "question": "Prove the arbitrary-size insertion condition and characterize update cost.",
+      "source": {
+        "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+        "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+        "session_number": 1,
+        "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+        "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "f467653f17cf5b855ebf5e24460c58af038878400e9082ed8f6e33002d56a113",
+      "question": "Run a bounded graph check before claiming evidence.",
+      "source": {
+        "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+        "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+        "session_number": 1,
+        "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+        "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "9614a8a81407cef5633d279bc3d9fe529fd7734f95c58e0a3db164178b079ad3",
+      "question": "General proof and complexity remain open.",
+      "source": {
+        "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+        "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+        "session_number": 1,
+        "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+        "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "f45f2ee4de37c8cbc9963d6dae2900c77b2d6ede6176d94fa2392703f6dad4e7",
+      "question": "Check boundary case 1",
+      "source": {
+        "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+        "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+        "session_number": 1,
+        "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+        "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    },
+    {
+      "obligation_id": "8449d0211642f06ddd1f8a0305da4d64541e04f6315f2972999c6ad50c822703",
+      "question": "Finite checks cannot prove the arbitrary-size claim.",
+      "source": {
+        "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+        "session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
+        "session_number": 1,
+        "strategy_id": "215809fb-dabe-41d1-9578-475a18349024",
+        "artifact_id": "0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "artifact_sequence": 1,
+        "record_path": "artifacts/0c71ccc5-6624-44e6-a44c-1deaac7b611d",
+        "available": true
+      },
+      "qualification": "Proposed from a saved open obligation; review its scope before starting."
+    }
+  ],
+  "changes": [],
+  "failures": [],
+  "limitations": [
+    "Local saved findings do not establish that the project is solved. Agent reviews and computations are not independent verification.",
+    "Latest reviewed findings are shown by strategy; different wording does not establish contradiction, equivalence or supersession."
+  ]
+}

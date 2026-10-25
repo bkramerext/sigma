@@ -157,6 +157,10 @@ def _sample_evidence(identifier: str) -> dict[str, Any]:
 
 
 def _validate_export(value: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    if isinstance(value, dict) and value.get("continuations"):
+        raise ProjectError(
+            "Sample conversion of continuation approvals is not supported; preserve the Project Audit JSON and working project to retain lineage."
+        )
     if (
         not isinstance(value, dict)
         or set(value) != {"export_version", "project", "agentic_runs", "research_sessions"}

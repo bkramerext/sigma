@@ -1,0 +1,1 @@
+{"checks": 29, "n": 3, "scope": "local insertion criterion only; no dynamic complexity result", "test": "reverse_edge_only_cycle_guard", "witness": {"candidate_accepts": true, "edges_before": [[0, 2], [1, 0]], "insert": [2, 1], "oracle_acyclic_after": false}}

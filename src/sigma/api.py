@@ -26,6 +26,9 @@ from sigma import (
 )
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
+from sigma.continuations import Approval, approved_packets
+from sigma.continuations import approve as approve_continuation
+from sigma.continuations import proposal as continuation_proposal
 from sigma.openai_connection import connection, models
 from sigma.projects import (
     ProjectError,
@@ -198,6 +201,24 @@ class OpenRequest(BaseModel):
     path: str
 
 
+class ContinuationApprovalRequest(Approval):
+    path: str
+
+
+@app.get("/api/projects/continuations/proposal")
+def continuation_proposal_view(
+    path: str, parent_strategy_id: str, obligation_id: str | None = None
+):
+    return continuation_proposal(path, parent_strategy_id, obligation_id)
+
+
+@app.post("/api/projects/continuations/approve")
+def continuation_approve_view(body: ContinuationApprovalRequest):
+    return asdict(
+        approve_continuation(body.path, Approval.model_validate(body.model_dump(exclude={"path"})))
+    )
+
+
 class ResearchStartRequest(OpenRequest):
     strategy_id: str = Field(min_length=1, max_length=100)
     strategy_ids: list[str] | None = Field(default=None, min_length=1, max_length=12)
@@ -248,11 +269,54 @@ class ResearchLimitsRequest(OpenRequest):
 class PaperGenerateRequest(OpenRequest):
     expected_project_id: str = Field(min_length=1, max_length=100)
     expected_binding: str = Field(min_length=1, max_length=512)
+    expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    long_form: bool = False
+
+
+class PaperRestartRequest(OpenRequest):
+    expected_project_id: str = Field(min_length=1, max_length=100)
+    expected_binding: str = Field(min_length=1, max_length=512)
+    expected_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirm_restart: Literal[True]
 
 
 @app.get("/api/projects/papers")
 def papers_view(path: str):
     return {"papers": papers.list_papers(path)}
+
+
+@app.get("/api/projects/papers/preflight")
+def papers_preflight_view(
+    path: str,
+    long_form: bool = False,
+    expected_project_id: str | None = None,
+    expected_binding: str | None = None,
+    mode: str | None = None,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+):
+    require_cloud_research_inference()
+    return papers.preflight(
+        path,
+        force_long_form=long_form,
+        expected_project_id=expected_project_id,
+        expected_binding=expected_binding,
+        mode=mode,
+        model=model,
+        reasoning_effort=reasoning_effort,
+    )
+
+
+@app.post("/api/projects/papers/restart")
+async def papers_restart_view(body: PaperRestartRequest):
+    require_cloud_research_inference()
+    return await papers.restart_work(
+        body.path,
+        body.expected_project_id,
+        body.expected_binding,
+        body.expected_snapshot_sha256,
+        body.confirm_restart,
+    )
 
 
 @app.get("/api/projects/papers/{paper_id}")
@@ -276,26 +340,46 @@ def paper_pdf_view(paper_id: str, path: str):
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
     require_cloud_research_inference()
 
-    async def disconnected():
-        while (await request.receive())["type"] != "http.disconnect":
-            pass
+    async def stream():
+        updates: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
-    task = asyncio.create_task(
-        papers.generate(body.path, body.expected_binding, body.expected_project_id)
-    )
-    connection = asyncio.create_task(disconnected())
-    try:
-        done, _ = await asyncio.wait({task, connection}, return_when=asyncio.FIRST_COMPLETED)
-        if connection in done:
-            return JSONResponse(
-                {"error": "Paper generation cancelled; no version was published"}, status_code=499
+        async def progress(stage: str, completed: int, total: int) -> None:
+            await updates.put(
+                {"type": "progress", "stage": stage, "completed": completed, "total": total}
             )
-        return await task
-    finally:
-        for pending in (task, connection):
-            if not pending.done():
-                pending.cancel()
-        await asyncio.gather(task, connection, return_exceptions=True)
+
+        task = asyncio.create_task(
+            papers.generate(
+                body.path,
+                body.expected_binding,
+                body.expected_project_id,
+                progress=progress,
+                force_long_form=body.long_form,
+                expected_snapshot_sha256=body.expected_snapshot_sha256,
+            )
+        )
+        try:
+            while not task.done():
+                try:
+                    update = await asyncio.wait_for(updates.get(), timeout=1)
+                except TimeoutError:
+                    yield ": paper generation is active\n\n"
+                    continue
+                yield "data: " + json.dumps(update, separators=(",", ":")) + "\n\n"
+            result = await task
+            yield "data: " + json.dumps({"type": "complete", "result": result}) + "\n\n"
+        except ProjectError as exc:
+            yield "data: " + json.dumps({"type": "error", "error": str(exc)}) + "\n\n"
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/projects/research-limits")
@@ -317,10 +401,24 @@ def research_limits_update(body: ResearchLimitsRequest):
     )
 
 
+@app.get("/api/projects/current-understanding")
+def current_understanding_view(path: str):
+    from sigma.research_state import current_understanding
+
+    return current_understanding(path)
+
+
 @app.get("/api/projects/research-sessions")
 async def research_sessions_view(path: str):
     await research_sessions.ensure_queued_workers(path)
-    return {"sessions": research_sessions.list_sessions(path)}
+    from sigma.research_state import build_current_understanding
+
+    sessions = research_sessions.list_sessions(path)
+    project = inspect_project(path).project
+    return {
+        "sessions": sessions,
+        "current_understanding": build_current_understanding(project.id, sessions),
+    }
 
 
 @app.get("/api/projects/research-sessions/{session_id}")
@@ -453,11 +551,13 @@ def export_project_view(path: str):
     project = json.loads(_document(inspect_project(path).project))
     runs = [get_run(path, item["run_id"]) for item in reversed(list_runs(path))]
     sessions = list(reversed(research_sessions.list_sessions(path)))
+    continuations = list(approved_packets(path, validate_dispatch=False).values())
     return {
         "export_version": 2,
         "project": project,
         "agentic_runs": runs,
         "research_sessions": sessions,
+        **({"continuations": continuations} if continuations else {}),
     }
 
 
@@ -748,6 +848,7 @@ class ProjectSettingsRequest(BaseModel):
     ai_model: str
     reasoning_effort: str
     difficulty: str | None
+    show_advanced_outcome_details: bool | None = None
 
 
 class UpdateProjectRequest(ProjectSettingsRequest):
@@ -765,8 +866,9 @@ def update_project_view(body: UpdateProjectRequest):
             body.investigation_type,
             body.ai_model,
             body.reasoning_effort,
-            body.expected.model_dump(),
+            body.expected.model_dump(exclude_none=True),
             difficulty=body.difficulty,
+            show_advanced_outcome_details=body.show_advanced_outcome_details,
         )
     )
 

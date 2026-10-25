@@ -1,0 +1,312 @@
+{
+  "scope": "Paired deterministic encoding/render baseline; actual dispatched calls and actual new Conclusions on the other side. Increment 5 dispatches full literal text; compact pooling is an untested hypothetical alternative. Exact reconstruction and all selected sources verified. No semantic source selection or truncation.",
+  "contexts": [
+    {
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "step_id": "bf53ccab-5c78-4616-bbcb-5aa827e12381",
+      "actual_dispatch_bytes": 49044,
+      "paired_alternative_encoding_bytes": 40725,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "step_id": "93521eb8-fcd8-4866-bb80-9b5f29a2aefa",
+      "actual_dispatch_bytes": 56558,
+      "paired_alternative_encoding_bytes": 48239,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "step_id": "607e52cf-06ff-47e5-ac65-3cb426b2446c",
+      "actual_dispatch_bytes": 64511,
+      "paired_alternative_encoding_bytes": 56192,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "step_id": "ea954743-5bf0-4fe4-a3ad-7bc971896907",
+      "actual_dispatch_bytes": 72200,
+      "paired_alternative_encoding_bytes": 63881,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "step_id": "0957d405-b5de-434d-806b-590f0dc88878",
+      "actual_dispatch_bytes": 49348,
+      "paired_alternative_encoding_bytes": 41029,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "step_id": "c223bd85-6b0f-41d6-8cb2-dc8e5540a050",
+      "actual_dispatch_bytes": 52723,
+      "paired_alternative_encoding_bytes": 44404,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "step_id": "d6a20da9-42fa-4dd0-b60f-79b2dd456984",
+      "actual_dispatch_bytes": 60300,
+      "paired_alternative_encoding_bytes": 51981,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "step_id": "5214f74b-c5bc-463f-a270-3f61aacbbf27",
+      "actual_dispatch_bytes": 63679,
+      "paired_alternative_encoding_bytes": 55360,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "step_id": "400f21b1-1578-4506-a864-377ecbd04b30",
+      "actual_dispatch_bytes": 49644,
+      "paired_alternative_encoding_bytes": 41325,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "step_id": "b1692852-a8a8-4f22-a313-b8c92d0c3d66",
+      "actual_dispatch_bytes": 54617,
+      "paired_alternative_encoding_bytes": 46298,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "step_id": "2e65c2a5-651b-478d-a2c1-189ebe6fd53a",
+      "actual_dispatch_bytes": 49907,
+      "paired_alternative_encoding_bytes": 41588,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "step_id": "76b37ea6-7935-42de-bdf3-55f99ce3ef5e",
+      "actual_dispatch_bytes": 54604,
+      "paired_alternative_encoding_bytes": 46285,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "step_id": "c59998ea-5285-493a-b873-9f3e2fc14461",
+      "actual_dispatch_bytes": 50162,
+      "paired_alternative_encoding_bytes": 41843,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "step_id": "5500f736-da32-4932-86a8-b5297a7f2ae3",
+      "actual_dispatch_bytes": 57379,
+      "paired_alternative_encoding_bytes": 49060,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "4c3c8dd6-7b65-4089-9881-1b9839b2ec31",
+      "step_id": "5c8450b3-3f6a-42e7-870f-28d7274d2465",
+      "actual_dispatch_bytes": 50444,
+      "paired_alternative_encoding_bytes": 42125,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "4c3c8dd6-7b65-4089-9881-1b9839b2ec31",
+      "step_id": "e6a05e62-fef6-4305-a28e-4e21250514eb",
+      "actual_dispatch_bytes": 57958,
+      "paired_alternative_encoding_bytes": 49639,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "step_id": "9b913a73-5388-4925-8a4f-cdae8a3874af",
+      "actual_dispatch_bytes": 51184,
+      "paired_alternative_encoding_bytes": 42865,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "step_id": "780d1bd9-23d6-4ce0-963e-4d496898ccc6",
+      "actual_dispatch_bytes": 57529,
+      "paired_alternative_encoding_bytes": 49210,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "step_id": "e400231b-27d7-493d-84fc-5b873cc45f5b",
+      "actual_dispatch_bytes": 64637,
+      "paired_alternative_encoding_bytes": 56318,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    },
+    {
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "step_id": "0397ff07-263d-4759-ada5-e54c36218271",
+      "actual_dispatch_bytes": 72630,
+      "paired_alternative_encoding_bytes": 64311,
+      "selected_source_ids": [
+        "1cc6ec50-87c0-46f4-b1dd-a82857d74f9e",
+        "5e15b337-adf1-483c-8ba6-7cd2de5f500b",
+        "516c2288-3458-40b2-9e02-87a918c35a3a"
+      ],
+      "full_source_coverage": true,
+      "measurement": "Actual dispatched encoding vs deterministic opposite encoding of same context; alternative is NOT a separate provider call."
+    }
+  ],
+  "summaries": [
+    {
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "actual": 2904,
+      "legacy_baseline": 7416
+    },
+    {
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "actual": 2466,
+      "legacy_baseline": 6396
+    },
+    {
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "actual": 2833,
+      "legacy_baseline": 4810
+    },
+    {
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "actual": 2690,
+      "legacy_baseline": 4670
+    },
+    {
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "actual": 2794,
+      "legacy_baseline": 4909
+    },
+    {
+      "session_id": "4c3c8dd6-7b65-4089-9881-1b9839b2ec31",
+      "actual": 1638,
+      "legacy_baseline": 2482
+    },
+    {
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "actual": 2961,
+      "legacy_baseline": 7437
+    },
+    {
+      "session_id": "152a6149-7aa9-435d-b7ff-0ea87a641643",
+      "actual": 1749,
+      "legacy_baseline": 1749
+    },
+    {
+      "session_id": "308bb619-263d-479b-b3b3-5204b3685c2e",
+      "actual": 1265,
+      "legacy_baseline": 1265
+    }
+  ]
+}

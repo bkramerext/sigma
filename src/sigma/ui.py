@@ -16,8 +16,8 @@ from uuid import uuid4
 
 from sigma.local_config import load_local_config
 from sigma.projects import ROOT
-from sigma.ui_instance import Instance
-from sigma.ui_orphans import recover_orphans
+from sigma.ui_instance import Instance, stop_registered_instances
+from sigma.ui_orphans import listener_details, recover_orphans
 
 API_URL = "http://127.0.0.1:8000"
 URL = "http://127.0.0.1:5173"
@@ -30,10 +30,13 @@ def check_ports() -> None:
             try:
                 listener.bind(("127.0.0.1", port))
             except OSError as exc:
+                occupants = listener_details(port) or [
+                    "PID unavailable (listener process details could not be read)"
+                ]
                 raise RuntimeError(
-                    f"Port {port} is occupied by an unrelated or unverifiable service. "
-                    "SIGMA cannot safely replace it. Close that service using its own controls, "
-                    "then retry ./sigma start. No process was signalled."
+                    f"Port {port} is occupied by {', '.join(occupants)}. "
+                    "SIGMA could not verify ownership and left it untouched. Stop it using its own controls, "
+                    "then retry ./sigma start."
                 ) from exc
 
 
@@ -63,6 +66,23 @@ def stop_servers(children: list[subprocess.Popen[bytes]]) -> None:
             raise RuntimeError(
                 "Owned server did not confirm shutdown; refusing unsafe takeover."
             ) from None
+
+
+def local_google_configuration_warning() -> str | None:
+    """Explain a partial local OAuth setup without reading or evaluating shell files."""
+    has_client_setting = any(
+        os.environ.get(key, "").strip()
+        for key in ("GOOGLE_OIDC_CLIENT_ID", "GOOGLE_OIDC_CLIENT_SECRET")
+    )
+    if has_client_setting and not os.environ.get("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL", "").strip():
+        return (
+            "Google OAuth client settings were found, but local Google sign-in is disabled "
+            "because SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL is missing from this launch "
+            "environment. Export the operator's actual Gmail address before starting SIGMA; "
+            "if it is in ~/.bashrc, run `source ~/.bashrc` in the launching shell, then "
+            "restart with `./sigma start --nav`."
+        )
+    return None
 
 
 def ready(url: str, instance_id: str | None = None) -> bool:
@@ -105,10 +125,16 @@ def run_ui(*, navigate: bool = False) -> int:
                     "Local Google sign-in needs SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL "
                     "set to the operator's actual Google account."
                 )
+        elif warning := local_google_configuration_warning():
+            print(warning, file=sys.stderr, flush=True)
         print("Checking SIGMA UI instance and stopping any previous launcher…", flush=True)
         with Instance(register_owner=True) as instance:
             try:
-                recover_orphans(ROOT)
+                failures = stop_registered_instances(exclude_identity=instance.identity)
+                if failures:
+                    raise RuntimeError(" ".join(failures))
+                if orphan_failures := recover_orphans():
+                    raise RuntimeError(" ".join(orphan_failures))
                 wait_for_ports()
                 print("Starting SIGMA backend and frontend…", flush=True)
                 commands = [
@@ -243,10 +269,13 @@ def run_ui(*, navigate: bool = False) -> int:
 
 
 def run_shutdown() -> int:
-    """Stop the verified same-checkout SIGMA UI; never start servers."""
+    """Stop all verifiable local SIGMA UI instances; never start servers."""
     try:
-        with Instance(shutdown_only=True):
-            recover_orphans(ROOT)
+        failures = stop_registered_instances()
+        if orphan_failures := recover_orphans():
+            failures.extend(orphan_failures)
+        if failures:
+            raise RuntimeError(" ".join(failures))
         print("SIGMA UI shutdown complete.", flush=True)
         return 0
     except (OSError, RuntimeError) as exc:

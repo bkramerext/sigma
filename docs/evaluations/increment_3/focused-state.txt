@@ -1,0 +1,1 @@
+PASS read-only current understanding: original archives, explicit dispositions/relations, no semantic matching, stable ordering/IDs, path isolation, missing/failed history, no provider work
