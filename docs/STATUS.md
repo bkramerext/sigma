@@ -4868,12 +4868,19 @@ the proposed output cap is now 4,096 per call: 1,024 could leave too little
 visible room after high-effort reasoning. This is a reasoned adjustment, not a
 live verification of no-clipping.
 
-The owner authorization request is still open: confirm the exact OpenAI API
-model/configuration and API-key billing, 200,000 reserved input / 16,384 output
-tokens per arm, four calls, 15 minutes per arm / 45 minutes overall, $0.67
-local per-arm ceiling, and set the selected project's monthly limit to $1.40
-with **Enforce a hard limit** enabled. Await explicit trial authorization. No Increment 23 work or Cloud
-changes were undertaken.
+Brian's authorization for one trial is recorded in the latest PR #150
+coordinator comment (2026-10-25 22:48 UTC), with the frozen model and strict
+limits. Latest `main` (`bcda1de`) is integrated in merge commit `cc3d766`,
+retaining its T131/T132 work and all Green/Cloud/evaluation artifacts. The
+frozen manifest still verifies exactly; it was not rewritten. The full local
+`./sigma test` and all 11 budget tests passed on this merge. No provider request
+was made and no spend occurred: the execution gate fails closed because this
+runtime and checkout `.env` have no OpenAI API key, and no OpenAI admin
+credential or project/key metadata is available to independently verify the
+key's project, current project usage, or model access. The owner's limit
+confirmation does not establish those separate checks. Trial outputs and
+actual trial elapsed time therefore do not exist. No Increment 23 work or
+Cloud deployment operation was undertaken.
 
 Final verification for this preparation SHA: `./sigma test` passed all lifecycle,
 research, storage, API, Cloud-regression, Ruff, format, Pyright, frontend
