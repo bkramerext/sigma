@@ -6,6 +6,30 @@
 
 This document consolidates deployment architecture, executable operator runbook, hosted authentication, and earlier hosting feasibility analysis. **Current implementation and operator instructions are in Parts 1–3. Parts 4–5 are historical alternatives, not approved deployment plans.**
 
+## Cloud resource inventory (T127)
+
+Maintain this inventory as the central record for actual cloud identifiers and the approved resource plan. **Observed** means reported from the operator's Google Cloud Console (not independently verified by live GCP access); **planned** means not confirmed created. Do not treat planned names as provisioned resources. Record actual IDs and verification dates as work proceeds. Keep secrets, credentials and tokens out of this document.
+
+| Resource | Identifier or configuration | Status / evidence |
+| --- | --- | --- |
+| Existing Google Cloud OAuth project | Name: `SIGMA Auth`; Project ID: `sigma-auth-512601`; Project number: `665111821572` | Operator-reported from Cloud Console, 2026-10-25 |
+| Production infrastructure GCP project | Proposed name: `SIGMA Production`; suggested ID: `sigma-research-prod` (availability unknown) | Planned; actual ID and number pending |
+| GCP organization | No organization suspected | Not verified |
+| Registered DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Selected/registered; IP assignment and DNS verification pending |
+| GCE VM | `sigma-gce-01`, Ubuntu 24.04 LTS amd64, `e2-standard-4`, `us-west1-b` | Planned; no live resource ID confirmed |
+| Boot disk | 100 GiB `pd-standard` | Planned |
+| State disk | `sigma-state`, 200 GiB `pd-balanced`, independently retained, `auto-delete=no` | Planned |
+| Static external IPv4 | `sigma-web-ip`, `us-west1`, Premium tier | Planned; actual IPv4 pending |
+| Network | `sigma-vpc` custom VPC; `sigma-us-west1` subnet; proposed `10.42.0.0/24` | Planned; CIDR approval pending |
+| Ingress | IAP SSH `35.235.240.0/20` to TCP 22 only; public TCP 80/443 deferred until launch gates | Planned |
+| Runtime service account | `sigma-runtime@PROJECT_ID.iam.gserviceaccount.com`; two secret-scoped grants only | Planned; PROJECT_ID unresolved |
+| Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Planned, no secret payloads here |
+| Production Google OAuth client | HTTPS origin `https://sigma-research.duckdns.org`; callback `https://sigma-research.duckdns.org/api/cloud-auth/callback` | Planned; client/project decision pending |
+| Billing / trial / project budget | $300 project-filtered usage-alert proposal; actual billing link and trial dates | Not yet verified |
+| Application release | Exact deployed Git SHA | Pending deployment |
+
+**Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
+
 ## Contents
 
 1. [Deployment architecture and operations](#part-1-deployment-architecture-and-operations)
