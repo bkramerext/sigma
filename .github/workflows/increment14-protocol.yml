@@ -1,0 +1,33 @@
+name: Increment 14 offline protocol validation
+
+on:
+  push:
+    branches:
+      - coordinator/research-increments-13-17
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate and generate deterministic manifest (no provider calls)
+        run: |
+          python scripts/increment14_protocol.py --seed 140017 --replicates 1 --output /tmp/manifest-a.json
+          python scripts/increment14_protocol.py --seed 140017 --replicates 1 --output /tmp/manifest-b.json
+          cmp /tmp/manifest-a.json /tmp/manifest-b.json
+          python - <<'PY'
+          import json
+          m = json.load(open('/tmp/manifest-a.json', encoding='utf-8'))
+          assert m['paired_runs'] == 12
+          assert m['total_arm_runs'] == 24
+          assert not m['user_approved'] and not m['freeze_approved']
+          assert m['model_provider'] is None and m['total_usd_cap'] is None
+          assert len({(p['task_id'], p['variant'], p['replicate']) for p in m['pairs']}) == 12
+          print('Offline protocol checks passed; no inference executed.')
+          PY
