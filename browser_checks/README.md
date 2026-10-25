@@ -130,6 +130,21 @@ actions, and no horizontal overflow. Screenshots
 are `/tmp/sigma-a23-model-controls-*.png` and
 `/tmp/sigma-a13-header-*.png`.
 
+## T131 / T23.1 Google OAuth browser acceptance harness
+
+Run `uv run --with playwright python browser_checks/t23_1_google_signin.py`.
+The check starts its own API and Vite servers on free loopback ports and uses
+temporary project, state, and workspace roots. It requires frontend npm
+dependencies (`npm ci --prefix frontend`) and installed Chrome or Chromium
+(`SIGMA_BROWSER_EXECUTABLE` can select another executable). The browser
+intercepts only Google auth status, login, logout, denied status, and the local
+budget response; protected project API requests reach the real API through the
+test-only deterministic identity adapter. It covers anonymous and revoked
+identity denial, fixture sign-in, reload persistence, logout, account
+switching, rejected identity, per-account project isolation, and the project
+header at desktop and mobile widths. Redirects and identities are local
+fixtures; this does not verify Google, deployed cookies, or hosted OAuth.
+
 ## Nonconsecutive Subset Sums sample review
 
 With the local SIGMA UI running, run
