@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from sigma.increment22_baseline import new_arm_budget, reserve_turn, settle_turn
+from sigma.increment22_baseline import dispatch_turn, new_arm_budget
 from sigma.research_budget import (
     BudgetExceeded,
     mark_unknown,
@@ -109,8 +109,17 @@ class Increment22BudgetTests(unittest.TestCase):
         self.assertEqual(baseline["input_token_limit"], 200_000)
         self.assertEqual(baseline["output_tokens_per_call"], 1024)
         self.assertEqual(baseline["cost_limit_usd"], 0.55)
-        reserve_turn(baseline, "turn-1", b"exact serialized baseline request")
-        settle_turn(baseline, "turn-1", input_tokens=8000, output_tokens=800)
+        dispatched = []
+
+        def fake_transport(body):
+            dispatched.append(body)
+            return {"usage": {"input_tokens": 8000, "output_tokens": 800}}
+
+        response = dispatch_turn(
+            baseline, "turn-1", b"exact serialized baseline request", fake_transport
+        )
+        self.assertEqual(response["usage"]["input_tokens"], 8000)
+        self.assertEqual(dispatched, [b"exact serialized baseline request"])
         self.assertEqual(totals(baseline)["input_tokens_used_or_reserved"], 8000)
         self.assertEqual(baseline["calls"][0]["status"], "settled")
 
@@ -123,10 +132,30 @@ class Increment22BudgetTests(unittest.TestCase):
             output_price_per_million=10.0,
         )
         transport_invocations = []
+
+        def forbidden_transport(body):
+            transport_invocations.append(body)
+            return {}
+
         with self.assertRaises(BudgetExceeded):
-            reservation = reserve_turn(too_large, "turn-over-limit", b"x")
-            transport_invocations.append(reservation)
+            dispatch_turn(
+                too_large,
+                "turn-over-limit",
+                b"x",
+                forbidden_transport,
+            )
         self.assertEqual(transport_invocations, [])
+
+    def test_baseline_ambiguous_dispatch_retains_reservation_and_stops(self):
+        budget = new_arm_budget()
+
+        def timed_out(_body):
+            raise TimeoutError("ambiguous provider outcome")
+
+        with self.assertRaisesRegex(TimeoutError, "ambiguous"):
+            dispatch_turn(budget, "turn-timeout", b"x", timed_out)
+        self.assertEqual(budget["calls"][0]["status"], "unknown")
+        self.assertIsNotNone(totals(budget)["blocked_reason"])
 
 
 if __name__ == "__main__":

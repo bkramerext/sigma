@@ -28,9 +28,11 @@ exact request in `preparation.md` and verifies the provider project limit.
    monotonic 15-minute timer per arm and 45-minute timer for the pair. Do not
    send a request unless the arm's persisted ledger has reserved call count,
    request input upper bound, maximum output, and maximum applicable cost.
-   SIGMA's request ledger is persisted in its session. The baseline uses the
-   same `sigma.research_budget` ledger and must persist it alongside the
-   transcript. After a response, settle only against provider-reported usage.
+   SIGMA's request ledger is persisted in its session. The baseline invokes
+   `sigma.increment22_baseline.dispatch_turn`, which reserves before invoking
+   its transport and settles only against provider-reported usage; its persisted
+   ledger is saved alongside the transcript. After a response, settle only
+   against provider-reported usage.
    Unknown/in-flight outcome or missing usage retains the full reservation and
    blocks another call. Never retry or switch models.
 5. A provider response marked `incomplete` for `max_output_tokens` is retained
@@ -52,9 +54,10 @@ exact request in `preparation.md` and verifies the provider project limit.
 ## Offline demonstration status
 
 `tests/increment22_budget.py` exercises the common pre-dispatch ledger used by
-both arms: per-arm call/output/input/cost refusal; cumulative reservations;
-settlement; input/cost over-limit refusal before any transport is called;
-unknown and in-flight full holds; and the frozen four-call cost upper bound.
+both arms and the baseline's actual `dispatch_turn` boundary: per-arm
+call/output/input/cost refusal; cumulative reservations; settlement;
+input/cost over-limit refusal before any transport is called; unknown and
+in-flight full holds; and the frozen four-call cost upper bound.
 `tests/research_sessions.py` additionally exercises the actual production
 SIGMA session request path and inspects saved reservation IDs, request bytes,
 input bounds and settled ledger entries. The provider path is replaced by a
