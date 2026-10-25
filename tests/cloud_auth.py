@@ -218,6 +218,35 @@ class CloudAuthTests(TestCase):
             self.client.post("/api/ai/disconnect", headers={"Origin": ORIGIN}).status_code, 403
         )
 
+    def test_session_persists_across_client_restart_and_logout_revokes_it(self):
+        signed_in = self.finish()
+        raw = signed_in.cookies[cloud_auth.SESSION_COOKIE]
+
+        # A new desktop browser process keeps its secure cookie while the
+        # server-side session remains in the persistent auth database.
+        restarted_context = TestClient(app)
+        restarted = restarted_context.__enter__()
+        self.addCleanup(restarted_context.__exit__, None, None, None)
+        restarted.cookies.set(cloud_auth.SESSION_COOKIE, raw)
+        self.assertEqual(
+            restarted.get("/api/cloud-auth/status").json()["user"]["email"], "admin@example.org"
+        )
+        self.assertEqual(restarted.get("/api/projects/recent").status_code, 200)
+
+        signed_out = restarted.post("/api/cloud-auth/logout", headers={"Origin": ORIGIN})
+        self.assertEqual(signed_out.status_code, 204)
+        self.assertIn('__Host-sigma_session="";', signed_out.headers["set-cookie"])
+        self.assertIn("Max-Age=0", signed_out.headers["set-cookie"])
+        self.assertIsNone(cloud_auth.resolve_session(raw))
+        self.assertEqual(restarted.get("/api/projects/recent").status_code, 401)
+
+        # A copied/stale cookie cannot restore access from another client.
+        stale_context = TestClient(app)
+        stale = stale_context.__enter__()
+        self.addCleanup(stale_context.__exit__, None, None, None)
+        stale.cookies.set(cloud_auth.SESSION_COOKIE, raw)
+        self.assertEqual(stale.get("/api/projects/recent").status_code, 401)
+
     def test_denied_identity_is_retained_only_for_request_and_other_account_resets_it(self):
         denied = self.finish(email="visitor@example.org")
         self.assertEqual(denied.status_code, 303)
