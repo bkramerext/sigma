@@ -79,7 +79,9 @@ install -o sigma-sandbox -g sigma-sandbox -m 0600 \
   "$(dirname "$0")/systemd/docker.service.d/sigma-socket.conf" \
   "/home/sigma-sandbox/.config/systemd/user/docker.service.d/sigma-socket.conf"
 
-install -d -o root -g root -m 0755 /srv/sigma-state
+# The target can already be a mounted persistent filesystem. Keep its root
+# private if the installer is run after the documented disk-mount step.
+install -d -o root -g root -m 0700 /srv/sigma-state
 install -d -o root -g root -m 0755 /opt/sigma
 install -d -o root -g root -m 0755 /usr/local/libexec/sigma
 install -m 0755 "$(dirname "$0")/gce_preflight.py" /usr/local/libexec/sigma/gce_preflight.py

@@ -1204,11 +1204,23 @@ def main() -> None:
         assert record["snapshot_sha256"] == first["snapshot_sha256"]
         assert record["tex_source"].startswith(r"\documentclass")
         assert r"\end{document}" in record["tex_source"]
+        assert papers.paper_tex(str(path), first["paper_id"]) == record["tex_source"]
         assert record["tex_source"].count(r"\section*{About this paper}") == 1
         assert "AI-generated research synthesis" in record["tex_source"]
         assert record["generation"]["call_limit"] == 1
         assert papers.get_pdf(str(path), first["paper_id"]).startswith(b"%PDF-")
+        saved_text = papers.paper_text(str(path), first["paper_id"])
+        assert saved_text.startswith("An evidence-bound exploratory note\n")
+        assert (
+            "Abstract" in saved_text
+            and "This paper does not establish a formal proof." in saved_text
+        )
         assert record["snapshot"]["sources"][0]["id"] == "project:" + record["project_id"]
+        assert len(inspect_project(path).project.events) == 1
+        papers.delete_paper(str(path), first["paper_id"])
+        assert [item["paper_id"] for item in papers.list_papers(str(path))] == [second["paper_id"]]
+        assert not (path.parent / "papers" / f"{first['paper_id']}.json").exists()
+        assert not (path.parent / "papers" / f"{first['paper_id']}.pdf").exists()
         assert len(inspect_project(path).project.events) == 1
 
         exploratory_path = Path(temporary) / "unresolved.sigma"

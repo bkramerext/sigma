@@ -1,5 +1,185 @@
 # SIGMA status
 
+## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
+
+Audited current desktop acceptance before adding coverage. T91 already runs
+real Chrome against packaged Compose with two simulated identities and covers
+project/strategy edits, saved sessions and evidence, report export, compiled
+TeX/PDF, backend recreation, fresh-volume restore and workspace isolation. T100
+covers persistent-disk browser reload and backend restart; T45 and
+`browser_checks/saved_paper_library.py` cover the paper dialog, TeX/PDF UI
+downloads, and inline PDF; service tests cover report formats, text rendering,
+paper integrity and cloud workspace boundaries. Added the missing explicit
+rendered Outcome assertion and packaged-UI downloads for Project Audit, text,
+and HTML in T91. Its recovery fixture now stores its archive under the temporary
+run directory. Added support for standalone Compose and Buildx to
+`deploy/validate-local.sh`, so the packaged acceptance works with Homebrew
+Compose on Apple Silicon; temporary recovery volumes are removed after stack
+shutdown. The hosted repeatable checklist is
+[T133 acceptance preparation](evaluations/t133/README.md).
+
+Validation: after `./sigma setup`, `./sigma test` passed all offline scenarios,
+Ruff, format, Pyright (0 diagnostics), frontend typecheck and production build.
+`deploy/validate-local.sh` passed: packaged images built, real Chrome verified
+project/strategy save and reopen, 5 saved sessions, rendered Outcome, all three
+report downloads, real Tectonic compilation, authenticated PDF and TeX hashes,
+malformed TeX rejection, backend restart, fresh-volume restore, data hashes and
+user isolation. No Google OAuth exchange or inference/provider call occurred.
+The full run used fixture identities and is local packaged evidence only.
+
+Hosted acceptance remains **BLOCKED** by T127/T129/T131/T132. No live host,
+Google identities, OAuth, or paid paper generation was exercised. A real hosted
+paper generation needs explicit provider/budget authorization if no prepared
+paper is available. Elapsed preparation time: approximately 35 minutes.
+
+
+## T129 GCE application deployment (2026-10-25)
+
+Implementation commit `513a207f20198eab089fed0915637f1eead1efcd` is on
+[`red/t129-gce-app-deployment`](https://github.com/bkramerext/sigma/tree/red/t129-gce-app-deployment)
+and submitted unmerged as [PR #152](https://github.com/bkramerext/sigma/pull/152).
+
+Offline deployment review adds a Caddy edge healthcheck against its local
+admin endpoint; the GCE preflight now fails unless backend, frontend and Caddy
+all have healthchecks, while Caddy remains ordered after healthy backend and
+frontend. Focused package tests pin the GCE state bind to
+`/srv/sigma-state/auth`, hosted `persistent_disk` configuration, auth/workspace
+paths, app UID/GID ownership, mount guard and systemd Docker/rootless/mount
+ordering. GCE preflight tests exercise acceptance and reject a missing edge
+healthcheck. Existing storage scenarios cover backend restart, full state-root
+backup/restore, Recent-path rebasing and no startup when the persistent mount
+is absent.
+
+Validation: focused `tests/deployment_package.py`, `tests/gce_host.py` (16
+tests), and `tests/storage.py` passed. Final `./sigma test` passed all offline
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build.
+One preceding full run had a transient `tests/storage.py` restore response
+failure; an immediate isolated rerun and the final full run both passed. The
+local Docker engine reports 29.5.2, but `docker compose version` exits 1
+because the Compose plugin is missing; merged Compose rendering, packaged
+container smoke and real Chrome checks could not run. No GCE resources, hosted
+endpoints, provider calls or secrets were used. Actual deployment SHA, mount
+identity/ownership, service health and persistence after container recreation
+remain pending Brian's T127 handoff; no hosted acceptance is claimed.
+
+## Green UI tickets #95 and #125 (2026-10-25)
+
+Implemented on one branch, `green/t95-t125-ui`, from current `main` at
+`6686e6f`. Before publication, merged updated `main` at `753b99a` (PR #134)
+without conflicts; its only change was `docs/OPERATION_RUNBOOK.md`. The work is
+split into reviewable commits:
+
+- **#95 paused-session clarity:** the paused lifecycle state now includes a
+  nearby explanation and next step. It classifies known context, duration,
+  budget, model/connection, project/strategy, restart, and manual-pause reasons
+  from `current_action`, `message`, and the latest typed failure/interruption
+  fields. Other recorded reasons remain visible verbatim; a missing reason is
+  explicitly described as unrecorded. Resume behavior and backend safeguards
+  are unchanged. Commits: `1effc46`, `486c8db`, `04b6a75`.
+- **#125 saved AI papers:** saved versions appear as a responsive card library
+  with title and date/version metadata, per-version TXT and PDF downloads, and
+  an inline-PDF new-tab action. Each card expands a collapsed-by-default view
+  of that exact saved draft using escaped React text. Removal has an inline
+  confirmation, deletes only the selected paper JSON/PDF, and immediately
+  updates the list. The TXT route emits the stored paper text as an attachment;
+  existing project-owner authorization protects reads and deletion. Commit:
+  `597afcd`.
+
+Real Chrome passed `browser_checks/paused_session_clarity.py` (manual pause,
+page close/reopen, visible explanation and next step, narrow viewport, safe
+resume) and `browser_checks/saved_paper_library.py` (fixture-authored version,
+TXT/PDF payloads and headers, actual inline-PDF popup, accessible expansion,
+mobile layout, cancellation and confirmed deletion). `tests/papers.py` and
+`tests/cloud_workspaces.py` passed. Frontend typecheck and production build,
+Ruff check/format, and Pyright (0 diagnostics) passed. The full `./sigma test`
+ran twice and stopped at the existing `tests/tooling.py:177` assertion that
+expects `stop_servers` once; it was called zero times. The paper and cloud
+ownership scenarios were then run directly and passed. The broad legacy
+`browser_checks/a17_research.py` also stops later at a stale `12/30 calls`
+expectation; its focused pause/reopen behavior passed before that assertion.
+No live or paid provider calls or cloud changes occurred. The browser paper
+check used only the deterministic local fixture; its one generation is fixture
+traffic.
+
+### Manual feedback follow-up (build 85a9efa)
+
+- The UI now calls every resumable interruption **Stopped**, including backend
+  guard states that remain `paused` internally for compatibility. Resume is
+  available when no other session is active. **Ended** remains terminal and
+  does not offer Resume. The stopped-session notice explains the cause and safe
+  next step; when no complete Investigator/Skeptic artifact exists, it also
+  states: “The session is stopped and has not saved a complete
+  Investigator/Skeptic finding. No answer to the project question is
+  established yet.”
+- Home Recent and Samples entries show **Runnable** only when the project has
+  an active, enabled strategy. The label describes project readiness; AI
+  connection availability still applies.
+- About already closed on backdrop clicks; real-Chrome coverage now checks
+  dismissal and focus restoration.
+- Real Chrome passed the stopped-session reopen/resume check and the About
+  backdrop check. In the broader `browser_checks/recents.py`, the new Runnable
+  assertion passed, then the existing scroll-height assertion failed because
+  the sample scroller's `scrollHeight` equaled its `clientHeight` (1275).
+- A fresh `./sigma test` again reached the existing `tests/tooling.py:177`
+  `stop_servers` call-count failure. Focused `tests/recents.py`, frontend
+  typecheck/build, Ruff, and Pyright passed.
+
+### Home session activity feedback
+
+Replaced the strategy-eligibility label in Home with inline `· Running` metadata
+only for a persisted research session whose status is `running`. Sample
+projects no longer claim to be Runnable or Not runnable. `tests/recents.py`
+checks both running and stopped session states. Real Chrome verified the
+metadata sentence omits Running for a stopped record and displays
+`1 strategy · Medium difficulty · Running` for a running record. The broader
+recents browser check passed this new assertion, then hit the existing sample
+scroll-height assertion; a second run with only that unrelated assertion
+bypassed reached the subsequent flaky Back-to-Home detached-element timeout.
+
+I inspected `projects/test2.sigma` directly: its latest saved research session
+is `ended`, and its earlier session is `stopped` with no running branches or
+steps. It is therefore correct for test2 not to show Running at this moment.
+The full `./sigma test` remains blocked by the unrelated existing
+`tests/tooling.py:177` `stop_servers` call-count assertion. Frontend production
+build, targeted Ruff and Pyright checks, and the focused recents backend test
+passed. No provider calls were made.
+
+After the user reported a newly started run missing from an already-open Home
+page, I found Recent had only fetched once on mount. It now refreshes visible
+Recent metadata every two seconds (and on focus/visibility return), so an open
+Home page reflects session starts and stops. Real Chrome
+`browser_checks/home_running_status.py` passed the persisted stopped → running
+→ stopped transition without reloading. The local app server was restarted
+after the test2 run had ended so its backend loaded the updated response field.
+
+The user then requested saved AI paper cards match the session-row disclosure
+pattern. Each saved version now has an adjacent disclosure arrow and title,
+date/version metadata with Remove on that line, and vertically stacked TeX/PDF
+actions on the right that remain visible while expanded. The TeX action now
+downloads the saved `.tex` source used to compile the PDF through a dedicated
+authenticated route; the older plain-text route remains available. Real Chrome
+`browser_checks/saved_paper_library.py` passed the TeX/PDF download, inline PDF,
+collapsed/expanded layout and action visibility, metadata/remove alignment,
+mobile layout, and confirmed deletion checks against a fresh local fixture.
+
+### Integrated T95/T125 handoff (2026-10-25)
+
+Merged current `main` at `8c3741a`, keeping both the Green UI history and T134
+cloud isolation preparation in this status file. `tests/cloud_workspaces.py`
+auto-merged; its newer cross-owner no-mutation assertions and the saved-paper
+read/download/delete authorization coverage are present together. Removed the
+redundant raw `RecentProject.running` field and its status-only assertions;
+Home and the API now rely on T92's recovery-aware `research_running` value. The
+Home Chrome fixture holds a worker lock while asserting Running, matching a
+live session rather than a stale persisted status.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps.
+Focused real Chrome checks passed for stopped-session guidance/resume,
+live Home Running updates, the saved-paper library, and the simplified LaTeX
+dialog. Cloud workspace and recents backend suites passed independently. All
+browser/provider paths used deterministic local fixtures; no paid calls or
+hosted identities were used. GitHub Actions will be verified on the pushed
+integrated head before R4R.
 ## T134 cloud isolation and privacy acceptance preparation (2026-10-25)
 
 On branch `gray/t134-cloud-isolation`, based on current `main` at `19e5bd7`,
@@ -126,13 +306,32 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
 
 ## Current owner follow-ups (2026-10-25)
 
-- TeX authoring: removed the extra white browser confirmation for long-form
-  generation; provider-use bounds are still visible in the dialog. Generate
-  becomes “Cancel generation” in place while running. Failed generation leaves
-  its error visible and restores an enabled Generate action for retry.
-- Project header: About matches Home's compact style in normal and hover states
-  and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
-  responsive.
+- LaTeX dialog launch simplification from `tickets/t95-t125-latex-dialog-ux-spec.md`
+  (owner revision `cf47e1c`): removed the expanded-authoring toggle, pipeline
+  bounds, checkpoint counters and ordinary restart control. The server chooses
+  one-shot or long-form authoring automatically; compatible saved work still
+  resumes when the user explicitly generates. A concise Start over action is
+  available only when changed evidence/settings make existing work unusable;
+  its consequence and possible provider usage are stated beside it. Generation
+  now uses one primary action and plain activity/success/failure messages. An
+  interrupted or failed dispatched request warns that provider completion or
+  usage may be unknown and is never automatically retried. Saved versions and
+  their TeX/PDF actions are unchanged.
+- `tests/papers.py` passed, including the API disconnect cancellation/no
+  publication regression. Real Chrome `browser_checks/t45_long_paper.py` and
+  `browser_checks/saved_paper_library.py` passed with deterministic local
+  fixtures at desktop/mobile widths. They verified automatic long-form
+  selection, no silent retry after a simulated failure, simple activity and
+  success feedback, saved versions and PDF access, plus the existing saved-row
+  layout, yellow Remove action, left-aligned downloads, TeX/PDF downloads, and
+  confirmed deletion. Frontend
+  production build passed. The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+  ./sigma test` passed all steps. No live or paid provider calls were made.
+- Project header: About matches Home's compact style in normal and hover states.
+  The desktop 3×2 pills are grouped by column: Difficulty/About,
+  Model/Thinking, and Google/ChatGPT. The group now sits closer to the upper
+  right with half-sized grid gaps; real Chrome confirmed the position and
+  grouping. Narrow layout stays responsive.
 - Real-Chrome checks now cover direct long-form start without a browser prompt,
   failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
   About placement/style. `browser_checks/t45_long_paper.py` and
@@ -141,6 +340,13 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
   Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
   All checks used local deterministic fixtures; no paid provider calls or cloud
   changes.
+- After syncing current `main` (`19e5bd7`), `./sigma test` passed all steps,
+  including the frontend production build. Real Chrome
+  `browser_checks/saved_paper_library.py` and `browser_checks/t45_long_paper.py`
+  passed against deterministic local fixtures. The recents test now tolerates
+  project initialization creating its research-session directory. The long
+  paper browser fixture uses a unique project title so repeated runs do not
+  collide with prior local fixture data.
 
 Screenshots: `docs/evaluations/t45-paper-dialog/` and
 `docs/evaluations/project-about-pill/`.
@@ -4383,25 +4589,32 @@ also provide a direct matching lower bound. This is a validated offline oracle,
 not provider research evidence, and its answer is withheld from model contexts.
 
 Proposed run: OpenAI API-key billing, `gpt-6.1-sol`, high reasoning, standard
-tier, no tools/search/retries/fallback; four calls per arm, 1,024 output tokens
-per call, 48,000 input / 52,096 total usage tokens per arm, 15 minutes per arm,
-$0.55 estimated-cost reservation per arm, and a $0.35 provider-project hard
-spend limit. Official Standard rates checked 2026-10-25 are $2/M input,
-$0.10/M cached input, $2.50/M short cache writes and $10/M output. Under those
-rates the token maxima imply $0.32 combined; provider hard-limit enforcement
-may slightly overshoot. These are proposals, not authorization. The trial is
-**not ready to execute**: current SIGMA derives a much larger token limit from
-context size; the capped request total gives a calculated upper spend of
-$0.32192 at the listed cache-write/output rates. Demonstrate a cumulative
-pre-dispatch token guard and configure the provider hard-limit backstop before
-any call.
+tier, no tools/search/retries/fallback; four calls per arm, 4,096 output tokens
+per call, 200,000 reserved input and 16,384 output tokens per arm, 15 minutes
+per arm / 45 minutes overall, $0.67 local pre-dispatch cost ceiling per arm.
+The conservative price-based reservation is $0.66384 per arm / $1.32768 total;
+operator verification of a $1.40 OpenAI project spend limit remains required.
+The 1,024-token cap included hidden reasoning and was not adequate to defend
+against clipping at high reasoning. The smallest recommended adjustment is
+4,096 output tokens/call. Clipping remains an incomplete result, is not scored
+as incorrect, and is not retried. The output limit includes visible and
+reasoning tokens; see the official [Responses API reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
+and [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning).
+The complete request, limits, cost derivation, execution procedure and
+authorization wording are frozen in `evaluations/increment_22/` and hashed in
+`increment_22/evidence/frozen-manifest.sha256`.
 
-`./sigma test` **passed** on this base, including all backend research checks,
-Ruff, format, Pyright (0 diagnostics), frontend typecheck and production build.
-Only deterministic/offline fixtures ran; there were zero provider calls, zero
-spend, no real-browser exercise, and no project/session export. The live trial
-and its exports are therefore outstanding. No Cloud files or Increment 23
-work were touched.
+Reconciled with current `main` (`455d752`) in merge commit `PENDING`; Green
+T95/T125 and Cloud T129/T133 changes are retained. The latest full
+`./sigma test` passed: backend scenarios, Ruff, formatting, Pyright (0
+errors), frontend typecheck and production build. The independent checker
+validated its exact 10-unit optimum across 2,016 assignment/order cases; all
+11 offline cumulative-budget tests passed. The real-Chrome Home running-status
+check passed against a fresh local fixture. One initial browser attempt used
+an already-populated project root and failed its fresh-fixture assumption; the
+isolated rerun passed. GitHub Actions for the final pushed SHA remain to be
+checked. No provider calls or spending occurred. The trial is not authorized,
+and no Increment 23 work or Cloud deployment operation was started.
 
 ## Issue 118 — harden within-session blind comparison (2026-10-25)
 
@@ -4551,21 +4764,22 @@ task, checker result, frozen baseline prompts, scoring rubric, caps and executio
 procedure are retained in [Increment 22](evaluations/increment_22/).
 
 Implemented a persisted, fail-closed pre-dispatch ledger shared by SIGMA and
-the baseline adapter. It reserves serialized request bytes plus 8,192 input
-tokens, output ceiling and conservative cost before dispatch; unknown or
-in-flight calls hold their full reservations and block further calls. The real
-SIGMA request-path regression test inspects reserved request IDs/bytes and
-settlement. Provider `max_output_tokens` clipping is retained as a partial
+the baseline dispatch adapter. It reserves serialized request bytes plus
+8,192 input tokens, output ceiling and conservative cost before dispatch;
+unknown or in-flight calls hold their full reservations and block further calls.
+The real SIGMA request-path regression test inspects reserved request IDs/bytes
+and settlement. Provider `max_output_tokens` clipping is retained as a partial
 incomplete result with usage; it is not scored as incorrect and is not retried.
 Ruff I001 and RUF007 in the checker were corrected. Offline checks only; no
-provider inference or spend occurred. 1,024 output tokens may be tight for high
-reasoning because reasoning uses the same output budget; this cannot be
-empirically settled without owner authorization.
+provider inference or spend occurred. Following the API token-counting guidance,
+the proposed output cap is now 4,096 per call: 1,024 could leave too little
+visible room after high-effort reasoning. This is a reasoned adjustment, not a
+live verification of no-clipping.
 
 The owner authorization request is still open: confirm the exact OpenAI API
-model/configuration and API-key billing, 200,000 reserved input / 4,096 output
-tokens per arm, four calls, 15 minutes per arm / 45 minutes overall, $0.55
-local per-arm ceiling, and configure/verify the $1.10 provider project spend
+model/configuration and API-key billing, 200,000 reserved input / 16,384 output
+tokens per arm, four calls, 15 minutes per arm / 45 minutes overall, $0.67
+local per-arm ceiling, and configure/verify the $1.40 provider project spend
 limit. Await explicit trial authorization. No Increment 23 work or Cloud
 changes were undertaken.
 

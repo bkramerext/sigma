@@ -10,8 +10,8 @@ exact request in `preparation.md` and verifies the provider project limit.
    artifact changes, stop and prepare a newly reviewed freeze before outputs.
 2. Create an empty independent SIGMA project using the exact task text and one
    manually saved strategy describing a systematic search over eligible
-   machine assignments/orders. Use 2 rounds, 4 calls, 15 minutes, 1,024 output
-   tokens/call, 200,000 cumulative input tokens, and $0.55 maximum estimated
+   machine assignments/orders. Use 2 rounds, 4 calls, 15 minutes, 4,096 output
+   tokens/call, 200,000 cumulative input tokens, and $0.67 maximum estimated
    cost. Confirm API-key billing, `gpt-6.1-sol`, high reasoning, standard tier,
    and local tool images. The production Investigator/Skeptic cycle is the
    SIGMA arm. Do not create synthetic provider output or seed history.

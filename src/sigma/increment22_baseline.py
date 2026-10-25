@@ -18,8 +18,8 @@ def new_arm_budget() -> dict[str, Any]:
     return new_ledger(
         call_limit=4,
         input_token_limit=200_000,
-        output_tokens_per_call=1024,
-        cost_limit_usd=0.55,
+        output_tokens_per_call=4096,
+        cost_limit_usd=0.67,
         input_price_per_million=2.5,
         output_price_per_million=10.0,
     )

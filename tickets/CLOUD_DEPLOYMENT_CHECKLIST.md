@@ -9,11 +9,11 @@
 | [T126](t126.md) | GCP project, trial, access | 👤 Brian + Coordinator | In progress |
 | [T127](t127.md) | VM, dedicated disk, static IP, network/IAM | 👤 **Brian** (console actions); 🔴 Red technical guidance | **Next** |
 | [T128](t128.md) | Host bootstrap, rootless Docker and preflight | 🔴 Red | Blocked by T127 |
-| [T129](t129.md) | Compose app, health and durable state | 🔴 Red | Blocked by T128 |
+| [T129](t129.md) | Compose app, health and durable state | 🔴 Red | Offline implementation in [PR #152](https://github.com/bkramerext/sigma/pull/152); hosted acceptance pending Brian's T127 handoff |
 | [T130](t130.md) | DuckDNS and HTTPS | 🔴 Red; 👤 Brian DNS account changes | Blocked by T127/T129 |
 | [T131](t131.md) | Hosted Google OAuth, sign-in | 🔴 Red backend + 🟢 Green browser; 👤 Brian OAuth console/secret | Blocked by T129/T130 |
 | [T132](t132.md) | Hosted inference, sessions, Python/Sage | 🔴 Red; 🔵 Blue only for specific research blocker; 👤 Brian live access/authorization | Blocked by hosted app |
-| [T133](t133.md) | Desktop projects, Outcomes, reports, TeX/PDF | 🟢 Green | Blocked by T131/T132 |
+| [T133](t133.md) | Desktop projects, Outcomes, reports, TeX/PDF | 🟢 Green + ⚪ Gray preparation | T133/PR153 offline preparation integrated; hosted checks remain pending T131/T132 |
 | [T134](t134.md) | Two-account workspace/privacy acceptance | ⚪ Gray + 🟢 Green; 👤 Brian test account | **Closed: T134/PR148 merged; hosted A/B test deferred (unverified)** |
 | [T135](t135.md) | Backup policy and verified restore | ⚪ Gray | **Closed: T135/PR142 merged; live backup/restore deferred (unverified)** |
 | [T136](t136.md) | Monitoring, restart, reboot, rollback | ⚪ Gray + 🔴 Red | **Closed: T136/PR144 merged; live recovery/rollback deferred (unverified)** |

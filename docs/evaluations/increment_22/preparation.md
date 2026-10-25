@@ -56,9 +56,9 @@ or clipped call.
   delegation, retries, or fallback model.
 - Calls: at most four provider calls per arm (eight total); SIGMA uses two
   Investigator/Skeptic cycles. Baseline uses four sequential self-review turns.
-- Output: at most 1,024 generated tokens per call (4,096 per arm).
-- Cumulative input: at most 200,000 reserved input tokens per arm and 4,096
-  generated output tokens per arm (1,024 per call). Before dispatch, input is
+- Output: at most 4,096 generated tokens per call (16,384 per arm).
+- Cumulative input: at most 200,000 reserved input tokens per arm and 16,384
+  generated output tokens per arm (4,096 per call). Before dispatch, input is
   reserved as the exact UTF-8 serialized request-body byte count plus 8,192
   structural-token allowance per call. The hard ledger blocks dispatch when
   cumulative input, output, calls, or cost would exceed the ceiling. An
@@ -66,13 +66,13 @@ or clipped call.
   later dispatch. Four requests each reserve at most 41,808 input tokens, so
   four full-size calls fit within the arm ceiling; larger actual requests may
   make the ledger stop earlier. Combined ceiling: 400,000 reserved input and
-  8,192 output tokens.
+  32,768 output tokens.
 - Wall time: 15 minutes per arm, with a 45-minute overall trial window. Stop
   at the limit; do not retry failed calls.
-- Cost: local pre-dispatch cost ceiling is $0.55 per arm. At the configured
+- Cost: local pre-dispatch cost ceiling is $0.67 per arm. At the configured
   ceilings, the highest applicable listed Standard short-cache write rate
-  ($2.50/M) plus output rate ($10/M) reserves at most $0.54096 per arm /
-  $1.08192 total. The owner must set and verify a $1.10 OpenAI project hard
+  ($2.50/M) plus output rate ($10/M) reserves at most $0.66384 per arm /
+  $1.32768 total. The owner must set and verify a $1.40 OpenAI project hard
   spend limit before any request. OpenAI says enforcement
   is not instantaneous and may slightly overshoot the setting, so that control
   alone is not the absolute cap. Before any call, demonstrate a local
@@ -82,11 +82,34 @@ or clipped call.
 At the official OpenAI Standard rates checked 2026-10-25, `gpt-6.1-sol` is
 $2/M input, $0.10/M cached input, $2.50/M short cache writes and $10/M output
 tokens. At the revised ceilings, short cache writes and output give a
-conservative $0.54096 per arm / $1.08192 combined upper bound, assuming no
-extended cache retention or tools. The $1.10 provider project control is a backstop;
+conservative $0.66384 per arm / $1.32768 combined upper bound, assuming no
+extended cache retention or external tools. The $1.40 provider project control is a backstop;
 the pre-dispatch guard is needed because provider enforcement may lag. Recheck
 pricing and model availability before approval:
 [OpenAI API pricing](https://developers.openai.com/api/docs/pricing).
+
+### Output-cap reassessment
+
+The Responses API defines `max_output_tokens` as including both visible and
+reasoning tokens; the reasoning guide also confirms internal reasoning tokens
+consume that same budget ([API reference](https://developers.openai.com/api/reference/resources/responses/methods/create),
+[reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)).
+Thus 1,024 total tokens leaves an unpredictable, potentially small visible
+budget for SIGMA's strict structured role output and the baseline's research
+note. Recommend 4,096 per call as the smallest defensible cap for this task:
+four times the prior limit, with a 16,384-token arm maximum. This gives room for
+high-effort internal reasoning plus concise structured findings without
+increasing call count or duration. It cannot guarantee completion; clipping
+remains an incomplete run and stops that arm without a correctness penalty or
+retry. No provider inference was used to tune this number.
+
+With 200,000 reserved input tokens/arm at the maximum applicable $2.50/M input
+cache-write rate, and 16,384 output tokens/arm at $10/M, the conservative cap is
+`(200,000 × $2.50 + 16,384 × $10) / 1,000,000 = $0.66384` per arm, $1.32768
+total. Use $0.67 as the local cost ceiling per arm and require the operator to
+set and verify a $1.40 OpenAI project spend limit before any request. The
+provider limit is defense in depth and can overshoot; the local request ledger
+enforces the usage ceiling.
 
 ## Procedure and validation
 
@@ -135,17 +158,17 @@ deployment are in scope.
 **Authorization request (no calls made):** May I run one exploratory comparison using the OpenAI
 API on `gpt-6.1-sol` at high reasoning / standard tier, API-key billing only,
 with no tools, search, retries, fallback, or extended cache retention; up to
-four calls per arm, 1,024 output tokens per call, 200,000 reserved input and
-4,096 output tokens per arm, 15 minutes per arm / 45 minutes overall, $0.55
+four calls per arm, 4,096 output tokens per call, 200,000 reserved input and
+16,384 output tokens per arm, 15 minutes per arm / 45 minutes overall, $0.67
 local pre-dispatch cost ceiling per arm, and an owner-configured, verified
-$1.10 OpenAI project hard spend limit? The price-based local upper bound is
-$0.54096 per arm / $1.08192 combined; provider enforcement can lag and slightly
-overshoot. The 1,024 output ceiling also counts reasoning tokens, so whether
-high-reasoning responses are meaningfully complete cannot be empirically
-verified without the authorized trial. Any clipping is retained as incomplete,
-not scored as incorrect, and not retried. I will send no request until explicit
-approval and confirmation of the provider hard cap. Approval covers this one
-trial under these limits only.
+$1.40 OpenAI project spend limit? The conservative local upper bound is $0.66384
+per arm / $1.32768 combined; provider enforcement can lag and slightly
+overshoot. I recommend 4,096 because output caps include hidden reasoning and
+visible text, but no live run has established that this prevents clipping.
+Clipped responses remain incomplete, are not scored incorrect, and are not
+retried. The operator must verify the project limit and model/account
+availability; I will make no request before explicit approval and that
+verification. Approval covers this one trial under only these stated limits.
 
 ## Offline review notes
 

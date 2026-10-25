@@ -16,7 +16,7 @@ from sigma.research_budget import (
 
 
 def ledger(
-    *, calls: int = 4, input_tokens: int = 200_000, output_tokens: int = 1024, cost: float = 0.55
+    *, calls: int = 4, input_tokens: int = 200_000, output_tokens: int = 4096, cost: float = 0.67
 ):
     return new_ledger(
         call_limit=calls,
@@ -33,8 +33,8 @@ class Increment22BudgetTests(unittest.TestCase):
         budget = ledger()
         reservation = reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
         self.assertEqual(reservation["input_token_bound"], 1000 + 8192)
-        self.assertEqual(reservation["output_token_reservation"], 1024)
-        self.assertEqual(reservation["cost_bound_usd"], (9192 * 2.5 + 1024 * 10) / 1_000_000)
+        self.assertEqual(reservation["output_token_reservation"], 4096)
+        self.assertEqual(reservation["cost_bound_usd"], (9192 * 2.5 + 4096 * 10) / 1_000_000)
         self.assertEqual(totals(budget)["input_tokens_used_or_reserved"], 9192)
 
     def test_settled_usage_releases_bound_and_keeps_cost_upper_bound(self):
@@ -65,7 +65,7 @@ class Increment22BudgetTests(unittest.TestCase):
         reserve_before_dispatch(budget, call_id="call-1", request_body=b"x" * 1000)
         mark_unknown(budget, call_id="call-1")
         self.assertEqual(totals(budget)["input_tokens_used_or_reserved"], 9192)
-        self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 1024)
+        self.assertEqual(totals(budget)["output_tokens_used_or_reserved"], 4096)
         self.assertIsNotNone(totals(budget)["blocked_reason"])
         with self.assertRaisesRegex(BudgetExceeded, "blocked"):
             reserve_before_dispatch(budget, call_id="retry", request_body=b"x")
@@ -97,18 +97,18 @@ class Increment22BudgetTests(unittest.TestCase):
         for index in range(4):
             reserve_before_dispatch(per_arm, call_id=f"call-{index}", request_body=b"x" * 41_808)
             settle_after_response(
-                per_arm, call_id=f"call-{index}", input_tokens=50_000, output_tokens=1024
+                per_arm, call_id=f"call-{index}", input_tokens=50_000, output_tokens=4096
             )
         upper = totals(per_arm)["cost_usd_used_or_reserved"]
-        self.assertEqual(upper, 0.54096)
-        self.assertLessEqual(upper, 0.55)
+        self.assertEqual(upper, 0.66384)
+        self.assertLessEqual(upper, 0.67)
 
     def test_baseline_adapter_uses_same_actual_pre_dispatch_guard(self):
         baseline = new_arm_budget()
         self.assertEqual(baseline["call_limit"], 4)
         self.assertEqual(baseline["input_token_limit"], 200_000)
-        self.assertEqual(baseline["output_tokens_per_call"], 1024)
-        self.assertEqual(baseline["cost_limit_usd"], 0.55)
+        self.assertEqual(baseline["output_tokens_per_call"], 4096)
+        self.assertEqual(baseline["cost_limit_usd"], 0.67)
         dispatched = []
 
         def fake_transport(body):
@@ -126,8 +126,8 @@ class Increment22BudgetTests(unittest.TestCase):
         too_large = new_ledger(
             call_limit=4,
             input_token_limit=4096,
-            output_tokens_per_call=1024,
-            cost_limit_usd=0.55,
+            output_tokens_per_call=4096,
+            cost_limit_usd=0.67,
             input_price_per_million=2.5,
             output_price_per_million=10.0,
         )

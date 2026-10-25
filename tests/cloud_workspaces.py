@@ -230,7 +230,17 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                     "project_id": a_id,
                     "created_at": datetime.now(UTC).isoformat(),
                     "snapshot_sha256": "a" * 64,
-                    "draft": {"title": "T100 private paper fixture"},
+                    "draft": {
+                        "title": "T100 private paper fixture",
+                        "abstract": "Saved text",
+                        "problem_framing": [],
+                        "methods": [],
+                        "sections": [],
+                        "claims": [],
+                        "limitations": [],
+                        "open_obligations": [],
+                        "conclusions": [],
+                    },
                     "validation_warnings": [],
                     "generation": {},
                     "source": {"fixture": "deterministic storage-only source"},
@@ -252,6 +262,21 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                 params={"path": a_path},
             )
             assert paper_download.content == paper_pdf
+            assert "attachment" in paper_download.headers["content-disposition"]
+            inline_download = request(
+                user_a,
+                "GET",
+                f"/api/projects/papers/{paper_id}/pdf",
+                params={"path": a_path, "open_in_browser": "true"},
+            )
+            assert inline_download.content == paper_pdf
+            assert "inline" in inline_download.headers["content-disposition"]
+            paper_text = request(
+                user_a, "GET", f"/api/projects/papers/{paper_id}/txt", params={"path": a_path}
+            )
+            assert paper_text.status_code == 200 and "Saved text" in paper_text.text
+            assert "text/plain" in paper_text.headers["content-type"]
+            assert "attachment" in paper_text.headers["content-disposition"]
             expect_hidden(
                 request(
                     user_b,
@@ -259,6 +284,50 @@ def exercise(root: Path) -> tuple[str, str, str, str, str, str]:
                     f"/api/projects/papers/{paper_id}/pdf",
                     params={"path": a_path},
                 )
+            )
+            expect_hidden(
+                request(
+                    user_b,
+                    "DELETE",
+                    f"/api/projects/papers/{paper_id}",
+                    params={"path": a_path},
+                )
+            )
+            assert (
+                papers.get_paper(a_path, paper_id)["draft"]["title"] == "T100 private paper fixture"
+            )
+            deleted = request(
+                user_a,
+                "DELETE",
+                f"/api/projects/papers/{paper_id}",
+                params={"path": a_path},
+            )
+            assert deleted.status_code == 200 and deleted.json()["deleted"] == paper_id
+            assert len(papers.list_papers(a_path)) == 0
+            assert Path(a_path).exists()
+            papers._save(
+                a_path,
+                {
+                    "paper_id": paper_id,
+                    "project_id": a_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "snapshot_sha256": "a" * 64,
+                    "draft": {
+                        "title": "T100 private paper fixture",
+                        "abstract": "Saved text",
+                        "problem_framing": [],
+                        "methods": [],
+                        "sections": [],
+                        "claims": [],
+                        "limitations": [],
+                        "open_obligations": [],
+                        "conclusions": [],
+                    },
+                    "validation_warnings": [],
+                    "generation": {},
+                    "source": {"fixture": "deterministic storage-only source"},
+                },
+                paper_pdf,
             )
             inference_body = {
                 "path": a_path,

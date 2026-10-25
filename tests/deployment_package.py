@@ -19,6 +19,9 @@ def main() -> None:
     frontend = (ROOT / "deploy/frontend.Dockerfile").read_text(encoding="utf-8")
     compose = (ROOT / "deploy/compose.yaml").read_text(encoding="utf-8")
     caddy = (ROOT / "deploy/Caddyfile").read_text(encoding="utf-8")
+    gce_compose = (ROOT / "deploy/compose.gce.yaml").read_text(encoding="utf-8")
+    startup = (ROOT / "deploy/start-gce.sh").read_text(encoding="utf-8")
+    systemd = (ROOT / "deploy/systemd/sigma.service").read_text(encoding="utf-8")
 
     for digest in (
         "2199a62885a12290dc9c5be3ca0681d367576ab7bf037da120e564723292a2f0",
@@ -31,6 +34,13 @@ def main() -> None:
     assert "--network=none" in (ROOT / "src/sigma/python_sandbox.py").read_text(encoding="utf-8")
     assert "npm --prefix frontend ci" in frontend and "package-lock.json" in frontend
     assert "sigma-state:/var/lib/sigma-auth" in compose
+    assert (
+        "device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth" in gce_compose
+    )
+    assert "SIGMA_STORAGE_BACKEND: persistent_disk" in gce_compose
+    assert "SIGMA_STORAGE_ROOT: /var/lib/sigma-auth" in gce_compose
+    assert "SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces" in gce_compose
+    assert "SIGMA_PROJECTS_ROOT" not in compose + gce_compose
     assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" in compose
     assert "SIGMA_RESEARCH_DOCKER_HOST" in compose
     assert "GOOGLE_OIDC_CLIENT_SECRET_FILE" in compose
@@ -40,6 +50,14 @@ def main() -> None:
     assert "reverse_proxy backend:8000" in caddy
     assert "reverse_proxy frontend:8080" in caddy
     assert 'CMD ["python", "-m", "sigma.deployment_health"]' in backend
+    assert "wget -q -O /dev/null http://127.0.0.1:8080/" in frontend
+    assert "wget -q -O /dev/null http://127.0.0.1:2019/config/" in compose
+    assert "depends_on:" in compose and "condition: service_healthy" in compose
+    assert "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
+    assert "After=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount" in systemd
+    assert 'mountpoint -q "$disk"' in startup
+    assert 'chown "${SIGMA_BACKEND_UID:-10001}:${SIGMA_BACKEND_GID:-10001}" "$disk/auth"' in startup
+    assert 'chmod 0700 "$disk/auth"' in startup
     assert "gcloud" not in backend.lower() and "OPENAI_API_KEY=" not in compose
 
     with tempfile.TemporaryDirectory(prefix="sigma-secret-test-") as directory:

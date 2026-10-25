@@ -17,9 +17,56 @@ ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy"
 sys.path.insert(0, str(DEPLOY))
 import gce_preflight  # pyright: ignore[reportMissingImports]
+import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
+    def test_preflight_requires_all_healthchecks_and_healthy_startup_dependencies(self) -> None:
+        services = {
+            "backend": {
+                "read_only": True,
+                "group_add": ["1002"],
+                "volumes": [
+                    {
+                        "source": "/run/user/1002/docker.sock",
+                        "target": "/run/sigma-sandbox/docker.sock",
+                        "read_only": True,
+                    }
+                ],
+                "healthcheck": {"test": ["CMD", "python", "-m", "sigma.deployment_health"]},
+            },
+            "frontend": {"healthcheck": {"test": ["CMD-SHELL", "wget /"]}},
+            "edge": {
+                "ports": ["80:80"],
+                "healthcheck": {"test": ["CMD-SHELL", "wget localhost:2019"]},
+                "depends_on": {
+                    "backend": {"condition": "service_healthy"},
+                    "frontend": {"condition": "service_healthy"},
+                },
+            },
+        }
+        configuration = {
+            "services": services,
+            "volumes": {"sigma-state": {"driver_opts": {"device": "/srv/sigma-state/auth"}}},
+        }
+        preflight = gce_preflight.Preflight(repository=ROOT)
+        preflight.values = {
+            "SIGMA_SANDBOX_DOCKER_GID": "1002",
+            "SIGMA_SANDBOX_DOCKER_SOCKET": "/run/user/1002/docker.sock",
+        }
+
+        def compose_result(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, 0, json.dumps(configuration), "")
+
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "PASS")
+
+        services["edge"].pop("healthcheck")
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "FAIL")
+
     def test_installer_guard_accepts_ubuntu_os_release_spellings(self) -> None:
         guard = DEPLOY / "gce_host_guard.sh"
         for identity in ('ID=ubuntu\nVERSION_ID="24.04"\n', 'ID="ubuntu"\nVERSION_ID=24.04\n'):
@@ -76,6 +123,106 @@ class GceHostToolingTests(unittest.TestCase):
                 ["bash", "-n", str(path)], capture_output=True, text=True, check=False
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_installer_keeps_state_mount_root_private(self) -> None:
+        installer = (DEPLOY / "install-gce-host.sh").read_text(encoding="utf-8")
+        self.assertIn("install -d -o root -g root -m 0700 /srv/sigma-state", installer)
+        self.assertNotIn("install -d -o root -g root -m 0755 /srv/sigma-state", installer)
+
+    def test_state_mount_fstab_planning_is_uuid_based_hardened_and_idempotent(self) -> None:
+        uuid = "12345678-1234-1234-1234-123456789abc"
+        planned = prepare_state_disk.plan_fstab("# host fstab\n", uuid, "ext4")
+        fields = planned.splitlines()[1].split()
+        self.assertEqual(fields[:3], [f"UUID={uuid}", "/srv/sigma-state", "ext4"])
+        self.assertTrue(
+            {"rw", "nodev", "nosuid", "noexec", "nofail", "x-systemd.device-timeout=60s"}.issubset(
+                fields[3].split(",")
+            )
+        )
+        self.assertEqual(prepare_state_disk.plan_fstab(planned, uuid, "ext4"), planned)
+
+    def test_state_mount_fstab_planning_rejects_conflicts_and_never_formats(self) -> None:
+        uuid = "12345678-1234-1234-1234-123456789abc"
+        with self.assertRaisesRegex(ValueError, "different filesystem"):
+            prepare_state_disk.plan_fstab(
+                "UUID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa /srv/sigma-state ext4 defaults 0 2\n",
+                uuid,
+                "ext4",
+            )
+        with self.assertRaisesRegex(ValueError, "already configured"):
+            prepare_state_disk.plan_fstab(
+                f"UUID={uuid} /mnt/other ext4 defaults 0 2\n",
+                uuid,
+                "ext4",
+            )
+        source = (DEPLOY / "prepare_state_disk.py").read_text(encoding="utf-8")
+        self.assertNotRegex(source, r"\bmkfs(?:\.[A-Za-z0-9_-]+)?\b")
+        self.assertIn("blkid", source)
+
+    def test_state_mount_uuid_validation_and_existing_options(self) -> None:
+        uuid = "12345678-1234-1234-1234-123456789abc"
+        with self.assertRaisesRegex(ValueError, "standard"):
+            prepare_state_disk.validate_uuid("not-a-uuid")
+        previous = f"UUID={uuid} /srv/sigma-state ext4 defaults,exec,suid,dev,noauto 0 2\n"
+        planned = prepare_state_disk.plan_fstab(previous, uuid, "ext4")
+        options = planned.split()[3].split(",")
+        self.assertNotIn("exec", options)
+        self.assertNotIn("suid", options)
+        self.assertNotIn("dev", options)
+        self.assertNotIn("noauto", options)
+        self.assertTrue({"rw", "nodev", "nosuid", "noexec", "nofail"}.issubset(options))
+
+    def test_preflight_requires_matching_uuid_backed_state_mount(self) -> None:
+        uuid = "12345678-1234-1234-1234-123456789abc"
+        with tempfile.TemporaryDirectory(prefix="sigma-gce-mount-test-") as temporary:
+            root = Path(temporary)
+            mount = root / "srv" / "sigma-state"
+            mount.mkdir(parents=True)
+            mount.chmod(0o700)
+
+            def matching_mount(argv, **kwargs):
+                if argv[0] == "findmnt":
+                    output = f"{uuid} ext4 rw,nodev,nosuid,noexec\n"
+                else:
+                    output = ""
+                return subprocess.CompletedProcess(argv, 0, output, "")
+
+            preflight = gce_preflight.Preflight(root=root, command=matching_mount)
+            with (
+                patch("gce_preflight.os.path.ismount", return_value=True),
+                patch("gce_preflight.pwd.getpwnam", return_value=SimpleNamespace(pw_gid=1002)),
+            ):
+                preflight.check_mount()
+            statuses = {result.name: result.status for result in preflight.results}
+            self.assertEqual(statuses["Persistent state source"], "PASS")
+            self.assertEqual(statuses["Persistent state mount"], "PASS")
+
+            def mismatched_mount(argv, **kwargs):
+                output = (
+                    f"{uuid} ext4 rw,nodev,nosuid,noexec\n"
+                    if "--fstab" in argv
+                    else f"{'a' * 8}-aaaa-aaaa-aaaa-aaaaaaaaaaaa ext4 rw,nodev,nosuid,noexec\n"
+                )
+                return subprocess.CompletedProcess(argv, 0, output, "")
+
+            preflight = gce_preflight.Preflight(root=root, command=mismatched_mount)
+            with patch("gce_preflight.os.path.ismount", return_value=True):
+                preflight.check_mount()
+            statuses = {result.name: result.status for result in preflight.results}
+            self.assertEqual(statuses["Persistent state source"], "FAIL")
+
+            def weak_fstab_mount(argv, **kwargs):
+                if "--fstab" in argv:
+                    output = f"{uuid} ext4 defaults,rw\n"
+                else:
+                    output = f"{uuid} ext4 rw,nodev,nosuid,noexec\n"
+                return subprocess.CompletedProcess(argv, 0, output, "")
+
+            preflight = gce_preflight.Preflight(root=root, command=weak_fstab_mount)
+            with patch("gce_preflight.os.path.ismount", return_value=True):
+                preflight.check_mount()
+            statuses = {result.name: result.status for result in preflight.results}
+            self.assertEqual(statuses["Persistent state options"], "FAIL")
 
     def test_preflight_exit_code_distinguishes_blocked_from_failed_checks(self) -> None:
         self.assertEqual(
