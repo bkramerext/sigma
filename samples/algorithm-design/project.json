@@ -2,17 +2,57 @@
   "schema_version": 8,
   "id": "e03f7c91-5f0c-4c13-bce0-6e3d825ff5d2",
   "title": "Design and Verify an Incremental Dependency Scheduler",
-  "problem": "Design an algorithm for a build system that maintains a directed dependency graph under edge additions and removals, answers whether the graph contains a cycle, and, when acyclic, produces a valid build order. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
+  "problem": "Build systems change as their dependencies change. How can a scheduler keep those updates safe while still finding a valid build order? Design an algorithm that handles edge additions and removals, detects cycles, and returns a valid order when possible. Assume up to 100,000 vertices and 1,000,000 edges, with long sequences of updates and queries. Specify exact semantics for updates, including duplicate edges and nonexistent removals, data structures, pseudocode, correctness invariants and proofs, time and space complexity, and adversarial tests. Compare at least two approaches, including a straightforward recomputation baseline. Seek useful incremental performance without asserting an unproved bound. If worst-case efficient fully dynamic maintenance is not established, distinguish a correct implementable solution from a proposed optimization and give a discriminating benchmark.",
   "events": [
     {
       "sequence": 1,
       "kind": "project.initialized",
       "timestamp": "2026-10-22T20:00:00+00:00"
+    },
+    {
+      "sequence": 2,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:33.120635+00:00",
+      "strategy_id": "aad63206-f2b8-4998-896e-e6ec664241a7"
+    },
+    {
+      "sequence": 3,
+      "kind": "strategy.created",
+      "timestamp": "2026-10-25T16:45:33.121093+00:00",
+      "strategy_id": "f1ad76f1-9153-4bd3-b264-7d34b68e97a9"
     }
   ],
-  "strategies": [],
-  "research_mode": "computer_science",
-  "active_order": [],
+  "strategies": [
+    {
+      "id": "aad63206-f2b8-4998-896e-e6ec664241a7",
+      "title": "Recompute baseline",
+      "approach": "Implement a clear baseline that handles one update at a time: apply it, run a directed-cycle check, then produce a topological order if acyclic. Define duplicate-edge and missing-removal behavior first, and measure its cost over long update sequences.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:33.120635+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Recompute baseline",
+      "provenance": null,
+      "enabled": true
+    },
+    {
+      "id": "f1ad76f1-9153-4bd3-b264-7d34b68e97a9",
+      "title": "Bounded dynamic-order experiment",
+      "approach": "Choose one update rule and maintain a topological order while it remains valid. Prove the invariant for that rule, identify exactly when it fails, and compare the repair cost with the recomputation baseline on adversarial sequences. Do not claim a general worst-case bound from a benchmark.",
+      "author_kind": "human",
+      "created_at": "2026-10-25T16:45:33.121093+00:00",
+      "removed_at": null,
+      "stage": "draft",
+      "summary": "Bounded dynamic-order experiment",
+      "provenance": null,
+      "enabled": true
+    }
+  ],
+  "investigation_type": "computer_science",
+  "active_order": [
+    "aad63206-f2b8-4998-896e-e6ec664241a7",
+    "f1ad76f1-9153-4bd3-b264-7d34b68e97a9"
+  ],
   "ai_model": "gpt-6.1-sol",
   "reasoning_effort": "high",
   "difficulty": "medium"

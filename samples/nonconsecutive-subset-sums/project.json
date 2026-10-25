@@ -1,8 +1,8 @@
 {
-  "schema_version": 5,
+  "schema_version": 8,
   "id": "7a8cbb3b-da78-4249-8e9e-8f7c15b8ae7a",
   "title": "Nonconsecutive Subset Sums Modulo 3",
-  "problem": "For each integer n >= 0, let a_n count the subsets S of {1,...,n} with no two consecutive elements such that the sum of the elements of S is divisible by 3. The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.",
+  "problem": "A simple restriction—no adjacent choices—creates a rich counting problem. For each n, how many subsets of {1,...,n} have no consecutive elements and a sum divisible by 3? The empty subset counts. Derive and rigorously prove a constant-coefficient linear recurrence with integer coefficients for a_n, giving sufficient initial values. Determine a_12 exactly. Finally prove that a_n/F_{n+2} tends to 1/3, where F_0=0 and F_1=1 are the Fibonacci numbers. Computational pattern matching alone does not count as a proof.",
   "events": [
     {
       "sequence": 1,
@@ -38,7 +38,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Track adjacency and the subset sum modulo 3 in six states, then exploit the 3-step periodic transition.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "00469f7f-ba53-4a12-944d-2d3295e48d1f",
@@ -49,7 +50,8 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Introduce a generating polynomial, filter sums divisible by 3, and derive a recurrence at cube roots of unity.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     },
     {
       "id": "9ad51640-ff9a-4d22-a928-518f032003bf",
@@ -60,13 +62,17 @@
       "removed_at": null,
       "stage": "draft",
       "summary": "Bijection nonconsecutive k-subsets to ordinary k-subsets and analyze the resulting q-binomial 3-dissection.",
-      "provenance": null
+      "provenance": null,
+      "enabled": true
     }
   ],
-  "research_mode": "mathematical",
+  "investigation_type": "mathematical",
   "active_order": [
     "5c8ce76f-4965-434b-8862-841c92de89e4",
     "00469f7f-ba53-4a12-944d-2d3295e48d1f",
     "9ad51640-ff9a-4d22-a928-518f032003bf"
-  ]
+  ],
+  "ai_model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "difficulty": "hard"
 }

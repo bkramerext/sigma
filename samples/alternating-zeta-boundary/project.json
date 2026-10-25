@@ -2,7 +2,7 @@
   "schema_version": 8,
   "id": "0d1eb24c-3c81-47ca-992b-70b4f9fabf8f",
   "title": "The Alternating Zeta Series and Analytic Continuation",
-  "problem": "Starting from \u03b6(s) = \u03a3(n\u22651) n^(-s) on Re(s) > 1, analyze \u03b7(s) = \u03a3(n\u22651) (-1)^(n-1)n^(-s) as a complex series. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing \u03b6(s) into 0 < Re(s) \u2264 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.",
+  "problem": "How far can an alternating series extend what we know about the Riemann zeta function? Start with η(s) = Σ(n≥1) (-1)^(n-1)n^(-s) and investigate its complex convergence alongside ζ(s) = Σ(n≥1) n^(-s), initially defined for Re(s) > 1. Determine its convergence domain and prove the claim, not just pointwise convergence on the real axis. Where both series converge, derive their exact relationship. Then determine what can rigorously be concluded about continuing ζ(s) into 0 < Re(s) ≤ 1, including any exceptional points introduced by dividing by a factor that may vanish. Justify holomorphic claims with locally uniform convergence or an equivalent argument. State clearly what this method does not establish about the critical strip. No external sources or numerical computation are available; label recalled facts as such.",
   "events": [
     {
       "sequence": 1,
@@ -26,7 +26,7 @@
     {
       "id": "cb33cee9-7a72-423a-9b08-d7243ade1a7e",
       "title": "Abel summation and compact-uniform convergence",
-      "approach": "Use bounded partial sums of the alternating signs with summation by parts. Establish convergence uniformly on each compact subset of the proposed half-plane, then use the theorem on locally uniform limits of holomorphic functions. Separately derive the relation with \u03b6 only in its original absolute-convergence region and analyze whether algebraic division creates exceptional points.",
+      "approach": "Use bounded partial sums of the alternating signs with summation by parts. Establish convergence uniformly on each compact subset of the proposed half-plane, then use the theorem on locally uniform limits of holomorphic functions. Separately derive the relation with ζ only in its original absolute-convergence region and analyze whether algebraic division creates exceptional points.",
       "author_kind": "human",
       "created_at": "2026-10-23T06:16:05.806120+00:00",
       "removed_at": null,

@@ -76,7 +76,7 @@ async def exercise(
     before: bytes,
     *,
     call_limit: int = 6,
-    expected_problem_prefix: str = "For each integer n >= 0",
+    expected_problem_prefix: str = "How many length-n binary strings avoid two consecutive 1s?",
 ):
     limits = dict(research_sessions.DEFAULT_LIMITS)
     limits["model_calls"] = call_limit
@@ -126,11 +126,11 @@ async def main_async(root: Path):
     source_before = SOURCE.read_bytes()
     sample = sample_projects()["projects"]
     assert any(
-        item["id"] == "counting-constrained-binary-strings" and item["strategy_count"] == 0
+        item["id"] == "counting-constrained-binary-strings" and item["strategy_count"] == 1
         for item in sample
     )
     view = open_sample_project("counting-constrained-binary-strings")
-    assert not view.project.strategies and not view.project.active_order
+    assert len(view.project.strategies) == len(view.project.active_order) == 1
     path = view.path
     before = (Path(path) / "project.json").read_bytes()
     assert before != source_before
@@ -192,14 +192,12 @@ async def main_async(root: Path):
     export = export_project_view(path)
     assert export["export_version"] == 2
     assert export["project"]["id"] == view.project.id
-    assert not export["project"][
-        "strategies"
-    ]  # asdict preserves the dataclass tuple; HTTP JSON uses [].
+    assert len(export["project"]["strategies"]) == 1
     assert any(run["run_id"] == events[-1]["run_id"] for run in export["agentic_runs"])
     assert any(run["steps"][0]["output"] == CANDIDATE for run in export["agentic_runs"])
     assert any(event["type"] == "activity.started" for event in events)
     assert any(event["type"] == "decision" and event["outcome"] == "present" for event in events)
-    assert inspect_project(path).project.strategies == ()
+    assert len(inspect_project(path).project.strategies) == 1
     provenance = accepted_provenance(events[-1]["receipt"], path)
     saved = create_strategy(
         path,
@@ -209,21 +207,22 @@ async def main_async(root: Path):
         provenance,
     )
     assert (
-        len(saved.project.strategies) == 1 and saved.project.strategies[0].provenance == provenance
+        len(saved.project.strategies) == 2 and saved.project.strategies[1].provenance == provenance
     )
     independent = open_sample_project("counting-constrained-binary-strings")
     assert independent.project.id != view.project.id
-    assert not independent.project.strategies
+    assert len(independent.project.strategies) == len(independent.project.active_order) == 1
     assert SOURCE.read_bytes() == source_before
     print(
-        "PASS sample zero-pool, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source"
+        "PASS seeded sample, real explore/challenge events, unsaved review, explicit acceptance, reopen and immutable source"
     )
 
     before = (Path(path) / "project.json").read_bytes()
     events, calls = await exercise(path, [ALTERNATIVE, DISTINCT], before)
     assert events[-1]["type"] == "run.completed"
-    assert calls[0]["context"]["project"]["existing_strategies"][0]["approach"].startswith(
-        CANDIDATE["approach"]
+    assert any(
+        item["approach"].startswith(CANDIDATE["approach"])
+        for item in calls[0]["context"]["project"]["existing_strategies"]
     )
     assert events[-1]["draft"]["title"] == ALTERNATIVE["title"]
     research_sessions._save(
@@ -311,7 +310,7 @@ async def main_async(root: Path):
     assert "6 of 6 configured model calls" in events[-1]["summary"]
     assert "passed independent review" in events[-1]["summary"]
     assert len(calls) == 6
-    assert len(inspect_project(path).project.strategies) == 1
+    assert len(inspect_project(path).project.strategies) == 2
 
     # A large configured ceiling does not become a target; the reviewer can
     # trigger one targeted revision and a fresh independent review.
@@ -368,7 +367,7 @@ async def main_async(root: Path):
 
     narrow_path = open_sample_project("operation-narrow-passage").path
     narrow_view = inspect_project(narrow_path)
-    assert not narrow_view.project.strategies
+    assert len(narrow_view.project.strategies) == 2
     assert research_sessions.get_limits(narrow_path)["model_calls"] == 30
     narrow_before = (Path(narrow_path) / "project.json").read_bytes()
     events, calls = await exercise(
@@ -381,10 +380,10 @@ async def main_async(root: Path):
         ],
         narrow_before,
         call_limit=30,
-        expected_problem_prefix="OPERATION NARROW PASSAGE",
+        expected_problem_prefix="Imagine a fictional crisis at Second Thomas Shoal",
     )
     assert events[-1]["type"] == "run.completed" and len(calls) == 4
-    assert inspect_project(narrow_path).project.strategies == ()
+    assert len(inspect_project(narrow_path).project.strategies) == 2
     print(
         "PASS settings-backed call budgets, extended candidate fields, narrow-passage sample flow, skeptical revision and no mutation"
     )
@@ -616,7 +615,10 @@ async def main_async(root: Path):
         storage_failed = await collect(path)
     assert storage_failed[-1]["type"] == "run.failed"
     assert "evidence could not be saved" in storage_failed[-1]["summary"].lower()
-    assert inspect_project(path).project.strategies[0].title == CANDIDATE["title"]
+    assert any(
+        strategy.title == CANDIDATE["title"]
+        for strategy in inspect_project(path).project.strategies
+    )
     source_before = SOURCE.read_bytes()
     source_id = json.loads(source_before)["id"]
     try:
