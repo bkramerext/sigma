@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "source": "synthetic, independently authored; not an existing SIGMA stock sample",
+  "task_count": 6,
+  "variants_per_task": 2,
+  "global_instruction": "Use only the packet and independently derivable reasoning. Never invent tool execution, sources, or evidence. Distinguish observations, hypotheses and proof. For every major claim identify supporting evidence or declare it unavailable. Finish with bounded next test or falsifier. No answer key or rubric is supplied to agents.",
+  "tasks": [
+    {
+      "id": "E1",
+      "domain": "experimental_design",
+      "question": "A sensor's readings rose after a firmware rollout. Determine what can be concluded and propose a falsifiable test of firmware drift versus ambient exposure. Address causal identification, controls and uncertainty.",
+      "evidence_present": {
+        "packet": "Six one-off readings (day,firmware,room,temp_C,reading): (1,A,X,20,100), (2,A,X,21,102), (3,B,Y,27,115), (4,B,Y,28,117), (5,A,Y,27,113), (6,B,X,20,101). No replicates, instrument reference or noise estimate."
+      },
+      "evidence_withheld": {
+        "packet": "You know firmware versions A/B, rooms X/Y, and temperature might vary, but the measurement log and calibrator are unavailable."
+      },
+      "scoring_dimensions": [
+        "causal_confounds",
+        "discriminating_design",
+        "calibration"
+      ]
+    },
+    {
+      "id": "S1",
+      "domain": "source_criticism",
+      "question": "Determine whether calibration log submission became mandatory on May 1 or July 1 and explain which sources justify any conclusion. Distinguish document authority from a summary.",
+      "evidence_present": {
+        "packet": "Document A, signed change notice dated April 12: 'Calibration log submission will be mandatory beginning July 1.' Document B, internal summary dated May 2: 'The new mandatory submission started May 1.' Document C, revision metadata: 'The April 12 signed notice superseded an earlier draft; no repeal appears in this packet.' Documents are synthetic."
+      },
+      "evidence_withheld": {
+        "packet": "Only an internal summary dated May 2 is available: 'The new mandatory submission started May 1.' The signed notice and revision record are unavailable. Documents are synthetic."
+      },
+      "scoring_dimensions": [
+        "source_authority",
+        "disagreement",
+        "withheld_calibration"
+      ]
+    },
+    {
+      "id": "C1",
+      "domain": "constrained_engineering",
+      "question": "Diagnose duplicate external charges in an at-least-once job queue, design a minimal mitigation, and define a test plan under a 100 ms added-p95 latency ceiling without provisioning a new service.",
+      "evidence_present": {
+        "packet": "Queue trace: K9 delivered to W1 at 0ms; W1 sends external charge which succeeds at 20ms; ACK lost at 21ms; K9 redelivered to W2 at 50ms; W2 sends same external charge, succeeds at 70ms. Existing DB supports unique constraints. External charge endpoint may or may not support idempotency keys; not specified."
+      },
+      "evidence_withheld": {
+        "packet": "At-least-once delivery, lost acknowledgments and duplicate external charges reported. Exact trace and external payment API semantics unavailable. Existing DB supports unique constraints."
+      },
+      "scoring_dimensions": [
+        "causal_failure",
+        "idempotency_limit",
+        "bounded_validation"
+      ]
+    },
+    {
+      "id": "P1",
+      "domain": "scenario_reasoning",
+      "question": "Plan distribution of 110 units of medical supplies to sites A and B over one day, prioritize safety, and give a contingency for a vehicle loss. Do not claim feasibility that the inputs cannot establish.",
+      "evidence_present": {
+        "packet": "Demand A=70, B=40. Depot has 110 units. Vehicle V1 capacity 60 units, V2 capacity 50 units; each can make one trip today. Transit times: A 2h, B 3h. Both sites require delivery by 6h. Vehicle assignments may be chosen. If either vehicle fails before departure, no replacement and no second trip is available."
+      },
+      "evidence_withheld": {
+        "packet": "Demand A=70, B=40 and depot supply 110 known. Vehicle capacities and trip limitations unknown. Deadline 6h. You must identify the missing constraints before asserting feasibility."
+      },
+      "scoring_dimensions": [
+        "feasibility",
+        "adversarial_contingency",
+        "priority_tradeoffs"
+      ]
+    },
+    {
+      "id": "M1",
+      "domain": "formal_mathematics",
+      "question": "Assess the conjecture: every finite simple graph with minimum degree at least 2 contains a triangle. Either prove it or give a counterexample. Explain why checking a finite collection cannot establish a universal proposition.",
+      "evidence_present": {
+        "packet": "Graph instances: triangle C3, square C4, pentagon C5, complete graph K4. C4 and C5 have minimum degree 2 and contain no triangles. The data are exact graph descriptions, not empirical measurements."
+      },
+      "evidence_withheld": {
+        "packet": "No example graphs are supplied. Only the definitions of finite simple graph, minimum degree and triangle are available."
+      },
+      "scoring_dimensions": [
+        "valid_counterexample",
+        "proof_evidence_distinction",
+        "scope"
+      ]
+    },
+    {
+      "id": "M2",
+      "domain": "formal_mathematics",
+      "question": "Critique the argument that f(x)=x^2 is strictly increasing on all real numbers because f'(x)=2x and its derivative is nonzero except at x=0. Identify its first invalid implication and replace it with a correct domain-restricted claim.",
+      "evidence_present": {
+        "packet": "Provided argument: 'f'(x)=2x, and f'(x) is nonzero for x != 0. A derivative nonzero almost everywhere means the function is strictly increasing. Thus x^2 increases on R.' The argument omits the derivative sign. Numerical checks: f(-2)=4, f(-1)=1, f(0)=0, f(1)=1."
+      },
+      "evidence_withheld": {
+        "packet": "Only the claimed conclusion, 'x^2 is strictly increasing on R', and the derivative f'(x)=2x are given. The author's chain of reasoning and example values are unavailable."
+      },
+      "scoring_dimensions": [
+        "earliest_invalid_step",
+        "correct_domain",
+        "negative_evidence"
+      ]
+    }
+  ]
+}
