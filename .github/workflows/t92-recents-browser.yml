@@ -38,7 +38,7 @@ jobs:
       - name: Install dependencies and browser
         run: |
           ./sigma setup
-          uv run --with playwright python -m playwright install --with-deps chromium
+          uv run --with playwright python -m playwright install chromium
       - name: Run real Chromium Recent Projects acceptance
         shell: bash
         run: |
