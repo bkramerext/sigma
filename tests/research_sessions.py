@@ -6690,26 +6690,25 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             "status": "connected",
         }
         config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
-        phase = "seed"
-        captured = []
-        dispatched = asyncio.Event()
+        state = {"phase": "seed", "captured": [], "dispatched": asyncio.Event()}
 
-        async def handler(request):
+        async def handler(request, *, case=(mode, assumption, followup), state=state):
+            case_mode, case_assumption, case_followup = case
             context = json.loads(json.loads(request.content)["input"])
             role = json.loads(request.content)["text"]["format"]["name"]
-            captured.append((phase, role, context))
-            if phase == "later":
-                dispatched.set()
+            state["captured"].append((state["phase"], role, context))
+            if state["phase"] == "later":
+                state["dispatched"].set()
                 await asyncio.Event().wait()
             if role == "research_investigator":
                 response = investigation(1)
-                response["claim"] = f"Unverified local claim for {mode}"
-                response["assumptions"] = [assumption]
+                response["claim"] = f"Unverified local claim for {case_mode}"
+                response["assumptions"] = [case_assumption]
                 response["evidence_status"] = "Scripted proposition, not verified."
             else:
                 response = skeptic(1, "continue", "recoverable_objection")
-                response["assumptions_reviewed"] = [assumption]
-                response["next_question"] = followup
+                response["assumptions_reviewed"] = [case_assumption]
+                response["next_question"] = case_followup
             return httpx.Response(200, json=provider_response(response))
 
         with (
@@ -6734,7 +6733,7 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             assert ended["status"] == "ended"
             assert ended["artifacts"][0]["coordinator_decision"] == "stop_budget_exhausted"
             saved = (root / "research-sessions" / f"{ended['id']}.json").read_bytes()
-            phase = "later"
+            state["phase"] = "later"
             limits.update(model_calls=4)
             research_sessions.save_limits(str(root), limits)
             later = await research_sessions.start_session(
@@ -6742,10 +6741,10 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             )
             assert later["current_question"] == followup
             assert later["initial_question_source"]["artifact_id"] == ended["artifacts"][0]["id"]
-            await asyncio.wait_for(dispatched.wait(), 2)
+            await asyncio.wait_for(state["dispatched"].wait(), 2)
             contexts = [
                 context
-                for stage, role, context in captured
+                for stage, role, context in state["captured"]
                 if stage == "later" and role == "research_investigator"
             ]
             assert contexts and contexts[0]["question"] == followup
