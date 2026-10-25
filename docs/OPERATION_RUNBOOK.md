@@ -66,6 +66,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 
 **State disk filesystem verification (2026-10-25):** Operator verified `google-sigma-state` was blank, created ext4 with label `sigma-state`, and confirmed `blkid` reported UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5`, type ext4, block size 4096. Initial mount and reboot validation pending. Do not reformat this disk.
 
+**State mount observation (2026-10-25):** Operator mounted UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5` at `/srv/sigma-state`; `findmnt` showed `/dev/sdb`, ext4, `rw,relatime`. Filesystem root ownership/mode, persistent fstab entry and reboot validation remain pending.
+
 ## Before any operation
 
 1. Identify the GCP project, `us-west1-b` zone, VM `sigma-gce-01`, disk `sigma-state`, public hostname, and current `SIGMA_RELEASE`. Confirm these against **live GCP**, not just this document.
