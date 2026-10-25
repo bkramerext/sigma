@@ -14,6 +14,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | --- | --- | --- |
 | Existing Google Cloud OAuth project | Name: `SIGMA Auth`; Project ID: `sigma-auth-512601`; Project number: `665111821572` | Operator-reported from Cloud Console, 2026-10-25 |
 | Production infrastructure GCP project | Name: `SIGMA Production`; Project ID: `sigma-research-prod`; Project number: `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
+| Duplicate production project | `SIGMA Production`; ID `sigma-production-512718` | Operator reports shutdown completed 2026-10-25; pending deletion/recovery period; do not use |
 | GCP organization | No organization suspected | Not verified |
 | Registered DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Selected/registered; IP assignment and DNS verification pending |
 | GCE VM | `sigma-gce-01`, Ubuntu 24.04 LTS amd64, `e2-standard-4`, `us-west1-b` | Planned; no live resource ID confirmed |
@@ -26,7 +27,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Planned, no secret payloads here |
 | Production Google OAuth client | HTTPS origin `https://sigma-research.duckdns.org`; callback `https://sigma-research.duckdns.org/api/cloud-auth/callback` | Planned; client/project decision pending |
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; project association and trial unverified |
-| Billing / trial / project budget | $300 project-filtered usage-alert proposal; project billing link, trial credit and dates | Not yet verified |
+| Billing / trial / project budget | Both `sigma-research-prod` and `sigma-auth-512601` linked to billing account `015C1D-E6B877-9913D6`; $300 budget proposal, trial credit and dates | Billing links observed in operator screenshot 2026-10-25; trial/budget still unverified |
 | Application release | Exact deployed Git SHA | Pending deployment |
 
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
