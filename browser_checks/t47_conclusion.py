@@ -216,8 +216,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 prelude = outcome.locator(".outcome-evidence-prelude")
                 expect(prelude).to_be_visible()
                 expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
-            expect(prelude).to_contain_text("No local Python or Sage computation is recorded for this session.")
-            expect(prelude).to_contain_text("Computational claims in the agent-authored conclusion are not supported")
+                expect(prelude).to_contain_text("No local Python or Sage computation is recorded for this session.")
+                expect(prelude).to_contain_text("Computational claims in the agent-authored conclusion are not supported")
                 expect(prelude).to_contain_text("No persisted Python/SageMath execution records")
                 assert prelude.evaluate(
                     "element => element.nextElementSibling.classList.contains('outcome-subsections')"
