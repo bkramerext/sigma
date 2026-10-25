@@ -1,5 +1,43 @@
 # SIGMA status
 
+## T132 Red hosted research and Python/Sage execution audit (2026-10-25)
+
+Started from current `main` at `803a62d` on `red/t132-hosted-research-execution`.
+Audited the hosted sponsored API integration and existing deterministic
+coverage. Existing suites already join authenticated HTTP proposal, agentic,
+conversion, paper, and research-session generation with owner/global usage
+accounting, unknown-outcome no-replay behavior, cross-workspace controls,
+execution provenance/artifacts, and recovery; Python/Sage tests cover runtime
+limits, errors, timeouts, and persistence. Corrected a stale Cloud Deployment
+statement that still described these sponsored routes as disabled despite the
+current ledger-backed implementation and regression coverage. Added a pure
+rootless-mode policy guard and deterministic regression coverage: the
+production path rejects non-rootless daemons unless the explicit development
+override is supplied.
+
+Added [T132 hosted research acceptance](T132_HOSTED_RESEARCH_ACCEPTANCE.md)
+with repeatable offline commands, a no-override target-host rootless runtime
+proof, authorized-only hosted workflow steps, interruption/no-retry handling,
+and a sanitized evidence record. Linked it from the operations runbook. No
+production service, provider, identity, or cloud resource was contacted or
+modified. This is preparation, not hosted acceptance.
+
+The local Docker Desktop ARM64 development smoke passed using
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check
+--allow-nonrootless-dev`: Python and Sage both ran as UID 65532 and reported
+network, host sentinel, host state, and daemon socket blocked; artifact and
+execution persistence passed; Tectonic PDF compilation and paper snapshot/PDF
+hash persistence passed. It explicitly reported `daemon_rootless: false`, so
+it does not validate the GCE rootless boundary. Docker Compose v2 is absent on
+this workstation; packaged Compose/browser integration did not run. The strict
+`uv run --locked --no-sync python -m sigma.cloud_runtime_check` command exited
+1 with the expected non-rootless refusal. `tests/deployment_package.py` passed,
+and the final `./sigma test` passed all scenarios, Ruff check/format, Pyright
+(0 diagnostics), frontend typecheck and production build. Actual rootless GCE,
+hosted OAuth/browser, provider-backed generation, and restart acceptance remain
+dependent on Brian's host verification and separate owner authorization for
+any live provider usage.
+
 ## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
 
 Started from current `main` at `455d752` in an isolated ticket worktree. Audited
