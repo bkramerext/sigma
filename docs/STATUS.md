@@ -4288,3 +4288,41 @@ check occurred. No project was modified or exercised, so no project export was
 created. The newcomer summary above is retained; the concurrent Green
 PR #108 also edits `STATUS.md`, so integration must preserve that summary and
 this issue record.
+
+## Round 2 Increment 19 — readable Outcomes and actionable pauses (2026-10-25)
+
+Reviewed current `main`, Green PR #97, and merged PR #108 before editing. The
+KaTeX renderer and explicit AI text-conversion path were already present on
+`main`; PR #97 remains open against an older base. Increment 19 extends the
+existing renderer for conservative bare math tokens in historical mixed prose,
+translating recognized Greek letters, operators, compact powers/subscripts, and
+simple slash fractions into KaTeX syntax only in the display projection. Code,
+links, HTML, and long underscore identifiers are left as authored prose. It
+does not rewrite saved conclusions. Simple and
+Advanced Outcome start typeset when a conclusion contains recognizable math;
+the original source remains available by toggle. Explicit AI formatting remains
+available for less regular notation and displays its warnings plus a clear
+statement that formatting is not verification.
+
+Research session projection now gives a concise safe next step for manual pause,
+an interrupted dispatched call, restart without a recorded in-flight request,
+project/account/model guards, context/storage limits, cost limits, and ended
+call/duration limits. The notice sits above the Outcome narrative in both reader
+modes. Ambiguous provider calls require a usage/billing check; a resumed session
+does not replay an interrupted attempt. Existing computation provenance stays
+above the agent-authored Conclusion.
+
+Real Chrome on the archived RH-style session verified legible KaTeX in both
+default Simple and Advanced views, exact saved-source access, the copper control,
+paused cause/next action and Resume visibility, evidence ordering, and mobile
+layout. The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` suite,
+frontend typecheck/build, Ruff, Pyright, and `git diff --check` passed. No live
+provider request or resume action occurred. The browser used an in-memory view
+fixture; the only preserved project export is the byte-identical historical
+T17.8 SIGMA export, with fixture changes explicitly excluded in its manifest.
+
+Mathematical display is a reading aid, not a proof or verification. The
+normalizer is intentionally token-based and conservative; unusual notation can
+still use the existing explicit AI formatting path or the exact saved-source
+view. PR #97 and issues #93/#95 remain open pending coordinator review and
+acceptance; this entry does not close them.
