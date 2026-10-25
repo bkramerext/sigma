@@ -214,9 +214,9 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
   confirmed deletion. Frontend
   production build passed. The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
   ./sigma test` passed all steps. No live or paid provider calls were made.
-- Project header: About matches Home's compact style in normal and hover states
-  and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
-  responsive.
+- Project header: About matches Home's compact style in normal and hover states.
+  The desktop 3×2 pills are grouped by column: Difficulty/About,
+  Model/Thinking, and Google/ChatGPT; narrow layout stays responsive.
 - Real-Chrome checks now cover direct long-form start without a browser prompt,
   failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
   About placement/style. `browser_checks/t45_long_paper.py` and
