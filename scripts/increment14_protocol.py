@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Offline Increment 14 preregistration validator. Never invokes a model/provider."""
 
 from __future__ import annotations
@@ -60,7 +61,7 @@ def validate() -> dict:
 
 
 def manifest(seed: int, repetitions: int) -> dict:
-    assert 1 <= repetitions <= 10
+    assert 1 <= repetitions <= 5
     data = validate()
     rng = random.Random(seed)
     pairs = []
@@ -69,6 +70,8 @@ def manifest(seed: int, repetitions: int) -> dict:
             for repeat in range(repetitions):
                 order = ["A", "B"]  # A/B are internal arm codes; hidden from graders.
                 rng.shuffle(order)
+                assignment = ["sigma", "single_role"]
+                rng.shuffle(assignment)
                 packet = {
                     "instruction": data["global_instruction"],
                     "question": t["question"],
@@ -81,11 +84,12 @@ def manifest(seed: int, repetitions: int) -> dict:
                         "replicate": repeat,
                         "packet_sha256": sha256(canonical_bytes(packet)),
                         "execution_order": order,
+                        "arm_assignment": dict(zip(("A", "B"), assignment, strict=True)),
                     }
                 )
     rng.shuffle(pairs)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "DRAFT_NOT_FROZEN",
         "seed": seed,
         "replicates_per_task_variant": repetitions,
@@ -93,6 +97,10 @@ def manifest(seed: int, repetitions: int) -> dict:
         "total_arm_runs": 2 * len(pairs),
         "task_file_sha256": sha256(TASKS.read_bytes()),
         "canonical_tasks_sha256": sha256(canonical_bytes(data)),
+        "analysis_unit": "task_cluster",
+        "independent_task_count": len(data["tasks"]),
+        "scoring_schema": "sigma-blind-submission-v1",
+        "scoring_schema_sha256": sha256((ROOT / "scripts/increment14_blinding.py").read_bytes()),
         "pairs": pairs,
         # Proposed ceilings only. Provider/model selection, a priced estimate,
         # protocol freeze, and owner authorization remain separate gates.
@@ -106,8 +114,8 @@ def manifest(seed: int, repetitions: int) -> dict:
         "per_arm_model_call_cap": 4,
         "per_arm_tool_call_cap": 1,
         "per_arm_wall_seconds": 600,
-        "per_arm_usd_cap": 2.00,
-        "total_usd_cap": 2.00 * 2 * len(pairs),
+        "per_arm_usd_cap": 0.55,
+        "total_usd_cap": 0.55 * 2 * len(pairs),
         "user_approved": False,
         "freeze_approved": False,
     }
@@ -116,7 +124,7 @@ def manifest(seed: int, repetitions: int) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=140017)
-    parser.add_argument("--replicates", type=int, default=1)
+    parser.add_argument("--replicates", type=int, default=3)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     result = manifest(args.seed, args.replicates)

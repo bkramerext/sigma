@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Increment 15 offline paired-run transport test. No network, model or credentials.
 
 This exercises deterministic scheduling, exact packet hashes, capped records,
@@ -28,7 +29,7 @@ def dry_run() -> dict:
     protocol = load("protocol15", "scripts/increment14_protocol.py")
     packets = load("packets15", "scripts/increment14_agent_packet.py")
     audit = load("audit15", "scripts/increment14_audit.py")
-    planned = protocol.manifest(140017, 1)
+    planned = protocol.manifest(140017, 3)
     # These local placeholder caps have NO authorization significance.
     frozen = dict(
         planned,
@@ -68,6 +69,7 @@ def dry_run() -> dict:
                 "variant": pair["variant"],
                 "replicate": pair["replicate"],
                 "arm_code": arm,
+                "executed_arm": pair["arm_assignment"][arm],
                 "packet_sha256": digest,
                 "model_provider": "offline-fixture",
                 "model_exact_version": "offline-only",
@@ -81,9 +83,41 @@ def dry_run() -> dict:
                 "cost_usd": 0,
                 "transcript_sha256": hashlib.sha256(transcript).hexdigest(),
                 "tool_audit_sha256": hashlib.sha256(b"[]").hexdigest(),
+                "normalized_submission": audit._BLINDING.normalize_submission(
+                    {
+                        "conclusion": "synthetic offline fixture",
+                        "reasoning": "no model inference performed",
+                        "challenge": "not applicable",
+                        "evidence": "fixture only",
+                        "uncertainty": "not research evidence",
+                        "next_test": "none",
+                    },
+                    arm="single_role",
+                ),
+                "schema_truncation_fields": [],
+                "schema_validation_errors": [],
                 "scores": {d: 0 for d in audit.DIMENSIONS},
+                "scorer_reviews": [
+                    {
+                        "grader_id": "fixture-grader-1",
+                        "scores": {d: 0 for d in audit.DIMENSIONS},
+                        "task_key_pass": False,
+                        "arm_guess": "uncertain",
+                        "guess_confidence": 0,
+                    },
+                    {
+                        "grader_id": "fixture-grader-2",
+                        "scores": {d: 0 for d in audit.DIMENSIONS},
+                        "task_key_pass": False,
+                        "arm_guess": "uncertain",
+                        "guess_confidence": 0,
+                    },
+                ],
                 "critical_integrity_failure": False,
             }
+            record["submission_sha256"] = audit._BLINDING.digest_submission(
+                record["normalized_submission"]
+            )
             records.append(record)
     # Adversarial fixture mutations must fail closed, not silently score a win.
     from copy import deepcopy
@@ -121,8 +155,25 @@ def dry_run() -> dict:
     must_reject(lambda m, r: m.update(status="DRAFT_NOT_FROZEN"))
 
     result = audit.check_trial_records(frozen, records)
-    if result != {"pairs": 12, "cost_usd": 0, "integrity_failures": 0}:
+    if result != {
+        "pairs": 36,
+        "cost_usd": 0,
+        "integrity_failures": 0,
+        "clipped_submissions": 0,
+        "schema_truncation_fields": 0,
+        "schema_validation_errors": 0,
+        "blinding_guess_accuracy": None,
+    }:
         raise AssertionError("Unexpected paired-run summary")
+    differences = audit.paired_score_differences(frozen, records)
+    cluster_summary = audit.task_cluster_summary(differences)
+    pass_cluster_summary = audit.task_cluster_summary(
+        differences, outcome_field="task_key_pass_rate_diff"
+    )
+    if cluster_summary["independent_units"] != 6 or len(differences) != 36:
+        raise AssertionError("Unexpected task-cluster analysis summary")
+    if pass_cluster_summary["independent_units"] != 6:
+        raise AssertionError("Unexpected task-key pass analysis summary")
     return {
         "kind": "OFFLINE_FIXTURE_ONLY",
         "model_calls": 0,
@@ -142,7 +193,7 @@ def main() -> None:
     outcome = dry_run()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(outcome, indent=2, sort_keys=True) + "\n")
-    print("PASS 24 synthetic records, 12 matched pairs, zero model calls/cost")
+    print("PASS 72 synthetic records, 36 matched pairs, zero model calls/cost")
 
 
 if __name__ == "__main__":

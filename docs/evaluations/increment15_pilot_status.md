@@ -1,5 +1,9 @@
 # Increment 15: bounded unscripted pilot execution
 
+**Historical plan:** The earlier 12-pair design below is superseded by T114
+revision 2: 36 paired runs clustered in six independent tasks. No live pilot is
+authorized.
+
 **State:** Started immediately after Increment 14 merged. **No live provider inference or paid calls authorized.** The approved work at this point is offline execution preparation, not the paid research experiment.
 
 ## Pilot goal

@@ -26,9 +26,9 @@ def main() -> None:
 
     protocol = load_module("i14_protocol", "scripts/increment14_protocol.py")
     packet = load_module("i14_packet", "scripts/increment14_agent_packet.py")
-    manifest = protocol.manifest(140017, 1)
+    manifest = protocol.manifest(140017, 3)
 
-    # Validate all 12 exact source packets against their manifest hashes.
+    # Validate all 36 exact source packets against their manifest hashes.
     for item in manifest["pairs"]:
         payload = packet.agent_packet(item["task_id"], item["variant"])
         if protocol.sha256(protocol.canonical_bytes(payload)) != item["packet_sha256"]:

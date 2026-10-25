@@ -1,5 +1,10 @@
 # Increment 14 adversarial re-review: second pass
 
+**Historical review:** This file records the earlier six-task assessment and is
+not the independent external curation required by T114 revision 2. Its
+references to a favorable 12-pair interpretation are superseded; the active
+design uses 36 paired runs clustered in six independent tasks.
+
 Scope: task validity, alternative interpretations, leakage, test validity and the limits of the offline audit. This is **not** an independent external scientific evaluation and does not substitute for one.
 
 | Case | Adversarial attack | Reference conclusion / acceptance | Residual risk |
