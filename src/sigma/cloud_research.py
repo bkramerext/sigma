@@ -7,10 +7,12 @@ write-ahead cost reservations without creating a second research engine.
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from pathlib import Path
@@ -375,6 +377,170 @@ def claim_job(session_id: str) -> bool:
             return True
     except sqlite3.Error as exc:
         raise CloudResearchUnavailable("Cloud research ledger is unavailable.") from exc
+
+
+def begin_standalone_inference(project_id: str, project_path: str) -> str:
+    """Reserve an owner-scoped execution slot for one non-session AI operation."""
+    if not isinstance(project_id, str) or not project_id or not isinstance(project_path, str):
+        raise CloudResearchUnavailable("Cloud inference project identity is invalid.")
+    session_id = str(uuid4())
+    prepare_job(
+        {
+            "id": session_id,
+            "mode": "api_key",
+            "project_id": project_id,
+            "project_path": project_path,
+            "idempotency_key": str(uuid4()),
+            "maximum_estimated_cost_usd": 0.25,
+            "cost_status": "available",
+            "call_limit": 2,
+            "duration_limit_minutes": 1,
+        }
+    )
+    if not claim_job(session_id):
+        try:
+            with _transaction() as db:
+                db.execute("DELETE FROM jobs WHERE session_id=? AND status='queued'", (session_id,))
+        except sqlite3.Error as exc:
+            raise CloudResearchUnavailable("Cloud inference ledger is unavailable.") from exc
+        raise CloudResearchUnavailable(
+            "Cloud inference is at its concurrency limit; retry shortly."
+        )
+    return session_id
+
+
+def finish_standalone_inference(session_id: str) -> None:
+    """Release a standalone operation's concurrency slot after provider I/O ends."""
+    owner = _workspace_id()
+    try:
+        with _transaction() as db:
+            db.execute(
+                "UPDATE jobs SET status='terminal',updated_at=? WHERE session_id=? AND workspace_id=? AND status IN ('running','stopping')",
+                (_now(), session_id, owner),
+            )
+    except sqlite3.Error as exc:
+        raise CloudResearchUnavailable("Cloud inference ledger is unavailable.") from exc
+
+
+def standalone_call_reservation(
+    model: str, input_bytes: int, output_tokens: int
+) -> tuple[float, int]:
+    """Estimate a conservative per-attempt cap from reviewed model prices."""
+    if (
+        type(input_bytes) is not int
+        or input_bytes < 0
+        or type(output_tokens) is not int
+        or output_tokens < 1
+    ):
+        raise CloudResearchUnavailable("Cloud inference reservation is invalid.")
+    from sigma.research_sessions import TOKEN_PRICES_PER_MILLION
+
+    prices = TOKEN_PRICES_PER_MILLION.get(model)
+    if prices is None:
+        raise CloudResearchUnavailable("Selected model has no reviewed cloud price.")
+    # UTF-8 bytes bound tokenizer input conservatively; round to cents and add
+    # 15% headroom before provider I/O. Input is reserved as uncached.
+    estimate = Decimal(input_bytes) * Decimal(str(prices["input"]))
+    estimate += Decimal(output_tokens) * Decimal(str(prices["output"]))
+    estimate = estimate / Decimal(1_000_000) * Decimal("1.15")
+    rounded = estimate.quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+    return float(max(rounded, Decimal("0.01"))), input_bytes + output_tokens
+
+
+@dataclass
+class ProviderAttempt:
+    job_id: str
+    call_id: str
+    model: str
+    dispatched: bool = False
+    settled: bool = False
+
+
+def provider_request_input_bytes(payload: Any) -> int:
+    """Return a conservative UTF-8 bound for all billable structured input."""
+    if not isinstance(payload, dict):
+        raise CloudResearchUnavailable("Cloud inference request is invalid.")
+    # Responses charges for instructions, input, and structured-output format
+    # content. Keep all three in the same deterministic encoding used by the
+    # request; transport and sampling metadata are not prompt input.
+    billable = {key: payload[key] for key in ("instructions", "input", "text") if key in payload}
+    if not all(key in billable for key in ("instructions", "input", "text")):
+        raise CloudResearchUnavailable("Cloud inference request is incomplete.")
+    try:
+        encoded = json.dumps(billable, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError) as exc:
+        raise CloudResearchUnavailable("Cloud inference request is invalid.") from exc
+    return len(encoded)
+
+
+def start_provider_attempt(
+    project_id: str, project_path: str, model: str, payload: Any, output_tokens: int
+) -> ProviderAttempt | None:
+    """Reserve one non-session provider attempt; local calls remain unchanged."""
+    if not cloud_workspaces.enabled():
+        return None
+    job_id = begin_standalone_inference(project_id, project_path)
+    call_id = uuid4().hex
+    try:
+        input_bytes = provider_request_input_bytes(payload)
+        amount, tokens = standalone_call_reservation(model, input_bytes, output_tokens)
+        reserve_call(job_id, call_id, amount, tokens)
+    except Exception:
+        finish_standalone_inference(job_id)
+        raise
+    return ProviderAttempt(job_id, call_id, model)
+
+
+def settle_provider_attempt(attempt: ProviderAttempt | None, response: Any) -> None:
+    """Reconcile response usage, retaining the reservation when price/usage is absent."""
+    if attempt is None:
+        return
+    from sigma.research_sessions import _estimate_cost
+
+    usage = response.get("usage") if isinstance(response, dict) else None
+    details = usage.get("input_tokens_details", {}) if isinstance(usage, dict) else {}
+    input_tokens = usage.get("input_tokens") if isinstance(usage, dict) else None
+    output_tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+    cached = details.get("cached_tokens", 0) if isinstance(details, dict) else None
+    valid = (
+        type(input_tokens) is int
+        and input_tokens >= 0
+        and type(output_tokens) is int
+        and output_tokens >= 0
+        and type(cached) is int
+        and 0 <= cached <= input_tokens
+    )
+    parsed = (
+        {
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached,
+            "output_tokens": output_tokens,
+        }
+        if valid
+        else None
+    )
+    settle_call(
+        attempt.job_id,
+        attempt.call_id,
+        input_tokens=input_tokens if type(input_tokens) is int else None,
+        output_tokens=output_tokens if type(output_tokens) is int else None,
+        estimated_cost_usd=_estimate_cost(attempt.model, parsed) if parsed else None,
+    )
+    attempt.settled = True
+
+
+def finish_provider_attempt(attempt: ProviderAttempt | None) -> None:
+    """Release its concurrency slot and preserve any dispatched uncertain charge."""
+    if attempt is None:
+        return
+    try:
+        if not attempt.settled:
+            if attempt.dispatched:
+                mark_call_unknown(attempt.job_id, attempt.call_id)
+            else:
+                mark_call_not_dispatched(attempt.job_id, attempt.call_id)
+    finally:
+        finish_standalone_inference(attempt.job_id)
 
 
 def sync_job(record: dict[str, Any]) -> None:

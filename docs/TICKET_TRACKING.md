@@ -46,6 +46,7 @@
 | T21 | Final integration, demonstration and acceptance testing | Current-main UI/browser acceptance passed through T28; coordinator integration pass remains | Gray |
 | T22 | Cloud deployment | Gates A/C merged; Gate B PR #49 refreshed against main `803e655` and R4R; deployment prep PR #52 open; T22.5 remains separate and unimplemented | Red |
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
+| T100 | Local validation of production-compatible persistent storage and real-Chrome restart/restore acceptance | Implementing · [issue #100](https://github.com/bkramerext/sigma/issues/100) | Red |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Original implementation merged in PR #12; local Google-pill acceptance follow-up in review | Blue |

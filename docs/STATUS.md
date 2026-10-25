@@ -1,5 +1,30 @@
 # SIGMA status
 
+## T100 persistent-disk storage (2026-10-25)
+
+Implemented opt-in `SIGMA_STORAGE_BACKEND=persistent_disk` with a validated
+private `SIGMA_STORAGE_ROOT`, while preserving `local` as the default. The
+authenticated workspace services now cover projects, strategies, sessions,
+evidence/artifacts, Recents, paper files, and research accounting. GCE Compose
+settings and a host mount guard are included. No GCP resources, OAuth exchange,
+or paid inference were used.
+
+Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`,
+focused persistent workspace/research tests, Ruff, Pyright, and
+`git diff --check`. Real Chrome exercised sample copy, project and strategy
+edits, save/reload/reopen, backend restart, Recent identity, cross-subject
+denial, and stock-sample immutability; screenshot and transcripts are in
+[T100 evidence](evaluations/t100/README.md). A disposable local Docker volume
+and backend image retained auth data through restart and container recreation.
+Negative root, symlink, permissions, traversal, corrupt mapping, and missing
+mount checks passed. The local Docker installation lacks Compose v2, so merged
+Compose configuration and a real GCE disk mount are unverified; YAML parsing
+and the guard's missing-mount check passed. Production startup now uses the
+guarded host script from the deployment runbook, with `/etc/sigma/deploy.env` as
+its default env file; the exact env-file handoff and refusal to invoke Docker on
+a missing mount are covered in `tests/storage.py`. See
+`messages/t100_red_r4r.txt` for the complete handoff and commit details.
+
 ## T86 README validation (2026-10-25)
 
 Rewrote the newcomer README with a local quick start, optional AI/API-key
@@ -62,6 +87,53 @@ passed. The runtime smoke script was exercised on actual Docker containers.
 The GCE command and real rootless execution remain a required Red follow-up;
 hosted AI paper generation, identity authorization, restart persistence, and
 sponsored budget operations are outside this Blue runtime increment.
+
+## T99 Blue: sponsored inference outside sessions (2026-10-25)
+
+Started from current `main` at `d4ca2194b68314336855823970b4b97f55c1256a` on
+the isolated `t99-cloud-inference-parity` branch. Reused the existing durable
+cloud call ledger for standalone proposal calls, agentic proposal steps, text
+conversion, and one-shot paper generation. Each provider attempt now reserves a
+per-user/global spend amount, token ceiling and concurrent slot before dispatch,
+then reconciles reported usage using the reviewed model prices. Provider failures
+and interruptions after dispatch retain the reservation as an unknown charge.
+Cloud inference accepts only the server-side sponsored API credential. Existing
+project ownership checks, cancellation paths and LOCAL credential selection
+remain in place.
+
+Removed the cloud 403 gates from the four operation routes after adding ledger
+admission at each provider-call site, including every long-form paper stage.
+Paper preflight and checkpoint restart are available to authenticated owners as
+well. Cloud provider quality, live OIDC, hosted persistence, cloud browser
+behavior, and TeX compilation on the hosted VM were not exercised; no paid calls
+or cloud resources were used.
+
+`docs/CLOUD_DEPLOYMENT.md` still describes these routes as disabled; that
+Red-owned deployment document was left untouched for its owner to reconcile.
+
+Deterministic API coverage exercises successful strategy and agentic proposals,
+text conversion, one-shot and forced long-form paper generation, TeX/PDF archival
+with the sponsored bearer, and checks their reconciled ledger rows. Provider 429
+and a request-timeout fixture both retain unknown reservations; exhaustion blocks
+dispatch and cross-user project access is denied. Existing local proposal,
+agentic, paper and text conversion regression scenarios also passed.
+Focused commands `uv run --locked --no-sync python tests/cloud_research_api.py`,
+`tests/proposals.py`, `tests/agentic.py`, `tests/papers.py` and
+`tests/text_views.py` passed. The first bare `./sigma test` run stopped at the
+existing `tests/tooling.py` UI cleanup assertion while
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` was set. After `./sigma setup`,
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, formatting, Pyright, frontend typecheck and production build. The
+environment override matches the repository's existing UI test workaround.
+
+Adversarial review of PR #107 found that the write-ahead estimate counted only
+request-specific dynamic input. The reservation now uses the UTF-8 JSON size of
+the full billable `instructions`, `input`, and structured-output `text` payload,
+then adds maximum output tokens. A deterministic API regression leaves enough
+budget for dynamic input alone but not for the complete request; the provider is
+not dispatched. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed
+again after the correction, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. No paid inference or cloud resources were used.
 
 ## T84 detailed command-specific CLI help (2026-10-25)
 

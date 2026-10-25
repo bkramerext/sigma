@@ -319,22 +319,26 @@ trial-signup, project-creation, or API-enablement command.
 
    ```sh
    cd /opt/sigma/current
-   docker compose --env-file /etc/sigma/deploy.env \
-     -f deploy/compose.yaml -f deploy/compose.gce.yaml up --build --detach
+   sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
+     SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
+     /opt/sigma/current/deploy/start-gce.sh
    ```
 
    The unit should use `Restart=on-failure`, start after `docker.service` and
-   `srv-sigma\\x2dstate.mount`, and run the same `compose ... up -d` on boot.
+   `srv-sigma\\x2dstate.mount`, and run the guarded `start-gce.sh` on boot with
+   `SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env` and
+   `SIGMA_STATE_DISK_MOUNT=/srv/sigma-state`. Do not invoke Compose `up` or
+   `start` directly for production startup.
    Do not run the stack until both disks and secrets are present. Public ingress
    reaches only Caddy; backend/frontend addresses remain private to Compose.
 
 ## Backup, restart, update, and rollback
 
-- **Restart/recovery:** Compose uses `restart: unless-stopped`; systemd starts
-  the stack after Docker and the state-disk mount. SQLite auth, workspaces,
-  sessions, artifacts and spend reservations remain on the disk. Existing T22
-  recovery treats an interrupted provider attempt as unknown and holds its
-  reservation; do not delete or manually edit the ledger after a restart.
+- **Restart/recovery:** Compose uses `restart: unless-stopped`; systemd invokes
+  guarded `start-gce.sh` after Docker and the state-disk mount. SQLite auth,
+  workspaces, sessions, artifacts and spend reservations remain on the disk.
+  Existing T22 recovery treats an interrupted provider attempt as unknown and
+  holds its reservation; do not delete or manually edit the ledger after a restart.
 - **Application-consistent backup:** Notify users; stop the stack so no SQLite
   transaction or project write is in flight. Create a regional standard
   snapshot of `sigma-state` and a separately encrypted tar copy in a private
@@ -357,8 +361,9 @@ trial-signup, project-creation, or API-enablement command.
       --output /tmp/sigma-state-backup.tgz.gpg
   gcloud storage cp /tmp/sigma-state-backup.tgz.gpg gs://APPROVED_PRIVATE_BUCKET/recovery/
   rm -f /tmp/sigma-state-backup.tgz.gpg
-  docker compose --env-file /etc/sigma/deploy.env \
-    -f deploy/compose.yaml -f deploy/compose.gce.yaml start
+  sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
+    SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
+    /opt/sigma/current/deploy/start-gce.sh
   ```
 
   Use a RAM-backed or otherwise encrypted temporary directory if disk data
@@ -891,14 +896,21 @@ gcloud compute instances add-tags "$VM_NAME" --project="$PROJECT_ID" \
   --zone="$ZONE" --tags=sigma-web
 ```
 
-After verifying env and secret files on the VM:
+After verifying env and secret files on the VM, validate the merged Compose
+configuration (read-only; no containers start):
 
 ```sh
 cd /opt/sigma/current
 docker compose --env-file /etc/sigma/deploy.env \
   -f deploy/compose.yaml -f deploy/compose.gce.yaml config --quiet
-docker compose --env-file /etc/sigma/deploy.env \
-  -f deploy/compose.yaml -f deploy/compose.gce.yaml up --build --detach
+```
+
+Then use only the guarded production startup path:
+
+```sh
+sudo env SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env \
+  SIGMA_STATE_DISK_MOUNT=/srv/sigma-state \
+  /opt/sigma/current/deploy/start-gce.sh
 ```
 
 Keep container ports private. Never enable public TCP/8000, 5173, 2375, or
