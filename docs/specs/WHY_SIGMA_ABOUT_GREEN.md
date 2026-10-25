@@ -25,4 +25,12 @@ The real test is whether this process produces better research than a simpler AI
 - Check keyboard toggle and mobile overflow in real Chrome, alongside `./sigma test`; disclose any acceptance not actually exercised.
 - This scope covers *why the product exists*, drawing only on the first five motivations: sustained research, productive critique, epistemic integrity, cross-domain use, and testable advantage. Exclude technical architecture difficulty and personal origin story.
 
+## Footer: GitHub repository and license (coordinator addition)
+
+- At the **very bottom of About**, after the evidence/verification caveat, include a collapsed-by-default native disclosure titled **Source code & license**.
+- Its expanded content should link directly to **https://github.com/bkramerext/sigma** with visible link text `github.com/bkramerext/sigma`, and to **https://github.com/bkramerext/sigma/blob/main/LICENSE** labeled `Apache 2.0`. Both should open a new tab with `rel="noopener noreferrer"`.
+- Keep this purposefully small. Do not move the repository link to the top or add competing call-to-action buttons. Reuse copper styling and wrap long URLs at 320px viewport widths.
+- The coordinator already committed the footer in `frontend/src/main.tsx`, styling in `frontend/src/project-entry.css`, and targeted browser assertions in `browser_checks/about.py`. Green should preserve and verify this change while implementing the separate **Why SIGMA?** section. If integration changes code, keep the exact URLs and link labels.
+- Acceptance: disclosure is closed on first open, keyboard/mouse accessible, both anchors correct, no overflow on narrow mobile, existing About interactions unaffected. Real-Chrome verification remains necessary; CI build alone is not sufficient.
+
 **Coordination:** Gray owns the separate README-linked `docs/WHY_SIGMA.md` piece on Gray's branch. Do not edit README from this branch. Notify the coordinator with commit and verification; do not coordinate with Gray directly.
