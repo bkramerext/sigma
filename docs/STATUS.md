@@ -8,7 +8,7 @@ process as structured scrutiny rather than independent validation, note their
 potential shared biases, and describe different-model review only as a possible
 future enhancement with no release commitment.
 
-Moved `JOURNAL.md` to `docs/JOURNAL.md` with `git mv`; its blob hash is unchanged
+Moved the journal to `docs/JOURNAL.md` with `git mv`; its blob hash is unchanged
 and all 285 lines remain intact. The README, contributor guidance, and software
 factory documentation now point to the new location. Repository search found
 no stale root-path references, and the new local links resolve. `WOLF_TODO.md`
