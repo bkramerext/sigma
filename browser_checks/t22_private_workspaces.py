@@ -44,6 +44,7 @@ def main() -> None:
             {
                 "SIGMA_CLOUD_AUTH_ENABLED": "true",
                 "SIGMA_CLOUD_PUBLIC_ORIGIN": ui_url,
+                "SIGMA_TEST_BROWSER_ORIGIN": ui_url,
                 "SIGMA_CLOUD_WORKSPACES_ROOT": str(root / "workspaces"),
                 "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
                 "SIGMA_STATE_DIR": str(root / "local-state"),
