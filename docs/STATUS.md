@@ -193,6 +193,18 @@ postponed stock-session implementation. Ubuntu host/systemd/rootless-Docker
 behavior remains limited to safe fixtures; Ubuntu CI validates regressions without running the installer or
 requiring root.
 
+Final T117 integration (2026-10-25): fetched main at `6686e6f`, which includes
+coordinator PR #132 (`a366038`) and subsequent main PR #130. Both fixture lint
+corrections are present from main: import ordering in
+`browser_checks/t47_conclusion.py` and the merged sample/recent route condition
+in `browser_checks/project_create_contract.py`; neither was reimplemented in
+T117. The current-main merge is commit `f5b5a61`. After the merge,
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff
+lint/format across 107 files, Pyright, frontend typecheck/build, and all
+scenarios. Direct `tests/gce_host.py` passed 10 tests; `tests/tooling.py`
+passed with a synthetic inherited bootstrap value and with it unset. No
+installer or infrastructure work was run. Final PR-head Ubuntu CI is pending.
+
 ## Issue 114 first increment (2026-10-25)
 
 Audited the Increment 6/14 blind plans and Increment 15 offline preparation,

@@ -52,3 +52,12 @@ Executed and passed:
 No provider calls, GCP resources, installer execution, or real-browser checks.
 Actual Ubuntu package/systemd/rootless-Docker host acceptance remains
 unverified. Total elapsed time was approximately 45 minutes.
+
+Final integration: merged current main `6686e6f` (PR #132 included) into T117
+at `f5b5a61`. PR #132's two Ruff fixture corrections are present in
+`browser_checks/t47_conclusion.py` and `browser_checks/project_create_contract.py`;
+no duplicate implementation was added. After merge, the full env-isolated
+`./sigma test` passed (Ruff 107 files, Pyright, frontend typecheck/build),
+`tests/gce_host.py` passed all 10 tests, and `tests/tooling.py` passed with a
+synthetic inherited bootstrap variable and unset. Final Ubuntu PR CI is pending.
+No installer or infrastructure was run.
