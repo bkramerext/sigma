@@ -33,6 +33,8 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 
 **Cost decision (2026-10-25):** Operator rejected the 200 GiB initial disk and requested a leaner size. 30 GiB is now recommended (approximately $3/month), pending operator confirmation. Monitor usage and expand only if needed. This is a deliberate T127 deviation; older baseline estimates and provisioning command examples elsewhere in this document still specify 200 GiB and must be reconciled before executing them.
 
+**Operator IAM checkpoint (2026-10-25):** The human operator confirmed their existing role is **Owner** on `sigma-research-prod`. Dedicated `roles/compute.osAdminLogin`, `roles/iap.tunnelResourceAccessor`, and runtime service-account-level `roles/iam.serviceAccountUser` grants are not yet verified. Preserve existing owner role during provisioning; review privileges after setup.
+
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
 
 ## Contents
