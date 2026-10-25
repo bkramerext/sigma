@@ -4634,17 +4634,17 @@ The complete request, limits, cost derivation, execution procedure and
 authorization wording are frozen in `evaluations/increment_22/` and hashed in
 `increment_22/evidence/frozen-manifest.sha256`.
 
-Reconciled with current `main` (`803a62d`) in merge commit `4835bf0`, then
-merged T130/T131 updates; Green T95/T125 and Cloud T129/T130/T131/T133 changes
-are retained. The latest full
+Reconciled with current `main` (`803a62d`) in merge commit `2eb1ae0`; Green
+T95/T125 and Cloud T129/T130/T131/T133 changes are retained. The latest full
 `./sigma test` passed: backend scenarios, Ruff, formatting, Pyright (0
 errors), frontend typecheck and production build. The independent checker
 validated its exact 10-unit optimum across 2,016 assignment/order cases; all
 11 offline cumulative-budget tests passed. The real-Chrome Home running-status
 check passed against a fresh local fixture. One initial browser attempt used
 an already-populated project root and failed its fresh-fixture assumption; the
-isolated rerun passed. On pushed SHA `bd02868`, GitHub Actions passed: full `SIGMA verification`,
-Research Outcome browser acceptance, and T92 Recent Projects browser acceptance. No provider calls or spending occurred. The trial is not authorized,
+isolated rerun passed. After later `main` updates, the latest full `./sigma test`
+passed again, as did checker execution, frozen-manifest verification, and all 11
+offline budget tests. The final post-merge Actions run is pending push. No provider calls or spending occurred. The trial is not authorized,
 and no Increment 23 work or Cloud deployment operation was started.
 
 ## Issue 118 — harden within-session blind comparison (2026-10-25)
@@ -4810,8 +4810,8 @@ live verification of no-clipping.
 The owner authorization request is still open: confirm the exact OpenAI API
 model/configuration and API-key billing, 200,000 reserved input / 16,384 output
 tokens per arm, four calls, 15 minutes per arm / 45 minutes overall, $0.67
-local per-arm ceiling, and configure/verify the $1.40 provider project spend
-limit. Await explicit trial authorization. No Increment 23 work or Cloud
+local per-arm ceiling, and set the selected project's monthly limit to $1.40
+with **Enforce a hard limit** enabled. Await explicit trial authorization. No Increment 23 work or Cloud
 changes were undertaken.
 
 Final verification for this preparation SHA: `./sigma test` passed all lifecycle,
