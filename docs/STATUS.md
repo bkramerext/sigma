@@ -1,9 +1,79 @@
 # SIGMA status
 
+## Current state for newcomers (2026-10-25)
+
+SIGMA is a local research workspace that stores questions, role responses,
+computations and reports. Current tests establish specific engineering
+behaviors on deterministic fixtures; they do **not** establish that SIGMA
+reliably discovers correct research results or outperforms a single researcher.
+Investigator and Skeptic use the same underlying model, so their agreement is
+structured scrutiny, not independent verification.
+
+**Research-quality evidence:** one earlier live Maximum Regions run used a
+solution-bearing stock strategy and cannot count as independent discovery. A
+later answer-free live run produced a reviewed proof candidate, but exact role
+inputs were not retained and output fields were truncated; its independence is
+unverified. Deterministic fixtures and archived sessions are useful engineering
+evidence, not new live trials. The matched-budget blind comparison remains
+**unexecuted**. Its current proposal is [issue 114 preregistration](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md);
+the proposed $48 ceiling is **not authorized**.
+
+**What is established:** the dated entries below link to actual tests, exports,
+browser observations and bounded engineering results, with their stated limits.
+Computations establish only their recorded finite scope. No model consensus,
+saved label or polished report alone establishes a theorem. See [Getting
+Started](GETTING_STARTED.md), [research evaluation records](evaluations/), and
+the [researcher-centered product limits](RESEARCHER_CENTERED_SIGMA.md).
+
+**Still unverified / launch blockers:** unscripted multi-agent advantage,
+general research quality, and independent proof correctness remain unverified.
+The proposed blind study still needs independent task/key review, proven
+model-visible isolation, matching request capture, current pricing and budget
+controls, blinded graders, and explicit owner approval. Cloud deployment also
+has host-specific acceptance requirements; those are recorded in the Red/cloud
+entries below and are not implied by local checks.
+
+The entries that follow are the retained chronological engineering and
+evaluation history; newer summaries do not replace or rewrite them.
+
+## Issue 114 first increment (2026-10-25)
+
+Audited the Increment 6/14 blind plans and Increment 15 offline preparation,
+the answer-bearing stock-sample Maximum Regions trial, and the later answer-free
+live trial. No matched-budget blind result exists. The later live run's
+mathematical candidate and Skeptic revision remain a single live observation;
+missing exact request bodies and historical response-field truncation prevent
+its use as verified independent-discovery evidence. Deterministic archived
+sessions and fixtures remain separate from live trials.
+
+Added a proposed paired protocol and USD $48 / 96-call hard-ceiling sheet in
+[the issue 114 evaluation record](evaluations/T114_MATCHED_BUDGET_PREREGISTRATION.md)
+([PR #116](https://github.com/bkramerext/sigma/pull/116)).
+The existing offline manifest and audit now check per-call and aggregate input
+and output token budgets. Twenty-four synthetic records passed the dry-run;
+the readiness report still blocks live work for absent isolation, model,
+graders and owner authorization. This is setup evidence, not research-quality
+evidence. No provider calls, paid inference or cloud work occurred.
+
+Validation: focused Increment 14 protocol/audit and Increment 15 pair dry-run
+passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all
+scenarios, Ruff, format, Pyright, frontend typecheck and production build after
+locked frontend dependencies were installed. The first full-suite attempt
+stopped at format; after formatting, another stopped because `tsc` was not yet
+installed. After rebasing onto main `8562c89`, one full run transiently failed
+at the copied-workspace assertion in `tests/storage.py`; that scenario passed
+alone and the subsequent full run passed all scenarios, Ruff, format, Pyright,
+frontend typecheck and production build. Actual elapsed time for the first
+increment: approximately 35 minutes. No browser surface changed. Matched live
+comparison, independent task/key review, runner isolation, pricing verification,
+blinded graders and owner authorization remain outstanding.
+
 ## T89 ship-ready stock sample curation, increment 1 (2026-10-25)
 
 Started from fresh `gray/t89-stock-sample-curation` at current `main`
-`8562c89` after PR #115 merged. Reframed the opening of all 17 sample briefs
+`8562c89` after PR #115 merged, then merged `main` `950c810` into the branch
+without rewriting history; the `docs/STATUS.md` conflict was resolved with
+both this record and the new T114/main status preserved. Reframed the opening of all 17 sample briefs
 in conversational language while retaining their research questions, evidence
 requirements, and exit criteria. Added 12 bounded, human-authored starting
 strategies across seven samples: Algorithm Design, Constrained Binary Strings,
@@ -48,8 +118,9 @@ full-suite result is **FAIL (existing tooling assertion)**, not a pass. No
 provider calls, live OAuth, or GCP resources were used. The active-branch
 acceptance detail and test evidence are in
 `evaluations/t89-stock-sample-curation-increment1.md`. Elapsed time from fresh
-branch creation to final full-suite rerun: approximately 17 minutes
-(09:41–09:58 PDT, 2026-10-25).
+branch creation through post-merge full-suite rerun: approximately 20 minutes
+(09:41–10:01 PDT, 2026-10-25).
+
 
 ## T89 stock sample catalog audit (2026-10-25)
 

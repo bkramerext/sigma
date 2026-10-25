@@ -18,10 +18,16 @@ manifest2 = module.manifest(140017, 1)
 assert manifest1 == manifest2
 assert manifest1["paired_runs"] == 12 and manifest1["total_arm_runs"] == 24
 assert not manifest1["user_approved"] and not manifest1["freeze_approved"]
+assert manifest1["per_arm_input_token_cap"] == 48000
+assert manifest1["per_arm_output_token_cap"] == 16000
+assert manifest1["per_call_output_token_cap"] == 4000
+assert manifest1["per_arm_model_call_cap"] == 4
+assert manifest1["per_arm_usd_cap"] == 2.00 and manifest1["total_usd_cap"] == 48.00
 assert len({(x["task_id"], x["variant"], x["replicate"]) for x in manifest1["pairs"]}) == 12
 assert len({x["packet_sha256"] for x in manifest1["pairs"]}) == 12
 assert module.manifest(140018, 1)["pairs"] != manifest1["pairs"]
-assert module.manifest(140017, 2)["total_arm_runs"] == 48
+repeated = module.manifest(140017, 2)
+assert repeated["total_arm_runs"] == 48 and repeated["total_usd_cap"] == 96.00
 for entry in manifest1["pairs"]:
     assert sorted(entry["execution_order"]) == ["A", "B"]
 assert "evaluator" not in json.dumps(data).lower()
