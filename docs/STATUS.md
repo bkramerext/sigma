@@ -3208,3 +3208,45 @@ function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail
 
 installRequestErrorToasts();
 createRoot(document.getElementById('root')!).render(<><CloudAuthGate/><RequestErrorToasts/></>);
+
+## Blue Increment 3 — approved causal research continuation (2026-10-24)
+
+Coordinator assignment: `messages/blue_out_4.md`; implementation app revision
+`373f564ab957a2f13db298c4190e2e29893328b9`, on `blue_session`, not merged.
+Researchers can inspect a saved open duty or write a bounded follow-up, select
+cross-strategy sources, reject transfers with reasons and explicitly approve a
+new durable strategy. Immutable companion packets preserve parent/source IDs,
+source snapshots and uncertainty. New sessions freeze them into actual role
+contexts, exact call audits and coordinator decisions. Uptake is explicitly
+model-reported, with negative-constraint treatment required for saved local
+counterexamples; no proof obligation is automatically closed. New Outcomes expose
+inherited sources and reported changes. Original history remains unchanged.
+
+Actual validation: focused continuation/role-contract and research-state tests,
+research-session suite and full `./sigma test` passed. Actual installed Chrome
+exercised approval, explicit session start, source inspection and reload; saved
+source navigation passed at 1440/390/320px without page errors or horizontal
+overflow. Reader fixed to exclude `sequence.json` allocation metadata from
+unavailable-session counts, found after the first actual new session. Full-run
+lint/import failures were fixed before final passing checks.
+
+Controlled actual orchestration: six new sessions, 21 offline scripted HTTP
+attempts (20 completed role steps, one interrupted), ten new artifacts. Evidence
+ON changes the second dispatched Investigator question relative to OFF. A fresh
+RH-SYM injected candidate retains its explicit objection and separate approved
+follow-up; the first Investigator context excludes the evaluator answer key.
+Negative-transfer rejection and stop/API-process-restart/resume are retained.
+All 21 exported call inputs match actual transport bodies/hashes; five original
+subset session exports compare equal before/after. Independent exact oracles
+check the short-rule counterexample, `a_12=128`, finite Gaussian normalization
+and RH logical-countermodel scope. These are not novel agent discoveries.
+
+Evidence and actual before/after Project Audit JSON/native TXT/HTML/TeX reports:
+`docs/evaluations/increment_3/`. Zero live provider calls and zero charges; token
+accounting in scripted responses is synthetic. Native Markdown reports, PDF,
+AI-authored paper quality and unscripted agent research quality are not claimed.
+Companion approval-bearing audit-to-sample conversion is explicitly refused
+rather than dropping lineage. Dense/repetitive reading surfaces and relevance
+selection remain product weaknesses documented in the assessment. No stock
+sample or historical source project was changed. Permanent clean-tree mailbox
+polling resumes after the report is pushed; no self-merge.

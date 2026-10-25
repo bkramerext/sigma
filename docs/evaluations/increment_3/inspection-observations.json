@@ -1,0 +1,56 @@
+{
+  "observations": [
+    {
+      "project": "nonconsecutive-subset-sums",
+      "width": 1440,
+      "session_id": "d6e51a2f-5501-4813-9eb4-7805e9106a63",
+      "inherited_source_navigation": true,
+      "horizontal_overflow": false,
+      "page_height": 13070
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "width": 390,
+      "session_id": "d6e51a2f-5501-4813-9eb4-7805e9106a63",
+      "inherited_source_navigation": true,
+      "horizontal_overflow": false,
+      "page_height": 31952
+    },
+    {
+      "project": "nonconsecutive-subset-sums",
+      "width": 320,
+      "session_id": "d6e51a2f-5501-4813-9eb4-7805e9106a63",
+      "inherited_source_navigation": true,
+      "horizontal_overflow": false,
+      "page_height": 41750
+    },
+    {
+      "project": "riemann-hypothesis-research",
+      "width": 1440,
+      "session_id": "64ad9713-295c-46a6-9ce3-82290ab507b9",
+      "inherited_source_navigation": true,
+      "horizontal_overflow": false,
+      "page_height": 7707
+    },
+    {
+      "project": "riemann-hypothesis-research",
+      "width": 390,
+      "session_id": "64ad9713-295c-46a6-9ce3-82290ab507b9",
+      "inherited_source_navigation": true,
+      "horizontal_overflow": false,
+      "page_height": 17462
+    },
+    {
+      "project": "riemann-hypothesis-research",
+      "width": 320,
+      "session_id": "64ad9713-295c-46a6-9ce3-82290ab507b9",
+      "inherited_source_navigation": true,
+      "horizontal_overflow": false,
+      "page_height": 22283
+    }
+  ],
+  "page_errors": [],
+  "new_sessions": 0,
+  "new_provider_calls": 0,
+  "browser": "Actual installed Google Chrome, Playwright"
+}

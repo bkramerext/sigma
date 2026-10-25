@@ -1,0 +1,1 @@
+PASS read-only saved continuation/source navigation at 1440/390/320px, no page errors or horizontal overflow; 0 new research sessions/calls
