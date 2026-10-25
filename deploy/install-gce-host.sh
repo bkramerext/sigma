@@ -19,10 +19,8 @@ failed() {
   exit 1
 }
 
-[[ -r /etc/os-release ]] || blocked 'host must be Ubuntu 24.04 LTS amd64'
-# shellcheck disable=SC1091
-. /etc/os-release
-[[ ${ID:-} == ubuntu && ${VERSION_ID:-} == 24.04 ]] || blocked 'host must be Ubuntu 24.04 LTS'
+source "$(dirname "$0")/gce_host_guard.sh"
+require_ubuntu_2404 /etc/os-release || exit $?
 [[ $(dpkg --print-architecture) == amd64 ]] || blocked 'host architecture must be amd64'
 [[ ${EUID} -eq 0 ]] || blocked 'run this installer as root on the target VM'
 

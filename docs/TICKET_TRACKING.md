@@ -48,6 +48,7 @@
 | T22.1 | Cloudflare runtime feasibility spike | Merged (PR #22) | Red |
 | T100 | Local validation of production-compatible persistent storage and real-Chrome restart/restore acceptance | Implementing · [issue #100](https://github.com/bkramerext/sigma/issues/100) | Red |
 | T89 | Ship-ready stock sample curation, increment 1 | R4R · [PR #120](https://github.com/bkramerext/sigma/pull/120) · [issue #89](https://github.com/bkramerext/sigma/issues/89) · [implementation](evaluations/t89-stock-sample-curation-increment1.md) · prior audit [PR #115](https://github.com/bkramerext/sigma/pull/115) | Gray |
+| T117 | Release safety and test reliability follow-ups | Implemented; R4R · [issue #117](https://github.com/bkramerext/sigma/issues/117) · [ticket](../tickets/t117.md) | Gray |
 | T91.2 | Packaged real-PDF and disaster-recovery acceptance | R4R · [PR #113](https://github.com/bkramerext/sigma/pull/113) · [ticket](../tickets/t91.2.md) · [evidence](evaluations/t91.2/README.md) | Gray |
 | T99.1 | Pre-cloud sponsored inference API and spending acceptance | Implemented; R4R · [PR #110](https://github.com/bkramerext/sigma/pull/110) · [ticket](../tickets/t99.1.md) | Blue |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |

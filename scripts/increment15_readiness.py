@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline pilot readiness gate. This tool never calls a model or network."""
 
 from __future__ import annotations

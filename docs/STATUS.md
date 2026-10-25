@@ -129,6 +129,83 @@ The focused change is on `blue/increment-18-hosted-research`; see
 [`messages/i18_blue_r4r.md`](../messages/i18_blue_r4r.md) for exact commands,
 scope and outstanding acceptance.
 
+## Issue 117 — Release safety and test reliability (2026-10-25)
+
+Fixed the Ubuntu host-installer test hazard by extracting the non-mutative
+Ubuntu 24.04 identity guard into `deploy/gce_host_guard.sh`. Regression tests
+exercise quoted and unquoted Ubuntu IDs, Debian and Fedora, and statically
+verify the installer guard precedes package and filesystem operations. No test
+invokes the installer. The separate preflight exit-code report was traced to
+the test asserting `BLOCKED`/2 on a matching Ubuntu host with failed service
+checks; a controlled Ubuntu fixture confirms those results correctly report
+`FAIL`/1, while a Debian fixture reports `BLOCKED`/2.
+
+The recurring mocked `stop_servers` failure reproduced with the shell's
+exported `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` and passed when it was unset. The
+UI lifecycle test now clears that value and the paired OAuth settings in its
+test context. `sigma test` now runs all approved offline checks after ordinary
+failures, prints a complete failed-step summary, returns nonzero, skips the
+offline artifact writer and frontend build after an earlier failure, and
+rejects commands outside the known check set. `setup` remains fail-fast.
+
+Expanded Ruff lint to `deploy/`, `browser_checks/`, `scripts/`, and
+`docs/evaluations/`; it found and fixed import ordering, an unused import, a
+credential-prefix check, a keyword-built dictionary, and non-executable
+shebangs (13 findings in the audited paths). Format checks now include
+deployment and support scripts: 105 files passed at the initial audit. After
+syncing current main, the gate also covers the new Increment 17 audit script
+and current-main readiness script; 107 files now pass. The audit found 20
+files that
+Ruff would reformat across the broader support paths; the six offline
+evaluation/support scripts are formatted, while 13 legacy browser checks and
+one evaluation exporter remain lint-gated without bulk formatting churn. CI is
+pinned to Ubuntu 24.04 and runs host-safety and environment isolation checks
+before the full suite.
+
+After the initial branch was created, main advanced through PR #122 to
+`cf7dcb024996b95a0913c75438c6d17c4c065299`, then through PR #112 to
+`f5388d8`, and through PRs #123/#126 to `f73a749`. All four updates were merged into the T117 branch, preserving Green's
+frontend changes. The PR #122 deterministic CLI-level BLOCKED test remains
+alongside the Ubuntu FAIL/1 fixture. CI run #431 exposed that the newly merged
+Increment 17 audit script had an invalid shebang for its non-executable mode
+and needed Ruff formatting. Removed the stale shebang and formatted that file;
+its direct offline invocation reported the expected quality-gate result and
+zero new paid calls. CI also caught an executable bit on current-main
+`scripts/increment15_readiness.py` without a shebang. Removed that bit because
+the workflow invokes it with Python. Both were narrow quality-gate fixes with
+no logic changes. The synchronized branch full local suite passed, including
+Ruff over 107 files, Pyright, frontend typecheck and production build. Ubuntu Actions run #443 passed on final code head `48be67f`, including the
+focused safety/lifecycle checks and full repository verification. Elapsed time
+through final CI completion was approximately 45 minutes. Actual Ubuntu package
+installation, systemd setup, rootless Docker, and installer execution remain
+unverified and were not attempted.
+
+Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
+scenarios, expanded Ruff lint, Ruff format, Pyright, frontend typecheck and
+production build); `tests/gce_host.py` (10 tests); `tests/tooling.py` with and
+without the inherited bootstrap variable; and `git diff --check`. The full
+suite's 24 synthetic Increment 15 records had zero model calls/cost. No
+provider calls, GCP resources, installer execution, or real-browser checks
+occurred. T117 changed no product UI; Green's main-branch UI changes remain
+present. The merge sync also took current main versions of two overlapping
+protocol scripts; those are outside the T117 diff and stay separate from the
+postponed stock-session implementation. Ubuntu host/systemd/rootless-Docker
+behavior remains limited to safe fixtures; Ubuntu CI validates regressions without running the installer or
+requiring root.
+
+Final T117 integration (2026-10-25): fetched main at `6686e6f`, which includes
+coordinator PR #132 (`a366038`) and subsequent main PR #130. Both fixture lint
+corrections are present from main: import ordering in
+`browser_checks/t47_conclusion.py` and the merged sample/recent route condition
+in `browser_checks/project_create_contract.py`; neither was reimplemented in
+T117. The current-main merge is commit `f5b5a61`. After the merge,
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff
+lint/format across 107 files, Pyright, frontend typecheck/build, and all
+scenarios. Direct `tests/gce_host.py` passed 10 tests; `tests/tooling.py`
+passed with a synthetic inherited bootstrap value and with it unset. No
+installer or infrastructure work was run. Ubuntu Actions run #461 passed on
+code head `5efdf3f` with focused host/lifecycle checks and full verification.
+
 ## Issue 114 first increment (2026-10-25)
 
 Audited the Increment 6/14 blind plans and Increment 15 offline preparation,

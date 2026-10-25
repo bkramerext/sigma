@@ -39,6 +39,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-export-only-") as temporary:
 
     httpx.AsyncClient = OfflineClient
     from fastapi.testclient import TestClient
+
     from sigma.api import app
 
     manifest = {
@@ -74,7 +75,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-export-only-") as temporary:
                 elif isinstance(value, list):
                     for child in value:
                         check_secrets(child)
-                elif isinstance(value, str) and (value.startswith("sk-proj-") or value.startswith("Bearer ")):
+                elif isinstance(value, str) and value.startswith(("sk-proj-", "Bearer ")):
                     raise RuntimeError("Credential-shaped value present; export not committed")
 
             check_secrets(audit)

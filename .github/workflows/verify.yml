@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CI: "true"
@@ -42,5 +42,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install locked dependencies
         run: ./sigma setup
+      - name: Check host safety and environment-isolated lifecycle tests
+        run: |
+          test "$(id -u)" -ne 0
+          env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/gce_host.py
+          env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run --locked --no-sync python tests/tooling.py
       - name: Run full repository verification
         run: ./sigma test

@@ -1,4 +1,4 @@
-"""Repository maintenance commands with streamed output and fail-fast exit codes."""
+"""Repository maintenance commands with streamed output and failure summaries."""
 
 import os
 import shlex
@@ -10,6 +10,37 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from sigma.projects import ROOT
+
+
+def _test_step_allowed(step: list[str]) -> bool:
+    """Reject test plans that include commands outside the repository check set."""
+    if step[:3] == ["uv", "run", "--locked"] and len(step) >= 5:
+        if step[3:4] == ["--no-sync"]:
+            tool = step[4]
+            args = step[5:]
+        else:
+            tool = step[3]
+            args = step[4:]
+        if tool == "python" and args:
+            return args[0].startswith("tests/") or args[0] == "scripts/increment15_offline_pairs.py"
+        if tool == "ruff" and args[:1] in (["check"], ["format"]):
+            return True
+        if tool == "pyright" and not args:
+            return True
+    return step[:4] == ["npm", "--prefix", "frontend", "run"] and step[4:] in (
+        ["typecheck"],
+        ["build"],
+    )
+
+
+def _safe_independent_test_step(step: list[str]) -> bool:
+    """Identify checks that may continue after another check has failed."""
+    if not _test_step_allowed(step):
+        return False
+    if step[:3] == ["uv", "run", "--locked"]:
+        script = step[5] if len(step) > 5 and step[3] == "--no-sync" else ""
+        return script != "scripts/increment15_offline_pairs.py"
+    return step[4:] != ["build"]
 
 
 def run_tooling(command: str) -> int:
@@ -90,12 +121,44 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/instance_ownership.py"],
             [*python, "python", "tests/ui_registry.py"],
             [*python, "python", "tests/ui_orphans.py"],
-            [*python, "ruff", "check", "src", "tests", "sigma"],
-            [*python, "ruff", "format", "--check", "src", "tests", "sigma"],
+            [
+                *python,
+                "ruff",
+                "check",
+                "src",
+                "tests",
+                "sigma",
+                "deploy",
+                "browser_checks",
+                "scripts",
+                "docs/evaluations",
+            ],
+            [
+                *python,
+                "ruff",
+                "format",
+                "--check",
+                "src",
+                "tests",
+                "sigma",
+                "deploy",
+                "scripts",
+            ],
             [*python, "pyright"],
             ["npm", "--prefix", "frontend", "run", "typecheck"],
             ["npm", "--prefix", "frontend", "run", "build"],
         ]
+    unsupported_steps = [step for step in steps if not _test_step_allowed(step)]
+    if command == "test" and unsupported_steps:
+        print(
+            "Refusing test plan command outside the approved check set: "
+            f"{shlex.join(unsupported_steps[0])}",
+            file=sys.stderr,
+        )
+        return 2
+
+    failures: list[tuple[list[str], int]] = []
+    skipped: list[list[str]] = []
     with (
         TemporaryDirectory(prefix="sigma-test-state-")
         if command == "test"
@@ -117,18 +180,42 @@ def run_tooling(command: str) -> int:
         else:
             environment = None
         for step in steps:
+            if command == "test" and failures and not _safe_independent_test_step(step):
+                skipped.append(step)
+                print(
+                    f"\nSkipping after earlier failure (not a read-only independent check): {shlex.join(step)}",
+                    flush=True,
+                )
+                continue
             print(f"\n> {shlex.join(step)}", flush=True)
             try:
                 result = subprocess.run(step, cwd=ROOT, check=False, env=environment)
             except OSError as exc:
                 print(f"Could not start {step[0]}: {exc}", file=sys.stderr)
-                return 2
-            if result.returncode:
+                code = 2
+            else:
+                code = result.returncode
+            if code:
+                normalized_code = code if code > 0 else 1
+                failures.append((step, normalized_code))
                 print(
-                    f"sigma {command} stopped: {shlex.join(step)} failed (exit {result.returncode}).",
+                    f"sigma {command} check failed: {shlex.join(step)} (exit {normalized_code}).",
                     file=sys.stderr,
                 )
-                return result.returncode if result.returncode > 0 else 1
+                if command != "test":
+                    return normalized_code
+    if failures:
+        print(f"\nsigma test: {len(failures)} step(s) failed:", file=sys.stderr)
+        for step, code in failures:
+            print(f"  exit {code}: {shlex.join(step)}", file=sys.stderr)
+        if skipped:
+            print(
+                f"sigma test: {len(skipped)} non-read-only step(s) skipped after failures:",
+                file=sys.stderr,
+            )
+            for step in skipped:
+                print(f"  {shlex.join(step)}", file=sys.stderr)
+        return failures[0][1]
     print(f"\nsigma {command}: all steps passed.", flush=True)
     return 0
 
