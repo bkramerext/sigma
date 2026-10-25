@@ -18,7 +18,7 @@ I'd discuss what I wanted with ChatGPT, we'd work through the design, and the wo
 
 We got a surprising amount done this way, but it wasn't effortless. Keeping four workers aligned was its own engineering problem. Branches diverged, changes conflicted, and passing tests sometimes concealed misunderstandings about what the product was supposed to do.
 
-SIGMA now has a working research engine, a browser UI, persistent investigations, computational tools, research reports, Markdown support, and automated tests. But getting the software to work is different from demonstrating that it produces genuinely better research.
+SIGMA now has a working research engine, a browser UI, persistent investigations, computational tools, research reports, and automated tests. But getting the software to work is different from demonstrating that it produces genuinely better research.
 
 Maybe this work bites off more than it can chew, but the goal really was to build a product that looks credible, supports Markdown and stays open to new ideas such as on-demand TeX paper generation, and inspires others to try it out. I appreciate you taking a second reading.
 
