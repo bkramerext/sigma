@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import socket
+import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -31,6 +36,8 @@ def main() -> None:
             "SIGMA_PROJECTS_ROOT": str(root / "local-projects"),
             "SIGMA_STATE_DIR": str(root / "local-state"),
             "SIGMA_CLOUD_OPENAI_API_KEY": "fake-server-credential",
+            # A personal API key must never win over the sponsored server key.
+            "OPENAI_API_KEY": "fake-personal-credential-must-not-be-used",
             "SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD": "1.00",
             "SIGMA_CLOUD_USER_SPEND_CEILING_USD": "1.00",
             "SIGMA_CLOUD_USER_MAX_CONCURRENT": "1",
@@ -48,6 +55,7 @@ def main() -> None:
             from sigma import (
                 agentic,
                 cloud_research,
+                openai_connection,
                 papers,
                 proposals,
                 research_sessions,
@@ -227,14 +235,38 @@ def main() -> None:
                 paper_long_mode = False
                 paper_long_evidence_ref = None
                 provider_calls = 0
+                response_dispatches = 0
+                provider_malformed = False
+                provider_cancel_mode = False
+                provider_cancel_started = threading.Event()
 
                 async def provider_fixture(request):
-                    nonlocal paper_long_evidence_ref, provider_calls
+                    nonlocal paper_long_evidence_ref, provider_calls, response_dispatches
                     provider_calls += 1
+                    if request.url.path == "/v1/responses":
+                        response_dispatches += 1
                     assert request.headers["authorization"] == "Bearer fake-server-credential"
+                    if request.url.path == "/v1/models":
+                        return httpx.Response(
+                            200,
+                            json={"object": "list", "data": [{"id": "gpt-6.1-sol"}]},
+                        )
                     if provider_interrupt:
                         raise httpx.ReadTimeout(
                             "deterministic interrupted provider", request=request
+                        )
+                    if provider_cancel_mode and request.url.path == "/v1/responses":
+                        provider_cancel_started.set()
+                        await asyncio.sleep(30)
+                    if provider_malformed:
+                        return httpx.Response(
+                            200,
+                            json={
+                                "status": "completed",
+                                "model": "gpt-6.1-sol",
+                                "usage": {},
+                                "output": [{"type": "message", "content": "malformed"}],
+                            },
                         )
                     if provider_status != 200:
                         return httpx.Response(provider_status, json={"error": "fixture failure"})
@@ -328,8 +360,6 @@ def main() -> None:
                     return httpx.Response(200, json=response_body)
 
                 with (
-                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(
                         proposals.httpx,
                         "AsyncClient",
@@ -356,6 +386,27 @@ def main() -> None:
                 assert proposal_call is not None
                 assert proposal_call["status"] == "usage_estimated"
                 assert proposal_call["project_id"] == project_id
+
+                # Credentials are selected by the real cloud auth adapter.
+                # A configured local/personal key cannot be used for hosted
+                # inference, and absence of the sponsor key fails closed.
+                proposal_configuration = client.get(
+                    "/api/projects/proposals/config", params={"path": path}
+                )
+                assert proposal_configuration.status_code == 200
+                assert proposal_configuration.json()["mode"] == "api_key"
+                assert proposal_configuration.json()["binding"] == "cloud_service_api_key"
+                dispatched_before_missing = provider_calls
+                os.environ.pop("SIGMA_CLOUD_OPENAI_API_KEY")
+                openai_connection._identity = ""
+                missing_credential = client.post(
+                    "/api/projects/proposals",
+                    json={"path": path, "expected_project_id": project_id},
+                )
+                assert missing_credential.status_code != 200, missing_credential.text
+                assert provider_calls == dispatched_before_missing
+                os.environ["SIGMA_CLOUD_OPENAI_API_KEY"] = "fake-server-credential"
+                openai_connection._identity = ""
 
                 # Text conversion goes through the same sponsored reservation
                 # path while preserving its source revision checks.
@@ -388,12 +439,6 @@ def main() -> None:
                     ],
                 }
                 with (
-                    patch.object(
-                        text_conversion, "auth_context", new=AsyncMock(return_value=credential)
-                    ),
-                    patch.object(
-                        text_conversion, "configuration", new=AsyncMock(return_value=config)
-                    ),
                     patch.object(
                         text_conversion.httpx,
                         "AsyncClient",
@@ -476,8 +521,6 @@ def main() -> None:
                     )
 
                 with (
-                    patch.object(agentic, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(agentic, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(
                         agentic.httpx,
                         "AsyncClient",
@@ -571,8 +614,6 @@ def main() -> None:
                     "/api/projects/papers/preflight", params={"path": paper_path}
                 ).json()
                 with (
-                    patch.object(papers, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(papers, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nfixture\n"),
                     patch.object(
                         papers.httpx,
@@ -619,8 +660,6 @@ def main() -> None:
                 ).json()
                 long_calls_before = provider_calls
                 with (
-                    patch.object(papers, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(papers, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(papers, "_compile_pdf", return_value=b"%PDF-1.4\nlong fixture\n"),
                     patch.object(
                         papers.httpx,
@@ -648,6 +687,11 @@ def main() -> None:
                     "papers"
                 ]
                 assert len(all_papers) == 2 and all(item["pdf_available"] for item in all_papers)
+                private_paper_path = Path(paper_path).resolve(strict=True)
+                assert private_paper_path.is_relative_to((root / "workspaces").resolve())
+                assert (
+                    private_paper_path / "papers" / f"{all_papers[0]['paper_id']}.pdf"
+                ).is_file()
                 db = cloud_research._connect()
                 paper_audit = db.execute(
                     "SELECT COUNT(*) FROM calls c JOIN jobs j USING(session_id) WHERE j.project_id=? AND c.status='usage_estimated'",
@@ -689,8 +733,6 @@ def main() -> None:
                 # Provider errors remain auditable as uncertain charges.
                 provider_status = 429
                 with (
-                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(
                         proposals.httpx,
                         "AsyncClient",
@@ -725,8 +767,6 @@ def main() -> None:
                 provider_status = 200
                 provider_interrupt = True
                 with (
-                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(
                         proposals.httpx,
                         "AsyncClient",
@@ -752,6 +792,98 @@ def main() -> None:
                 ).fetchone()[0]
                 db.close()
                 assert unknown_attempts == 2
+
+                # A completed HTTP response with malformed structured content
+                # has uncertain provider billing and keeps its reservation.
+                provider_interrupt = False
+                provider_malformed = True
+                with patch.object(
+                    proposals.httpx,
+                    "AsyncClient",
+                    side_effect=lambda **kwargs: real_async_client(
+                        transport=httpx.MockTransport(provider_fixture), **kwargs
+                    ),
+                ):
+                    malformed = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                provider_malformed = False
+                assert malformed.status_code == 400, malformed.text
+                db = cloud_research._connect()
+                unknown_attempts = db.execute(
+                    "SELECT COUNT(*) FROM calls WHERE status='unknown' AND workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                ).fetchone()[0]
+                db.close()
+                assert unknown_attempts == 3
+
+                # Cancel after provider dispatch. The request is deliberately
+                # left awaiting its simulated response while the authenticated
+                # cancellation endpoint interrupts it. A second concurrent
+                # proposal must be rejected before provider dispatch.
+                contention_project = client.post(
+                    "/api/projects/create",
+                    json={"title": "Concurrent cloud request", "problem": "A second problem."},
+                )
+                assert contention_project.status_code == 201, contention_project.text
+                contention_path = contention_project.json()["path"]
+                contention_id = contention_project.json()["project"]["id"]
+                provider_cancel_mode = True
+                provider_cancel_started.clear()
+                cancel_id = str(uuid4())
+                from concurrent.futures import ThreadPoolExecutor
+
+                with (
+                    patch.object(
+                        proposals.httpx,
+                        "AsyncClient",
+                        side_effect=lambda **kwargs: real_async_client(
+                            transport=httpx.MockTransport(provider_fixture), **kwargs
+                        ),
+                    ),
+                    ThreadPoolExecutor(max_workers=1) as pool,
+                ):
+                    pending = pool.submit(
+                        client.post,
+                        "/api/projects/proposals",
+                        json={
+                            "path": path,
+                            "expected_project_id": project_id,
+                            "expected_binding": credential["identity"],
+                            "request_id": cancel_id,
+                        },
+                    )
+                    assert provider_cancel_started.wait(5), "cancel fixture did not reach provider"
+                    dispatched_while_running = response_dispatches
+                    concurrent_rejection = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": contention_path,
+                            "expected_project_id": contention_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                    assert concurrent_rejection.status_code == 400, concurrent_rejection.text
+                    assert response_dispatches == dispatched_while_running
+                    cancelled = client.post(
+                        "/api/projects/proposals/cancel", json={"request_id": cancel_id}
+                    )
+                    assert cancelled.status_code == 200, cancelled.text
+                    cancellation_response = pending.result(timeout=10)
+                provider_cancel_mode = False
+                assert cancellation_response.status_code == 499, cancellation_response.text
+                db = cloud_research._connect()
+                unknown_attempts = db.execute(
+                    "SELECT COUNT(*) FROM calls WHERE status='unknown' AND workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                ).fetchone()[0]
+                db.close()
+                assert unknown_attempts == 4
 
                 # Leave only enough budget for the dynamic text reservation.
                 # Instructions and the response schema push the complete
@@ -790,8 +922,6 @@ def main() -> None:
                     )
 
                 with (
-                    patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
-                    patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
                     patch.object(
                         cloud_research,
                         "start_provider_attempt",
@@ -835,7 +965,11 @@ def main() -> None:
                 # while saved research remains readable to its owner.
                 db = cloud_research._connect()
                 db.execute(
-                    "UPDATE calls SET amount_usd=1.00 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    "UPDATE calls SET amount_usd=0 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                )
+                db.execute(
+                    "UPDATE calls SET amount_usd=1.00 WHERE call_id=(SELECT c.call_id FROM calls c JOIN jobs j USING(session_id) WHERE j.session_id=? LIMIT 1)",
                     (session_id,),
                 )
                 db.close()
@@ -846,6 +980,75 @@ def main() -> None:
                     f"/api/projects/research-sessions/{session_id}", params={"path": path}
                 )
                 assert still_readable.status_code == 200, still_readable.text
+
+                # Reopen the durable ledger in a fresh Python backend process,
+                # then continue through the authenticated API with the same
+                # persisted workspaces and quota state.
+                with socket.socket() as port_socket:
+                    port_socket.bind(("127.0.0.1", 0))
+                    restart_port = port_socket.getsockname()[1]
+                restart_environment = os.environ.copy()
+                restart_environment["PYTHONPATH"] = os.pathsep.join(
+                    [
+                        str(Path.cwd() / "tests"),
+                        str(Path.cwd() / "src"),
+                        restart_environment.get("PYTHONPATH", ""),
+                    ]
+                )
+                restarted_backend = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        "uvicorn",
+                        "cloud_workspace_test_app:app",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        str(restart_port),
+                        "--log-level",
+                        "error",
+                    ],
+                    cwd=Path.cwd(),
+                    env=restart_environment,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                try:
+                    recovered_budget = None
+                    for _ in range(100):
+                        if restarted_backend.poll() is not None:
+                            raise AssertionError("Restarted FastAPI backend exited during startup")
+                        try:
+                            recovered_budget = httpx.get(
+                                f"http://127.0.0.1:{restart_port}/api/cloud-research/budget",
+                                headers={
+                                    "X-Test-Subject": "cloud-a",
+                                    "X-Test-Email": "a@example.test",
+                                },
+                                timeout=0.2,
+                            )
+                            if recovered_budget.status_code == 200:
+                                break
+                        except httpx.HTTPError:
+                            time.sleep(0.05)
+                    assert recovered_budget is not None, "Restarted API did not respond"
+                    assert recovered_budget.status_code == 200, recovered_budget.text
+                    assert recovered_budget.json()["unknown_provider_attempts"] >= 4
+                    assert recovered_budget.json()["remaining_usd"] == 0
+                    other_user_budget = httpx.get(
+                        f"http://127.0.0.1:{restart_port}/api/cloud-research/budget",
+                        headers={
+                            "X-Test-Subject": "cloud-b",
+                            "X-Test-Email": "b@example.test",
+                        },
+                        timeout=2,
+                    )
+                    assert other_user_budget.status_code == 200, other_user_budget.text
+                    assert other_user_budget.json()["unknown_provider_attempts"] == 0
+                    assert other_user_budget.json()["remaining_usd"] == 1.0
+                finally:
+                    restarted_backend.terminate()
+                    restarted_backend.wait(timeout=10)
 
                 client.headers.update(
                     {"X-Test-Subject": "cloud-b", "X-Test-Email": "b@example.test"}
@@ -868,8 +1071,86 @@ def main() -> None:
                 assert owner_b_budget.status_code == 200
                 assert owner_b_budget.json()["reserved_and_estimated_usd"] == 0
 
+                # A has used the full $1 global pool above, while B still has
+                # an empty $1 per-user allowance: the global ceiling blocks B
+                # before provider dispatch.
+                user_b_project = client.post(
+                    "/api/projects/create",
+                    json={"title": "Budget isolation", "problem": "A private question."},
+                )
+                assert user_b_project.status_code == 201, user_b_project.text
+                user_b_path = user_b_project.json()["path"]
+                user_b_id = user_b_project.json()["project"]["id"]
+                dispatched_before_global = response_dispatches
+                with patch.object(
+                    proposals.httpx,
+                    "AsyncClient",
+                    side_effect=lambda **kwargs: real_async_client(
+                        transport=httpx.MockTransport(provider_fixture), **kwargs
+                    ),
+                ):
+                    global_exhausted = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": user_b_path,
+                            "expected_project_id": user_b_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert global_exhausted.status_code == 400, global_exhausted.text
+                assert "global inference-spend ceiling" in global_exhausted.text
+                assert response_dispatches == dispatched_before_global
+
+                # Lift only the test's global ceiling and consume B's own
+                # allowance. A later B request must then fail at the per-user
+                # ceiling while the global account still has room.
+                os.environ["SIGMA_CLOUD_GLOBAL_SPEND_CEILING_USD"] = "15.00"
+                with patch.object(
+                    proposals.httpx,
+                    "AsyncClient",
+                    side_effect=lambda **kwargs: real_async_client(
+                        transport=httpx.MockTransport(provider_fixture), **kwargs
+                    ),
+                ):
+                    first_b = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": user_b_path,
+                            "expected_project_id": user_b_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert first_b.status_code == 200, first_b.text
+                db = cloud_research._connect()
+                user_b_workspace = db.execute(
+                    "SELECT workspace_id FROM jobs WHERE project_id=?", (user_b_id,)
+                ).fetchone()[0]
+                db.execute(
+                    "UPDATE calls SET amount_usd=1.00 WHERE workspace_id=?", (user_b_workspace,)
+                )
+                db.close()
+                dispatched_before_user = response_dispatches
+                with patch.object(
+                    proposals.httpx,
+                    "AsyncClient",
+                    side_effect=lambda **kwargs: real_async_client(
+                        transport=httpx.MockTransport(provider_fixture), **kwargs
+                    ),
+                ):
+                    user_exhausted = client.post(
+                        "/api/projects/proposals",
+                        json={
+                            "path": user_b_path,
+                            "expected_project_id": user_b_id,
+                            "expected_binding": credential["identity"],
+                        },
+                    )
+                assert user_exhausted.status_code == 400, user_exhausted.text
+                assert "cumulative cloud research allowance" in user_exhausted.text
+                assert response_dispatches == dispatched_before_user
+
     print(
-        "PASS authenticated HTTP research start/status/idempotency and cross-workspace status/control denial with deterministic provider"
+        "PASS authenticated cloud inference endpoints, sponsor selection, spend limits, concurrency, failure accounting, cancellation, restart recovery, workspace artifacts and cross-user isolation"
     )
 
 

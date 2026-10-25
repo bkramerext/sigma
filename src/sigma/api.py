@@ -755,7 +755,12 @@ async def proposal_view(body: ProposalRequest, request: Request):
             return JSONResponse(
                 {"error": "Proposal request cancelled; nothing saved"}, status_code=499
             )
-        return await task
+        try:
+            return await task
+        except asyncio.CancelledError:
+            return JSONResponse(
+                {"error": "Proposal request cancelled; nothing saved"}, status_code=499
+            )
     finally:
         for pending in (task, connection):
             if not pending.done():
