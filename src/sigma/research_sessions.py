@@ -3399,10 +3399,10 @@ async def start_session(
                 source = followups.get(branch["strategy_id"])
                 if source and branch["strategy_id"] not in packets:
                     branch["current_question"] = source["question"]
-                    branch["question_source"] = source
+                    branch["initial_question_source"] = source
                     if branch["strategy_id"] == strategy.id:
                         record["current_question"] = source["question"]
-                        record["question_source"] = source
+                        record["initial_question_source"] = source
             (
                 record["prior_session_failures"],
                 record["prior_session_failures_omitted"],
@@ -4161,8 +4161,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
-    if cycle == 1 and isinstance(record.get("question_source"), dict):
-        context["question_source"] = record["question_source"]
+    if cycle == 1 and isinstance(record.get("initial_question_source"), dict):
+        context["question_source"] = record["initial_question_source"]
     if role == "skeptic" and isinstance(investigator_step_id, str):
         context["investigator_step_id"] = investigator_step_id
     manifest["omitted_project_strategies"] = {
@@ -5370,7 +5370,7 @@ def _portfolio_context(
         "strategy_title": branch["strategy_title"],
         "strategy_text": branch["strategy_text"],
         "current_question": branch["current_question"],
-        "question_source": branch.get("question_source"),
+        "initial_question_source": branch.get("initial_question_source"),
         "artifacts": branch_artifacts,
         "pending_investigation": branch.get("pending_investigation"),
     }
