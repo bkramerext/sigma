@@ -16,6 +16,8 @@ For more background on the research approach and its underlying rationale, see [
 
 Create a project or start from a sample, write or generate strategies, then choose strategies for a research session. Investigator and Skeptic roles work through bounded steps; SIGMA saves findings, objections, optional computation, and unresolved questions so you can review and continue the work. You remain in control of starting, pausing, stopping, and evaluating investigations.
 
+AI can reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatting does not verify the mathematics. Investigator and Skeptic currently use the same underlying model, so their structured challenge is not independent model validation. Different-model review is a potential future enhancement.
+
 ## Run SIGMA locally
 
 SIGMA's local development setup supports macOS and Linux. Install:

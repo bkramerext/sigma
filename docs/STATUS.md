@@ -3782,3 +3782,26 @@ survived restart and full container recreation. **SKIPPED:** real Google OAuth
 fixture), and the T100 persistent-disk configuration (this run uses Compose's
 default local storage). T99 inference is also skipped; no provider calls were
 made. This is local acceptance, not live OAuth or cloud-deployment evidence.
+## T93 mathematical formatting showcase and project creation regression (2026-10-25)
+
+Rebased the T93 work on current `main` (`f3bae10`, including the README update).
+The About Key Features section, README capabilities list, and `WOLF.md` essay
+now describe AI reformatting of plain-text project descriptions and saved
+Conclusions into Markdown with typeset equations. They say the saved text stays
+available and the formatted mathematics still needs review; this is not claimed
+as mathematical verification.
+
+Brian's New Project screenshot exposed that shared settings state sent the
+edit-only `show_advanced_outcome_details` preference to the strict create API.
+Project creation now sends only the create contract fields. A real-Chrome
+regression asserts the submitted request omits that preference and retains the
+API's strict error response without creating test data. A second Chrome check
+asserts the About copy and layout at 1440, 390 and 320 px. Both focused checks
+passed; screenshots are `/tmp/sigma-about-math-1440.png`,
+`/tmp/sigma-about-math-390.png`, and `/tmp/sigma-about-math-320.png`. The full
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed after the frontend
+change, including typecheck and production build. No provider calls or cloud
+changes. The broader legacy `browser_checks/settings.py` did not reach its
+creation assertions in this local cloud-auth environment because its initial
+“Checking AI…” expectation was not met; the standalone request-contract check
+covers the reported regression directly.
