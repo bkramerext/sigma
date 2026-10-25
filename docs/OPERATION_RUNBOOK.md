@@ -11,7 +11,7 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 | Item | Current record | Verification |
 | --- | --- | --- |
 | Google OAuth project | `SIGMA Auth`; ID `sigma-auth-512601`; number `665111821572` | Operator read from Cloud Console, 2026-10-25 |
-| Infrastructure project | Proposed `SIGMA Production`, suggested ID `sigma-research-prod` | Not yet created/confirmed; separate project requires explicit approval/deviation from T127 existing-project prerequisite |
+| Infrastructure project | `SIGMA Production`; ID `sigma-research-prod`; number `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
 | DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Registered; A record target not yet confirmed |
 | Zone and VM | `us-west1-b`; planned `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-4` | Provisioning pending |
 | Disk | Planned `sigma-state` 200 GiB `pd-balanced`, retained; boot 100 GiB `pd-standard` | Provisioning and UUID verification pending |
@@ -21,6 +21,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 | Production release | Exact Git SHA and live host evidence | Not deployed |
 
 **Change log**
+
+- 2026-10-25: Operator created `SIGMA Production`, ID `sigma-research-prod`, project number `224387813390`. Billing and permissions have not yet been verified.
 
 - 2026-10-25: Operator reported existing `SIGMA Auth` project identity (name, project ID, project number). Confirmed selected DuckDNS hostname from approved deployment documentation. No production resources, IAM grants, billing changes, or DNS updates executed by this documentation change.
 
