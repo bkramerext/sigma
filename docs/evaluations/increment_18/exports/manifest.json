@@ -1,0 +1,31 @@
+{
+  "source_project_id": "e3bddcf6-d78f-40c0-ac17-f7aebff13ec6",
+  "source_session_ids": [
+    "f694137f-9576-4fff-ab8a-db866cd89930"
+  ],
+  "captured_at_utc": "2026-10-25T17:53:11.931951+00:00",
+  "capture_app_commit": "adb3205a2b24240b61fa28994d149b16f87cf094",
+  "publishing_commit": "ab35f2f1c635e142819ae86a91e67969465d4b89",
+  "capture_method": "Production FastAPI project/export and report routes in the deterministic authenticated cloud sponsored-session scenario.",
+  "activity": [
+    "Created a private project and saved strategy through authenticated routes.",
+    "Completed three Investigator/Skeptic rounds using the no-network fake Responses transport.",
+    "Retrieved the owner-facing project JSON and text report, then re-read both from a fresh FastAPI process."
+  ],
+  "files": [
+    {
+      "path": "cloud-research-project.json",
+      "source": "exact HTTP response bytes from /api/projects/export",
+      "content_type": "application/json"
+    },
+    {
+      "path": "cloud-research-report.txt",
+      "source": "exact HTTP response bytes from /api/projects/export/report?format=txt",
+      "content_type": "text/plain; charset=utf-8"
+    }
+  ],
+  "omissions": [
+    "No real Google OAuth exchange or production host was used.",
+    "No live inference, paid provider call, Python/Sage execution, PDF, or Markdown export was exercised."
+  ]
+}

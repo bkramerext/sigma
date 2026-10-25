@@ -1,0 +1,207 @@
+Cloud research API
+==================
+
+Project
+-------
+Interpretation: Agent-generated findings are provisional unless explicitly verified; reviewer agreement is not proof.
+
+Research problem: A recurrence bound
+
+Project ID: e3bddcf6-d78f-40c0-ac17-f7aebff13ec6
+
+Research type: Other
+
+Difficulty: Medium
+
+Strategies
+----------
+Induction (saved)
+~~~~~~~~~
+Check recurrence bounds by induction.
+
+Research sessions
+-----------------
+Session #1
+Execution status: ended
+Outcome: Mixed · partial progress, unresolved
+Strategy: Induction
+Started: 2026-10-25T17:53:11.791984+00:00
+
+Recorded computation provenance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+No persisted Python/SageMath execution records; authored measurement claims are not established by a saved computation.
+Persisted executions: 0 identified; 0 without an ID; 0 with unambiguous completed status.
+
+Authored conclusion below is agent-reported; a recorded execution does not independently validate its interpretation.
+
+Outcome summary: A partial bound is plausible.
+
+Conclusion
+~~~~~~~~~~
+### Partial finding
+
+A partial bound is plausible.
+
+The recurrence step is plausible but not a proof.
+
+The saved review does not establish a complete answer to the project question.
+
+### Unresolved points
+- Verify the first value.
+- Check the base case.
+
+### Session caveats
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Verify the first value.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+**Evidence:** Artifact 1, Artifact 2, Artifact 3
+
+### Verification and scope
+
+Verification: Incomplete.
+
+This Conclusion summarizes agent-reported findings for this session. SIGMA has not independently verified the result; inspect the detailed Outcome and saved evidence before relying on it.
+
+Outcome caveats:
+- Agent-reported evidence is unverified; agreement is not independent verification.
+- The saved argument remains incomplete; no solution is claimed.
+- Verify the first value.
+- Open obligations remain; inspect the saved artifacts before relying on this result.
+
+Verification: Incomplete
+Structured argument steps are recorded; review their evidence and objections.
+
+Outcome metrics
+~~~~~~~~~~~~~~~
+Operational metrics
+~~~~~~~~~~~~~~~~~~~
+Participating agents: Investigator, Skeptic
+Model calls by status: 6 dispatched · 6 completed · 0 rejected · 0 timed out · 0 interrupted / cancelled · 0 failed · 0 in progress · 0 not dispatched · 0 status unavailable
+Tokens · input / output / cached / total: 540 / 180 / 0 / 720
+Wall-clock / agent call time: 0s wall · Investigator 0s across 3 call(s) · Skeptic 0s across 3 call(s)
+Python runs by status: 0 executions
+SageMath runs by status: 0 executions
+Artifacts and storage: 3 finding(s) · 0 Python file(s) (0 B) · session record 112,660 B
+Provider failures / retries: 0 provider failure(s) (0 rejected, 0 timed out, 0 other) · 0 interrupted / cancelled · 0 later attempt(s); no automatic retries
+Estimated monetary cost: $0.002880 estimated (rates checked 2026-10-23)
+
+Research-quality metrics
+~~~~~~~~~~~~~~~~~~~~~~~~
+Strategies investigated: Induction
+Research cycles: 3 completed / 3 started
+Outcome classification: Mixed · partial progress, unresolved
+Verification status: Incomplete
+Open proof obligations: 2 · Verify the first value.; Check the base case.
+Evidence-backed conclusions: 1 conclusion(s) · 1 cited finding(s)
+Strategy contribution: productive: 1
+Unresolved objections: 1 · Verify the first value.
+
+Claim scope: unconditional
+Solution claim: A partial bound is plausible.
+Argument: The recurrence step is plausible but not a proof.
+Skeptic response: The base case remains to be checked.
+Assumptions reviewed: The recurrence is valid at positive indices.
+Proof obligations considered: Verify the first value.
+Still open: Check the base case.; Verify the first value.
+Solution evidence references: ca57d616-f507-4c36-a83e-4a1c0291e24a
+Unresolved objections: Verify the first value.
+Resolved review notes: None recorded
+
+Skeptic objection: Verify the first value.
+Saved verification code: incomplete
+
+Reviewed reasoning
+~~~~~~~~~~~~~~~~~
+Step 1: Recurrence consequence
+Epistemic status: deduction
+The recurrence supports the stated local consequence under the supplied assumption.
+Research artifact: b91dc819-c212-42f2-b6c4-a578c39017ba
+Source artifacts: Current research artifact
+Skeptic disposition: accepted
+Skeptic rationale: The stated local consequence follows from its supplied premise.
+
+Strategy finding: Induction · partial
+Strategy execution status: ended
+Strategy failure detail: Stop budget exhausted
+Claim: A partial bound is plausible.
+Source artifacts: ca57d616-f507-4c36-a83e-4a1c0291e24a; ec5b5a8c-1ff7-441e-b22c-5e272c75e12c; b91dc819-c212-42f2-b6c4-a578c39017ba
+Step 1: Recurrence consequence (deduction)
+The recurrence supports the stated local consequence under the supplied assumption.
+Skeptic review: accepted · The stated local consequence follows from its supplied premise.
+Objection: Verify the first value.
+Open obligation: Check the base case.
+Open obligation: Verify the first value.
+
+Strategy Assessments
+--------------------
+Induction · Productive: The remaining check is now explicit. [Evidence: ca57d616-f507-4c36-a83e-4a1c0291e24a]
+
+Artifact 1 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: An induction suggests the recurrence bound.
+Method: Apply the recurrence once and check the base case.
+Assumptions: The recurrence is valid at positive indices.
+Evidence status: Unverified model derivation.
+Skeptic response: The base case remains to be checked.
+Objections: Verify the first value.
+Decision: continue
+Open obligations: Check the base case.; Verify the first value.
+Next question: Check the recurrence at its first index.
+
+Artifact 2 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: An induction suggests the recurrence bound.
+Method: Apply the recurrence once and check the base case.
+Assumptions: The recurrence is valid at positive indices.
+Evidence status: Unverified model derivation.
+Skeptic response: The base case remains to be checked.
+Objections: Verify the first value.
+Decision: continue
+Open obligations: Check the base case.; Verify the first value.
+Next question: Check the recurrence at its first index.
+
+Artifact 3 · Unverified research note. Any Investigator Python or SageMath execution, including its source, status, output, and captured artifacts, is recorded below and is not proof by itself.
+Claim: An induction suggests the recurrence bound.
+Method: Apply the recurrence once and check the base case.
+Assumptions: The recurrence is valid at positive indices.
+Evidence status: Unverified model derivation.
+Skeptic response: The base case remains to be checked.
+Objections: Verify the first value.
+Decision: stop_budget_exhausted
+Open obligations: Check the base case.; Verify the first value.
+Next question: Not recorded
+
+Agent context selection
+~~~~~~~~~~~~~~~~~~~~~~~
+Context extracts are deterministic, untrusted summaries; omitted evidence remains in the original session records.
+Step 68e496e7-7469-4c9b-837f-1cb67b0015a0 · investigator: 0 selected, 0 current-session artifacts omitted, 3064 UTF-8 bytes
+Obligation ledger dispositions: unresolved 0, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["e3240b92-e8f0-45e7-8225-f05c994f7099"] · bounded portfolio overview for strategy and domain context
+Step f5d858d7-b60e-495e-8938-d15b99e41827 · skeptic: 0 selected, 0 current-session artifacts omitted, 4801 UTF-8 bytes
+Obligation ledger dispositions: unresolved 1, addressed 0, superseded 0, retracted 0, unknown 0
+- selected project_strategy_snapshot: ["e3240b92-e8f0-45e7-8225-f05c994f7099"] · bounded portfolio overview for strategy and domain context
+- selected current_investigator_obligation: ["68e496e7-7469-4c9b-837f-1cb67b0015a0"] · current Investigator step is the source; disposition remains unverified
+Step eb63f633-a011-4f30-9bdb-5dd356c27dbe · investigator: 1 selected, 0 current-session artifacts omitted, 8797 UTF-8 bytes
+Obligation ledger dispositions: unresolved 2, addressed 0, superseded 0, retracted 0, unknown 0
+- selected current_session_material_evidence: ["ca57d616-f507-4c36-a83e-4a1c0291e24a"] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history
+- selected project_strategy_snapshot: ["e3240b92-e8f0-45e7-8225-f05c994f7099"] · bounded portfolio overview for strategy and domain context
+Step 0a0452b3-da92-4c8d-a2c4-60987097ab94 · skeptic: 1 selected, 0 current-session artifacts omitted, 9861 UTF-8 bytes
+Obligation ledger dispositions: unresolved 2, addressed 0, superseded 0, retracted 0, unknown 0
+- selected current_session_material_evidence: ["ca57d616-f507-4c36-a83e-4a1c0291e24a"] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history
+- selected project_strategy_snapshot: ["e3240b92-e8f0-45e7-8225-f05c994f7099"] · bounded portfolio overview for strategy and domain context
+- selected current_investigator_obligation: ["eb63f633-a011-4f30-9bdb-5dd356c27dbe"] · current Investigator step is the source; disposition remains unverified
+Step f59ba0cb-ab1e-4382-9154-2e6f8b48b8b3 · investigator: 2 selected, 0 current-session artifacts omitted, 12957 UTF-8 bytes
+Obligation ledger dispositions: unresolved 2, addressed 0, superseded 0, retracted 0, unknown 0
+- selected current_session_material_evidence: ["ca57d616-f507-4c36-a83e-4a1c0291e24a", "ec5b5a8c-1ff7-441e-b22c-5e272c75e12c"] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history
+- selected project_strategy_snapshot: ["e3240b92-e8f0-45e7-8225-f05c994f7099"] · bounded portfolio overview for strategy and domain context
+Step 5c377ccd-79ad-4e22-8dd1-c09f8d09a941 · skeptic: 2 selected, 0 current-session artifacts omitted, 14021 UTF-8 bytes
+Obligation ledger dispositions: unresolved 2, addressed 0, superseded 0, retracted 0, unknown 0
+- selected current_session_material_evidence: ["ca57d616-f507-4c36-a83e-4a1c0291e24a", "ec5b5a8c-1ff7-441e-b22c-5e272c75e12c"] · representative sources for unresolved obligations, structured decisive outcomes, and newest saved artifact; selected before optional history
+- selected project_strategy_snapshot: ["e3240b92-e8f0-45e7-8225-f05c994f7099"] · bounded portfolio overview for strategy and domain context
+- selected current_investigator_obligation: ["f59ba0cb-ab1e-4382-9154-2e6f8b48b8b3"] · current Investigator step is the source; disposition remains unverified
+
+Terminal reason: stop_budget_exhausted
+
+Agentic runs
+------------
+No agentic runs are recorded.

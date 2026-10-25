@@ -86,6 +86,49 @@ entries below and are not implied by local checks.
 The entries that follow are the retained chronological engineering and
 evaluation history; newer summaries do not replace or rewrite them.
 
+## Round 2 Increment 18 — hosted research and export integration (2026-10-25)
+
+Extended the deterministic authenticated hosted-session API scenario to follow a
+completed sponsored research session through the owner-facing project export,
+saved Outcome verification label, text report download, and a fresh FastAPI
+process reading the same project, session, Outcome, and report from the durable
+workspace. The fixture uses the production API and workspace boundaries with a
+test-only verified-principal adapter and fake OpenAI Responses transport. It
+does not contact Google OAuth or OpenAI. Code inspection plus this joined check
+found no Blue-owned session-engine defect requiring behavioral changes; the
+gap was that existing hosted inference coverage ended before the user's export
+and restart workflow.
+
+**Acceptance state:** simulated authenticated research → saved Outcome → export
+→ new-process recovery: PASS. Workspace ownership, sponsor-only inference,
+budget admission/holds, idempotency and failure cases remain covered by the
+same existing scenario. The full suite passed, including this extension,
+Ruff, format, Pyright, frontend typecheck and production build. No real provider
+calls, cloud resources, or production secrets were used.
+
+The packaged Compose/Chrome acceptance did not run. The repository script first
+stopped because this host lacks the `docker compose` CLI plugin; routing it to
+the installed Compose v2 binary then stopped before app startup because the
+ARM64 Docker engine lacks Buildx and produced ARM64 images where the package
+requires amd64. Thus no new real-browser hosted acceptance is claimed. Real
+Google OIDC, a hosted browser session, GCE rootless execution and the Red-owned
+#98/#99 deployment gates remain **UNVERIFIED**; Red owns those host checks, and
+actual hosted provider usage remains unauthorized. Increment 18 remains
+partially verified pending coordinator disposition of these dependencies.
+
+The actual synthetic hosted project and text-report response bytes produced by
+the accepted API workflow are retained in
+[`increment_18/exports`](evaluations/increment_18/exports/manifest.json). The
+manifest records project/session IDs, capture/app commit `adb3205`, initial
+artifact publishing commit `ab35f2f`, exercised actions and omissions. These
+are exports of the deterministic fixture session, not live research or hosted
+customer data.
+
+Elapsed worker time was approximately 40 minutes through PR-ready handoff.
+The focused change is on `blue/increment-18-hosted-research`; see
+[`messages/i18_blue_r4r.md`](../messages/i18_blue_r4r.md) for exact commands,
+scope and outstanding acceptance.
+
 ## Issue 114 first increment (2026-10-25)
 
 Audited the Increment 6/14 blind plans and Increment 15 offline preparation,
