@@ -25,6 +25,27 @@ its default env file; the exact env-file handoff and refusal to invoke Docker on
 a missing mount are covered in `tests/storage.py`. See
 `messages/t100_red_r4r.txt` for the complete handoff and commit details.
 
+## T86 README validation (2026-10-25)
+
+Rewrote the newcomer README with a local quick start, optional AI/API-key
+configuration, a separate optional local Google administrator bootstrap, and
+links to the main product and engineering guides. The owner deferred Home and
+RH screenshots until after cloud launch; README contains no screenshot
+placeholders or substitute images.
+Setup and bootstrap details were checked against `./sigma setup`,
+`src/sigma/ui.py`, `src/sigma/local_config.py`, and the local Google sign-in
+section of `CLOUD_DEPLOYMENT.md`.
+
+`./sigma setup` passed. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`
+passed all scenarios, Ruff, formatting, Pyright, frontend typecheck, and
+production build. An actual local `./sigma start` reached ready state; frontend
+and API health URLs returned HTTP 200, and `./sigma shutdown` completed. The
+checkout contained Google OAuth client settings but no bootstrap email in that
+launch environment, so the observed run stayed in local single-user mode and
+printed its existing configuration warning. Credentialed Google sign-in was
+not exercised. The updated T86 assigns WOLF drafting to ChatGPT after Brian
+approves its outline; Gray's work on this branch is limited to the README.
+
 ## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
 
 Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
@@ -3497,3 +3518,23 @@ test logs, synthetic-test diagnostics and provenance are in
 `docs/evaluations/increment_5/`. The blind unscripted quality gate is proposed
 there but awaits explicit paid-provider authorization. No PDF/AI-paper quality,
 unprompted reasoning advantage or general mathematical proof is claimed.
+
+## T91 — production-shaped local Compose smoke (2026-10-25)
+
+Ran `./deploy/validate-local.sh` against the tree at
+`579a2069090bd972232c88ec8b5515485d81b0b2` (whose code base is current `main`
+`f3bae10af63eeb781b549bd610100ba75f6a3633`). Docker Engine 29.5.2 on the
+Colima Linux VM and Compose 5.6.1 built the locked backend and frontend images,
+started the local Compose stack, served the SPA and API through its edge,
+reported hosted auth enabled/ready, and confirmed auth SQLite persistence after
+backend restart and container recreation. The script exited 0 with
+`Local deployment smoke passed`. It removed its temporary stack, volumes, and
+dummy secret files. No Google or provider endpoints were called. Compose was
+installed through Homebrew; Docker plugin discovery used a temporary CLI
+config, leaving the existing Docker config unchanged.
+
+This verifies the local production-shaped package and its basic persistence
+path. It is not a clean-machine README onboarding/browser acceptance run, live
+Google OAuth, sponsored inference, GCE startup, rootless-daemon isolation,
+public HTTPS, backup restore, or cloud deployment approval. Those remain
+separate acceptance items in T91 and the cloud runbook.
