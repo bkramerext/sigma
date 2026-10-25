@@ -112,6 +112,9 @@ with sync_playwright() as playwright:
     credits = page.locator(".home-art-credit > span")
     expect(credits.nth(0)).to_have_text("Brian Kramer &")
     expect(credits.nth(1)).to_have_text("OpenAI Models")
+    assert page.locator(".home-art-credit").evaluate(
+        "el => getComputedStyle(el).textTransform"
+    ) == "uppercase"
     desktop_edges = page.locator(".home-projects").evaluate(
         "el => ({top: el.getBoundingClientRect().top, left: el.getBoundingClientRect().left})"
     )
