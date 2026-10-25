@@ -56,49 +56,49 @@
     {
       "id": "P1",
       "domain": "scenario_reasoning",
-      "question": "Plan distribution of 110 units of medical supplies to sites A and B over one day, prioritize safety, and give a contingency for a vehicle loss. Do not claim feasibility that the inputs cannot establish.",
+      "question": "Plan a one-day distribution of 110 medical supply units to two sites under a delivery deadline and vehicle-loss scenario. Produce a conditional feasibility analysis, identify critical missing routing assumptions, and propose a robust contingency plan without inventing travel times or available capacity.",
       "evidence_present": {
-        "packet": "Demand A=70, B=40. Depot has 110 units. Vehicle V1 capacity 60 units, V2 capacity 50 units; each can make one trip today. Transit times: A 2h, B 3h. Both sites require delivery by 6h. Vehicle assignments may be chosen. If either vehicle fails before departure, no replacement and no second trip is available."
+        "packet": "Demand A=70, B=40. Depot stock=110. V1 capacity=60, V2 capacity=50, each may undertake one depot departure and may visit more than one site per route. Known depot-to-A travel=2h, depot-to-B travel=3h; A-to-B travel time is UNKNOWN. Site deadlines are 6h. One vehicle can fail before departure and no replacement is available. Loading and unloading times are UNKNOWN. State which routes are provably feasible, infeasible or conditional."
       },
       "evidence_withheld": {
-        "packet": "Demand A=70, B=40 and depot supply 110 known. Vehicle capacities and trip limitations unknown. Deadline 6h. You must identify the missing constraints before asserting feasibility."
+        "packet": "Demand A=70, B=40, stock 110 and deadlines 6h are known. Vehicle counts/capacities, intersite travel, trip policy and handling times are unavailable. Analyze what evidence is required before making a dispatch promise."
       },
       "scoring_dimensions": [
-        "feasibility",
-        "adversarial_contingency",
-        "priority_tradeoffs"
+        "conditional_feasibility",
+        "missing_assumptions",
+        "contingency_tradeoffs"
       ]
     },
     {
       "id": "M1",
       "domain": "formal_mathematics",
-      "question": "Assess the conjecture: every finite simple graph with minimum degree at least 2 contains a triangle. Either prove it or give a counterexample. Explain why checking a finite collection cannot establish a universal proposition.",
+      "question": "Investigate a proposed structural claim about undirected graphs: every finite simple graph with minimum degree at least three contains a cycle of length four. Give a rigorous argument for or against it, and show how you would independently validate the decisive step without treating sampled graphs as a universal proof.",
       "evidence_present": {
-        "packet": "Graph instances: triangle C3, square C4, pentagon C5, complete graph K4. C4 and C5 have minimum degree 2 and contain no triangles. The data are exact graph descriptions, not empirical measurements."
+        "packet": "Consider a 10-vertex graph on vertices a0..a4 and b0..b4. The a-vertices form the cycle a0-a1-a2-a3-a4-a0. Each ai is joined to bi. The b-vertices are joined by edges bi-b(i+2 mod 5). Treat this as a graph definition, not an assertion about cycle lengths. No computed result is supplied."
       },
       "evidence_withheld": {
-        "packet": "No example graphs are supplied. Only the definitions of finite simple graph, minimum degree and triangle are available."
+        "packet": "No graph examples or search results are supplied. You may derive constructions and use mathematical reasoning; if tool access is authorized, any actual computation must be recorded. The truth of the proposed claim has not been established in the packet."
       },
       "scoring_dimensions": [
-        "valid_counterexample",
-        "proof_evidence_distinction",
-        "scope"
+        "construction_and_verification",
+        "logical_scope",
+        "independent_check"
       ]
     },
     {
       "id": "M2",
       "domain": "formal_mathematics",
-      "question": "Critique the argument that f(x)=x^2 is strictly increasing on all real numbers because f'(x)=2x and its derivative is nonzero except at x=0. Identify its first invalid implication and replace it with a correct domain-restricted claim.",
+      "question": "Examine this proposed resource-sharing lemma: if every task can use at least two machines, and there are at least as many machines as tasks, then all tasks can be assigned to distinct compatible machines. Either provide a proof under precisely stated additional conditions or a counterexample, and design an efficient correctness check for arbitrary instances.",
       "evidence_present": {
-        "packet": "Provided argument: 'f'(x)=2x, and f'(x) is nonzero for x != 0. A derivative nonzero almost everywhere means the function is strictly increasing. Thus x^2 increases on R.' The argument omits the derivative sign. Numerical checks: f(-2)=4, f(-1)=1, f(0)=0, f(1)=1."
+        "packet": "Instance: tasks T1,T2,T3,T4,T5; machines A,B,C,D,E. Compatibility: T1={A,B}; T2={A,B}; T3={A,B}; T4={C,D,E}; T5={C,D,E}. No assignment or matching computation is supplied. Analyze both this instance and the claimed general rule."
       },
       "evidence_withheld": {
-        "packet": "Only the claimed conclusion, 'x^2 is strictly increasing on R', and the derivative f'(x)=2x are given. The author's chain of reasoning and example values are unavailable."
+        "packet": "The proposed rule and task/machine counts are known, but no compatibility list is supplied. Independently reason about possible counterexamples and identify what additional information is necessary to certify a specific assignment."
       },
       "scoring_dimensions": [
-        "earliest_invalid_step",
-        "correct_domain",
-        "negative_evidence"
+        "matching_obstruction",
+        "sufficient_condition",
+        "validation_algorithm"
       ]
     }
   ]
