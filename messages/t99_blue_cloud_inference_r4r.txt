@@ -1,0 +1,19 @@
+# T99 Blue response: cloud AI inference parity
+
+Branch: t99-cloud-inference-parity
+Base: current main, a7fc937eaece2ae53c976cb2e09bbb2594a47c85
+Commit: pending final PR updates
+
+## Delivered
+
+Enabled sponsored cloud inference for standalone strategy/proposal generation, agentic proposal steps, text conversion, and on-demand one-shot and long-form TeX papers. Cloud authorization verifies the authenticated owner and explicit sponsored server credential. Every provider attempt reserves a durable call, budget amount, and concurrency slot before dispatch; reported usage is reconciled, while uncertain post-dispatch charges retain the reservation for audit. Project identity, cancellation, and local credential behavior are preserved.
+
+Deterministic API tests use mocked provider responses and cover all operations, TeX/PDF archival, reservation/accounting, quota exhaustion, provider rejection and request timeout, and cross-user denial. No paid inference, Google Cloud resources, or hosted checks were used.
+
+## Verification
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed after rebase on current main, including scenarios, Ruff, formatting, Pyright, frontend typecheck, and production build. `git diff --check` passed. The mock API suite verifies the sponsored bearer is sent to the provider.
+
+## Remaining follow-up
+
+Live cloud OIDC, hosted persistence, browser interaction, and hosted TeX compilation remain unverified because this assignment authorizes no cloud resources or paid calls. `docs/CLOUD_DEPLOYMENT.md` still calls these routes disabled; it is Red-owned under T100 and was not changed here. Reconcile that deployment documentation and verify the deployment after T100 lands.
