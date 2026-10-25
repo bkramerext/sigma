@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -281,6 +282,55 @@ def main() -> None:
                 assert report.status_code == 200, report.text
                 assert report.headers["content-type"].startswith("text/plain")
                 assert "Outcome" in report.text and "Verification" in report.text
+
+                export_directory = os.environ.get("SIGMA_INCREMENT18_EXPORT_DIR")
+                if export_directory:
+                    retained = Path(export_directory)
+                    retained.mkdir(parents=True, exist_ok=True)
+                    (retained / "cloud-research-project.json").write_bytes(exported.content)
+                    (retained / "cloud-research-report.txt").write_bytes(report.content)
+                    capture_commit = subprocess.run(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=Path(__file__).resolve().parents[1],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.strip()
+                    manifest = {
+                        "source_project_id": project_id,
+                        "source_session_ids": [session_id],
+                        "captured_at_utc": datetime.now(UTC).isoformat(),
+                        "capture_app_commit": capture_commit,
+                        "capture_method": (
+                            "Production FastAPI project/export and report routes in the "
+                            "deterministic authenticated cloud sponsored-session scenario."
+                        ),
+                        "activity": [
+                            "Created a private project and saved strategy through authenticated routes.",
+                            "Completed three Investigator/Skeptic rounds using the no-network fake Responses transport.",
+                            "Retrieved the owner-facing project JSON and text report, then re-read both from a fresh FastAPI process.",
+                        ],
+                        "files": [
+                            {
+                                "path": "cloud-research-project.json",
+                                "source": "exact HTTP response bytes from /api/projects/export",
+                                "content_type": exported.headers.get("content-type"),
+                            },
+                            {
+                                "path": "cloud-research-report.txt",
+                                "source": "exact HTTP response bytes from /api/projects/export/report?format=txt",
+                                "content_type": report.headers.get("content-type"),
+                            },
+                        ],
+                        "omissions": [
+                            "No real Google OAuth exchange or production host was used.",
+                            "No live inference, paid provider call, Python/Sage execution, PDF, or Markdown export was exercised.",
+                        ],
+                    }
+                    (retained / "manifest.json").write_text(
+                        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
 
                 restart_environment = os.environ.copy()
                 restart_environment["PYTHONPATH"] = os.pathsep.join(
