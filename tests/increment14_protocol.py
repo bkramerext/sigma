@@ -1,4 +1,5 @@
 """Offline adversarial regression for Increment 14 protocol and answer-key integrity."""
+
 # fmt: off
 import importlib.util
 import json
@@ -73,5 +74,3 @@ except ValueError:
 else:
     raise AssertionError("Invalid variant accepted")
 print("Increment 14 adversarial offline checks passed")
-
-# fmt: on
