@@ -2598,6 +2598,8 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
   const [open, setOpen] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const signInStarted = useRef(false);
   const disclosure = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
@@ -2640,32 +2642,37 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   }
   const canSignIn = !!cloud?.enabled && cloud.ready;
   const setupMissing = cloud?.local_setup_missing ?? [];
-  const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
+  const description = cloud?.authenticated ? 'Google account connected; open account settings' : signingIn ? 'Connecting to Google' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
+  function activate() {
+    setError('');
+    if (cloud?.authenticated) {
+      setPosition(null);
+      setOpen(true);
+      return;
+    }
+    if (signInStarted.current) return;
+    if (!canSignIn) {
+      const message = setupMissing.length
+        ? `Google sign-in is not configured. Missing: ${setupMissing.join(', ')}.`
+        : 'Google sign-in is not available on this SIGMA server. Contact its administrator.';
+      reportRequestFailure(message);
+      return;
+    }
+    signInStarted.current = true;
+    setSigningIn(true);
+    window.location.assign('/api/cloud-auth/login');
+  }
   return <>
-    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
+    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup={cloud?.authenticated ? 'dialog' : undefined} aria-expanded={cloud?.authenticated ? open : undefined} aria-busy={signingIn} disabled={signingIn} aria-label={description} data-tooltip-disabled="" onClick={activate}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : signingIn ? 'Connecting…' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
     </button>
-    {open && createPortal(<>
+    {open && cloud?.authenticated && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
-      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
-      {!cloud ? <>
-        <h2 id="google-account-title">Checking Google sign-in</h2>
-        <p>SIGMA is checking the local Google authentication configuration.</p>
-      </> : !canSignIn && !cloud.authenticated ? <>
-        <h2 id="google-account-title">Google sign-in setup required</h2>
-        <p>Local Google sign-in is unavailable because the current SIGMA launch is missing required configuration.</p>
-        {setupMissing.length > 0 && <p className="google-setup-missing">Missing: {setupMissing.map(name => <code key={name}>{name}</code>)}</p>}
-        {setupMissing.length === 0 && <p>Local Google authentication is not enabled for this server process. Restart using <code>./sigma start --nav</code> after exporting the required settings.</p>}
-        <p>Set the missing values in the environment used to start SIGMA. Put the Google OAuth client ID and secret in this checkout’s <code>.env</code>. Set <code>SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL</code> to the operator’s actual Gmail address. If that value is in <code>~/.bashrc</code>, run <code>source ~/.bashrc</code> in the launching shell, then restart with <code>./sigma start --nav</code>.</p>
-        <p>Google verifies the account and SIGMA checks its email and persistent Google subject before granting access.</p>
-      </> : <>
-        {!cloud?.authenticated && <h2 id="google-account-title">Connect your Google account</h2>}
-        {cloud?.authenticated && <p className="google-account-email">{cloud.user?.email}</p>}
-        {cloud?.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
-        {!cloud?.authenticated && canSignIn && <a className="cloud-auth-button" href="/api/cloud-auth/login">Sign in with Google</a>}
-        {cloud?.authenticated && <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>}
-      </>}
-      {error && <p role="alert">{error}</p>}
+      <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-label="Google account" tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
+        <p className="google-account-email">{cloud.user?.email}</p>
+        {cloud.deniedEmail && <p className="google-account-denied" role="status">Access is not granted for {cloud.deniedEmail}.</p>}
+        <button type="button" className="google-text-action" onClick={() => void signOut()}>Sign out</button>
+        {error && <p role="alert">{error}</p>}
       </div>
     </>, document.body)}
   </>;

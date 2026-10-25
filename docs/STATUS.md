@@ -1,5 +1,27 @@
 # SIGMA status
 
+## Google header sign-in and TeX hover target (2026-10-24)
+
+The signed-out Google identity pill now starts the existing OAuth endpoint
+directly. It reports missing setup through the existing request notification,
+guards repeated activation while redirecting, and keeps the account popover
+for authenticated users. Narrow Home headers wrap long connection status text.
+The LaTeX wordmark hover target is 56×38px, centered with even clearance around
+the mark.
+
+**Verification:** Real Chrome `browser_checks/t23_1_google_signin.py` passed at
+1280, 390 and 320px, including TeX hover bounds. Real Chrome
+`browser_checks/t43_1_manual_acceptance.py` passed for setup feedback and
+responsive status pills. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma
+test` passed, including Ruff, Pyright, frontend typecheck and production build.
+Plain `./sigma test` stopped in `tests/tooling.py` because the inherited
+`SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` changes that test's expected launcher
+cleanup path. `browser_checks/t40_cloud_ui.py` reached an existing narrow-width
+assertion that the administrator settings link sits above Projects; at 390px
+its measured box was 308×756px and overlapped the Projects section. The About
+dialog and Conclusion markup referenced in earlier requests are absent from
+this branch, so their copy and toggle cannot be updated here.
+
 ## Session Outcome Markdown toggle visibility (2026-10-24)
 
 Scoped the Session Outcome Markdown toggle fix to its SVG mark. The mark's

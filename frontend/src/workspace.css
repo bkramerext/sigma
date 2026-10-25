@@ -289,7 +289,7 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .project-pane-actions .project-latex-button:disabled { opacity: .5; cursor: not-allowed; }
 .workspace-page .project-pane-actions .project-lean-button:disabled { color: #a0aab2; cursor: not-allowed; opacity: 1; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { width: 50px; min-width: 50px; margin-left: 0; }
-.workspace-page .project-pane-actions .text-view-icon.project-latex-button { margin-right: 10px; }
+.workspace-page .project-pane-actions .text-view-icon.project-latex-button { box-sizing: border-box; width: 56px; min-width: 56px; height: 38px; min-height: 38px; padding: 0; margin-right: 10px; }
 .workspace-page .project-pane-actions .text-view-icon.project-lean-button { margin-right: 5px; }
 .workspace-page .project-pane-actions .project-lean-button img { display: block; width: 42px; height: 21px; object-fit: contain; }
 .workspace-page .latex-wordmark { display: inline-block; margin-left: 0; white-space: nowrap; font: 500 18px/1 "Latin Modern Roman", "CMU Serif", "Computer Modern", Georgia, serif; letter-spacing: -.055em; }

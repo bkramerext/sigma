@@ -7,6 +7,7 @@ in SIGMA or its CLI.
 
 import json
 import os
+import time
 from urllib.parse import unquote
 
 from playwright.sync_api import expect, sync_playwright
@@ -41,6 +42,7 @@ status = {
     "admin_contact_email": None,
 }
 admin_requests: list[str] = []
+login_requests: list[str] = []
 
 
 def main() -> None:
@@ -156,10 +158,12 @@ def main() -> None:
             page.route("**/api/**", forward)
             page.route("**/api/cloud-auth/status", cloud_status)
             page.route("**/api/cloud-auth/admin/**", admin_api)
-            page.route(
-                "**/api/cloud-auth/login",
-                lambda route: route.fulfill(status=200, body="OAuth fixture route"),
-            )
+            def begin_login(route):
+                login_requests.append(route.request.url)
+                time.sleep(0.7)
+                route.fulfill(status=200, body="OAuth fixture route")
+
+            page.route("**/api/cloud-auth/login", begin_login)
             page.route(
                 "**/api/cloud-auth/logout", lambda route: route.fulfill(status=200, body="{}")
             )
@@ -183,7 +187,7 @@ def main() -> None:
             ).to_be_visible()
             expect(page.locator(".request-toast")).to_have_count(0)
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-            google = page.get_by_role("button", name="Sign in with Google")
+            google = page.locator(".home-topline .project-google-signin")
             expect(google).to_have_text("Sign in with Google")
             expect(page.locator(".home-topline .api-connection > summary")).to_be_visible()
             expect(page.locator(".home-topline .api-connection > summary")).to_contain_text(
@@ -206,6 +210,39 @@ def main() -> None:
             )
             assert page.get_by_role("link", name="Explore Demo").count() == 0
             assert page.get_by_text("owner@gmail.com", exact=True).count() == 0
+            navigation_dialogs: list[str] = []
+
+            def cancel_navigation(dialog):
+                navigation_dialogs.append(dialog.type)
+                dialog.dismiss()
+
+            page.on("dialog", cancel_navigation)
+            page.evaluate(
+                "window.__sigmaBlockNavigation = e => { e.preventDefault(); e.returnValue = ''; }; window.addEventListener('beforeunload', window.__sigmaBlockNavigation); document.querySelector('.home-topline .project-google-signin').click()"
+            )
+            expect(google).to_be_disabled()
+            expect(google).to_have_attribute("aria-busy", "true")
+            expect(google).to_have_text("Connecting…")
+            loading_state = page.evaluate(
+                "() => { const e=document.querySelector('.home-topline .project-google-signin'); return e && [e.disabled, e.getAttribute('aria-busy'), e.textContent.trim()]; }"
+            )
+            assert loading_state == [True, "true", "Connecting…"], loading_state
+            page.evaluate(
+                "() => { const e=document.querySelector('.home-topline .project-google-signin'); e.disabled=false; e.dispatchEvent(new MouseEvent('click', { bubbles: true })); }"
+            )
+            assert navigation_dialogs == ["beforeunload"], navigation_dialogs
+            page.evaluate(
+                "window.removeEventListener('beforeunload', window.__sigmaBlockNavigation)"
+            )
+            assert not login_requests, login_requests
+            page.goto(URL, wait_until="networkidle")
+            google = page.locator(".home-topline .project-google-signin")
+            google.click()
+            expect(page.get_by_text("OAuth fixture route")).to_be_visible()
+            expect(page.get_by_role("dialog", name="Connect your Google account")).to_have_count(0)
+            assert len(login_requests) == 1, login_requests
+            page.goto(URL, wait_until="networkidle")
+            google = page.locator(".home-topline .project-google-signin")
             page.evaluate("fetch('/api/projects/inspect?path=projects%2Frh.sigma')")
             expect(
                 page.locator(".request-toast").filter(has_text="Authentication required.")
@@ -225,32 +262,7 @@ def main() -> None:
                 )
                 assert font_size <= 24, (width, font_size)
                 page.screenshot(path=f"/tmp/sigma-t43-signin-{width}.png", full_page=True)
-                google.click()
-                google_panel = page.locator(".google-connection-details")
-                expect(google_panel).to_be_visible()
-                assert (
-                    google_panel.evaluate("element => getComputedStyle(element).position")
-                    == "fixed"
-                )
-                assert google_panel.evaluate(
-                    "element => { const r = element.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }"
-                )
-                page.keyboard.press("Escape")
-                expect(google).to_be_focused()
-            page.set_viewport_size({"width": 1440, "height": 900})
-            google.click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            expect(account).to_be_visible()
-            assert account.evaluate("element => getComputedStyle(element).position") == "fixed"
-            assert account.evaluate("element => element.getBoundingClientRect().width") <= 300
-            expect(account.locator(".google-account-target")).to_have_count(0)
-            page.keyboard.press("Escape")
-            expect(google).to_be_focused()
-            google.click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            account.get_by_role("link", name="Sign in with Google").click()
-            expect(page.get_by_text("OAuth fixture route")).to_be_visible()
-
+                expect(page.locator(".google-connection-details")).to_have_count(0)
             # Admin status is supplied by deterministic API fixture only.
             status.update(authenticated=True, user={"email": BOOTSTRAP, "role": "admin"})
             page.goto(URL, wait_until="networkidle")

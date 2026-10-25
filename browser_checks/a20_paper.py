@@ -145,12 +145,12 @@ with sync_playwright() as playwright:
     page.locator(".project-google-signin").hover()
     expect(page.get_by_role("tooltip")).to_have_count(0)
     page.locator(".project-google-signin").click()
-    expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_be_visible()
-    assert "SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL" in " ".join(
-        page.locator(".google-setup-missing code").all_text_contents()
+    setup_notice = page.get_by_role("alert").filter(
+        has_text="Google sign-in is not configured."
     )
-    page.keyboard.press("Escape")
-    expect(page.get_by_role("dialog", name="Google sign-in setup required")).to_have_count(0)
+    expect(setup_notice).to_contain_text("SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL")
+    expect(page.locator(".google-connection-details")).to_have_count(0)
+    page.get_by_role("button", name="Dismiss request error").click()
     page.locator(".project-difficulty-badge").hover()
     expect(page.get_by_role("tooltip")).to_have_text("This project is considered easy. Click to cycle through easy, medium, and hard.")
     page.locator(".project-chatgpt-signin summary").hover()
