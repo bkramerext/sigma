@@ -753,18 +753,50 @@ def main() -> None:
                 db.close()
                 assert unknown_attempts == 2
 
-                # Force the remaining allowance below the next reservation and
-                # prove no provider request is made after quota exhaustion.
+                # Leave only enough budget for the dynamic text reservation.
+                # Instructions and the response schema push the complete
+                # request above the available amount, before dispatch.
                 db = cloud_research._connect()
                 db.execute(
-                    "UPDATE calls SET amount_usd=0.80 WHERE session_id=?",
+                    "UPDATE calls SET amount_usd=0 WHERE workspace_id=(SELECT workspace_id FROM jobs WHERE session_id=?)",
+                    (session_id,),
+                )
+                db.execute(
+                    "UPDATE calls SET amount_usd=0.90 WHERE call_id=(SELECT c.call_id FROM calls c JOIN jobs j USING(session_id) WHERE j.session_id=? LIMIT 1)",
                     (session_id,),
                 )
                 db.close()
                 attempted_before_quota = provider_calls
+                real_start_provider_attempt = cloud_research.start_provider_attempt
+                overhead_was_budgeted = False
+
+                def start_with_overhead_assertion(
+                    attempt_project_id, attempt_path, model, payload, output_tokens
+                ):
+                    nonlocal overhead_was_budgeted
+                    assert isinstance(payload["input"], str)
+                    dynamic_bytes = len(payload["input"].encode("utf-8"))
+                    complete_bytes = cloud_research.provider_request_input_bytes(payload)
+                    dynamic_cost, _ = cloud_research.standalone_call_reservation(
+                        model, dynamic_bytes, output_tokens
+                    )
+                    complete_cost, _ = cloud_research.standalone_call_reservation(
+                        model, complete_bytes, output_tokens
+                    )
+                    assert dynamic_cost <= 0.10 < complete_cost
+                    overhead_was_budgeted = complete_bytes > dynamic_bytes
+                    return real_start_provider_attempt(
+                        attempt_project_id, attempt_path, model, payload, output_tokens
+                    )
+
                 with (
                     patch.object(proposals, "auth_context", new=AsyncMock(return_value=credential)),
                     patch.object(proposals, "configuration", new=AsyncMock(return_value=config)),
+                    patch.object(
+                        cloud_research,
+                        "start_provider_attempt",
+                        side_effect=start_with_overhead_assertion,
+                    ),
                     patch.object(
                         proposals.httpx,
                         "AsyncClient",
@@ -782,6 +814,7 @@ def main() -> None:
                         },
                     )
                 assert exhausted_proposal.status_code == 400, exhausted_proposal.text
+                assert overhead_was_budgeted
                 assert provider_calls == attempted_before_quota
 
                 duplicate = client.post("/api/projects/research-sessions/start", json=start_body)

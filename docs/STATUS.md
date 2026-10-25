@@ -126,6 +126,15 @@ existing `tests/tooling.py` UI cleanup assertion while
 Ruff, formatting, Pyright, frontend typecheck and production build. The
 environment override matches the repository's existing UI test workaround.
 
+Adversarial review of PR #107 found that the write-ahead estimate counted only
+request-specific dynamic input. The reservation now uses the UTF-8 JSON size of
+the full billable `instructions`, `input`, and structured-output `text` payload,
+then adds maximum output tokens. A deterministic API regression leaves enough
+budget for dynamic input alone but not for the complete request; the provider is
+not dispatched. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed
+again after the correction, including Ruff, formatting, Pyright, frontend
+typecheck, and production build. No paid inference or cloud resources were used.
+
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.

@@ -7,6 +7,7 @@ write-ahead cost reservations without creating a second research engine.
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -455,8 +456,25 @@ class ProviderAttempt:
     settled: bool = False
 
 
+def provider_request_input_bytes(payload: Any) -> int:
+    """Return a conservative UTF-8 bound for all billable structured input."""
+    if not isinstance(payload, dict):
+        raise CloudResearchUnavailable("Cloud inference request is invalid.")
+    # Responses charges for instructions, input, and structured-output format
+    # content. Keep all three in the same deterministic encoding used by the
+    # request; transport and sampling metadata are not prompt input.
+    billable = {key: payload[key] for key in ("instructions", "input", "text") if key in payload}
+    if not all(key in billable for key in ("instructions", "input", "text")):
+        raise CloudResearchUnavailable("Cloud inference request is incomplete.")
+    try:
+        encoded = json.dumps(billable, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError) as exc:
+        raise CloudResearchUnavailable("Cloud inference request is invalid.") from exc
+    return len(encoded)
+
+
 def start_provider_attempt(
-    project_id: str, project_path: str, model: str, input_bytes: int, output_tokens: int
+    project_id: str, project_path: str, model: str, payload: Any, output_tokens: int
 ) -> ProviderAttempt | None:
     """Reserve one non-session provider attempt; local calls remain unchanged."""
     if not cloud_workspaces.enabled():
@@ -464,6 +482,7 @@ def start_provider_attempt(
     job_id = begin_standalone_inference(project_id, project_path)
     call_id = uuid4().hex
     try:
+        input_bytes = provider_request_input_bytes(payload)
         amount, tokens = standalone_call_reservation(model, input_bytes, output_tokens)
         reserve_call(job_id, call_id, amount, tokens)
     except Exception:

@@ -319,7 +319,7 @@ async def generate_proposal(
             ):
                 raise ProjectError("Sponsored cloud inference is not configured.")
             cloud_attempt = cloud_research.start_provider_attempt(
-                project_id, path, config["model"], len(context.encode("utf-8")), 8000
+                project_id, path, config["model"], payload, 8000
             )
         # asyncio.timeout bounds the whole operation, including slow streaming peers.
         if cloud_attempt is not None:

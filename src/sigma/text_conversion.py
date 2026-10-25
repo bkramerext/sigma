@@ -165,7 +165,7 @@ async def _convert_text(
                         view.project.id,
                         path,
                         config["model"],
-                        len(context.encode("utf-8")),
+                        payload,
                         8000,
                     )
                 if attempt is not None:

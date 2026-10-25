@@ -323,7 +323,7 @@ async def _invoke(
                 view.project.id,
                 view.path,
                 config["model"],
-                len(context.encode("utf-8")),
+                payload,
                 MAX_OUTPUT_TOKENS,
             )
         if attempt is not None:

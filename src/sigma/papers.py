@@ -1385,7 +1385,7 @@ async def _provider(
                 project_id,
                 project_path_value,
                 config["model"],
-                len(serialized_context.encode("utf-8")),
+                payload,
                 12000,
             )
         if attempt is not None:
@@ -1515,7 +1515,7 @@ async def _provider_structured(
                 project_id,
                 project_path_value,
                 config["model"],
-                len(input_text.encode("utf-8")),
+                payload,
                 12000,
             )
         if attempt is not None:
