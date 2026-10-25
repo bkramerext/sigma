@@ -70,6 +70,8 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 
 **State mount permissions (2026-10-25):** Operator confirmed `sudo stat -c '%U:%G %a %n' /srv/sigma-state` returned `root:root 700 /srv/sigma-state`. Persistent fstab configuration and reboot validation remain pending.
 
+**T127 reboot acceptance (2026-10-25):** VM boot time `2026-10-25 22:01:51 UTC` after operator reboot. `findmnt /srv/sigma-state` reported `/dev/sdb` ext4 `rw,relatime`; `stat` reported `root:root 700`. Persistent UUID mount survived reboot. Host application installation, backup policy, and hosted launch remain separate work.
+
 ## Before any operation
 
 1. Identify the GCP project, `us-west1-b` zone, VM `sigma-gce-01`, disk `sigma-state`, public hostname, and current `SIGMA_RELEASE`. Confirm these against **live GCP**, not just this document.
