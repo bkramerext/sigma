@@ -1801,48 +1801,57 @@ type CloudResearchBudget = {
 
 function AboutArchitecture() {
   const descriptions = {
-    project: 'The overarching question being investigated. A project contains multiple research strategies and preserves their findings.',
-    strategyA: 'A particular angle into the problem, not a proposed answer. Several strategies may be needed, and unsuccessful approaches can still produce useful findings.',
-    strategyB: 'A particular angle into the problem, not a proposed answer. Several strategies may be needed, and unsuccessful approaches can still produce useful findings.',
-    strategyC: 'A particular angle into the problem, not a proposed answer. Several strategies may be needed, and unsuccessful approaches can still produce useful findings.',
-    session: 'An individual attempt to investigate one or more strategies. Sessions preserve the work and results, allowing strategies to be revisited.',
-    investigator: 'An AI agent that develops reasoning, explores hypotheses, and can write code to test ideas.',
-    skeptic: "An AI agent that challenges the Investigator's reasoning, examines evidence, and identifies errors or unresolved questions.",
-    evidence: 'The record of findings, objections, code execution, and unresolved questions remains available to guide future research.',
+    project: 'A project holds the central research question and multiple persistent research directions. Results from a local investigation do not automatically settle the entire question.',
+    strategies: 'Strategies are durable, bounded research ideas. They may be tested, revised or forked, and failed attempts retain their evidence and history.',
+    strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
+    strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
+    strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
+    session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
+    orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
+    investigator: 'The Investigator role develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
+    tools: 'Where enabled, proposed Python code is run through the execution subsystem; source and outputs become inspectable evidence. SageMath requires an available, validated runtime. A computation is not a formal proof.',
+    workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
+    skeptic: "The Skeptic role examines claims and assumptions, looks for counterexamples or gaps, and suggests discriminating next tests. Its review is model-reported, not independent proof certification.",
+    decision: 'After a review, SIGMA applies the recorded assessment, next question and remaining work within resource limits. A strategy can remain available for later revision or another session.',
+    savedEvidence: 'Persisted artifacts preserve findings, reasoning, objections, execution results and open questions. Researchers can revisit prior evidence to guide later sessions or strategy revisions.',
   } as const;
   type DiagramNode = keyof typeof descriptions;
-  const [activeNode, setActiveNode] = useState<DiagramNode | null>(null);
-  const nodeRefs = useRef<Partial<Record<DiagramNode, HTMLButtonElement>>>({});
-  const tooltip = useRef<HTMLDivElement>(null);
+  const [activeInfoNode, setActiveInfoNode] = useState<DiagramNode | null>(null);
+  const [expandedStrategy, setExpandedStrategy] = useState<'strategyA' | 'strategyB' | 'strategyC' | null>(null);
+  const [sessionExpanded, setSessionExpanded] = useState(false);
+  const sessionToggle = useRef<HTMLButtonElement>(null);
+  const sessionPanel = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | null>(null);
   const pointerType = useRef('');
-  const tooltipId = 'about-diagram-tooltip';
+  const tooltipId = (key: DiagramNode) => 'about-diagram-tooltip-' + key;
+
   function cancelHide() {
     if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
     hideTimer.current = null;
   }
   function scheduleHide() {
     cancelHide();
-    hideTimer.current = window.setTimeout(() => setActiveNode(null), 130);
+    hideTimer.current = window.setTimeout(() => setActiveInfoNode(null), 130);
   }
-  function revealNode(key: DiagramNode) {
+  function revealNode(key: DiagramNode, revealToKeyboardOrTouch = false) {
     cancelHide();
-    setActiveNode(key);
-    requestAnimationFrame(() => document.getElementById(tooltipId)?.scrollIntoView({ block: 'nearest' }));
+    setActiveInfoNode(key);
+    if (revealToKeyboardOrTouch) {
+      requestAnimationFrame(() => document.getElementById(tooltipId(key))?.scrollIntoView({ block: 'nearest' }));
+    }
   }
   useLayoutEffect(() => {
-    const tip = tooltip.current;
-    if (!activeNode || !tip) return;
+    if (!activeInfoNode) return;
     const pointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Element && (target.closest('[data-about-diagram-node]') || tip.contains(target))) return;
-      setActiveNode(null);
+      if (target instanceof Element && target.closest('[data-about-info-node]')) return;
+      setActiveInfoNode(null);
     };
     const keyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopImmediatePropagation();
-        setActiveNode(null);
+        setActiveInfoNode(null);
       }
     };
     document.addEventListener('pointerdown', pointerDown, true);
@@ -1851,70 +1860,123 @@ function AboutArchitecture() {
       document.removeEventListener('pointerdown', pointerDown, true);
       document.removeEventListener('keydown', keyDown, true);
     };
-  }, [activeNode]);
+  }, [activeInfoNode]);
   useEffect(() => () => cancelHide(), []);
-  function node(key: DiagramNode, title: string, subtitle: string, tone: 'copper' | 'blue') {
-    return <div className="about-diagram-node-wrap"><button
-      ref={element => { if (element) nodeRefs.current[key] = element; else delete nodeRefs.current[key]; }}
+
+  function help(key: DiagramNode, label: string) {
+    const active = activeInfoNode === key;
+    return <button
       type="button"
-      className={`about-diagram-node about-diagram-node--${tone}`}
-      data-about-diagram-node={key}
-      aria-describedby={activeNode === key ? tooltipId : undefined}
-      aria-expanded={activeNode === key}
+      className="about-diagram-help"
+      aria-label={"Explain " + label}
+      aria-describedby={active ? tooltipId(key) : undefined}
       onPointerDown={event => { pointerType.current = event.pointerType; }}
+      onFocus={() => revealNode(key, true)}
+      onBlur={scheduleHide}
+      onClick={() => {
+        const touch = pointerType.current === 'touch' || window.matchMedia('(hover: none)').matches;
+        if (touch) {
+          // Touch generates focus before click; keep the newly revealed tip open.
+          if (activeInfoNode !== key) revealNode(key, true);
+        }
+        pointerType.current = '';
+      }}
+    >i</button>;
+  }
+  function infoRegion(key: DiagramNode, content: ReactNode, tone: 'copper' | 'blue' = 'copper') {
+    return <div
+      className="about-info-region"
+      data-about-info-node={key}
       onPointerEnter={event => { if (event.pointerType === 'mouse') revealNode(key); }}
       onPointerLeave={event => { if (event.pointerType === 'mouse') scheduleHide(); }}
-      onFocus={() => { if (pointerType.current !== 'touch') revealNode(key); }}
-      onBlur={() => scheduleHide()}
-      onClick={event => {
-        const touch = pointerType.current === 'touch' || (event.detail > 0 && window.matchMedia('(hover: none)').matches);
-        pointerType.current = '';
-        if (touch) {
-          if (activeNode === key) setActiveNode(null);
-          else revealNode(key);
-        }
-      }}
     >
+      {content}
+      {activeInfoNode === key && <div id={tooltipId(key)} className="about-diagram-tooltip" data-tone={tone} role="tooltip" onPointerEnter={cancelHide} onPointerLeave={scheduleHide}>{descriptions[key]}</div>}
+    </div>;
+  }
+  function card(key: DiagramNode, title: string, subtitle: string, tone: 'copper' | 'blue' = 'copper') {
+    return infoRegion(key, <div className={"about-diagram-node about-diagram-node--" + tone}>
       <span className="about-diagram-node-title">{title}</span>
       <span className="about-diagram-node-subtitle">{subtitle}</span>
-      <span className="about-diagram-node-hint" aria-hidden="true">i</span>
-    </button>{activeNode === key && <div ref={tooltip} id={tooltipId} className="about-diagram-tooltip" data-tone={key === 'investigator' || key === 'skeptic' ? 'blue' : 'copper'} role="tooltip" onPointerEnter={cancelHide} onPointerLeave={scheduleHide}>{descriptions[key]}</div>}</div>;
+      {help(key, title)}
+    </div>, tone);
   }
-  return <section className="about-architecture" aria-labelledby="about-architecture-heading">
-    <h3 id="about-architecture-heading">How SIGMA Works: Multi-Agentic Research</h3>
+  const strategyExamples = [
+    { id: 'strategyA' as const, title: 'Strategy A', subtitle: 'Explore a pattern', more: 'Study a promising structure or relationship, then test where it holds.' },
+    { id: 'strategyB' as const, title: 'Strategy B', subtitle: 'Try another model', more: 'Use a different representation or method to expose what another approach misses.' },
+    { id: 'strategyC' as const, title: 'Strategy C', subtitle: 'Challenge assumptions', more: 'Probe boundary cases, alternative hypotheses or potential counterexamples.' },
+  ];
+  function toggleSession() {
+    const next = !sessionExpanded;
+    if (!next && sessionPanel.current?.contains(document.activeElement)) {
+      requestAnimationFrame(() => sessionToggle.current?.focus());
+    }
+    setSessionExpanded(next);
+  }
+
+  return <section className="about-architecture" aria-label="How SIGMA Works: Multi-Agentic Research">
     <div className="about-research-flow">
-      <div className="about-flow-project">{node('project', 'Research Project', 'The overarching hard question', 'copper')}</div>
-      <div className="about-flow-connector about-flow-connector--branch"><span>Branches into several research directions</span><i aria-hidden="true"/></div>
-      <div className="about-strategy-group" aria-label="Project strategies">
+      <div className="about-flow-project">{card('project', 'Research Project', 'The overarching hard question')}</div>
+      <div className="about-flow-connector"><span>Branches into distinct research directions</span><i aria-hidden="true"/></div>
+      <div className="about-strategy-group">
+        <div className="about-strategy-group-heading"><span>Project Strategies</span>{help('strategies', 'Project Strategies')}</div>
         <div className="about-strategy-cards">
-          {node('strategyA', 'Strategy A', 'One research direction', 'copper')}
-          {node('strategyB', 'Strategy B', 'Another research direction', 'copper')}
-          {node('strategyC', 'Strategy C', 'A further direction', 'copper')}
+          {strategyExamples.map(strategy => {
+            const expanded = expandedStrategy === strategy.id;
+            const panelId = 'about-' + strategy.id + '-description';
+            return infoRegion(strategy.id, <div className="about-strategy-card">
+              <button type="button" className="about-strategy-expand" aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpandedStrategy(expanded ? null : strategy.id)}>
+                <span className="about-diagram-node-title">{strategy.title}</span>
+                <span className="about-diagram-node-subtitle">{strategy.subtitle}</span>
+                <span className="about-strategy-chevron" aria-hidden="true">⌄</span>
+              </button>
+              {help(strategy.id, strategy.title)}
+              <p id={panelId} className="about-strategy-more" hidden={!expanded}>{strategy.more}</p>
+            </div>);
+          })}
         </div>
       </div>
-      <div className="about-flow-connector about-flow-connector--session"><i aria-hidden="true"/><span>A strategy is investigated through a session</span></div>
+      <div className="about-flow-connector"><span>Selected strategies are investigated through sessions</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
-        <div className="about-session-heading">{node('session', 'Research Session', 'An investigation of selected strategies', 'copper')}</div>
-        <div className="about-agent-cycle">
-          <div className="about-agent-pair">
-            {node('investigator', 'Investigator', 'Develop ideas and test hypotheses', 'blue')}
-            <span className="about-agent-forward" aria-hidden="true"><span>Investigation</span></span>
-            {node('skeptic', 'Skeptic', 'Challenge reasoning and examine evidence', 'blue')}
+        <div className="about-session-heading">{card('session', 'Research Session', 'Coordinates bounded investigations')}</div>
+        <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" onClick={toggleSession}>
+          <span className="about-session-preview">Investigator <span aria-hidden="true">↔</span> Skeptic</span>
+          <span className="about-session-toggle-label">{sessionExpanded ? 'Collapse agent coordination' : 'Explore agent coordination'}</span>
+          <span className="about-session-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div id="about-session-details" ref={sessionPanel} className={'about-session-detail' + (sessionExpanded ? ' is-expanded' : '')} role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded}>
+          <div className="about-session-detail-inner">
+            <h4 id="about-session-detail-heading">Bounded role coordination</h4>
+            <div className="about-orchestration">{card('orchestration', 'Session Orchestration', 'Assign, route, evaluate')}</div>
+            <div className="about-inner-connector"><span>Assign task + context</span><i aria-hidden="true"/></div>
+            <div className="about-selected-strategies">Selected strategies <span>One or more directions may be investigated in a session</span></div>
+            <div className="about-inner-connector"><span>Bounded work proceeds as resources allow</span><i aria-hidden="true"/></div>
+            <div className="about-role-work-row">
+              {card('investigator', 'Investigator', 'Develop reasoning and experiments', 'blue')}
+              <div className="about-optional-tool-link" aria-hidden="true"><span>Propose / execute when available</span><b>›</b></div>
+              {card('tools', 'Research Tools', 'Optional, bounded computations')}
+            </div>
+            <div className="about-inner-connector"><span>Work and outputs become reviewable evidence</span><i aria-hidden="true"/></div>
+            <div className="about-working-evidence">{card('workingEvidence', 'Working Research Evidence', 'Shared context, traceable sources')}</div>
+            <div className="about-inner-connector"><span>Review evidence</span><i aria-hidden="true"/></div>
+            <div className="about-skeptic-row">{card('skeptic', 'Skeptic', 'Challenge the reasoning', 'blue')}</div>
+            <div className="about-inner-connector"><span>Critique + next question</span><i aria-hidden="true"/></div>
+            <div className="about-coordinator">{card('decision', 'Coordinator Decision', 'Continue, revise or stop')}</div>
+            <div className="about-cycle-return">
+              <svg viewBox="0 0 400 44" aria-hidden="true" focusable="false"><defs><linearGradient id="about-feedback-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient><marker id="about-feedback-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#acd9fa" strokeWidth="1.4"/></marker></defs><path d="M375 3 C375 38 25 38 25 3" fill="none" stroke="url(#about-feedback-metal)" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#about-feedback-arrow)"/></svg>
+              <span>If continued, another bounded cycle may return to the Investigator.</span>
+            </div>
+            <p className="about-multiple-strategies-note">A session can investigate multiple selected strategies. Each follows bounded investigation and review; relevant evidence may inform another strategy.</p>
           </div>
-          <svg className="about-review-loop" viewBox="0 0 400 36" role="img" aria-label="Skeptic review can lead to further investigation">
-            <defs><linearGradient id="about-loop-metal" x1="0" x2="1"><stop stopColor="#71b7eb"/><stop offset=".52" stopColor="#b9dff8"/><stop offset="1" stopColor="#71b7eb"/></linearGradient><marker id="about-loop-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6" fill="none" stroke="#71b7eb" strokeWidth="1.4"/></marker></defs>
-            <path d="M385 2 C385 30 15 30 15 2" fill="none" stroke="url(#about-loop-metal)" strokeWidth="1.5" markerEnd="url(#about-loop-arrow)"/>
-          </svg>
-          <p className="about-cycle-caption">Research may continue through further investigation and review cycles.</p>
         </div>
       </div>
-      <div className="about-flow-connector about-flow-connector--evidence"><i aria-hidden="true"/><span>Work is saved for later review</span></div>
-      <div className="about-flow-evidence">{node('evidence', 'Saved Evidence & Outcome', 'Findings, objections, code execution, and open questions', 'copper')}</div>
+      <div className="about-flow-connector"><span>Save findings</span><i aria-hidden="true"/></div>
+      <div className="about-flow-evidence">{card('savedEvidence', 'Saved Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
+      <div className="about-history-return"><span aria-hidden="true">↶</span> Findings may inform later sessions or researcher-approved strategy revisions.</div>
     </div>
     <p className="about-architecture-caption">SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find.</p>
   </section>;
 }
-
 function AboutDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -1925,9 +1987,16 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
     <div className="about-dialog-content">
-      <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
-      <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
-      <h3>Key Features</h3>
+      <details className="about-disclosure">
+        <summary>About SIGMA</summary>
+        <div className="about-disclosure-content">
+          <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
+          <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
+        </div>
+      </details>
+      <details className="about-disclosure">
+        <summary>Key Features</summary>
+        <div className="about-disclosure-content">
       <section className="about-feature"><h4>Multi-Strategy Exploration</h4><p>Hard problems often need more than one approach. Each strategy explores a particular angle, rather than proposing an answer. Strategies can be tested, revised, or combined as the research develops. Even failed approaches can teach us something useful.</p></section>
       <section className="about-feature"><h4>Multiple Research Agents</h4><p>Different agents investigate ideas, challenge assumptions, and look for weaknesses in the reasoning.</p></section>
       <section className="about-feature"><h4>Research History</h4><p>SIGMA keeps a record of strategies, research sessions, experiments, and findings so earlier work isn't lost. Failed approaches remain available for review and further investigation.</p></section>
@@ -1936,8 +2005,13 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
       <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
       <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
-      <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
-      <AboutArchitecture/>
+          <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
+        </div>
+      </details>
+      <details className="about-disclosure">
+        <summary>How SIGMA Works: Multi-Agentic Research</summary>
+        <div className="about-disclosure-content"><AboutArchitecture/></div>
+      </details>
     </div>
     <small className="about-build-commit">Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog>;
