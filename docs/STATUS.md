@@ -3340,3 +3340,61 @@ overflow. No Sage installation, cloud provisioning, live research, worker
 coordination or self-merge. Unscripted reasoning, general proof/discovery quality,
 PDF/AI papers and native Markdown reports are not claimed. Return to permanent
 clean-tree 30-second fetch/fast-forward-only polling after pushing `blue_in_4`.
+
+## Blue Increment 5 — integrated research Outcome and provenance gate (2026-10-24)
+
+Coordinator assignment: `messages/blue_out_6.md`. The isolated PR #77 integration
+branch merged current `main` (Green's Simple/Advanced Outcome hierarchy and
+previously merged UI work) into Increments 3–4 without rewriting any historical
+research export. Simple displays a bounded opening excerpt of the saved
+Conclusion first when present, with its three leading substantive qualifications,
+or a clearly named historical summary when absent; the full text remains in
+Advanced and exports. Researcher-approved inherited
+sources are collapsed in Advanced, with direct source links and frozen detail;
+ordinary available history is labeled separately and duplicate inherited rows
+are suppressed in the other-prior-sources list. Settings and older sessions
+remain intact. An approved continuation branch filters cross-strategy historical
+findings to explicitly approved sources plus its own prior work, preventing an
+unselected parent artifact from entering via a multi-strategy session index.
+
+New Python execution reservations now carry the validated saved Investigator
+step ID, role, model and thinking level, matching Sage; old records remain
+unchanged. An interrupted reservation may retain known proposal attribution,
+but its execution result remains unknown. New role calls dispatch full literal
+approved continuation text by default. The exact-text pool is retained behind
+an internal false-by-default experimental constant; deterministic opt-in tests
+confirm round-trip, source coverage and corrupt-alias refusal. In the new actual
+smoke run, 20 literal contexts totaled 1,139,058 bytes; a paired deterministic
+pooled alternative totaled 972,678 bytes (14.61% fewer bytes), **not** a live
+token/cost or comprehension result.
+
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all steps after
+formatter correction; focused continuation, computational-feedback,
+research-session and project-settings tests passed. Real SIGMA API orchestration
+with offline scripted provider transport generated nine new sessions and 28
+captured role calls across isolated subset and algorithm projects, with ten
+Docker execution attempts: seven complete, one failed, one timed out and one
+interrupted. Existing nine subset sessions compare exactly before/after.
+Exact output/hash/citations and next-dispatched questions passed independent
+subset and graph oracles, including 543 four-vertex DAGs and 4,500 insertions.
+All ten execution records carry the correct saved Investigator provenance; no
+live inference or charges occurred. The script's deterministic next-test choice
+does not establish autonomous model comprehension.
+
+Installed Chrome covered Simple→Advanced Preference, per-project isolation,
+historical summary, inherited source navigation, Markdown icon visibility and
+saved execution source/output at 1440/390/320px for six cases (18 evidence
+viewport checks, plus six Simple, two mobile Preferences and three Research
+Model/Thinking settings screenshots).
+No page errors, request-error overlays or horizontal overflow; final browser-state audits show
+Preferences changed while every research session object remained equal. An
+explicitly synthetic adversarial report test shows a correctly hashed but
+meaningless `theorem_proved=true` stdout is only an observation: a conservative
+review stays incomplete, while an optimistic role review can still become a
+**positive unverified candidate**, never an independently verified proof. This
+is a product trust limit, not a solved inference problem. Audit JSON, native
+TXT/HTML/TeX reports, execution JSON, downloaded evidence, browser screenshots,
+test logs, synthetic-test diagnostics and provenance are in
+`docs/evaluations/increment_5/`. The blind unscripted quality gate is proposed
+there but awaits explicit paid-provider authorization. No PDF/AI-paper quality,
+unprompted reasoning advantage or general mathematical proof is claimed.

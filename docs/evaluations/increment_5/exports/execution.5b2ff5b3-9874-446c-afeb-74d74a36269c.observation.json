@@ -1,0 +1,1 @@
+{"checks": 4500, "mismatch": null, "n": 4, "scope": "finite agreement is not a proof; update semantics, invariant and large-scale bounds remain open", "test": "reachability_guard_finite_regression"}

@@ -1,0 +1,313 @@
+{
+  "scope": "Independent finite enumeration/logical oracle; not an autonomous reasoning or general theorem claim",
+  "subset_counts_n_0_to_18": [
+    1,
+    1,
+    1,
+    2,
+    3,
+    5,
+    8,
+    12,
+    19,
+    31,
+    49,
+    79,
+    128,
+    205,
+    331,
+    536,
+    864,
+    1397,
+    2261
+  ],
+  "new_six_step_candidate_counterexample": {
+    "n": 0,
+    "actual": 8,
+    "predicted": 9,
+    "residual": -1
+  },
+  "graph_four_vertex_DAGs": 543,
+  "graph_insertion_cases": 4500,
+  "all_original_session_objects_export_equal": true,
+  "matched_actual_calls": 28,
+  "executions": 10,
+  "statuses": {
+    "completed": 7,
+    "interrupted": 1,
+    "timeout": 1,
+    "failed": 1
+  },
+  "rows": [
+    {
+      "scenario": "subset",
+      "mode": "actual",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "31baf7c5-fee1-4c68-9d36-965094a0970d",
+      "strategy_id": "eea0d6c7-f58c-4206-8e85-c1d2d183ee50",
+      "calls_used": 4,
+      "artifact_ids": [
+        "2e486289-e8b7-4cb5-b005-741d5a0d4ef2",
+        "3c711767-5fc7-405b-a612-e149f2597f19"
+      ],
+      "status": "ended",
+      "execution_ids": [
+        "bb5cf083-319c-4233-8b40-da24d3071014",
+        "1b196d0c-cbd3-454b-ae98-32d6952157cf"
+      ],
+      "execution_statuses": {
+        "completed": 2
+      },
+      "chain": [
+        {
+          "skeptic_step_id": "93521eb8-fcd8-4866-bb80-9b5f29a2aefa",
+          "execution_id": "bb5cf083-319c-4233-8b40-da24d3071014",
+          "reported_effect": "counterexample",
+          "observation": "{\"n_max\": 18, \"scope\": \"finite exact counts; no global recurrence or limit proof\", \"test\": \"six_step_candidate\", \"values\": [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79, 128, 205, 331, 536, 864, 1397, 2261], \"witness\": {\"actual\": 8, \"n\": 0, \"predicted\": 9, \"residual\": -1}}\n",
+          "next_test": "Observed counterexample {\"actual\": 8, \"n\": 0, \"predicted\": 9, \"residual\": -1}. Separate the six-step residuals by n modulo 3, then identify the missing phase/boundary obligation; do not infer the global recurrence or limit.",
+          "next_investigator_step_id": "607e52cf-06ff-47e5-ac65-3cb426b2446c"
+        },
+        {
+          "skeptic_step_id": "ea954743-5bf0-4fe4-a3ad-7bc971896907",
+          "execution_id": "1b196d0c-cbd3-454b-ae98-32d6952157cf",
+          "reported_effect": "bounded_support",
+          "observation": "{\"residuals_by_n_mod_3\": {\"0\": [-1, -3, -4, -7, -11], \"1\": [-1, -2, -3, -5], \"2\": [-2, -2, -4, -6]}, \"scope\": \"finite pattern only; derive an exact matrix identity and boundaries before extrapolating\", \"test\": \"residue_separated_residuals\"}\n",
+          "next_test": "Finite agreement only. Prove the scoped invariant/phase identity, cover update/boundary semantics, and state what remains unknown about the full problem."
+        }
+      ],
+      "actual_conclusion_characters": 2904,
+      "legacy_render_baseline_characters": 7416,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "subset",
+      "mode": "withheld",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "4c01ac39-ee8f-4947-9c5e-4f79b1929a0c",
+      "strategy_id": "2ca26ac4-c9e7-4d88-993f-5517f366a6bd",
+      "calls_used": 4,
+      "artifact_ids": [
+        "7daa7a02-f41f-4254-b679-60c81e567f35",
+        "0c25ab14-56a1-4fc9-8321-600772e85353"
+      ],
+      "status": "ended",
+      "execution_ids": [],
+      "execution_statuses": {},
+      "chain": [],
+      "actual_conclusion_characters": 2466,
+      "legacy_render_baseline_characters": 6396,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "subset",
+      "mode": "error",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "ead33c83-2b00-4907-a16c-585bd1fa6a75",
+      "strategy_id": "cebec5f5-847b-4964-a50b-b251908721fc",
+      "calls_used": 2,
+      "artifact_ids": [
+        "5ed60895-eba0-45fa-a296-ef06e8c8e359"
+      ],
+      "status": "ended",
+      "execution_ids": [
+        "61bdc26f-26e4-4fe6-a4f5-391ed40a2761"
+      ],
+      "execution_statuses": {
+        "failed": 1
+      },
+      "chain": [
+        {
+          "skeptic_step_id": "b1692852-a8a8-4f22-a313-b8c92d0c3d66",
+          "execution_id": "61bdc26f-26e4-4fe6-a4f5-391ed40a2761",
+          "reported_effect": "inconclusive",
+          "observation": "WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"<research>\", line 1, in <module>\nRuntimeError: Deliberate evaluator failure before producing any observation\n",
+          "next_test": "The actual run is failed; it establishes no mathematical disproof. Diagnose the recorded execution failure, then propose changed bounded code before testing the local candidate."
+        }
+      ],
+      "actual_conclusion_characters": 2833,
+      "legacy_render_baseline_characters": 4810,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "subset",
+      "mode": "timeout",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "2eb9783e-3b16-4802-bc83-712ed2935e64",
+      "strategy_id": "1cde062f-ac2d-441d-913d-5fe9443e3522",
+      "calls_used": 2,
+      "artifact_ids": [
+        "b269b6c1-45de-42ee-b989-b0db96c3d71a"
+      ],
+      "status": "ended",
+      "execution_ids": [
+        "e6275786-dc5a-4b37-9358-6f5e3583bfb0"
+      ],
+      "execution_statuses": {
+        "timeout": 1
+      },
+      "chain": [
+        {
+          "skeptic_step_id": "76b37ea6-7935-42de-bdf3-55f99ce3ef5e",
+          "execution_id": "e6275786-dc5a-4b37-9358-6f5e3583bfb0",
+          "reported_effect": "inconclusive",
+          "observation": "WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested\n\nExecution exceeded the 15-second wall limit.",
+          "next_test": "The actual run is timeout; it establishes no mathematical disproof. Diagnose the recorded execution failure, then propose changed bounded code before testing the local candidate."
+        }
+      ],
+      "actual_conclusion_characters": 2690,
+      "legacy_render_baseline_characters": 4670,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "subset",
+      "mode": "sage",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "6d113f64-0916-4a5b-b839-62a39de095af",
+      "strategy_id": "e6f827ab-9d07-48a5-a8c7-b72ce8a4b431",
+      "calls_used": 2,
+      "artifact_ids": [
+        "3b178ed5-5d6e-4938-8225-6f058c52271c"
+      ],
+      "status": "ended",
+      "execution_ids": [
+        "9ed8f40e-56f5-4db1-978d-aba3bc25ec53"
+      ],
+      "execution_statuses": {
+        "completed": 1
+      },
+      "chain": [
+        {
+          "skeptic_step_id": "5500f736-da32-4932-86a8-b5297a7f2ae3",
+          "execution_id": "9ed8f40e-56f5-4db1-978d-aba3bc25ec53",
+          "reported_effect": "counterexample",
+          "observation": "{\"scope\": \"independent finite exact method, not a general recurrence or limit proof\", \"test\": \"sage_exact_weighted_polynomial_mod_z3_minus_1\", \"values\": [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79, 128, 205, 331, 536, 864, 1397, 2261], \"witness\": {\"actual\": 8, \"n\": 0, \"predicted\": 9, \"residual\": -1}}\n",
+          "next_test": "Observed counterexample {\"actual\": 8, \"n\": 0, \"predicted\": 9, \"residual\": -1}. Separate the six-step residuals by n modulo 3, then identify the missing phase/boundary obligation; do not infer the global recurrence or limit."
+        }
+      ],
+      "actual_conclusion_characters": 2794,
+      "legacy_render_baseline_characters": 4909,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "subset",
+      "mode": "invalid_feedback",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "4c3c8dd6-7b65-4089-9881-1b9839b2ec31",
+      "strategy_id": "3790a917-cc62-4131-b994-b449ec8079ad",
+      "calls_used": 2,
+      "artifact_ids": [],
+      "status": "failed",
+      "execution_ids": [
+        "204b33f4-9113-44ae-916b-35d3c5103931"
+      ],
+      "execution_statuses": {
+        "completed": 1
+      },
+      "chain": [],
+      "actual_conclusion_characters": 1638,
+      "legacy_render_baseline_characters": 2482,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "subset",
+      "mode": "restart",
+      "project_id": "1e8625bf-12fd-4148-8db9-8878895466fd",
+      "session_id": "e20ec37c-a8f5-464b-ae11-26a6b300d02f",
+      "strategy_id": "9117f562-49bc-4bbc-8a42-92bd642045a3",
+      "calls_used": 4,
+      "artifact_ids": [
+        "11960c8c-70b2-4883-ad2c-6bfea3626566",
+        "2f52d49c-66e6-4b3c-acfc-b4d93c35f90d"
+      ],
+      "interrupted_execution_id": "0c376030-2755-4ec7-a9a0-90770300f2a0",
+      "status": "ended",
+      "execution_ids": [
+        "d9cb7200-aca6-4420-9ecd-04e45407e2c5",
+        "0c376030-2755-4ec7-a9a0-90770300f2a0"
+      ],
+      "execution_statuses": {
+        "completed": 1,
+        "interrupted": 1
+      },
+      "chain": [
+        {
+          "skeptic_step_id": "780d1bd9-23d6-4ce0-963e-4d496898ccc6",
+          "execution_id": "0c376030-2755-4ec7-a9a0-90770300f2a0",
+          "reported_effect": "inconclusive",
+          "observation": "",
+          "next_test": "The actual run is interrupted; it establishes no mathematical disproof. Diagnose the recorded execution failure, then propose changed bounded code before testing the local candidate.",
+          "next_investigator_step_id": "e400231b-27d7-493d-84fc-5b873cc45f5b"
+        },
+        {
+          "skeptic_step_id": "0397ff07-263d-4759-ada5-e54c36218271",
+          "execution_id": "d9cb7200-aca6-4420-9ecd-04e45407e2c5",
+          "reported_effect": "counterexample",
+          "observation": "{\"n_max\": 18, \"scope\": \"finite exact counts; no global recurrence or limit proof\", \"test\": \"six_step_candidate\", \"values\": [1, 1, 1, 2, 3, 5, 8, 12, 19, 31, 49, 79, 128, 205, 331, 536, 864, 1397, 2261], \"witness\": {\"actual\": 8, \"n\": 0, \"predicted\": 9, \"residual\": -1}}\n",
+          "next_test": "Observed counterexample {\"actual\": 8, \"n\": 0, \"predicted\": 9, \"residual\": -1}. Separate the six-step residuals by n modulo 3, then identify the missing phase/boundary obligation; do not infer the global recurrence or limit."
+        }
+      ],
+      "actual_conclusion_characters": 2961,
+      "legacy_render_baseline_characters": 7437,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "graph",
+      "mode": "actual",
+      "project_id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
+      "session_id": "152a6149-7aa9-435d-b7ff-0ea87a641643",
+      "strategy_id": "c4eb4c32-a591-475e-bd59-ceca9816c5fa",
+      "calls_used": 4,
+      "artifact_ids": [
+        "a540f665-db5b-4346-b1dd-25fc68abec6f",
+        "c6503628-40d0-41c2-9ae1-ffde0382c564"
+      ],
+      "status": "ended",
+      "execution_ids": [
+        "5b2ff5b3-9874-446c-afeb-74d74a36269c",
+        "089fa532-5ae6-4e88-976c-7e720eaa2a24"
+      ],
+      "execution_statuses": {
+        "completed": 2
+      },
+      "chain": [
+        {
+          "skeptic_step_id": "694f3648-5caa-42f2-a8ce-4b9e4e61508f",
+          "execution_id": "089fa532-5ae6-4e88-976c-7e720eaa2a24",
+          "reported_effect": "counterexample",
+          "observation": "{\"checks\": 29, \"n\": 3, \"scope\": \"local insertion criterion only; no dynamic complexity result\", \"test\": \"reverse_edge_only_cycle_guard\", \"witness\": {\"candidate_accepts\": true, \"edges_before\": [[0, 2], [1, 0]], \"insert\": [2, 1], \"oracle_acyclic_after\": false}}\n",
+          "next_test": "Observed counterexample {\"candidate_accepts\": true, \"edges_before\": [[0, 2], [1, 0]], \"insert\": [2, 1], \"oracle_acyclic_after\": false}. Replace immediate reverse-edge checking by a reachability test and compare it with recomputation on all four-vertex DAG insertions; retain the invariant/complexity proof duty.",
+          "next_investigator_step_id": "a44123ad-99ad-437b-9292-b5b95e45614f"
+        },
+        {
+          "skeptic_step_id": "1d2d581e-192a-4463-97c4-d106773e1cca",
+          "execution_id": "5b2ff5b3-9874-446c-afeb-74d74a36269c",
+          "reported_effect": "bounded_support",
+          "observation": "{\"checks\": 4500, \"mismatch\": null, \"n\": 4, \"scope\": \"finite agreement is not a proof; update semantics, invariant and large-scale bounds remain open\", \"test\": \"reachability_guard_finite_regression\"}\n",
+          "next_test": "Finite agreement only. Prove the scoped invariant/phase identity, cover update/boundary semantics, and state what remains unknown about the full problem."
+        }
+      ],
+      "actual_conclusion_characters": 1749,
+      "legacy_render_baseline_characters": 1749,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    },
+    {
+      "scenario": "graph",
+      "mode": "withheld",
+      "project_id": "d9e7d28c-68a1-4cbb-a05b-00ffc713700f",
+      "session_id": "308bb619-263d-479b-b3b3-5204b3685c2e",
+      "strategy_id": "be7a317a-b8ce-4e20-914d-9a69b961dca7",
+      "calls_used": 4,
+      "artifact_ids": [
+        "5f4639d5-d288-40ab-a256-02ecc21c48ad",
+        "59c316fe-885b-4781-bba2-68da78c93012"
+      ],
+      "status": "ended",
+      "execution_ids": [],
+      "execution_statuses": {},
+      "chain": [],
+      "actual_conclusion_characters": 1265,
+      "legacy_render_baseline_characters": 1265,
+      "summary_baseline_scope": "Deterministic legacy renderer on same saved data, not a historical rewrite or extra research run."
+    }
+  ]
+}
