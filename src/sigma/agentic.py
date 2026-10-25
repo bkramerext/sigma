@@ -13,7 +13,7 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from sigma import research_sessions
+from sigma import cloud_research, cloud_workspaces, research_sessions
 from sigma.agentic_evidence import now as evidence_now
 from sigma.agentic_evidence import save as save_evidence
 from sigma.openai_connection import auth_context
@@ -310,7 +310,24 @@ async def _invoke(
         payload["input"] = [{"role": "user", "content": context}]
         headers["Accept"] = "text/event-stream"
     guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+    attempt = None
     try:
+        if cloud_workspaces.enabled():
+            if (
+                binding["identity"] != "cloud_service_api_key"
+                or binding["mode"] != "api_key"
+                or not binding["token"]
+            ):
+                raise ProjectError("Sponsored cloud inference is not configured.")
+            attempt = cloud_research.start_provider_attempt(
+                view.project.id,
+                view.path,
+                config["model"],
+                len(context.encode("utf-8")),
+                MAX_OUTPUT_TOKENS,
+            )
+        if attempt is not None:
+            attempt.dispatched = True
         async with (
             asyncio.timeout(CALL_SECONDS),
             httpx.AsyncClient(
@@ -339,6 +356,7 @@ async def _invoke(
                     raw = {}
                 if response.status_code != 200:
                     failure(response.status_code, raw, binding["mode"], guard)
+        cloud_research.settle_provider_attempt(attempt, raw)
         if not isinstance(raw, dict) or raw.get("status") != "completed":
             raise ProjectError("Provider did not complete a research step; no strategy was saved.")
         if raw.get("model") != config["model"]:
@@ -378,6 +396,14 @@ async def _invoke(
         raise ProjectError(
             "Provider returned malformed research output; no strategy was saved."
         ) from exc
+    except cloud_research.CloudResearchUnavailable as exc:
+        raise ProjectError(str(exc)) from exc
+    finally:
+        if attempt is not None:
+            try:
+                cloud_research.finish_provider_attempt(attempt)
+            except cloud_research.CloudResearchUnavailable:
+                pass
 
 
 async def agentic_events(

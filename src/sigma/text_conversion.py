@@ -8,6 +8,7 @@ import re
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sigma import cloud_research, cloud_workspaces
 from sigma.openai_connection import auth_context
 from sigma.plan_stream import MAX_STREAM_BYTES, completed, failure
 from sigma.projects import MAX_STRATEGY_APPROACH, ProjectError, inspect_project
@@ -55,10 +56,17 @@ async def convert_text(
     strategy_id: str | None = None,
     expected_digest: str | None = None,
     expected_binding: str | None = None,
+    expected_project_id: str | None = None,
 ) -> dict:
     try:
         return await _convert_text(
-            path, scope, target, strategy_id, expected_digest, expected_binding
+            path,
+            scope,
+            target,
+            strategy_id,
+            expected_digest,
+            expected_binding,
+            expected_project_id,
         )
     except TimeoutError as exc:
         raise ProjectError("Text conversion timed out; source text was kept") from exc
@@ -71,6 +79,7 @@ async def _convert_text(
     strategy_id: str | None = None,
     expected_digest: str | None = None,
     expected_binding: str | None = None,
+    expected_project_id: str | None = None,
 ) -> dict:
     target_format = _format(target)
     if _gate.locked():
@@ -78,6 +87,8 @@ async def _convert_text(
     async with _gate:
         async with asyncio.timeout(CALL_SECONDS + 5):
             view = inspect_project(path)
+            if expected_project_id is not None and view.project.id != expected_project_id:
+                raise ProjectError("Project identity changed; reopen it before converting")
             source = inspect_text(path, scope, strategy_id)
             if expected_digest is not None and source["source_digest"] != expected_digest:
                 raise ProjectError("Text changed since this view opened. Refresh before converting")
@@ -141,7 +152,24 @@ async def _convert_text(
                 payload["input"] = [{"role": "user", "content": context}]
                 headers["Accept"] = "text/event-stream"
             guard = hashlib.sha256((binding["mode"] + binding["token"]).encode()).hexdigest()
+            attempt = None
             try:
+                if cloud_workspaces.enabled():
+                    if (
+                        binding["identity"] != "cloud_service_api_key"
+                        or binding["mode"] != "api_key"
+                        or not binding["token"]
+                    ):
+                        raise ProjectError("Sponsored cloud inference is not configured.")
+                    attempt = cloud_research.start_provider_attempt(
+                        view.project.id,
+                        path,
+                        config["model"],
+                        len(context.encode("utf-8")),
+                        8000,
+                    )
+                if attempt is not None:
+                    attempt.dispatched = True
                 async with (
                     asyncio.timeout(CALL_SECONDS),
                     httpx.AsyncClient(
@@ -208,6 +236,7 @@ async def _convert_text(
                             raw = {}
                         if response.status_code != 200:
                             failure(response.status_code, raw, binding["mode"], guard)
+                cloud_research.settle_provider_attempt(attempt, raw)
                 if (
                     not isinstance(raw, dict)
                     or raw.get("status") != "completed"
@@ -255,6 +284,14 @@ async def _convert_text(
                 raise ProjectError(
                     f"Provider returned malformed conversion output ({detail}); source text was kept"
                 ) from exc
+            except cloud_research.CloudResearchUnavailable as exc:
+                raise ProjectError(str(exc)) from exc
+            finally:
+                if attempt is not None:
+                    try:
+                        cloud_research.finish_provider_attempt(attempt)
+                    except cloud_research.CloudResearchUnavailable:
+                        pass
             body = result.body
             if (
                 not body.strip()

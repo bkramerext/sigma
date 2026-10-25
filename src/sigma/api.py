@@ -29,7 +29,7 @@ from sigma.agentic_evidence import get_run, list_runs
 from sigma.continuations import Approval, approved_packets
 from sigma.continuations import approve as approve_continuation
 from sigma.continuations import proposal as continuation_proposal
-from sigma.openai_connection import connection, models
+from sigma.openai_connection import auth_context, connection, models
 from sigma.projects import (
     ProjectError,
     WorkspaceAccessError,
@@ -105,6 +105,32 @@ demo_app = FastAPI(title="SIGMA public Demo", docs_url=None, redoc_url=None)
 app.mount("/api/cloud-demo", demo_app)
 
 
+async def require_cloud_inference_binding(
+    expected_binding: str | None,
+    expected_project_id: str | None,
+    path: str,
+    *,
+    require_project: bool = True,
+) -> None:
+    """Require explicit project/account intent before admitting sponsored inference."""
+    if not cloud_workspaces.enabled():
+        return
+    view = inspect_project(path)
+    if expected_project_id is not None and expected_project_id != view.project.id:
+        raise HTTPException(404, "Project not found or access denied.")
+    if expected_binding != "cloud_service_api_key" or (require_project and not expected_project_id):
+        raise HTTPException(
+            403, "Cloud inference requires the current sponsored account and project binding."
+        )
+    credential = await auth_context()
+    if (
+        credential["identity"] != "cloud_service_api_key"
+        or credential["mode"] != "api_key"
+        or not credential["token"]
+    ):
+        raise HTTPException(503, "Sponsored cloud inference is not configured.")
+
+
 @demo_app.get("/")
 def cloud_demo_view():
     """Return the one server-configured public audit snapshot, never a caller path."""
@@ -128,15 +154,6 @@ def cloud_demo_report_view(format: str = "txt"):
     except ProjectError as exc:
         raise HTTPException(503, "Hosted Demo is not available.") from exc
     return Response(body, media_type=media_type, headers={"Cache-Control": "no-store"})
-
-
-def require_cloud_research_inference() -> None:
-    """Keep the shared cloud credential inside the bounded research engine."""
-    if cloud_workspaces.enabled():
-        raise HTTPException(
-            status_code=403,
-            detail="Cloud inference is available only through bounded research sessions.",
-        )
 
 
 @app.get("/api/ui-instance")
@@ -295,7 +312,6 @@ def papers_preflight_view(
     model: str | None = None,
     reasoning_effort: str | None = None,
 ):
-    require_cloud_research_inference()
     return papers.preflight(
         path,
         force_long_form=long_form,
@@ -309,7 +325,6 @@ def papers_preflight_view(
 
 @app.post("/api/projects/papers/restart")
 async def papers_restart_view(body: PaperRestartRequest):
-    require_cloud_research_inference()
     return await papers.restart_work(
         body.path,
         body.expected_project_id,
@@ -338,7 +353,9 @@ def paper_pdf_view(paper_id: str, path: str):
 
 @app.post("/api/projects/papers")
 async def paper_generate_view(body: PaperGenerateRequest, request: Request):
-    require_cloud_research_inference()
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
 
     async def stream():
         updates: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
@@ -705,7 +722,9 @@ async def proposal_config(path: str | None = None):
 
 @app.post("/api/projects/proposals")
 async def proposal_view(body: ProposalRequest, request: Request):
-    require_cloud_research_inference()
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
 
     async def disconnected():
         # Await the ASGI event directly. is_disconnected() polling can miss events
@@ -754,7 +773,9 @@ async def cancel_proposal(body: ProposalCancelRequest):
 
 @app.post("/api/projects/proposals/agentic")
 async def agentic_proposal_view(body: ProposalRequest):
-    require_cloud_research_inference()
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
 
     async def stream():
         async for event in agentic_events(
@@ -803,11 +824,14 @@ class TextConversionRequest(OpenRequest):
     target: str
     expected_digest: str
     expected_binding: str | None = None
+    expected_project_id: str | None = None
 
 
 @app.post("/api/projects/text/convert")
 async def text_conversion_view(body: TextConversionRequest, request: Request):
-    require_cloud_research_inference()
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path, require_project=False
+    )
 
     async def disconnected():
         while (await request.receive())["type"] != "http.disconnect":
@@ -821,6 +845,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.strategy_id,
             body.expected_digest,
             body.expected_binding,
+            body.expected_project_id,
         )
     )
     connection = asyncio.create_task(disconnected())
