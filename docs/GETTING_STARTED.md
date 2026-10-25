@@ -56,6 +56,8 @@ The runtime does not pull images during a research call. Computations run withou
 
 New projects normally live in the repository's `projects/` directory. Set `SIGMA_PROJECTS_ROOT` to an existing absolute directory before launch to use a different location. Project data stays local; do not put credentials in project files.
 
+The ordinary local app uses `SIGMA_STORAGE_BACKEND=local` (the default) and keeps its established project and state paths. To exercise the same authenticated, file-backed storage layout used with a GCE Persistent Disk on a local machine, use a private directory and set `SIGMA_STORAGE_BACKEND=persistent_disk` plus `SIGMA_STORAGE_ROOT` to its absolute path. The app derives its auth database and owner workspaces below that root and fails closed if authentication or the root is unsafe. No GCP resource is needed. A copy/paste fixture procedure, including two simulated Google subjects, backend restart, full-root restore, and the real Chrome workflow, is in [T100 local persistent-disk acceptance](evaluations/t100/README.md).
+
 If **Connect AI** or generation fails, check the connection status and usage limits before retrying. For optional API-key billing, put `OPENAI_API_KEY` in the repository-root `.env` file or server environment and restart SIGMA. Never put secrets in frontend configuration.
 
 For command and API details, see `./sigma --help` and the relevant technical docs. For implemented behavior and known verification limits, see [Status](STATUS.md). The [Backlog](BACKLOG.md) tracks future ideas.

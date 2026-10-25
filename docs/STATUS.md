@@ -1,5 +1,27 @@
 # SIGMA status
 
+## T100 persistent-disk storage (2026-10-25)
+
+Implemented opt-in `SIGMA_STORAGE_BACKEND=persistent_disk` with a validated
+private `SIGMA_STORAGE_ROOT`, while preserving `local` as the default. The
+authenticated workspace services now cover projects, strategies, sessions,
+evidence/artifacts, Recents, paper files, and research accounting. GCE Compose
+settings and a host mount guard are included. No GCP resources, OAuth exchange,
+or paid inference were used.
+
+Validation passed: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test`,
+focused persistent workspace/research tests, Ruff, Pyright, and
+`git diff --check`. Real Chrome exercised sample copy, project and strategy
+edits, save/reload/reopen, backend restart, Recent identity, cross-subject
+denial, and stock-sample immutability; screenshot and transcripts are in
+[T100 evidence](evaluations/t100/README.md). A disposable local Docker volume
+and backend image retained auth data through restart and container recreation.
+Negative root, symlink, permissions, traversal, corrupt mapping, and missing
+mount checks passed. The local Docker installation lacks Compose v2, so merged
+Compose configuration and a real GCE disk mount are unverified; YAML parsing
+and the guard's missing-mount check passed. See `messages/t100_red_r4r.txt` for
+the complete handoff and commit details.
+
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.

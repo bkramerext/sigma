@@ -602,9 +602,21 @@ def test_local_limits_remain_unmodified(root: Path) -> None:
 
 def main() -> None:
     with TemporaryDirectory(prefix="sigma-cloud-research-", dir=Path.cwd().parent) as temp:
-        root = Path(temp)
-        ledger_root = root / "service"
-        ledger_root.mkdir(mode=0o700)
+        base = Path(temp)
+        persistent_root = (
+            base / "persistent-disk"
+            if os.environ.get("SIGMA_T100_PERSISTENT_DISK") == "1"
+            else None
+        )
+        if persistent_root is not None:
+            persistent_root.mkdir(mode=0o700)
+            root = persistent_root / "workspaces"
+            root.mkdir(mode=0o700)
+            ledger_root = root
+        else:
+            root = base
+            ledger_root = root / "service"
+            ledger_root.mkdir(mode=0o700)
         a = workspace(root, "a" * 32)
         b = workspace(root, "b" * 32)
         settings = {
@@ -617,6 +629,15 @@ def main() -> None:
             "SIGMA_CLOUD_GLOBAL_MAX_QUEUED": "2",
             "SIGMA_CLOUD_USER_TOKEN_BUDGET": "1000",
         }
+        if os.environ.get("SIGMA_T100_PERSISTENT_DISK") == "1":
+            assert persistent_root is not None
+            settings.update(
+                {
+                    "SIGMA_STORAGE_BACKEND": "persistent_disk",
+                    "SIGMA_STORAGE_ROOT": str(persistent_root),
+                    "SIGMA_CLOUD_WORKSPACES_ROOT": str(root),
+                }
+            )
         with patch.dict(
             os.environ,
             {
