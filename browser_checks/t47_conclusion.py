@@ -215,7 +215,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert conclusion.locator("summary").inner_text().strip() == "Conclusion"
                 prelude = outcome.locator(".outcome-evidence-prelude")
                 expect(prelude).to_be_visible()
-                expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
+                expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
                 expect(prelude).to_contain_text("No persisted Python/SageMath execution records")
                 assert prelude.evaluate(
                     "element => element.nextElementSibling.classList.contains('outcome-subsections')"
@@ -281,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
             prelude = row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
+            expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
             assert prelude.evaluate(
                 "element => (element.compareDocumentPosition("
                 "element.parentElement.querySelector('.outcome-simple')) & "
@@ -336,7 +336,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             if disclosure.get_attribute("aria-expanded") != "true":
                 disclosure.click()
             prelude = saved_row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("1 completed of 2 identified saved executions")
+            expect(prelude).to_contain_text("1 reported completed of 2 identified saved executions")
             expect(prelude).to_contain_text(
                 "1 completed-status record(s) do not include saved source and output"
             )
