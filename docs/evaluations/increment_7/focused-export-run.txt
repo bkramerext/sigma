@@ -3,38 +3,38 @@ PASS retracted and truncated source closures rejected through real Skeptic dispa
 PASS graph real failed/completed execution, saved witness follow-up, withheld prose contradiction
 {
   "parity": {
-    "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-    "first_session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
-    "later_session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
-    "foreign_session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
-    "first_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+    "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+    "first_session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
+    "later_session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
+    "foreign_session_id": "ddf4b214-a12d-4887-9ba7-a7621d306bab",
+    "first_artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
     "calls": 6,
     "foreign_rejected_calls": 1,
     "first_record_unchanged": true
   },
   "parity_retracted": {
-    "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-    "rejected_session_id": "c3aa3f44-0dbb-4617-83cc-08047fa364ae",
-    "tainted_source_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+    "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+    "rejected_session_id": "4f6a2c5f-c90b-49de-a3ff-873a86c5b114",
+    "tainted_source_artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
     "kind": "retracted",
     "source_record_unchanged_after_rejected_call": true
   },
   "parity_truncated": {
-    "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-    "rejected_session_id": "49518fd5-1476-4ed0-aefc-4824aedbde77",
-    "tainted_source_artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+    "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+    "rejected_session_id": "70507ad6-63af-4009-b1ca-a2d67d11c84b",
+    "tainted_source_artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
     "kind": "truncated",
     "source_record_unchanged_after_rejected_call": true
   },
   "graph_present": {
-    "project_id": "48676efc-03dd-47e4-95ed-a655142e5965",
-    "initial_session_id": "fc6e5571-54da-4d81-8cec-61cab11a9ee3",
-    "followup_session_id": "148109cd-b4f0-40a9-b323-b6ef9bdfd57f",
-    "fork_session_id": "2b44eabf-ab8a-4276-a998-53f64149f881",
-    "approved_negative_source_id": "54f7fd27-f2be-4497-b0e7-5b602184b308",
+    "project_id": "7a81b6be-4f42-41cc-87b9-254f4de6efb8",
+    "initial_session_id": "56e2d39a-e25b-4981-881f-70c53c8308e8",
+    "followup_session_id": "a2f83515-fcb2-4dce-8a18-7cb6dda45324",
+    "fork_session_id": "58fab0de-be20-43db-9258-be18cf76121f",
+    "approved_negative_source_id": "43420383-e7f6-4e6b-ab4e-a1003c6e19e2",
     "execution_ids": [
-      "985090ea-d02f-41be-9e80-6ed666c2e68c",
-      "dd666bdf-8c06-401a-8f6c-854b1b9fbe3a"
+      "32880383-aa42-4252-ad40-2257dba35e81",
+      "8e7c69d1-494e-4e94-9324-64b889f3f2b4"
     ],
     "execution_statuses": [
       "failed",
@@ -44,8 +44,8 @@ PASS graph real failed/completed execution, saved witness follow-up, withheld pr
     "initial_record_unchanged": true
   },
   "graph_withheld": {
-    "project_id": "98f210d9-4246-438d-9547-4fa82746dbd3",
-    "initial_session_id": "dc668640-39b6-4952-a305-e106ed25abe7",
+    "project_id": "2f44bea5-45b7-424d-aa91-dab0038d23d3",
+    "initial_session_id": "aa9d0772-ffa3-416e-8268-00d09f1873ee",
     "followup_session_id": null,
     "fork_session_id": null,
     "approved_negative_source_id": null,

@@ -28,14 +28,14 @@ PASS sample discovery and independent copies, retained edits, collision safety, 
 > uv run --locked --no-sync python tests/test_sample_copies.py
 .........
 ----------------------------------------------------------------------
-Ran 9 tests in 0.156s
+Ran 9 tests in 0.152s
 
 OK
 
 > uv run --locked --no-sync python tests/make_sample.py
 {
   "sample": "t30-exported",
-  "path": "/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-make-sample-mv38yx8q/samples/t30-exported"
+  "path": "/var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/sigma-make-sample-yfrtw4w4/samples/t30-exported"
 }
 PASS exported project -> make_sample -> sample loader preserves sessions, outcomes, evidence and provenance safely
 
@@ -103,7 +103,7 @@ PASS durable run evidence round-trip, failed/incomplete work, storage failure an
 PASS evidence persistence, cross-project isolation, private modes, run/byte retention, size cap and symlink rejection
 
 > uv run --locked --no-sync python tests/research_sessions.py
-PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.746s
+PASS 10-strategy load: max provider concurrency 3, 20/20 calls, 10 artifacts, out-of-order responses, 0.749s
 Persistent research session scenarios passed.
 
 > uv run --locked --no-sync python tests/epistemic_continuity.py
@@ -112,38 +112,38 @@ PASS retracted and truncated source closures rejected through real Skeptic dispa
 PASS graph real failed/completed execution, saved witness follow-up, withheld prose contradiction
 {
   "parity": {
-    "project_id": "fb3ff01a-156f-4338-9021-404f032ab8a1",
-    "first_session_id": "7a664f35-6ffb-4c04-bed0-b0c0e0a09abf",
-    "later_session_id": "f355ac37-d5b7-4f3d-977c-f392adf5882f",
-    "foreign_session_id": "1ed721f6-4897-4e6c-b34c-5c9290302871",
-    "first_artifact_id": "055f6480-5058-476f-8a3a-44bd1952e589",
+    "project_id": "4bf4c5f1-a907-4d30-94ec-70eb49947e34",
+    "first_session_id": "760407b6-21e1-4b31-bacb-ba50baa6e22b",
+    "later_session_id": "d39d4c49-71c1-4932-a1fe-f8918ee9267c",
+    "foreign_session_id": "cc0c3a96-341a-4948-a511-a3ad6a94cba3",
+    "first_artifact_id": "9281e80b-8617-4ef3-949b-c1b5780b818f",
     "calls": 6,
     "foreign_rejected_calls": 1,
     "first_record_unchanged": true
   },
   "parity_retracted": {
-    "project_id": "fb3ff01a-156f-4338-9021-404f032ab8a1",
-    "rejected_session_id": "50cc9615-7dc6-4d22-8b88-a204981b56dd",
-    "tainted_source_artifact_id": "055f6480-5058-476f-8a3a-44bd1952e589",
+    "project_id": "4bf4c5f1-a907-4d30-94ec-70eb49947e34",
+    "rejected_session_id": "c719d4f6-964e-4549-9484-cde11bcbedac",
+    "tainted_source_artifact_id": "9281e80b-8617-4ef3-949b-c1b5780b818f",
     "kind": "retracted",
     "source_record_unchanged_after_rejected_call": true
   },
   "parity_truncated": {
-    "project_id": "fb3ff01a-156f-4338-9021-404f032ab8a1",
-    "rejected_session_id": "8d786030-d15a-418a-afe7-4a9ce3de060e",
-    "tainted_source_artifact_id": "055f6480-5058-476f-8a3a-44bd1952e589",
+    "project_id": "4bf4c5f1-a907-4d30-94ec-70eb49947e34",
+    "rejected_session_id": "3766fdb3-3b01-4454-ad82-04602469c074",
+    "tainted_source_artifact_id": "9281e80b-8617-4ef3-949b-c1b5780b818f",
     "kind": "truncated",
     "source_record_unchanged_after_rejected_call": true
   },
   "graph_present": {
-    "project_id": "c110934f-dfcb-4b39-a0c9-741eab1ff729",
-    "initial_session_id": "e789072f-6925-4ead-8c56-d975e58b1d98",
-    "followup_session_id": "7db13b52-7b1c-427c-8ac3-7fb24190afab",
-    "fork_session_id": "8e6e4542-0a68-4f6b-8e42-f434e1395e3a",
-    "approved_negative_source_id": "61645ca4-3e3f-4d0a-8e66-e127af4837b1",
+    "project_id": "76cc6e35-1836-41d5-8aec-d137c9651ce9",
+    "initial_session_id": "6cb9e338-476f-4e76-808f-2fe13f531f45",
+    "followup_session_id": "ff40c1f0-4a38-484f-9e9e-6c3f0496f649",
+    "fork_session_id": "d87d82cd-0e8e-42c1-b054-17deabd36e92",
+    "approved_negative_source_id": "eb72aa2c-5e39-474d-abb2-76dce51295de",
     "execution_ids": [
-      "17e21ba9-2194-4403-98cb-453b9a943fab",
-      "cd880cdd-7970-4b60-bf39-4c31983c89b9"
+      "540f40c2-fcdf-4cb4-ab3f-d87e81fd73df",
+      "98912ac7-2057-438a-a648-f501061ad5d9"
     ],
     "execution_statuses": [
       "failed",
@@ -153,8 +153,8 @@ PASS graph real failed/completed execution, saved witness follow-up, withheld pr
     "initial_record_unchanged": true
   },
   "graph_withheld": {
-    "project_id": "31419ee0-8130-4960-89e3-5fd1eda75fc1",
-    "initial_session_id": "13669b73-2732-4f37-ab00-872ca12bf3b2",
+    "project_id": "847a7ba5-8248-480b-a8a1-53b5d265478c",
+    "initial_session_id": "1ff8873e-bb88-4cb4-8481-5a109138810e",
     "followup_session_id": null,
     "fork_session_id": null,
     "approved_negative_source_id": null,
@@ -261,7 +261,7 @@ OK
   from starlette.testclient import TestClient as TestClient  # noqa
 ...............
 ----------------------------------------------------------------------
-Ran 15 tests in 0.335s
+Ran 15 tests in 0.327s
 
 OK
 
@@ -291,8 +291,8 @@ PASS global cross-checkout shutdown, stale owner/socket/temp cleanup and no PID 
 > uv run --locked --no-sync python tests/ui_orphans.py
 Stopping orphaned SIGMA server on port 8000 (PID 123)…
 Stopping orphaned SIGMA server on port 5173 (PID 124)…
-Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmp_lwhlp3g/checkout-a); ownership could not be verified, so SIGMA left it untouched.
-Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmp_lwhlp3g/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmp8f3hlxqs/checkout-a); ownership could not be verified, so SIGMA left it untouched.
+Port 8000 remains occupied by PID 123 (python, working directory /var/folders/jx/30vs1hc57zj9gbx3dyx750840000gn/T/tmp8f3hlxqs/checkout-a); ownership could not be verified, so SIGMA left it untouched.
 PASS cross-checkout orphan discovery, command/marker verification, occupied-port reporting and PID reuse protection
 
 > uv run --locked --no-sync ruff check src tests sigma
@@ -382,9 +382,9 @@ dist/assets/KaTeX_Main-Regular-ypZvNtVU.ttf            53.58 kB
 dist/assets/KaTeX_AMS-Regular-DRggAlZN.ttf             63.63 kB
 dist/assets/RenderedMarkdown-DdZNUVNG.css              30.25 kB │ gzip:   8.09 kB
 dist/assets/index-DGIUZMzX.css                        211.65 kB │ gzip:  35.33 kB
-dist/assets/RenderedMarkdown-DL0TRH0H.js              397.41 kB │ gzip: 120.62 kB
-dist/assets/index-DDs7zyvS.js                         489.31 kB │ gzip: 141.24 kB
-✓ built in 859ms
+dist/assets/RenderedMarkdown-CgNZDgLf.js              397.41 kB │ gzip: 120.62 kB
+dist/assets/index-DIVuZgOl.js                         489.31 kB │ gzip: 141.24 kB
+✓ built in 845ms
 
 sigma test: all steps passed.
 exit_code=0

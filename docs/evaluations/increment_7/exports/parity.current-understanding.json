@@ -1,25 +1,25 @@
 {
   "version": 1,
-  "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
+  "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
   "session_count": 3,
   "project_status": "not_determined",
   "scope_note": "Latest saved local reviews by strategy. Project completion and independent correctness are not inferred.",
   "findings": [
     {
-      "id": "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3:38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+      "id": "finding:dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7:ac56c9f6-06d2-4244-b292-13fe11fef858:bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
       "text": "The cited local parity step holds; the larger characterization remains open.",
       "investigated_claim": "For every integer n, n(n+1) is even.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
         "session_number": 1,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
         "artifact_sequence": 1,
-        "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "record_path": "artifacts/bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
         "available": true
       },
-      "review_ref": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5/objective_review",
+      "review_ref": "artifacts/bcb9b5c3-fe73-4b0f-8079-08108e77a0e3/objective_review",
       "review_status": "partial",
       "status": "partial_reported",
       "verification": "Incomplete",
@@ -34,20 +34,20 @@
       "related_by": []
     },
     {
-      "id": "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3:156ccc93-1c53-4af7-8b5e-16febd55e684",
+      "id": "finding:dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7:ac56c9f6-06d2-4244-b292-13fe11fef858:8c11ebaa-6460-4592-9859-a8e530f1b9f1",
       "text": "The cited local parity step holds; the larger characterization remains open.",
       "investigated_claim": "For every integer n, n(n+1)+2 is even.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
         "session_number": 1,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
         "artifact_sequence": 2,
-        "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
         "available": true
       },
-      "review_ref": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684/objective_review",
+      "review_ref": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1/objective_review",
       "review_status": "partial",
       "status": "partial_reported",
       "verification": "Incomplete",
@@ -62,20 +62,20 @@
       "related_by": []
     },
     {
-      "id": "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:38e6dfad-ee05-4cc8-8bef-b776b2bd82d4:0bc26ede-c29e-4e63-9951-c90de72caf9e",
+      "id": "finding:dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7:065c8cdd-09c1-4710-b8af-37bbb80c51b9:9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
       "text": "The cited local parity step holds; the larger characterization remains open.",
       "investigated_claim": "For every integer n, n(n+1)+4 is even.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
         "session_number": 2,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "artifact_sequence": 1,
-        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "available": true
       },
-      "review_ref": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e/objective_review",
+      "review_ref": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c/objective_review",
       "review_status": "partial",
       "status": "partial_reported",
       "verification": "Incomplete",
@@ -91,45 +91,45 @@
     }
   ],
   "current_finding_ids": [
-    "finding:8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb:38e6dfad-ee05-4cc8-8bef-b776b2bd82d4:0bc26ede-c29e-4e63-9951-c90de72caf9e"
+    "finding:dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7:065c8cdd-09c1-4710-b8af-37bbb80c51b9:9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c"
   ],
   "obligations": [
     {
-      "id": "0dbe22fcd8fa878ac787a883f7591deb83cd4e9523ee71e9f5fc4b23df3b9187",
+      "id": "3bf5ffb9f6bef3dafc131aab9e8c369863c975b48e33cfd00b4a4f6d57e9626a",
       "text": "Characterize broader perturbations without assuming this local lemma solves the project.",
       "kind": "obligation",
-      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
       "status": "open_reported",
       "actionable": true,
       "sources": [
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
           "artifact_sequence": 1,
-          "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "record_path": "artifacts/bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "artifact_sequence": 2,
-          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
           "session_number": 2,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "artifact_sequence": 1,
-          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "available": true
         }
       ],
@@ -138,41 +138,41 @@
       "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
     },
     {
-      "id": "ba19af1c6f3473f2674e292f554ad7f328bf92caded6220b301a7c803f53148d",
+      "id": "e176cc8a431b87119757e5a2683f10fff5dffcfff71378288e355561f98b6b51",
       "text": "Broader perturbation classification is not established.",
       "kind": "obligation",
-      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
       "status": "open_reported",
       "actionable": true,
       "sources": [
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
           "artifact_sequence": 1,
-          "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "record_path": "artifacts/bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "artifact_sequence": 2,
-          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
           "session_number": 2,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "artifact_sequence": 1,
-          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "available": true
         }
       ],
@@ -181,41 +181,41 @@
       "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
     },
     {
-      "id": "b733c79fd97ec8c12c6426d03a2a877f52c29cf48aaf6d56aec7178d0b4c899d",
+      "id": "5935fd9974d4aeb0f81b0f71bce5059278678c40ddce3f64d206d26630577ec7",
       "text": "Check boundary case 1",
       "kind": "obligation",
-      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
       "status": "open_reported",
       "actionable": true,
       "sources": [
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
           "artifact_sequence": 1,
-          "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+          "record_path": "artifacts/bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "artifact_sequence": 2,
-          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
           "session_number": 2,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "artifact_sequence": 1,
-          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "available": true
         }
       ],
@@ -224,31 +224,31 @@
       "note": "Open in the latest local partial review; suggested work, not an independently assessed requirement."
     },
     {
-      "id": "f779c05f183a500d16a7200621a89e7eeb47adf4087ca9b48bc93da811d98e60",
+      "id": "caf328ef7c96e4531f44b6b1fbd5f818991bb6f423c3bfd154520f225f1c69c5",
       "text": "Check boundary case 2",
       "kind": "obligation",
-      "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
+      "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
       "status": "open_reported",
       "actionable": true,
       "sources": [
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
           "session_number": 1,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "artifact_sequence": 2,
-          "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+          "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
           "available": true
         },
         {
-          "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-          "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+          "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+          "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
           "session_number": 2,
-          "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-          "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+          "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "artifact_sequence": 1,
-          "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+          "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
           "available": true
         }
       ],
@@ -259,61 +259,61 @@
   ],
   "next_investigations": [
     {
-      "obligation_id": "0dbe22fcd8fa878ac787a883f7591deb83cd4e9523ee71e9f5fc4b23df3b9187",
+      "obligation_id": "3bf5ffb9f6bef3dafc131aab9e8c369863c975b48e33cfd00b4a4f6d57e9626a",
       "question": "Characterize broader perturbations without assuming this local lemma solves the project.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
         "session_number": 2,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "artifact_sequence": 1,
-        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "available": true
       },
       "qualification": "Proposed from a saved open obligation; review its scope before starting."
     },
     {
-      "obligation_id": "ba19af1c6f3473f2674e292f554ad7f328bf92caded6220b301a7c803f53148d",
+      "obligation_id": "e176cc8a431b87119757e5a2683f10fff5dffcfff71378288e355561f98b6b51",
       "question": "Broader perturbation classification is not established.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
         "session_number": 2,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "artifact_sequence": 1,
-        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "available": true
       },
       "qualification": "Proposed from a saved open obligation; review its scope before starting."
     },
     {
-      "obligation_id": "b733c79fd97ec8c12c6426d03a2a877f52c29cf48aaf6d56aec7178d0b4c899d",
+      "obligation_id": "5935fd9974d4aeb0f81b0f71bce5059278678c40ddce3f64d206d26630577ec7",
       "question": "Check boundary case 1",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
         "session_number": 2,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "artifact_sequence": 1,
-        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "available": true
       },
       "qualification": "Proposed from a saved open obligation; review its scope before starting."
     },
     {
-      "obligation_id": "f779c05f183a500d16a7200621a89e7eeb47adf4087ca9b48bc93da811d98e60",
+      "obligation_id": "caf328ef7c96e4531f44b6b1fbd5f818991bb6f423c3bfd154520f225f1c69c5",
       "question": "Check boundary case 2",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
         "session_number": 2,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "artifact_sequence": 1,
-        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "available": true
       },
       "qualification": "Proposed from a saved open obligation; review its scope before starting."
@@ -324,23 +324,23 @@
       "kind": "later_finding_available",
       "text": "The cited local parity step holds; the larger characterization remains open.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "38e6dfad-ee05-4cc8-8bef-b776b2bd82d4",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "065c8cdd-09c1-4710-b8af-37bbb80c51b9",
         "session_number": 2,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "artifact_sequence": 1,
-        "record_path": "artifacts/0bc26ede-c29e-4e63-9951-c90de72caf9e",
+        "record_path": "artifacts/9b0a7ce4-5bb2-4c0b-86af-88b4adf9d56c",
         "available": true
       },
       "earlier": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
         "session_number": 1,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
         "artifact_sequence": 2,
-        "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
         "available": true
       },
       "caution": "Later saved review; no supersession or correction is inferred. Inspect both records."
@@ -349,23 +349,23 @@
       "kind": "later_finding_available",
       "text": "The cited local parity step holds; the larger characterization remains open.",
       "source": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
         "session_number": 1,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "8c11ebaa-6460-4592-9859-a8e530f1b9f1",
         "artifact_sequence": 2,
-        "record_path": "artifacts/156ccc93-1c53-4af7-8b5e-16febd55e684",
+        "record_path": "artifacts/8c11ebaa-6460-4592-9859-a8e530f1b9f1",
         "available": true
       },
       "earlier": {
-        "project_id": "8c73f6ee-e86f-4e7b-816b-4e8c2bc7aaeb",
-        "session_id": "0ddeec49-ef10-4f97-a7e0-503b6c5ba9c3",
+        "project_id": "dcc7bbd2-7b30-4a23-be99-8f5b0ebebdd7",
+        "session_id": "ac56c9f6-06d2-4244-b292-13fe11fef858",
         "session_number": 1,
-        "strategy_id": "6237b753-6705-4825-a4f3-eb26dc287ab4",
-        "artifact_id": "38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "strategy_id": "1a92ca82-b545-4f46-b0dc-2d7481f22aa6",
+        "artifact_id": "bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
         "artifact_sequence": 1,
-        "record_path": "artifacts/38e4c758-949d-4ba8-a6e9-f1f35b70acf5",
+        "record_path": "artifacts/bcb9b5c3-fe73-4b0f-8079-08108e77a0e3",
         "available": true
       },
       "caution": "Later saved review; no supersession or correction is inferred. Inspect both records."
@@ -373,15 +373,15 @@
   ],
   "failures": [
     {
-      "session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+      "session_id": "ddf4b214-a12d-4887-9ba7-a7621d306bab",
       "session_number": 3,
       "status": "failed",
       "note": "Research reasoning cited an artifact not supplied in this call's context"
     },
     {
-      "session_id": "e311d294-08d2-4beb-9c12-847cd7b00fd7",
+      "session_id": "ddf4b214-a12d-4887-9ba7-a7621d306bab",
       "session_number": 3,
-      "strategy_id": "f3fbd6c5-1d10-412e-b37a-261ad959bda0",
+      "strategy_id": "448110e1-6420-4171-8fe1-9c1918b4c37e",
       "status": "failed",
       "note": "Research reasoning cited an artifact not supplied in this call's context"
     }

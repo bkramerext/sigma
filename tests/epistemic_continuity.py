@@ -25,6 +25,7 @@ from sigma.api import export_project_view
 from sigma.project_reports import render_report
 from sigma.projects import create_strategy, initialize_project, inspect_project
 from sigma.research_state import current_understanding
+from sigma.research_tools import execution_capabilities
 
 program_spec = importlib.util.spec_from_file_location(
     "continuity_graph_programs",
@@ -791,7 +792,20 @@ async def main() -> None:
             kind="truncated",
             source_artifact_id=parity["first_artifact_id"],
         )
-        present = await graph_project(root / "graph-present.sigma", capture, withheld=False)
+        python_available = any(
+            tool["runtime"] == "python" and tool["available"] for tool in execution_capabilities()
+        )
+        if output and not python_available:
+            raise AssertionError(
+                "Graph-present export requires an already available local Python image"
+            )
+        present = (
+            await graph_project(root / "graph-present.sigma", capture, withheld=False)
+            if python_available
+            else {
+                "skipped": "Local Python sandbox image unavailable; no graph-present computation was claimed"
+            }
+        )
         withheld = await graph_project(root / "graph-withheld.sigma", capture, withheld=True)
         if output:
             manifest = {
@@ -850,6 +864,8 @@ async def main() -> None:
         print("PASS retracted and truncated source closures rejected through real Skeptic dispatch")
         print(
             "PASS graph real failed/completed execution, saved witness follow-up, withheld prose contradiction"
+            if python_available
+            else "SKIP graph-present local execution: existing Python sandbox image unavailable; graph-withheld still checked"
         )
         print(
             json.dumps(
