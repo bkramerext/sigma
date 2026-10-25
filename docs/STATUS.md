@@ -37,13 +37,10 @@ confirmation/cancel, scoped deletion, and zero paper-generation POSTs.
 provider fixture, including failure/retry/cancel, saved-version creation, and
 PDF retrieval through the existing generation flow.
 
-An initial `./sigma test` run on the starting base `6686e6f` reached
-`tests/tooling.py` and failed at `check_ui()` because the mocked `stop_servers`
-was not called. The same test passes on a clean checkout of latest `main`
-`fd8a10e`, so that earlier result is specific to the starting base. The full
-suite is being rerun after rebasing onto latest `main`. Ruff check/format,
-frontend typecheck and build passed; the build prints the existing large-chunk
-warning. No paid provider calls were made.
+After rebasing onto current `main` (`fd8a10e`), `./sigma test` passed all
+scenarios, Ruff, format, Pyright (0 diagnostics), frontend typecheck and
+production build. The build prints its large-chunk warning. The targeted #95,
+#125 and T45 real-Chrome checks also passed. No paid provider calls were made.
 
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
