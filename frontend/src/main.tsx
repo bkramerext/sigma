@@ -1170,11 +1170,11 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   const [model, setModel] = useState('');
   const [mode, setMode] = useState('');
   const [effort, setEffort] = useState('');
-  const [checkpoint, setCheckpoint] = useState<any>(null);
+  const [checkpointMismatch, setCheckpointMismatch] = useState<any>(null);
   const [busy, setBusy] = useState(false);
-  const [longForm, setLongForm] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
@@ -1190,16 +1190,18 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
       const list = await listResponse.json(); const config = await configResponse.json();
       if (!listResponse.ok) throw new Error(list.error ?? 'Could not load saved AI papers.');
       setPapers(list.papers as PaperSummary[]);
-      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpoint(null); }
+      if (!configResponse.ok || !config.available) { setBinding(''); setModel(config.model ?? ''); setMode(config.mode ?? ''); setEffort(config.reasoning_effort ?? ''); setCheckpointMismatch(null); }
       else {
         setBinding(config.binding); setModel(config.model); setMode(config.mode); setEffort(config.reasoning_effort);
         const params = new URLSearchParams({
-          path, long_form: String(longForm), expected_project_id: projectId, expected_binding: config.binding,
+          path, long_form: 'false', expected_project_id: projectId, expected_binding: config.binding,
           mode: config.mode, model: config.model, reasoning_effort: config.reasoning_effort,
         });
         const preflightResponse = await fetch(`/api/projects/papers/preflight?${params}`, { cache: 'no-store' });
         const preflight = await preflightResponse.json();
-        if (preflightResponse.ok) setCheckpoint(preflight);
+        if (preflightResponse.ok && preflight.checkpoint_exists && !preflight.resume_available && preflight.checkpoint_can_restart)
+          setCheckpointMismatch(preflight);
+        else setCheckpointMismatch(null);
       }
       const nextId = keepId ?? selected?.paper_id ?? list.papers?.[0]?.paper_id;
       if (nextId) {
@@ -1232,26 +1234,20 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
     finally { setBusy(false); }
   }
   async function restartCheckpoint() {
-    if (busy || !checkpoint?.checkpoint_can_restart || !binding) return;
-    const prior = Number(checkpoint.provider_calls_previous_runs ?? 0) + Number(checkpoint.provider_calls_attempted ?? 0);
-    const restartCostCeiling = mode === 'api_key'
-      ? ' At 12,000 requested output tokens per call, a fresh run may request up to ' + Number(checkpoint.maximum_fresh_run_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar quote.'
-      : ' The new run is subject to your ChatGPT-plan allowance.';
-    if (!window.confirm(
-      `Restart long-form authoring from the beginning? This discards the current checkpointed work and can repeat up to ${Number(checkpoint.maximum_provider_calls).toLocaleString()} provider calls. The ${prior.toLocaleString()} calls already attempted will remain recorded. ${restartCostCeiling} ${mode === 'api_key' ? 'Additional calls can incur API-key charges.' : ''}`
-    )) return;
-    setBusy(true); setError(''); setPhase('Resetting the long-form checkpoint…');
+    if (busy || !checkpointMismatch?.checkpoint_can_restart || !binding) return;
+    setBusy(true); setError(''); setSuccess(''); setPhase('Clearing unfinished paper work…');
     try {
       const response = await fetch('/api/projects/papers/restart', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           path, expected_project_id: projectId, expected_binding: binding,
-          expected_snapshot_sha256: checkpoint.snapshot_sha256, confirm_restart: true,
+          expected_snapshot_sha256: checkpointMismatch.snapshot_sha256, confirm_restart: true,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Could not reset the long-form checkpoint.');
-      setPhase(`Checkpoint reset. ${Number(result.provider_calls_previous_runs).toLocaleString()} previous provider call attempts remain recorded.`);
+      setCheckpointMismatch(null);
+      setSuccess('Unfinished paper work cleared. No generation has started. Your saved versions are unchanged; choose Generate paper when you’re ready to start over.');
       await refresh(selected?.paper_id);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -1259,29 +1255,26 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   async function generatePaper() {
     if (busy || !binding) return;
     const controller = new AbortController(); request.current = controller;
-    setBusy(true); setPhase('Checking the frozen evidence size…'); setError('');
+    setBusy(true); setPhase('Preparing research evidence…'); setError(''); setSuccess('');
     let finishProvider = () => {};
-    let timer = 0;
+    let requestDispatched = false;
     try {
       const preflightParams = new URLSearchParams({
-        path, long_form: String(longForm), expected_project_id: projectId, expected_binding: binding,
+        path, long_form: 'false', expected_project_id: projectId, expected_binding: binding,
         mode, model, reasoning_effort: effort,
       });
       const preflightResponse = await fetch(`/api/projects/papers/preflight?${preflightParams}`, { cache: 'no-store', signal: controller.signal });
       const preflight = await preflightResponse.json();
       if (!preflightResponse.ok) throw new Error(preflight.error ?? 'Could not size the evidence snapshot.');
       if (preflight.checkpoint_exists && !preflight.resume_available) {
-        throw new Error('A checkpoint exists for different project or provider settings. Use Restart checkpoint to preserve its attempt history before generating.');
+        setCheckpointMismatch(preflight);
+        throw new Error('Unfinished paper work belongs to different project evidence or AI settings. Review the message below before starting over.');
       }
       finishProvider = beginProviderRequest('ai-paper');
-      setPhase(preflight.long_form
-        ? `Indexing ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then authoring the planned sections…`
-        : 'Authoring and validating the paper, then compiling the PDF…');
-      timer = window.setTimeout(() => setPhase(preflight.long_form
-        ? 'Long-form evidence indexing and section authoring are in progress…'
-        : 'Authoring, validating evidence references, and compiling PDF…'), 350);
+      setPhase('Generating paper…');
+      requestDispatched = true;
       const response = await fetch('/api/projects/papers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: longForm }) });
+        body: JSON.stringify({ path, expected_project_id: projectId, expected_binding: binding, expected_snapshot_sha256: preflight.snapshot_sha256, long_form: false }) });
       if (!response.ok) {
         const failure = await response.json().catch(() => null);
         throw new Error(failure?.error ?? `Paper generation failed (${response.status}); no version was published.`);
@@ -1303,43 +1296,46 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
           if (event.type === 'error') throw new Error(event.error ?? 'Paper generation failed.');
           if (event.type === 'complete') result = event.result as { paper_id: string };
           if (event.type === 'progress') {
-            const stage = event.stage === 'snapshot' ? 'Frozen the complete evidence snapshot'
-              : event.stage === 'evidence' ? `Indexing evidence batch ${event.completed} of ${event.total}`
-              : event.stage === 'index' ? 'Consolidating the source-linked evidence index'
-              : event.stage === 'outline' ? 'Planning the complete paper outline'
-              : event.stage === 'compile' ? 'Compiling the complete TeX document and validating the PDF'
-              : `Authoring paper section ${event.completed} of ${event.total}`;
-            setPhase(`${stage}…`);
+            setPhase(event.stage === 'compile' ? 'Compiling PDF…'
+              : event.stage === 'snapshot' ? 'Preparing research evidence…'
+              : 'Writing paper…');
           }
         }
         if (done) break;
       }
       if (!result) throw new Error('Paper generation ended without a completed version. No version was published.');
-      setPhase('Saved a new immutable paper version.');
       await refresh(result.paper_id);
+      setSuccess('Paper saved in Saved versions.');
     } catch (cause) {
-      if (controller.signal.aborted) setPhase('Generation cancelled. No new version was published.');
+      if (controller.signal.aborted) {
+        const message = requestDispatched
+          ? 'Generation was interrupted. Provider completion or usage may be unknown. Check Saved versions and your provider usage before trying again.'
+          : 'Generation was interrupted before a provider request was started.';
+        setError(message);
+      }
       else reportRequestFailure(errorMessage(cause));
       await refresh(selected?.paper_id);
-      if (!controller.signal.aborted) setError(errorMessage(cause));
-    } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
+      if (!controller.signal.aborted) {
+        const message = errorMessage(cause);
+        setError(requestDispatched
+          ? `${message} Check Saved versions and your provider usage before generating again; a provider request may have completed or consumed allowance before the error.`
+          : message);
+      }
+    } finally { finishProvider(); request.current = null; setBusy(false); }
   }
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
-      <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
-      <p className="settings-hint">SIGMA uses the project's complete research history to prepare a paper, including supporting evidence, unsuccessful approaches, contradictions, and unresolved questions. It distinguishes established findings from conjectures and identifies gaps rather than inventing missing proof steps.</p>
-      <p className="settings-hint">The resulting paper is AI-generated and has not been independently verified. Readers should examine its evidence and limitations before relying on its conclusions.</p>
-      <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
-      <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
-      <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
-      {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
-        {checkpoint.resume_available
-          ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
-          : `A checkpoint exists but does not match current settings. It records ${checkpoint.provider_calls_attempted} calls in its current run and ${checkpoint.provider_calls_previous_runs} in earlier runs; restart to keep this accounting before authoring.`}
-      </p>}
-      <div className="ai-paper-controls">{busy ? <button type="button" className="settings-submit ai-paper-cancel-generation" onClick={() => request.current?.abort()}>Cancel generation</button> : <button type="button" className="settings-submit" disabled={!binding} onClick={() => void generatePaper()}>{papers.length ? 'Generate new version' : 'Generate paper'}</button>}{!busy && checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}</div>
-      {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
+      <p className="settings-hint">The paper is AI-generated and has not been independently verified. Generation uses your selected provider and may consume allowance or incur charges. It does not start a research session.</p>
+      <p className="settings-hint ai-paper-model">Selected model: <strong>{model || 'Loading…'}</strong></p>
+      {checkpointMismatch && <div className="research-stop-confirm ai-paper-restart-notice" role="group" aria-label="Unfinished paper work needs a fresh start">
+        <p>Unfinished paper work belongs to different project evidence or AI settings and cannot continue. Starting over clears that unfinished work; saved versions stay available. A new generation may use provider allowance or incur charges.</p>
+        <button type="button" className="text-view-link" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Start over</button>
+      </div>}
+      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding || !!checkpointMismatch} onClick={() => void generatePaper()}>{busy ? 'Generating paper…' : papers.length ? 'Generate new version' : 'Generate paper'}</button></div>
+      {busy && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
+      {success && <p className="ai-paper-status" role="status">{success}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
       {!loading && papers.length > 0 && <section className="saved-paper-library" aria-label="Saved AI papers"><h3>Saved versions</h3>{papers.map((paper, index) => <article className="saved-paper-card" key={paper.paper_id}>
@@ -1348,7 +1344,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
             <button type="button" className="saved-paper-expand" title={`${expandedPaperId === paper.paper_id ? 'Collapse' : 'Expand'} saved paper: ${paper.title}`} aria-expanded={expandedPaperId === paper.paper_id} aria-controls={`saved-paper-body-${paper.paper_id}`} onClick={() => { if (expandedPaperId === paper.paper_id) setExpandedPaperId(''); else { setExpandedPaperId(paper.paper_id); if (selected?.paper_id !== paper.paper_id) void openPaper(paper.paper_id); } }}><DisclosureChevron expanded={expandedPaperId === paper.paper_id}/><h4>{paper.title}</h4></button>
             <div className="saved-paper-meta"><p>{dateLabel(paper.created_at)} · Version {papers.length - index}</p><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => setConfirmDeleteId(paper.paper_id)}>Remove</button></div>
           </div>
-          <div className="saved-paper-actions"><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
+          <div className="saved-paper-actions"><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/tex?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.tex`}>Download TeX file</a>{paper.pdf_available && <><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path })}`} download={`sigma-ai-paper-${paper.paper_id}.pdf`}>Download PDF</a><a className="text-view-link" href={`/api/projects/papers/${encodeURIComponent(paper.paper_id)}/pdf?${new URLSearchParams({ path, open_in_browser: 'true' })}`} target="_blank" rel="noopener noreferrer">Open PDF in browser</a></>}</div>
         </div>
         {confirmDeleteId === paper.paper_id && <div className="saved-paper-confirm" role="group" aria-label={`Confirm removal of ${paper.title}`}><p>Remove this saved paper version and its PDF? Other versions and research history will remain.</p><button type="button" className="text-view-link destructive-action" disabled={busy} onClick={() => void removePaper(paper.paper_id)}>Confirm remove</button><button type="button" className="text-view-link" disabled={busy} onClick={() => setConfirmDeleteId('')}>Cancel</button></div>}
         <div id={`saved-paper-body-${paper.paper_id}`} hidden={expandedPaperId !== paper.paper_id || selected?.paper_id !== paper.paper_id}>{expandedPaperId === paper.paper_id && selected?.paper_id === paper.paper_id && <article className="ai-paper-preview">

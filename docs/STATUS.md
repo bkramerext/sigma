@@ -119,10 +119,27 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
 
 ## Current owner follow-ups (2026-10-25)
 
-- TeX authoring: removed the extra white browser confirmation for long-form
-  generation; provider-use bounds are still visible in the dialog. Generate
-  becomes “Cancel generation” in place while running. Failed generation leaves
-  its error visible and restores an enabled Generate action for retry.
+- LaTeX dialog launch simplification from `tickets/t95-t125-latex-dialog-ux-spec.md`
+  (owner revision `cf47e1c`): removed the expanded-authoring toggle, pipeline
+  bounds, checkpoint counters and ordinary restart control. The server chooses
+  one-shot or long-form authoring automatically; compatible saved work still
+  resumes when the user explicitly generates. A concise Start over action is
+  available only when changed evidence/settings make existing work unusable;
+  its consequence and possible provider usage are stated beside it. Generation
+  now uses one primary action and plain activity/success/failure messages. An
+  interrupted or failed dispatched request warns that provider completion or
+  usage may be unknown and is never automatically retried. Saved versions and
+  their TeX/PDF actions are unchanged.
+- `tests/papers.py` passed, including the API disconnect cancellation/no
+  publication regression. Real Chrome `browser_checks/t45_long_paper.py` and
+  `browser_checks/saved_paper_library.py` passed with deterministic local
+  fixtures at desktop/mobile widths. They verified automatic long-form
+  selection, no silent retry after a simulated failure, simple activity and
+  success feedback, saved versions and PDF access, plus the existing saved-row
+  layout, yellow Remove action, left-aligned downloads, TeX/PDF downloads, and
+  confirmed deletion. Frontend
+  production build passed. The full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+  ./sigma test` passed all steps. No live or paid provider calls were made.
 - Project header: About matches Home's compact style in normal and hover states
   and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
   responsive.

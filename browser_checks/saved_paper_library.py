@@ -38,11 +38,28 @@ with sync_playwright() as playwright:
     page.goto(ui + "/project?path=" + __import__("urllib.parse").parse.quote(path, safe=""))
     page.get_by_role("button", name="LaTeX research paper", exact=True).click()
     dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
+    expect(dialog).to_contain_text("Create a LaTeX paper from this project’s saved research")
+    expect(dialog).to_contain_text("Selected model: gpt-6.1-sol")
+    expect(dialog.locator("input[type=checkbox]")).to_have_count(0)
+    expect(dialog.locator(".ai-paper-controls button")).to_have_count(1)
+    for implementation_detail in (
+        "Advanced options",
+        "checkpoint",
+        "reduction group",
+        "evidence batches",
+        "calls remain",
+    ):
+        expect(dialog).not_to_contain_text(implementation_detail)
     generate = dialog.get_by_role("button", name="Generate paper", exact=True)
     expect(generate).to_be_enabled(timeout=20000)
     generate.click()
+    expect(dialog.get_by_role("button", name="Generating paper…")).to_be_disabled(
+        timeout=10000
+    )
+    expect(dialog.get_by_role("status")).to_be_visible()
     card = dialog.locator(".saved-paper-card").first
     expect(card).to_be_visible(timeout=60000)
+    expect(dialog.get_by_role("status")).to_contain_text("Paper saved in Saved versions.")
     tex_download = card.get_by_role("link", name="Download TeX file")
     expect(tex_download).to_be_visible()
     with page.expect_download() as tex_download_event:
@@ -85,6 +102,9 @@ with sync_playwright() as playwright:
     title_line = card.locator(".saved-paper-expand")
     metadata_line = card.locator(".saved-paper-meta")
     remove_button = metadata_line.get_by_role("button", name="Remove")
+    assert remove_button.evaluate(
+        "button => getComputedStyle(button).color"
+    ) == "rgb(241, 197, 141)"
     title_box = title_line.bounding_box()
     actions_box = actions.bounding_box()
     metadata_box = metadata_line.locator("p").bounding_box()
@@ -123,6 +143,10 @@ with sync_playwright() as playwright:
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     expect(actions).to_be_visible()
+    mobile_action_lefts = actions.locator("a").evaluate_all(
+        "items => items.map(item => item.getBoundingClientRect().left)"
+    )
+    assert max(mobile_action_lefts) - min(mobile_action_lefts) < 1
     card.get_by_role("button", name="Remove").click()
     expect(card.get_by_role("group", name="Confirm removal of")).to_be_visible()
     card.get_by_role("button", name="Cancel").click()
