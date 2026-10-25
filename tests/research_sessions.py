@@ -6501,7 +6501,7 @@ def test_saved_followup_question_selection():
     assert result["B"]["artifact_id"] == "artifact-3"
     assert select([older, current], ["A"], supplied[:1]) == {}
     # A shortened material scope cannot silently authorize carrying a question.
-    shortened = [dict(item) for item in supplied]
+    shortened: list[dict[str, Any]] = [dict(item) for item in supplied]
     shortened[1]["extract_truncated_fields"] = ["assumptions"]
     assert select([older, current], ["A"], shortened) == {}
     shortened[1]["extract_truncated_fields"] = ["next_question"]
