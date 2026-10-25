@@ -72,7 +72,11 @@ def check_start_cli() -> None:
 
 
 def check_command_help() -> None:
-    for argv in (["sigma", "-h", "create"], ["sigma", "create", "--help"]):
+    for argv in (
+        ["sigma", "-h", "create"],
+        ["sigma", "create", "-h"],
+        ["sigma", "create", "--help"],
+    ):
         output = StringIO()
         with patch("sys.argv", argv), redirect_stdout(output):
             try:
