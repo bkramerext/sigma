@@ -3075,7 +3075,6 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
-
 def _saved_followup_questions(
     records: list[dict[str, Any]],
     strategy_ids: list[str],
@@ -3098,9 +3097,7 @@ def _saved_followup_questions(
     ordered = sorted(
         records,
         key=lambda item: (
-            item.get("session_number")
-            if type(item.get("session_number")) is int
-            else -1,
+            item.get("session_number") if type(item.get("session_number")) is int else -1,
             str(item.get("created_at", "")),
         ),
         reverse=True,
@@ -3128,11 +3125,14 @@ def _saved_followup_questions(
             if not isinstance(skeptic, dict):
                 continue
             if skeptic.get("stop_reason") in {
-                "decisive_counterexample", "productive_conclusion", "no_progress"
+                "decisive_counterexample",
+                "productive_conclusion",
+                "no_progress",
             }:
                 continue
             if artifact.get("coordinator_decision") in {
-                "stop_decisive_counterexample", "stop_productive_conclusion",
+                "stop_decisive_counterexample",
+                "stop_productive_conclusion",
                 "stop_no_progress",
             }:
                 continue
@@ -3143,7 +3143,8 @@ def _saved_followup_questions(
             if decision not in {"continue", "revise", "stop_budget_exhausted"}:
                 continue
             if decision == "stop_budget_exhausted" and skeptic.get("assessment") not in {
-                "continue", "revise"
+                "continue",
+                "revise",
             }:
                 continue
             question = artifact.get("next_question")
