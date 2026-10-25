@@ -1,7 +1,7 @@
 """Real Chrome checks for saved session Conclusions at desktop and phone widths."""
 
-import json
 import hashlib
+import json
 import os
 import socket
 import subprocess
