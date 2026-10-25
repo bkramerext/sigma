@@ -6632,6 +6632,129 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         assert (path / "research-sessions" / f"{ended['id']}.json").read_bytes() == original_bytes
 
 
+async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path):
+    """One saved question must carry across domains without answer-key tuning.
+
+    Real project persistence and provider dispatch are exercised; the roles
+    themselves are scripted local HTTP fixtures, not research judgments.
+    """
+    cases = (
+        (
+            "biology",
+            "Does an observed growth change survive control for batch effects?",
+            "Growth under different reagent conditions",
+            "Reagent and culture batches were assigned independently.",
+            "Compare within-batch replicate growth estimates before any causal claim.",
+        ),
+        (
+            "default",
+            "Which of two conflicting archive accounts has stronger provenance?",
+            "Source criticism and competing archive accounts",
+            "The two documents refer to the same recorded event.",
+            "Inspect custody and dating for each original source before reconciliation.",
+        ),
+        (
+            "military",
+            "Which routing plan satisfies bounded resource constraints?",
+            "Assess a fictional logistics scenario under stated limits",
+            "The simulated route capacity remains constant during the scenario.",
+            "Test whether the alternative route remains feasible under reduced capacity.",
+        ),
+        (
+            "mathematical",
+            "Does a bounded numerical pattern generalize?",
+            "Test a finite case without asserting a universal theorem",
+            "The proposed recurrence is restricted to nonnegative indices.",
+            "Check the first unsampled index against the proposed recurrence.",
+        ),
+    )
+    for index, (mode, question, approach, assumption, followup) in enumerate(cases):
+        root = path / f"domain-{index}"
+        view = initialize_project(
+            root, f"Cross-domain case {index}", question, research_mode=mode
+        )
+        strategy = create_strategy(root, "Bounded local test", approach).project.strategies[0]
+        limits = research_sessions.get_limits(str(root))
+        limits.update(research_rounds=1, model_calls=2)
+        research_sessions.save_limits(str(root), limits)
+        credential = {
+            "identity": "offline-case",
+            "mode": "api_key",
+            "token": "fixture-token",
+            "status": "connected",
+        }
+        config = {"available": True, "model": MODEL, "reasoning_effort": "high"}
+        phase = "seed"
+        captured = []
+        dispatched = asyncio.Event()
+
+        async def handler(request):
+            context = json.loads(json.loads(request.content)["input"])
+            role = json.loads(request.content)["text"]["format"]["name"]
+            captured.append((phase, role, context))
+            if phase == "later":
+                dispatched.set()
+                await asyncio.Event().wait()
+            if role == "research_investigator":
+                response = investigation(1)
+                response["claim"] = f"Unverified local claim for {mode}"
+                response["assumptions"] = [assumption]
+                response["evidence_status"] = "Scripted proposition, not verified."
+            else:
+                response = skeptic(1, "continue", "recoverable_objection")
+                response["assumptions_reviewed"] = [assumption]
+                response["next_question"] = followup
+            return httpx.Response(200, json=provider_response(response))
+
+        with (
+            patch.object(
+                research_sessions, "auth_context", new=AsyncMock(return_value=credential)
+            ),
+            patch.object(
+                research_sessions, "configuration", new=AsyncMock(return_value=config)
+            ),
+            patch.object(research_sessions, "execution_capabilities", return_value=[]),
+            patch(
+                "sigma.research_sessions.httpx.AsyncClient",
+                side_effect=lambda **kwargs: REAL_CLIENT(
+                    transport=httpx.MockTransport(handler), **kwargs
+                ),
+            ),
+        ):
+            first = await research_sessions.start_session(
+                str(root), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            ended = await wait_for(root, first["id"])
+            assert ended["status"] == "ended"
+            assert ended["artifacts"][0]["coordinator_decision"] == "stop_budget_exhausted"
+            saved = (root / "research-sessions" / f"{ended['id']}.json").read_bytes()
+            phase = "later"
+            limits.update(model_calls=4)
+            research_sessions.save_limits(str(root), limits)
+            later = await research_sessions.start_session(
+                str(root), strategy.id, str(uuid4()), view.project.id, credential["identity"]
+            )
+            assert later["current_question"] == followup
+            assert later["initial_question_source"]["artifact_id"] == ended["artifacts"][0]["id"]
+            await asyncio.wait_for(dispatched.wait(), 2)
+            contexts = [
+                context
+                for stage, role, context in captured
+                if stage == "later" and role == "research_investigator"
+            ]
+            assert contexts and contexts[0]["question"] == followup
+            assert contexts[0]["question_source"] == later["initial_question_source"]
+            finding = next(
+                row for row in contexts[0]["prior_session_findings"]
+                if row["id"] == ended["artifacts"][0]["id"]
+            )
+            assert finding["source_readiness"]["independently_verified"] is False
+            assert finding["source_readiness"]["assumptions"] == "model_reviewed"
+            assert finding["strategy_id"] == strategy.id
+            await research_sessions.control_session(str(root), later["id"], "stop")
+            assert (root / "research-sessions" / f"{ended['id']}.json").read_bytes() == saved
+
+
 def test_outcome_includes_derived_execution_provenance() -> None:
     record = {
         "id": "saved-session",
