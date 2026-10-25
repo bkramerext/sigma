@@ -228,7 +228,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 toggle = outcome.get_by_role("button", name="Show Conclusion Markdown source")
                 toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
-                outcome.get_by_text("Citations, Evidence & Obligations", exact=True).click()
+                outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
                 expect(outcome).to_contain_text("The intersection bound yields at most n pieces.")
