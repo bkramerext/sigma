@@ -13,7 +13,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Resource | Identifier or configuration | Status / evidence |
 | --- | --- | --- |
 | Existing Google Cloud OAuth project | Name: `SIGMA Auth`; Project ID: `sigma-auth-512601`; Project number: `665111821572` | Operator-reported from Cloud Console, 2026-10-25 |
-| Production infrastructure GCP project | Proposed name: `SIGMA Production`; suggested ID: `sigma-research-prod` (availability unknown) | Planned; actual ID and number pending |
+| Production infrastructure GCP project | Name: `SIGMA Production`; Project ID: `sigma-research-prod`; Project number: `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
 | GCP organization | No organization suspected | Not verified |
 | Registered DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Selected/registered; IP assignment and DNS verification pending |
 | GCE VM | `sigma-gce-01`, Ubuntu 24.04 LTS amd64, `e2-standard-4`, `us-west1-b` | Planned; no live resource ID confirmed |
