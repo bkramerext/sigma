@@ -1,5 +1,54 @@
 # SIGMA status
 
+## T91.2 packaged PDF and disaster-recovery acceptance (2026-10-25)
+
+Started on fresh branch `gray/t91.2-packaged-pdf-recovery` from current `main`
+`5fa536b`. Extended the packaged Compose / real-Chrome check with real Tectonic
+0.15.0 compilation from a saved TeX source inside the backend image, strict PDF
+parsing and extracted-content checks, authenticated API download/hash comparison,
+malformed-TeX failure/no-publication checks, backend container recreation, and
+full auth/workspace-volume backup to a new disposable Docker volume. The restore
+check compares owner project/strategy/session/paper identities, TeX and PDF
+hashes, session outcomes/evidence, and deterministic HTML report hash. A second
+simulated user remains denied after restore. Invalid tar extraction returns
+nonzero and cannot mark the restore accepted.
+
+**Acceptance matrix for the five requested criteria: PASS 5, FAIL 0, BLOCKED 0.** The packaged
+workflow also reports PASS for its existing UI/report/persistence checks; three
+cloud/provider checks are explicitly SKIPPED. Details, hashes and exact commands: [T91.2 evidence](evaluations/t91.2/README.md).
+The packaged run's PDF was 4,782 bytes, SHA-256
+`8e4604f8e35a87f0592ca802170aa86d0398364617e146bb2b1f3d421e28a5c9`; the
+restored HTML report SHA-256 was
+`284295274a8c1fd2e678b1983c0ea3256638f5f3971e9d6d864cc9f26d9dbcfa`.
+No paid inference, Google OAuth exchange, GCP resource, or rootless host
+acceptance was used. GCE disk attachment, Red-owned bootstrap/mount/systemd,
+public TLS/OAuth, and persistent-disk-on-GCE remain cloud-only limitations.
+
+Validation passed: `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
+./deploy/validate-local.sh` (fresh amd64 backend/frontend builds and packaged
+Chrome matrix); `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` (all
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build);
+Ruff check/format for the browser acceptance script; `python3 -m py_compile
+browser_checks/t91_packaged_compose.py`; and `git diff --check`. Assignment elapsed time was approximately 16 minutes (08:57–09:13 PDT,
+2026-10-25). Implementation commit `5c519ba0be92604e4507cd29ae90497c1924b7ab`;
+[PR #113](https://github.com/bkramerext/sigma/pull/113).
+
+Post-merge verification after Red PR #111: fetched `origin/main` at
+`37637153c4daf0aa652b63a40cef5bf1f5b642ec` and merged it into T91.2. The only
+conflict was `docs/STATUS.md`; both acceptance entries were preserved, with no
+code conflicts. `DOCKER_CONFIG=/tmp/sigma-t91-2-docker-config
+./deploy/validate-local.sh` passed again, including packaged Chrome, real
+Tectonic, malformed TeX, backend recreation, fresh-volume restore and isolation.
+The rerun PDF SHA-256 was
+`057c293aade96f34d9990e1697257da0f6da406990bb0b47e8397fb8451bd06c`; report
+SHA-256 was `fb08945053785e85e8f882517aaa98e2a0f582013f625f041dc9988b77f2ce29`.
+The requested bare `./sigma test` stopped at existing `tests/tooling.py` cleanup
+because `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is set in this shell;
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+including merged `tests/gce_host.py`, Ruff, formatting, Pyright, frontend
+typecheck and production build. No provider calls, OAuth, or GCP resources were
+used.
+
 ## T98 production host readiness pre-cloud (2026-10-25)
 
 Added a pinned Ubuntu 24.04 amd64 host installer for Docker Engine/Compose v2
