@@ -381,10 +381,16 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   const qualificationItems = [...new Set([...(review?.open_obligations ?? []), ...(review?.unresolved_objections ?? []), ...(session.outcome.caveats ?? [])])];
   const simpleQualifications = session.outcome.conclusion ? qualificationItems.slice(0, 3) : qualificationItems;
   const provenance = session.outcome.execution_provenance;
+  const runMetrics = session.outcome.metrics?.operational ?? [];
+  const zeroPythonRuns = runMetrics.some(item => item.label === 'Python runs by status' && item.value === '0 executions');
+  const zeroSageRuns = runMetrics.some(item => item.label === 'SageMath runs by status' && item.value === '0 executions');
+  const noSavedLocalComputations = (provenance && provenance.records.length === 0 && provenance.unidentified_count === 0)
+    || (!provenance && zeroPythonRuns && zeroSageRuns);
   const provenancePrelude = <div className="outcome-evidence-prelude" aria-label="Recorded computation provenance">
     <strong>Recorded computations:</strong> {provenance
       ? `${provenance.completed_count} reported completed of ${provenance.records.length} identified saved execution${provenance.records.length === 1 ? '' : 's'}${provenance.unidentified_count ? ` · ${provenance.unidentified_count} missing IDs` : ''}`
       : 'Provenance projection unavailable for this historical Outcome.'}
+    {noSavedLocalComputations && <p role="status"><strong>Evidence limitation:</strong> No local Python or Sage computation is recorded for this session. Computational claims in the agent-authored conclusion are not supported by saved local execution evidence.</p>}
     {provenance && <p>{provenance.note}</p>}{!!provenance?.completed_without_recorded_io_count && <p>Warning: {provenance.completed_without_recorded_io_count} completed-status record(s) do not include saved source and output.</p>}
     {!!provenance?.records.length && <details><summary>Execution IDs and saved statuses</summary><ul>{provenance.records.map(row => <li key={`${row.runtime}:${row.id}`}><strong>{row.runtime} · {row.id}</strong> · {row.statuses.join(' / ')} · {row.artifact_ids.length ? `artifacts ${row.artifact_ids.join(', ')}` : row.step_ids.length ? `steps ${row.step_ids.join(', ')}` : 'owner not recorded'} · source {row.source_recorded ? 'saved' : 'unavailable'}, output {row.output_recorded ? 'saved' : 'unavailable'}</li>)}</ul></details>}
   </div>;

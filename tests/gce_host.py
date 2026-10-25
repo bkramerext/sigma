@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import platform
 import subprocess
@@ -9,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy"
@@ -38,29 +41,40 @@ class GceHostToolingTests(unittest.TestCase):
         self.assertNotIn("curl", result.stderr + result.stdout)
 
     def test_local_preflight_emits_safe_blocked_results(self) -> None:
+        # Simulate an ineligible host deterministically. GitHub's Linux runner
+        # may itself be Ubuntu 24.04 amd64, where real inspection legitimately
+        # produces FAIL statuses instead of the intended BLOCKED-only control.
         with tempfile.TemporaryDirectory(prefix="sigma-preflight-test-") as temporary:
             env_file = Path(temporary) / "deploy.env"
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(DEPLOY / "gce_preflight.py"),
-                    "--json",
-                    "--env-file",
-                    str(env_file),
-                    "--repository",
-                    str(ROOT),
-                ],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        self.assertEqual(result.returncode, 2)
-        entries = json.loads(result.stdout)
+            output = io.StringIO()
+            with (
+                patch.object(
+                    gce_preflight.Preflight,
+                    "check_platform",
+                    lambda instance: instance.add(
+                        "Platform", "BLOCKED", "simulated unsupported host"
+                    ),
+                ),
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "gce_preflight.py",
+                        "--json",
+                        "--env-file",
+                        str(env_file),
+                        "--repository",
+                        str(ROOT),
+                    ],
+                ),
+                contextlib.redirect_stdout(output),
+            ):
+                result = gce_preflight.main()
+        self.assertEqual(result, 2)
+        entries = json.loads(output.getvalue())
         self.assertTrue(entries)
-        self.assertTrue(all(item["status"] in {"PASS", "FAIL", "BLOCKED"} for item in entries))
         self.assertEqual({item["status"] for item in entries}, {"BLOCKED"})
-        self.assertNotIn("fixture-value-that-is-not-a-credential", result.stdout)
+        self.assertNotIn("fixture-value-that-is-not-a-credential", output.getvalue())
 
     def test_deploy_environment_parser_rejects_shell_and_direct_credentials(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sigma-env-parse-") as temporary:
