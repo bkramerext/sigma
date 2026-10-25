@@ -43,7 +43,11 @@ harness setup gap only; deployed cookie behavior and hosted Google OAuth remain
 unverified. See the self-contained command and fixture boundary in
 [`browser_checks/README.md`](../browser_checks/README.md). `./sigma test` also
 passed all scenarios, Ruff, format, Pyright, frontend typecheck, and production
-build. No SIGMA production auth code changed.
+build. No SIGMA production auth code changed. Implementation commit
+`424ca3aa2cac5ba01a35c9dc11e58c1e251c83ae` is on
+[`red/t131-google-oauth-harness`](https://github.com/bkramerext/sigma/tree/red/t131-google-oauth-harness)
+and submitted R4R, unmerged, as [PR #158](https://github.com/bkramerext/sigma/pull/158).
+Elapsed implementation and validation time was approximately 20 minutes.
 
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 

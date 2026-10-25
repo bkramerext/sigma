@@ -34,5 +34,6 @@ Production callback/session behavior remains covered only by the existing
 deterministic cloud_auth tests. Hosted sign-in, real Google identities, and
 deployed cookie behavior remain UNVERIFIED pending T131 operator prerequisites.
 
-Elapsed implementation/validation time: approximately 19 minutes.
-PR: to be added after push.
+Implementation/validation elapsed time: approximately 20 minutes.
+Implementation commit: 424ca3aa2cac5ba01a35c9dc11e58c1e251c83ae.
+PR: https://github.com/bkramerext/sigma/pull/158 (open, unmerged, R4R).
