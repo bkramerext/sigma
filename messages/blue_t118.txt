@@ -47,3 +47,11 @@ six public synthetic tasks remain high contamination/ceiling risk until an
 external curator documents otherwise. The live shakedown remains a proposal
 only. The STATUS.md newcomer summary and current-state record should survive
 integration with pending PR #108.
+
+Reconciliation after the PR was reported not mergeable: fetched current main
+`f5388d8` and merged it into `blue/t118`. Git reported no conflicts. The
+newcomer summary and T118 record remain in STATUS; the incoming main changes
+were confined to Increment 17 files. Re-ran protocol, audit, 72-record offline
+pair, blocked-readiness, Ruff check, Ruff format and `git diff --check`; all
+passed. GitHub now reports PR #123 mergeable against current main. This branch
+is R4R; no merge or paid inference was performed.
