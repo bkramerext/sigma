@@ -260,3 +260,26 @@ The remaining limitation is asymmetric: **Blue can poll every 30 seconds, but th
 Day 4 advanced SIGMA from a functioning multi-agent workflow toward a more **evidence-preserving, cumulatively useful research machine**. It improved the fidelity of outcomes and papers, made the current research state inspectable, and connected actual computation to later research steps. The next scientific test is whether these mechanisms improve unscripted research quality against a simpler matched-budget baseline. The day's branch recovery also exposed a different reliability requirement: multiple coding agents need one unambiguous source of truth, not just successful local tests and confident handoff messages.
 
 The day ended with **Blue Increment 5 integrated in `main`**, a further release-quality increment assigned, and **Red's newer Home/About work preserved in PR #78 but blocked on failed CI and browser acceptance**. No claim of autonomous discovery, formal proof, continuously active overnight coordination, or completed public cloud launch is warranted.
+
+### Ticket throughput (snapshot: October 25, 2026 UTC)
+
+The following cumulative counts include **GitHub issues and pull requests**. They are grouped by UTC date, so the final point includes activity after the Day 4 calendar boundary.
+
+```mermaid
+xychart-beta
+    title "SIGMA tickets opened vs. closed (cumulative)"
+    x-axis ["Oct 21", "Oct 22", "Oct 23", "Oct 24", "Oct 25"]
+    y-axis "Tickets" 0 --> 80
+    line [1, 3, 56, 74, 79]
+    line [0, 1, 46, 64, 70]
+```
+
+| UTC date | Opened (cumulative) | Closed (cumulative) | Open backlog |
+| --- | ---: | ---: | ---: |
+| Oct 21 | 1 | 0 | 1 |
+| Oct 22 | 3 | 1 | 2 |
+| Oct 23 | 56 | 46 | 10 |
+| Oct 24 | 74 | 64 | 10 |
+| Oct 25 | 79 | 70 | 9 |
+
+**Interpretation:** 70 of 79 tracked items were closed (**89%**), with nine remaining open. The backlog stayed near ten despite a sharp increase in ticket creation, indicating strong completion throughput relative to intake. This is encouraging delivery momentum, not by itself evidence of software quality or research validity. In the chart, the first line represents **opened** and the second **closed**.
