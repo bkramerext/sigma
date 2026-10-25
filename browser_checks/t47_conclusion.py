@@ -215,9 +215,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(prelude).to_be_visible()
                 expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
                 expect(prelude).to_contain_text("No persisted Python/SageMath execution records")
-                assert conclusion.evaluate(
-                    "element => element.previousElementSibling.classList.contains('outcome-evidence-prelude')"
-                ), "Saved computation provenance must precede the model-authored Conclusion"
+                assert prelude.evaluate(
+                    "element => element.nextElementSibling.classList.contains('outcome-subsections')"
+                ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text(session["outcome"]["conclusion"].splitlines()[2])
                 toggle = outcome.get_by_role("button", name="Render Conclusion as Markdown")
                 toggle.click()
