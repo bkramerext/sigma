@@ -11,10 +11,39 @@ retried automatically, and resume errors remain visible.
 
 `npm --prefix frontend run typecheck` passed. The real-Google-Chrome check
 `uv run --with playwright python browser_checks/t95_paused_session.py` passed
-desktop and 390px checks, browser close/reopen persistence, and a guarded resume
-error; opening/viewing a paused session issued no session-start request. It uses
-a saved session fixture and an intercepted resume-guard response, with no
-provider calls. Full `./sigma test` is scheduled after #125 as requested.
+desktop and 390px checks across manual pause, backend restart/provider
+interruption, context, wall-clock, cost, connection/account, project/strategy,
+and unknown guarded states. Browser close/reopen retained the explanation, and
+an intercepted guarded-resume error remained visible. Opening/viewing a paused
+session issued no session-start request; this used saved fixtures and made no
+provider calls.
+
+## Green #125 — saved AI papers library (2026-10-25)
+
+Saved versions now appear at the top of the paper dialog as compact library rows
+with title, saved date, `.txt` and `.pdf` downloads, and a direct inline-PDF
+new-tab action. Each row has collapsed HTML rendering of its persisted draft,
+escaped by React, and a visible Remove/Confirm flow. Text downloads derive from
+the immutable draft record. Deletion verifies the project's saved identity and
+removes only that version's JSON and PDF files.
+
+`uv run python tests/papers.py` and `uv run python tests/cloud_workspaces.py`
+passed, including text payload, per-version cleanup, preservation of other
+history, and cross-owner denial for text, PDF, and deletion. Real Chrome checks
+`browser_checks/t125_saved_paper_library.py` passed desktop/mobile, safe HTML,
+download payloads, PDF inline/attachment headers, new-tab link behavior,
+confirmation/cancel, scoped deletion, and zero paper-generation POSTs.
+`browser_checks/t45_long_paper.py` passed against the deterministic local
+provider fixture, including failure/retry/cancel, saved-version creation, and
+PDF retrieval through the existing generation flow.
+
+An initial `./sigma test` run on the starting base `6686e6f` reached
+`tests/tooling.py` and failed at `check_ui()` because the mocked `stop_servers`
+was not called. The same test passes on a clean checkout of latest `main`
+`fd8a10e`, so that earlier result is specific to the starting base. The full
+suite is being rerun after rebasing onto latest `main`. Ruff check/format,
+frontend typecheck and build passed; the build prints the existing large-chunk
+warning. No paid provider calls were made.
 
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 

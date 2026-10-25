@@ -267,16 +267,33 @@ SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 \
   uv run --locked --with playwright python browser_checks/t45_long_paper.py
 ```
 
-This real-Chrome check opens the Xenopus sample, verifies the compact paper
-dialog at desktop and 390px mobile widths, starts long-form authoring directly
-without a browser-native confirmation, injects a temporary failure and verifies
-that Generate is available for retry, then checks in-dialog cancellation and
-focus behavior. It authors a long-form paper using the deterministic local
-provider fixture and checks the bounded completed-preview scroll area and both
-PDF modes: the “Open in browser tab” option returns an inline PDF, while the
-default still returns an attachment. No live model or paid usage is involved.
-The PDF is saved at `/tmp/sigma-t45-xenopus.pdf`; dialog captures are in
+This real-Chrome check opens the Xenopus sample, verifies the paper dialog at
+desktop and 390px mobile widths, starts long-form authoring directly without a
+browser-native confirmation, injects a temporary failure and verifies that
+Generate is available for retry, then checks in-dialog cancellation and focus
+behavior. It authors a long-form paper using the deterministic local provider
+fixture and checks the saved library row and both PDF delivery modes. No live
+model or paid usage is involved. The PDF is saved at
+`/tmp/sigma-t45-xenopus.pdf`; dialog captures are in
 `docs/evaluations/t45-paper-dialog/`.
+
+## #95 paused-session clarity
+
+Run `uv run --with playwright python browser_checks/t95_paused_session.py`.
+The isolated API and Vite servers are started by the script. Real Chrome checks
+the recorded pause explanation, typed interruption reason, safe next action,
+browser close/reopen persistence, guarded-resume error, and desktop/390px
+layout. The session is a saved fixture; resume is intercepted with a guarded
+error, and no provider call is made.
+
+## #125 saved AI papers library
+
+Run `uv run --with playwright python browser_checks/t125_saved_paper_library.py`.
+The script starts isolated API and Vite servers and seeds two saved versions
+with a locally compiled PDF. Real Chrome checks the per-version actions, exact
+text/PDF payloads and headers, new-tab inline PDF route, collapsed safe HTML
+rendering, visible deletion confirmation/cancel, project artifact scope, and
+mobile layout. It makes no authoring/provider calls.
 
 ## T40 Google account and administrator controls
 
