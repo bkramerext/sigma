@@ -4,7 +4,9 @@ T79 handoff — unused images and concise asset names
 Branch: gray/t79-unused-images
 Base: origin/main at 617570b (fetched at start of this assignment)
 Issue: https://github.com/bkramerext/sigma/issues/79
-PR: pending creation after commit/push; requested state is R4R, do not merge.
+PR: https://github.com/bkramerext/sigma/pull/83 (open, non-draft, R4R label).
+Implementation commit: 80f962406ed3d9aadf0cbf0088988065a4ca6bf5; PR #83 also
+contains the final handoff metadata update.
 
 Inventory and decisions
 -----------------------

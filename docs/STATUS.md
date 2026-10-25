@@ -2,6 +2,9 @@
 
 ## T79: unused image cleanup and asset names (2026-10-25)
 
+Delivered on branch `gray/t79-unused-images`; PR [#83](https://github.com/bkramerext/sigma/pull/83)
+is open against `main`, labeled R4R, and remains unmerged.
+
 Removed the retired `assets/sigma-home-background.png`, which was no longer
 loaded by the UI and was copied only to an unused `frontend/public/` path. The
 current zeta-bearing Home art remains byte-for-byte intact as
