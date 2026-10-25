@@ -3075,6 +3075,97 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
+
+def _saved_followup_questions(
+    records: list[dict[str, Any]],
+    strategy_ids: list[str],
+    supplied_findings: list[dict[str, Any]],
+) -> dict[str, dict[str, str]]:
+    """Carry only the latest scoped, supplied, unfinished question per strategy.
+
+    This is a model-suggested next action, not a certified finding or a
+    researcher-approved cross-strategy continuation. An ineligible newer
+    artifact blocks fallback to an older proposal.
+    """
+    selected = set(strategy_ids)
+    supplied = {
+        (item.get("strategy_id"), item.get("id"))
+        for item in supplied_findings
+        if isinstance(item, dict)
+    }
+    sources: dict[str, dict[str, str]] = {}
+    seen: set[str] = set()
+    ordered = sorted(
+        records,
+        key=lambda item: (
+            item.get("session_number")
+            if type(item.get("session_number")) is int
+            else -1,
+            str(item.get("created_at", "")),
+        ),
+        reverse=True,
+    )
+    for session in ordered:
+        if session.get("status") in {"queued", "running"}:
+            continue
+        artifacts = session.get("artifacts")
+        if not isinstance(artifacts, list):
+            continue
+        for artifact in reversed(artifacts):
+            if not isinstance(artifact, dict):
+                continue
+            strategy_id = artifact.get("strategy_id", session.get("strategy_id"))
+            if strategy_id not in selected or strategy_id in seen:
+                continue
+            seen.add(strategy_id)
+            artifact_id = artifact.get("id")
+            # Do not silently use history omitted from the frozen role context.
+            if (strategy_id, artifact_id) not in supplied:
+                continue
+            if artifact.get("retracted_by_artifact_ids"):
+                continue
+            skeptic = artifact.get("skeptic_output")
+            if not isinstance(skeptic, dict):
+                continue
+            if skeptic.get("stop_reason") in {
+                "decisive_counterexample", "productive_conclusion", "no_progress"
+            }:
+                continue
+            if artifact.get("coordinator_decision") in {
+                "stop_decisive_counterexample", "stop_productive_conclusion",
+                "stop_no_progress",
+            }:
+                continue
+            objective = artifact.get("objective_review")
+            if isinstance(objective, dict) and objective.get("status") == "achieved":
+                continue
+            decision = artifact.get("coordinator_decision")
+            if decision not in {"continue", "revise", "stop_budget_exhausted"}:
+                continue
+            if decision == "stop_budget_exhausted" and skeptic.get("assessment") not in {
+                "continue", "revise"
+            }:
+                continue
+            question = artifact.get("next_question")
+            field = "artifact.next_question"
+            if not isinstance(question, str) or not question.strip():
+                if decision != "stop_budget_exhausted":
+                    continue
+                question = skeptic.get("next_question")
+                field = "skeptic_output.next_question"
+            if not isinstance(question, str) or not question.strip():
+                continue
+            sources[strategy_id] = {
+                "question": question.strip(),
+                "session_id": str(session.get("id", "")),
+                "artifact_id": str(artifact_id),
+                "strategy_id": strategy_id,
+                "source_field": field,
+                "status": "model_suggested_unverified",
+            }
+    return sources
+
+
 async def start_session(
     path: str,
     strategy_id: str,
@@ -3301,6 +3392,17 @@ async def start_session(
                 strategy_ids=record["strategy_ids"],
                 obligation_source_ids=obligation_source_ids,
             )
+            followups = _saved_followup_questions(
+                records, selected_ids, record["prior_session_findings"]
+            )
+            for branch in record["strategy_runs"]:
+                source = followups.get(branch["strategy_id"])
+                if source and branch["strategy_id"] not in packets:
+                    branch["current_question"] = source["question"]
+                    branch["question_source"] = source
+                    if branch["strategy_id"] == strategy.id:
+                        record["current_question"] = source["question"]
+                        record["question_source"] = source
             (
                 record["prior_session_failures"],
                 record["prior_session_failures_omitted"],
@@ -4059,6 +4161,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    if cycle == 1 and isinstance(record.get("question_source"), dict):
+        context["question_source"] = record["question_source"]
     if role == "skeptic" and isinstance(investigator_step_id, str):
         context["investigator_step_id"] = investigator_step_id
     manifest["omitted_project_strategies"] = {
@@ -5266,6 +5370,7 @@ def _portfolio_context(
         "strategy_title": branch["strategy_title"],
         "strategy_text": branch["strategy_text"],
         "current_question": branch["current_question"],
+        "question_source": branch.get("question_source"),
         "artifacts": branch_artifacts,
         "pending_investigation": branch.get("pending_investigation"),
     }
