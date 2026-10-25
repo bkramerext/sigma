@@ -82,6 +82,14 @@ The full `./sigma test` remains blocked by the unrelated existing
 build, targeted Ruff and Pyright checks, and the focused recents backend test
 passed. No provider calls were made.
 
+After the user reported a newly started run missing from an already-open Home
+page, I found Recent had only fetched once on mount. It now refreshes visible
+Recent metadata every two seconds (and on focus/visibility return), so an open
+Home page reflects session starts and stops. Real Chrome
+`browser_checks/home_running_status.py` passed the persisted stopped → running
+→ stopped transition without reloading. The local app server was restarted
+after the test2 run had ended so its backend loaded the updated response field.
+
 ## T98 Red cloud-deployment checkpoint (2026-10-25)
 
 On current `main` (`f76d834`), the existing host-readiness package, sponsored

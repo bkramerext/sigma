@@ -177,6 +177,17 @@ with sync_playwright() as playwright:
         data={"path": path, "title": "Browser sample addition", "approach": "Keep this strategy"},
     )
     assert saved.status == 201
+    page.get_by_role("button", name="Back to home", exact=True).click()
+    # A Sample is copied into working projects; return to Recent automatically.
+    expect(recent_tab).to_have_attribute("aria-selected", "true")
+    first_copy = recent_panel.get_by_role(
+        "button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True
+    )
+    expect(first_copy).to_be_visible()
+    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
+    expect(recent_meta).to_contain_text("strategies · ")
+    expect(recent_meta).to_contain_text("Hard difficulty")
+    expect(recent_meta).not_to_contain_text("Running")
     project_data = json.loads(Path(path, "project.json").read_text())
     session_id = str(uuid4())
     session_file = Path(path, "research-sessions", f"{session_id}.json")
@@ -191,17 +202,9 @@ with sync_playwright() as playwright:
             }
         )
     )
-    page.get_by_role("button", name="Back to home", exact=True).click()
-    # A Sample is copied into working projects; return to Recent automatically.
-    expect(recent_tab).to_have_attribute("aria-selected", "true")
-    first_copy = recent_panel.get_by_role(
-        "button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True
-    )
-    expect(first_copy).to_be_visible()
-    recent_meta = first_copy.locator("xpath=../..").locator(".recent-meta-row small span")
-    expect(recent_meta).to_contain_text("strategies · ")
-    expect(recent_meta).to_contain_text("Hard difficulty")
     expect(recent_meta).to_contain_text(" · Running")
+    session_file.write_text(session_file.read_text().replace('"running"', '"stopped"'))
+    expect(recent_meta).not_to_contain_text("Running")
     assert first_copy.locator("xpath=../..").locator(".home-runnable-state").count() == 0
     assert "Mathematics" not in recent_meta.inner_text()
     recent_title_box = first_copy.bounding_box()

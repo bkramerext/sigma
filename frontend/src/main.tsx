@@ -2457,9 +2457,29 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch('/api/projects/recent', { signal });
     const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'Recent Projects unavailable. Open Project still works.');
-    setProjects(data.projects); setLoading(false);
+    setProjects(data.projects); setError(''); setLoading(false);
   }, []);
-  useEffect(() => { const controller = new AbortController(); void load(controller.signal).catch(error => { if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); } }); return () => controller.abort(); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    let refreshing = false;
+    const refresh = () => {
+      if (refreshing || controller.signal.aborted || document.visibilityState !== 'visible') return;
+      refreshing = true;
+      void load(controller.signal).catch(error => {
+        if (!controller.signal.aborted) { setError(errorMessage(error)); setLoading(false); }
+      }).finally(() => { refreshing = false; });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 2000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+      controller.abort();
+    };
+  }, [load]);
   async function open(entry: RecentProject) {
     if (pending.current) return; pending.current = true; setOpening(entry.id); setError('');
     try { onOpen(await post<ProjectView>('open', { path: entry.path })); }
