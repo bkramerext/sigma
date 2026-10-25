@@ -55,6 +55,8 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 
 **State mount permissions (2026-10-25):** Operator confirmed `sudo stat -c '%U:%G %a %n' /srv/sigma-state` returned `root:root 700 /srv/sigma-state`. Persistent fstab configuration and reboot validation remain pending.
 
+**T127 reboot acceptance (2026-10-25):** VM boot time `2026-10-25 22:01:51 UTC` after operator reboot. `findmnt /srv/sigma-state` reported `/dev/sdb` ext4 `rw,relatime`; `stat` reported `root:root 700`. Persistent UUID mount survived reboot. Host application installation, backup policy, and hosted launch remain separate work.
+
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
 
 ## Contents
