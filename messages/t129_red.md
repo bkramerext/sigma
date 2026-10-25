@@ -3,7 +3,8 @@
 **State:** R4R for offline implementation; hosted acceptance remains pending Brian's T127 handoff.
 **Base:** `main` at `583f946ca9a495c44dbef6950dc1d07db1eaf2ac`.
 **Branch:** `red/t129-gce-app-deployment`.
-**PR:** Pending creation.
+**PR:** [#152](https://github.com/bkramerext/sigma/pull/152).
+**Implementation commit:** `513a207f20198eab089fed0915637f1eead1efcd`.
 
 ## Delivered
 

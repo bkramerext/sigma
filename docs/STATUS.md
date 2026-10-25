@@ -2,6 +2,10 @@
 
 ## T129 GCE application deployment (2026-10-25)
 
+Implementation commit `513a207f20198eab089fed0915637f1eead1efcd` is on
+[`red/t129-gce-app-deployment`](https://github.com/bkramerext/sigma/tree/red/t129-gce-app-deployment)
+and submitted unmerged as [PR #152](https://github.com/bkramerext/sigma/pull/152).
+
 Offline deployment review adds a Caddy edge healthcheck against its local
 admin endpoint; the GCE preflight now fails unless backend, frontend and Caddy
 all have healthchecks, while Caddy remains ordered after healthy backend and
