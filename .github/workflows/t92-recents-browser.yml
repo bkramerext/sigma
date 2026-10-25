@@ -6,7 +6,7 @@ on:
       - "frontend/**"
       - "src/sigma/recents.py"
       - "src/sigma/research_sessions.py"
-      - "browser_checks/recents.py"
+      - "browser_checks/t92_recent_running.py"
       - ".github/workflows/t92-recents-browser.yml"
   workflow_dispatch:
 
