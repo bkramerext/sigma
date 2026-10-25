@@ -1,5 +1,23 @@
 # SIGMA status
 
+## T84 detailed command-specific CLI help (2026-10-25)
+
+Extended the existing `argparse` command tree with a shared detailed-help format.
+`sigma -h COMMAND`, `sigma COMMAND -h`, and `sigma COMMAND --help` use the same
+parser help, including purpose, required arguments, options/defaults, examples,
+relevant configuration notes, and common input/runtime errors. Root `sigma -h`
+remains concise. This changes presentation only; command dispatch and services
+are unchanged.
+
+Regression coverage exercises both requested help forms, top-level help, and the
+common example/notes structure for every registered command. Validation:
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run python tests/tooling.py` passed;
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, formatting, Pyright, frontend typecheck, and production build. The
+environment variable is unset because this local checkout's launch-time Google
+configuration otherwise makes an existing UI lifecycle mock fail before its
+cleanup assertion.
+
 ## Blue Increment 7: saved reasoning and adversarial continuity (2026-10-25)
 
 On cumulative PR #80, the Skeptic guidance now reviews the current claim against actually supplied prior steps rather than demanding a complete proof rewrite each cycle. Bounded prior-session extracts include saved reasoning arguments and reviews, with truncation and retraction signals. A Skeptic cannot mark an obligation addressed solely by a retracted, reasoning-truncated or absent older source. This checks source availability, not mathematical truth.
