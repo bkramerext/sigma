@@ -2,10 +2,44 @@
 
 from __future__ import annotations
 
+import http.server
+import threading
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from sigma import public_endpoint as verify_public_endpoint
+
+
+@contextmanager
+def redirect_server() -> Iterator[tuple[str, list[str]]]:
+    followed: list[str] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path == "/redirect":
+                self.send_response(301)
+                self.send_header("Location", "/final")
+                self.end_headers()
+            else:
+                followed.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"final")
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/redirect", followed
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 class PublicEndpointTests(unittest.TestCase):
@@ -35,6 +69,13 @@ class PublicEndpointTests(unittest.TestCase):
     def test_accepts_expected_dns_redirect_tls_spa_and_hosted_api(self) -> None:
         checks = self.probe()
         self.assertEqual(len(checks), 6)
+
+    def test_http_transport_returns_actual_redirect_without_following_it(self) -> None:
+        with redirect_server() as (url, followed):
+            status, headers, _ = verify_public_endpoint.response(url)
+        self.assertEqual(status, 301)
+        self.assertEqual(headers["Location"], "/final")
+        self.assertEqual(followed, [])
 
     def test_rejects_dns_mismatch_before_http_requests(self) -> None:
         with self.assertRaisesRegex(ValueError, "DNS A record"):

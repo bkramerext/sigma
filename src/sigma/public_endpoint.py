@@ -34,15 +34,28 @@ def require_private_ports_closed(ipv4: str) -> None:
         raise ValueError(f"unexpected public TCP listener on port {port}")
 
 
-def response(
-    url: str, *, opener: Callable[..., object] = urllib.request.urlopen
-) -> tuple[int, dict[str, str], bytes]:
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Return redirects as HTTP errors for explicit status and Location checks."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        return None
+
+
+def response(url: str) -> tuple[int, dict[str, str], bytes]:
     """Fetch without following redirects so unexpected routing is visible."""
     request = urllib.request.Request(url, headers={"User-Agent": "SIGMA-public-check/1"})
+    opener = urllib.request.build_opener(
+        _NoRedirectHandler(),
+        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+    )
     try:
-        result = opener(request, context=ssl.create_default_context(), timeout=10)
+        result = opener.open(request, timeout=10)
     except urllib.error.HTTPError as error:
-        return error.code, dict(error.headers.items()), error.read(4096)
+        try:
+            body = error.read(4096)
+            return error.code, dict(error.headers.items()), body
+        finally:
+            error.close()
     with result:  # type: ignore[attr-defined]
         return result.status, dict(result.headers.items()), result.read(65536)  # type: ignore[attr-defined]
 

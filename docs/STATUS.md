@@ -4721,7 +4721,7 @@ unused UDP 443 host publish, and documented the public firewall and external
 probe procedure. No DNS, GCP firewall, or public endpoint was changed.
 
 `./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
-frontend typecheck, and production build. Six focused public endpoint tests
+frontend typecheck, and production build. Seven focused public endpoint tests
 cover success and DNS, redirect, SPA, malformed/unready API, and direct-port
 failure cases; existing deployment package and GCE host tests also passed.
 `bash deploy/validate-local.sh` built both locked images but could not start its
@@ -4734,3 +4734,10 @@ Docker-shared checkout path if available.
 Public DNS/TLS acceptance remains pending the provisioned VM, Brian's
 owner-authorized DuckDNS update and GCP ingress decision, and production launch
 prerequisites. Do not treat offline or local checks as public acceptance.
+
+PR155 review correction: public HTTP requests now use a no-redirect urllib
+handler and return 3xx status plus `Location`; HTTPS requests still use an
+explicit `HTTPSHandler` with `ssl.create_default_context()`. A loopback HTTP
+server regression test proves the redirect destination is not requested.
+Seven focused public endpoint tests and the full `./sigma test` passed after
+this correction. No production host or DNS was contacted.
