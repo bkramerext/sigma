@@ -19,7 +19,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Registered DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Selected/registered; IP assignment and DNS verification pending |
 | GCE VM | `sigma-gce-01`, Ubuntu 24.04 LTS amd64, `e2-standard-4`, `us-west1-b` | Planned; no live resource ID confirmed |
 | Boot disk | 100 GiB `pd-standard` | Planned |
-| State disk | `sigma-state`, **100 GiB** `pd-balanced`, independently retained, `auto-delete=no` | Revised by operator for cost control on 2026-10-25; creation pending |
+| State disk | `sigma-state`, **30 GiB** `pd-balanced`, independently retained, `auto-delete=no` | Further lean sizing recommendation on 2026-10-25, pending operator confirmation and creation |
 | Static external IPv4 | `sigma-web-ip`, `us-west1`, Premium tier | Planned; actual IPv4 pending |
 | Network | `sigma-vpc` custom VPC; `sigma-us-west1` subnet; proposed `10.42.0.0/24` | Planned; CIDR approval pending |
 | Ingress | IAP SSH `35.235.240.0/20` to TCP 22 only; public TCP 80/443 deferred until launch gates | Planned |
@@ -31,7 +31,7 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Enabled project APIs | `compute.googleapis.com`, `iam.googleapis.com`, `cloudresourcemanager.googleapis.com`, `secretmanager.googleapis.com`, `iap.googleapis.com`, `billingbudgets.googleapis.com` | Enabled: operator screenshots/reports on 2026-10-25 |
 | Application release | Exact deployed Git SHA | Pending deployment |
 
-**Cost decision (2026-10-25):** Operator approved reducing the initial state disk from 200 GiB to 100 GiB to save approximately $10/month. Monitor usage and expand only if needed. This is a deliberate T127 deviation; older baseline estimates and provisioning command examples elsewhere in this document still specify 200 GiB and must be reconciled before executing them.
+**Cost decision (2026-10-25):** Operator rejected the 200 GiB initial disk and requested a leaner size. 30 GiB is now recommended (approximately $3/month), pending operator confirmation. Monitor usage and expand only if needed. This is a deliberate T127 deviation; older baseline estimates and provisioning command examples elsewhere in this document still specify 200 GiB and must be reconciled before executing them.
 
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
 
