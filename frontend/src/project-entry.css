@@ -26,21 +26,22 @@
 .home-page .entry-dialog-actions button { padding: 12px 16px; font-size: 13px; border: 1px solid #dbb080; }
 .home-page .entry-dialog-actions .entry-cancel { background: transparent; border-color: transparent; color: #c2ced9; box-shadow: none; font-weight: 500; }
 .home-page .entry-dialog-actions .entry-cancel:hover { background: transparent; color: #f0c992; text-decoration: underline; }
-:is(.home-page, .workspace-page) .about-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; }
-:is(.home-page, .workspace-page) .about-dialog .entry-dialog-header { position: sticky; top: -28px; z-index: 1; background: #07111e; }
-.workspace-page .about-dialog { padding: 28px; border: 1px solid #9d784c; border-radius: 8px; background: #07111e; color: #dce7f0; color-scheme: dark; box-shadow: 0 24px 80px #000a; }
-.workspace-page .about-dialog .entry-dialog-header { display: flex; align-items: baseline; justify-content: flex-start; gap: 18px; margin: -28px -28px 18px; padding: 18px 28px 14px; border-bottom: 1px solid #35404a; }
+:is(.home-page, .workspace-page) .about-dialog { width: min(760px, calc(100vw - 32px)); max-height: calc(95dvh - 32px); overflow-y: auto; overscroll-behavior: contain; overflow-anchor: none; }
+:is(.home-page, .workspace-page) .about-dialog { padding: 26px; }
+:is(.home-page, .workspace-page) .about-dialog .entry-dialog-header { position: sticky; top: -26px; z-index: 1; margin: -26px -26px 16px; padding: 17px 26px 13px; background: #07111e; }
+.workspace-page .about-dialog { padding: 26px; border: 1px solid #9d784c; border-radius: 8px; background: #07111e; color: #dce7f0; color-scheme: dark; box-shadow: 0 24px 80px #000a; }
+.workspace-page .about-dialog .entry-dialog-header { display: flex; align-items: baseline; justify-content: flex-start; gap: 18px; margin: -26px -26px 16px; padding: 17px 26px 13px; border-bottom: 1px solid #35404a; }
 .workspace-page .about-dialog h2 { margin: 0; color: #edc38d; font: 400 25px/1.25 Georgia, serif; }
 .workspace-page .about-dialog .entry-cancel { flex: 0 0 auto; padding: 2px 0; border: 0; background: transparent; box-shadow: none; color: #d9b17e; font: 12px/1.3 Inter, ui-sans-serif, system-ui, sans-serif; text-decoration: underline; text-underline-offset: 3px; }
 :is(.home-page, .workspace-page) .about-dialog-content { color: #c4ced8; font: 13px/1.6 Inter, ui-sans-serif, system-ui, sans-serif; overflow-anchor: none; }
-:is(.home-page, .workspace-page) .about-dialog-content .about-intro { margin: 0 0 8px; color: #e7c8a1; font-size: 15px; line-height: 1.55; }
-:is(.home-page, .workspace-page) .about-dialog-content .about-terms { margin: 0 0 17px; color: #aebbc7; font-size: 12px; }
+:is(.home-page, .workspace-page) .about-dialog-content .about-intro { margin: 0 0 7px; color: #e7c8a1; font-size: 15px; line-height: 1.55; }
+:is(.home-page, .workspace-page) .about-dialog-content .about-terms { margin: 0 0 14px; color: #aebbc7; font-size: 12px; }
 :is(.home-page, .workspace-page) .about-dialog-content > h3 { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #795d3d; color: #edc38d; font: 400 20px/1.3 Georgia, serif; }
 :is(.home-page, .workspace-page) .about-feature { margin: 0; padding: 11px 0; border-bottom: 1px solid #35404a; }
 :is(.home-page, .workspace-page) .about-feature h4 { margin: 0 0 4px; color: #e3b485; font: 600 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-feature p { margin: 0; color: #c4ced8; font: inherit; }
-:is(.home-page, .workspace-page) .about-disclosure { margin: 12px 0; border: 1px solid #70543a; border-radius: 7px; background: linear-gradient(145deg, #12191f, #0a121b 72%); box-shadow: inset 0 1px 0 #f5c88912; }
-:is(.home-page, .workspace-page) .about-disclosure > summary { display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 11px 14px; color: #edc38d; cursor: pointer; list-style: none; font: 600 14px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+:is(.home-page, .workspace-page) .about-disclosure { margin: 11px 0; border: 1px solid #70543a; border-radius: 7px; background: linear-gradient(145deg, #12191f, #0a121b 72%); box-shadow: inset 0 1px 0 #f5c88912; }
+:is(.home-page, .workspace-page) .about-disclosure > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 14px; color: #edc38d; cursor: pointer; list-style: none; font: 600 14px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-disclosure > summary::-webkit-details-marker { display: none; }
 :is(.home-page, .workspace-page) .about-disclosure > summary::before { content: '›'; display: grid; place-items: center; width: 17px; height: 17px; border: 1px solid #a96548; border-radius: 50%; color: #e4b67d; font: 16px/1 Georgia, serif; transition: transform 140ms ease; }
 :is(.home-page, .workspace-page) .about-disclosure[open] > summary::before { transform: rotate(90deg); }
@@ -49,13 +50,13 @@
 :is(.home-page, .workspace-page) .about-disclosure-content { padding: 0 14px 14px; }
 :is(.home-page, .workspace-page) .about-disclosure-content > .about-terms { margin-bottom: 2px; }
 :is(.home-page, .workspace-page) .about-disclosure-content > .about-feature:first-child { border-top: 1px solid #35404a; }
-:is(.home-page, .workspace-page) .about-architecture { margin: 0 0 16px; }
+:is(.home-page, .workspace-page) .about-architecture { margin: 0 0 13px; }
 :is(.home-page, .workspace-page) .about-research-flow { display: grid; justify-items: center; width: 100%; min-width: 0; }
 :is(.home-page, .workspace-page) .about-flow-project, :is(.home-page, .workspace-page) .about-flow-evidence { display: flex; justify-content: center; width: 100%; min-width: 0; }
 :is(.home-page, .workspace-page) .about-info-region { position: relative; display: grid; justify-items: stretch; min-width: 0; width: 100%; }
 :is(.home-page, .workspace-page) .about-flow-project .about-info-region { max-width: 390px; }
 :is(.home-page, .workspace-page) .about-flow-evidence .about-info-region { max-width: 460px; }
-:is(.home-page, .workspace-page) .about-diagram-node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; min-height: 62px; padding: 11px 38px 11px 14px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; text-align: center; background: linear-gradient(145deg, #302117 0%, #151c22 52%, #0a121b 100%); box-shadow: inset 0 1px 0 #f6c98d38, inset 0 -1px 0 #0008, 0 7px 18px #0005; text-shadow: 0 1px 8px #000a; transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease, transform 140ms ease; }
+:is(.home-page, .workspace-page) .about-diagram-node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-width: 0; min-height: 60px; padding: 9px 38px 9px 14px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; text-align: center; background: linear-gradient(145deg, #302117 0%, #151c22 52%, #0a121b 100%); box-shadow: inset 0 1px 0 #f6c98d38, inset 0 -1px 0 #0008, 0 7px 18px #0005; text-shadow: 0 1px 8px #000a; transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease, transform 140ms ease; }
 :is(.home-page, .workspace-page) .about-diagram-node-title { color: #f0c999; font: 600 13px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-diagram-node-subtitle { color: #b9c2cc; font: 11px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-info-region:hover > .about-diagram-node, :is(.home-page, .workspace-page) .about-strategy-card:hover .about-strategy-node, :is(.home-page, .workspace-page) .about-strategy-card:focus-within .about-strategy-node { border-color: #e0ad74; box-shadow: inset 0 1px 0 #ffe0ab70, 0 0 0 1px #c78b5740, 0 8px 20px #0008; filter: brightness(1.08); }
@@ -66,21 +67,21 @@
 :is(.home-page, .workspace-page) .about-diagram-help:hover, :is(.home-page, .workspace-page) .about-diagram-help:focus-visible { border-color: #ffe0ab; color: #fff2e9; outline: 2px solid #edbc77; outline-offset: 2px; }
 :is(.home-page, .workspace-page) .about-info-region .about-diagram-help:hover:not(:disabled), :is(.home-page, .workspace-page) .about-info-region .about-diagram-help:focus-visible { background: #101820; }
 :is(.home-page, .workspace-page) .about-diagram-node--blue .about-diagram-help:hover, :is(.home-page, .workspace-page) .about-diagram-node--blue .about-diagram-help:focus-visible { border-color: #acd9fa; color: #fff; outline-color: #75b7ef; }
-:is(.home-page, .workspace-page) .about-flow-connector, :is(.home-page, .workspace-page) .about-inner-connector { display: grid; justify-items: center; gap: 4px; padding: 4px 0; color: #d4b18d; text-align: center; font: 500 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .025em; }
-:is(.home-page, .workspace-page) .about-flow-connector i, :is(.home-page, .workspace-page) .about-inner-connector i { position: relative; display: block; width: 12px; height: 17px; background: linear-gradient(180deg, #e1b77f, #926146 72%, #57402e) center / 1px 100% no-repeat; }
+:is(.home-page, .workspace-page) .about-flow-connector, :is(.home-page, .workspace-page) .about-inner-connector { display: grid; justify-items: center; gap: 4px; padding: 3px 0; color: #d4b18d; text-align: center; font: 500 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .025em; }
+:is(.home-page, .workspace-page) .about-flow-connector i, :is(.home-page, .workspace-page) .about-inner-connector i { position: relative; display: block; width: 12px; height: 16px; background: linear-gradient(180deg, #e1b77f, #926146 72%, #57402e) center / 1px 100% no-repeat; }
 :is(.home-page, .workspace-page) .about-flow-connector i::after, :is(.home-page, .workspace-page) .about-inner-connector i::after { position: absolute; bottom: -1px; left: 3px; width: 6px; height: 6px; border-right: 1px solid #d4a372; border-bottom: 1px solid #d4a372; content: ''; transform: rotate(45deg); }
-:is(.home-page, .workspace-page) .about-strategy-group { width: 100%; min-width: 0; padding: 10px; border: 1px solid #805b3e; border-radius: 8px; background: linear-gradient(135deg, #251c17, #111820 48%, #0b121a); box-shadow: inset 0 1px 0 #f5c88920, 0 8px 22px #0005; }
-:is(.home-page, .workspace-page) .about-strategy-group-heading { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 8px; color: #d6ae83; font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+:is(.home-page, .workspace-page) .about-strategy-group { width: 100%; min-width: 0; padding: 9px; border: 1px solid #805b3e; border-radius: 8px; background: linear-gradient(135deg, #251c17, #111820 48%, #0b121a); box-shadow: inset 0 1px 0 #f5c88920, 0 8px 22px #0005; }
+:is(.home-page, .workspace-page) .about-strategy-group-heading { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 7px; color: #d6ae83; font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 :is(.home-page, .workspace-page) .about-strategy-group-heading .about-diagram-help { position: static; flex: none; width: 18px; height: 18px; }
 :is(.home-page, .workspace-page) .about-strategy-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 :is(.home-page, .workspace-page) .about-strategy-card { position: relative; min-width: 0; }
-:is(.home-page, .workspace-page) .about-strategy-node { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-height: 62px; padding: 10px 30px 10px 8px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; background: linear-gradient(145deg, #302117, #151c22 58%, #0a121b); transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease; }
+:is(.home-page, .workspace-page) .about-strategy-node { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; min-height: 60px; padding: 8px 30px 8px 8px; border: 1px solid #a96548; border-radius: 7px; color: #f2d9bc; background: linear-gradient(145deg, #302117, #151c22 58%, #0a121b); transition: border-color 140ms ease, box-shadow 140ms ease, filter 140ms ease; }
 :is(.home-page, .workspace-page) .about-session-toggle:focus-visible { outline: 2px solid #75b7ef; outline-offset: 3px; }
 :is(.home-page, .workspace-page) .about-strategy-card > .about-diagram-help { top: 6px; right: 6px; }
 :is(.home-page, .workspace-page) .about-session-chevron { position: absolute; right: 10px; top: 50%; color: #d4a372; transform: translateY(-50%); transition: transform 140ms ease; }
-:is(.home-page, .workspace-page) .about-session-frame { width: 100%; min-width: 0; padding: 10px; border: 1px solid #8a6846; border-radius: 9px; background: linear-gradient(150deg, #171c20, #0b121a 72%); box-shadow: inset 0 1px 0 #e3bd8c22, 0 8px 20px #0006; }
+:is(.home-page, .workspace-page) .about-session-frame { width: 100%; min-width: 0; padding: 9px; border: 1px solid #8a6846; border-radius: 9px; background: linear-gradient(150deg, #171c20, #0b121a 72%); box-shadow: inset 0 1px 0 #e3bd8c22, 0 8px 20px #0006; }
 :is(.home-page, .workspace-page) .about-session-heading .about-diagram-node { min-height: 54px; }
-:is(.home-page, .workspace-page) .about-agent-cycle-preview { position: relative; display: grid; grid-template-columns: minmax(84px, 1fr) minmax(96px, 1.25fr) minmax(84px, 1fr); align-items: center; gap: 5px; min-height: 58px; margin-top: 9px; padding: 7px 10px; }
+:is(.home-page, .workspace-page) .about-agent-cycle-preview { position: relative; display: grid; grid-template-columns: minmax(84px, 1fr) minmax(96px, 1.25fr) minmax(84px, 1fr); align-items: center; gap: 5px; min-height: 56px; margin-top: 8px; padding: 6px 10px; }
 :is(.home-page, .workspace-page) .about-agent-role { color: #acd9fa; text-align: center; font: 600 12px/1.35 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-agent-role small { display: block; margin-top: 2px; color: #c8d5df; font: 8px/1.2 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
 :is(.home-page, .workspace-page) .about-agent-review-arrow { width: 100%; height: 32px; overflow: visible; filter: drop-shadow(0 0 4px #4b98cf70); }
@@ -100,13 +101,14 @@
 :is(.home-page, .workspace-page) .about-agent-feedback { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 9px 0 0; color: #c5dcea; font: 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-agent-feedback span { color: #85b8da; font: 17px/1 Georgia, serif; }
 :is(.home-page, .workspace-page) .about-session-record { margin: 7px 0 0; color: #aebbc7; text-align: center; font: 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
-:is(.home-page, .workspace-page) .about-boundary { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid #35404a; color: #aebbc7; font: 11px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
+:is(.home-page, .workspace-page) .about-boundary { margin: 12px 0 0; padding-top: 11px; border-top: 1px solid #35404a; color: #aebbc7; font: 11px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; }
 :is(.home-page, .workspace-page) .about-diagram-tooltip { position: fixed; z-index: 4; width: min(360px, calc(100vw - 62px)); max-height: min(240px, calc(100dvh - 32px)); overflow: auto; margin: 0; padding: 10px 12px; border: 1px solid #b47a52; border-radius: 7px; color: #f1e3d3; background: linear-gradient(145deg, #302117, #101821 72%); box-shadow: inset 0 1px 0 #ffe0ab58, 0 8px 24px #000b, 0 0 15px #b8643c24; font: 11px/1.55 Inter, ui-sans-serif, system-ui, sans-serif; pointer-events: auto; animation: about-tip-enter 100ms ease-out both; }
 :is(.home-page, .workspace-page) .about-diagram-tooltip[data-tone="blue"] { border-color: #75b7ef; color: #e3edf5; background: linear-gradient(145deg, #19384f, #09131e 72%); box-shadow: inset 0 1px 0 #e4f5ff48, 0 8px 24px #000b, 0 0 16px #4b98cf30; }
 @keyframes about-tip-enter { from { opacity: .6; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 560px) {
-  :is(.home-page, .workspace-page) .about-dialog { width: calc(100vw - 24px); padding: 16px; }
-  :is(.home-page, .workspace-page) .about-dialog .entry-dialog-header { margin: -16px -16px 14px; padding: 14px 16px 11px; }
+  :is(.home-page, .workspace-page) .about-dialog { width: calc(100vw - 24px); max-height: calc(95dvh - 24px); padding: 15px; }
+  :is(.home-page, .workspace-page) .about-dialog .entry-dialog-header { margin: -15px -15px 13px; padding: 13px 15px 10px; }
+  :is(.home-page, .workspace-page) .about-dialog .entry-dialog-header { top: -15px; }
   :is(.home-page, .workspace-page) .about-dialog-content { font-size: 12px; }
   :is(.home-page, .workspace-page) .about-disclosure-content { padding: 0 10px 11px; }
   :is(.home-page, .workspace-page) .about-strategy-cards { grid-template-columns: minmax(0, 1fr); gap: 7px; }
@@ -128,6 +130,6 @@
   .home-page .project-entry-dialog { padding: 22px; }
   .home-page .project-entry-dialog .entry-dialog-header { margin: -22px -22px 16px; padding: 16px 22px 12px; }
   :is(.home-page, .workspace-page) .about-dialog .entry-dialog-header { top: -22px; }
-  .workspace-page .about-dialog { padding: 22px; }
-  .workspace-page .about-dialog .entry-dialog-header { margin: -22px -22px 16px; padding: 16px 22px 12px; }
+  .workspace-page .about-dialog { padding: 21px; }
+  .workspace-page .about-dialog .entry-dialog-header { top: -21px; margin: -21px -21px 15px; padding: 15px 21px 11px; }
 }

@@ -206,6 +206,16 @@ calls or cloud changes were made.
 Before/after Chrome captures, with a brief simplification summary, are in
 [About polish screenshots](evaluations/about-polish/README.md).
 
+### About dialog height follow-up
+
+Reduced vertical spacing and the viewport height cap while keeping the content
+and interactions intact. Real Chrome measured the closed dialog at 777.6px at
+1440×900, down from 816.6px (5.5%); at 390×844 it measured 777.8px. The focused
+`browser_checks/about.py` acceptance passed at 1440px, 390px and 320px from both
+Home and Project, including tooltip, expanded content, keyboard/touch, scrolling,
+focus restoration, and Project hit-area checks. Updated screenshots are in the
+About polish capture directory. No provider calls or cloud changes were made.
+
 ## Outcome presentation and Project Settings (2026-10-24)
 
 Added project-scoped `show_advanced_outcome_details`, defaulting off. Simple mode

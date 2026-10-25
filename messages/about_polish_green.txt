@@ -22,6 +22,13 @@ Dependencies/conflicts: none found
 - Ruff checks on the changed browser checks and `git diff --check` — passed.
 - No live Google OAuth, paid provider calls, or cloud changes.
 
+## Height follow-up
+
+- Reduced the About dialog height about 5% by tightening vertical spacing and the viewport cap. Real Chrome measured 816.6px → 771.6px at 1440×900 (5.5%); 777.8px at 390×844.
+- Focused `browser_checks/about.py` passed again in real Chrome at 1440px, 390px and 320px from Home and Project, including tooltips, disclosure, keyboard/touch access, scrolling, focus restoration and mobile Project hit area.
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed again after this CSS follow-up.
+- Refreshed the About dialog after screenshots; details are in `docs/evaluations/about-polish/README.md`.
+
 ## Screenshots
 
 See [docs/evaluations/about-polish/README.md](../docs/evaluations/about-polish/README.md) for before/after desktop and mobile captures and the short simplification note. Individual Chrome captures are preserved in that directory.

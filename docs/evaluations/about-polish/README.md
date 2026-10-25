@@ -4,6 +4,8 @@ The **Before** captures show the current `main` baseline at `617570b`. The **Aft
 
 The architecture flow is now visible at a glance, with one concise expandable session loop and fewer repeated explanations. The dialog has more room at desktop widths. Home’s signed-out access notice is narrower and aligned to the same top and left inset; its controls sit below it on mobile to prevent overlap. About/Admin now sit to the left of the account pills, and the Project header uses an `About` pill in the lower row beneath Difficulty.
 
+A follow-up trims the About dialog's vertical spacing and viewport cap. In real Chrome at 1440×900, its closed height is 771.6px, down from 816.6px (5.5%). At 390×844, the dialog is about 777.8px tall, with the remaining content reachable by scrolling.
+
 ## About dialog
 
 | Before | After |
