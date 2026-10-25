@@ -8,6 +8,8 @@ guards repeated activation while redirecting, and keeps the account popover
 for authenticated users. Narrow Home headers wrap long connection status text.
 The administrator settings action now clears the first status-pill row at
 tablet widths, leaving the controls separated.
+The About action now uses the same copper outlined pill, dimensions, and hover
+surface as the neighboring Google sign-in control.
 The LaTeX wordmark hover target is 56×38px, centered with even clearance around
 the mark. The Home header also opens an About dialog with the plain language
 introduction, feature descriptions, and a responsive architecture diagram.
@@ -29,7 +31,8 @@ return. Screenshots: `/tmp/sigma-about-diagram-1440.png`,
 ./sigma test` passed, including Ruff, Pyright, frontend typecheck and
 production build.
 `browser_checks/t40_cloud_ui.py` passed across desktop, tablet and mobile
-widths, including authenticated and signed-out controls. Conclusion markup
+widths, including authenticated and signed-out controls. The T43.1 Chrome
+check passed again after matching the About pill styling. Conclusion markup
 from the earlier toggle screenshot remains absent from this branch.
 
 ## Session Outcome Markdown toggle visibility (2026-10-24)
