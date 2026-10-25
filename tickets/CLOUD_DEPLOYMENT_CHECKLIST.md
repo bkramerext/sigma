@@ -11,8 +11,8 @@
 | [T128](t128.md) | Host bootstrap, rootless Docker and preflight | 🔴 Red | Blocked by T127 |
 | [T129](t129.md) | Compose app, health and durable state | 🔴 Red | Offline implementation in [PR #152](https://github.com/bkramerext/sigma/pull/152); hosted acceptance pending Brian's T127 handoff |
 | [T130](t130.md) | DuckDNS and HTTPS | 🔴 Red; 👤 Brian DNS account changes | Blocked by T127/T129 |
-| [T131](t131.md) | Hosted Google OAuth, sign-in | 🔴 Red backend + 🟢 Green browser; 👤 Brian OAuth console/secret | Blocked by T129/T130 |
-| [T132](t132.md) | Hosted inference, sessions, Python/Sage | 🔴 Red; 🔵 Blue only for specific research blocker; 👤 Brian live access/authorization | Blocked by hosted app |
+| [T131](t131.md) | Hosted Google OAuth, sign-in | 🔴 Red backend + ⚪ Gray preparation; 👤 Brian OAuth console/secret | **Closed: T131/PR156 and T131/PR158 merged; live OAuth acceptance deferred (unverified)** |
+| [T132](t132.md) | Hosted inference, sessions, Python/Sage | ⚪ Gray preparation; 🔴 Red integration; 👤 Brian live access/authorization | **Closed: T132/PR157 merged; hosted research and rootless acceptance deferred (unverified)** |
 | [T133](t133.md) | Desktop projects, Outcomes, reports, TeX/PDF | 🟢 Green + ⚪ Gray preparation | T133/PR153 offline preparation integrated; hosted checks remain pending T131/T132 |
 | [T134](t134.md) | Two-account workspace/privacy acceptance | ⚪ Gray + 🟢 Green; 👤 Brian test account | **Closed: T134/PR148 merged; hosted A/B test deferred (unverified)** |
 | [T135](t135.md) | Backup policy and verified restore | ⚪ Gray | **Closed: T135/PR142 merged; live backup/restore deferred (unverified)** |
@@ -21,4 +21,4 @@
 
 These are repository tickets in the existing T sequence, not GitHub issue numbers. **Codex workers cannot relax acceptance requirements or mark blocked steps complete without observed evidence.** Owner action must be distinguished from worker implementation. Update statuses and evidence as tasks complete. Mobile-specific acceptance is out of scope.
 
-**Owner decision (2026-10-25):** T134–T136 were closed after offline implementation. Live GCE verification is explicitly deferred, not passed. Before public launch, T137 must reassess these risks and record an explicit go/no-go decision; closure alone is not acceptance.
+**Owner decision (2026-10-25):** T131, T132 and T134–T136 were closed after offline implementation/preparation. All live GCE, OAuth and provider-backed verification is explicitly deferred to a separate coordinated acceptance effort, not passed. Before public launch, T137 must reassess these risks and record an explicit go/no-go decision; closure alone is not acceptance.
