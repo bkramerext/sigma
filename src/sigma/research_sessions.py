@@ -30,7 +30,11 @@ from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
-from sigma.research_epistemics import argument_availability, verification_label
+from sigma.research_epistemics import (
+    argument_availability,
+    execution_provenance,
+    verification_label,
+)
 from sigma.research_feedback import ComputationFeedback, validate_feedback
 from sigma.research_tools import capability_guidance, execution_capabilities
 
@@ -1951,6 +1955,7 @@ def _outcome(record: dict[str, Any]) -> dict[str, Any]:
     review = outcome.get("solution_review")
     outcome["verification_label"] = verification_label(review)
     outcome["argument_availability"] = argument_availability(review, record.get("artifacts", []))
+    outcome["execution_provenance"] = execution_provenance(record)
     return outcome
 
 
@@ -3075,6 +3080,168 @@ def _snapshot(path: str) -> tuple[Any, str]:
     return view, _digest(state.read_bytes())
 
 
+def _finding_source_readiness(finding: dict[str, Any]) -> dict[str, Any]:
+    """Describe what a bounded saved source contains, not whether its claim is true.
+
+    Model-reviewed assumptions and steps are still unverified. An incomplete
+    extract must not quietly stand in for its complete original.
+    """
+    truncated = finding.get("extract_truncated_fields", [])
+    truncated = truncated if isinstance(truncated, list) else ["unknown"]
+    retracted = bool(finding.get("retracted_by_artifact_ids"))
+    steps = finding.get("reasoning_steps")
+    if retracted:
+        state = "withdrawn"
+    elif truncated:
+        state = "incomplete_extract"
+    elif isinstance(steps, list) and steps:
+        reviewed = all(
+            isinstance(step, dict)
+            and isinstance(step.get("argument"), str)
+            and bool(step["argument"].strip())
+            and isinstance(step.get("review"), dict)
+            and step["review"].get("disposition") == "accepted"
+            and not step["review"].get("objection")
+            for step in steps
+        )
+        state = "model_reviewed_steps" if reviewed else "unresolved_steps"
+    else:
+        state = "narrative_unverified"
+
+    declared = finding.get("assumptions")
+    declared = declared if isinstance(declared, list) else []
+    skeptic = finding.get("skeptic_output")
+    reviewed = finding.get("assumptions_reviewed")
+    if not isinstance(reviewed, list) and isinstance(skeptic, dict):
+        reviewed = skeptic.get("assumptions_reviewed")
+    reviewed = reviewed if isinstance(reviewed, list) else []
+
+    def normalize(value: str) -> str:
+        return " ".join(value.casefold().split())
+
+    declared_set = {normalize(item) for item in declared if isinstance(item, str)}
+    reviewed_set = {normalize(item) for item in reviewed if isinstance(item, str)}
+    assumption_status = (
+        "none_declared"
+        if not declared_set
+        else "model_reviewed"
+        if declared_set <= reviewed_set and "assumptions" not in truncated
+        else "requires_review"
+    )
+    return {
+        "state": state,
+        "assumptions": assumption_status,
+        "original_in_context": False,
+        "independently_verified": False,
+    }
+
+
+def _saved_followup_questions(
+    records: list[dict[str, Any]],
+    strategy_ids: list[str],
+    supplied_findings: list[dict[str, Any]],
+) -> dict[str, dict[str, str]]:
+    """Carry only the latest scoped, supplied, unfinished question per strategy.
+
+    This is a model-suggested next action, not a certified finding or a
+    researcher-approved cross-strategy continuation. An ineligible newer
+    artifact blocks fallback to an older proposal.
+    """
+    selected = set(strategy_ids)
+    supplied = {
+        (item.get("strategy_id"), item.get("id")): item
+        for item in supplied_findings
+        if isinstance(item, dict)
+    }
+    sources: dict[str, dict[str, str]] = {}
+    seen: set[str] = set()
+    ordered = sorted(
+        records,
+        key=lambda item: (
+            item.get("session_number") if type(item.get("session_number")) is int else -1,
+            str(item.get("created_at", "")),
+        ),
+        reverse=True,
+    )
+    for session in ordered:
+        if session.get("status") in {"queued", "running"}:
+            continue
+        artifacts = session.get("artifacts")
+        if not isinstance(artifacts, list):
+            continue
+        for artifact in reversed(artifacts):
+            if not isinstance(artifact, dict):
+                continue
+            strategy_id = artifact.get("strategy_id", session.get("strategy_id"))
+            if strategy_id not in selected or strategy_id in seen:
+                continue
+            seen.add(strategy_id)
+            artifact_id = artifact.get("id")
+            # Do not silently use history omitted from the frozen role context.
+            saved_extract = supplied.get((strategy_id, artifact_id))
+            if saved_extract is None:
+                continue
+            # Carry a question only if its material scope was not shortened.
+            # Truncated reasoning steps alone do not invalidate a next test.
+            truncated = saved_extract.get("extract_truncated_fields", [])
+            if not isinstance(truncated, list) or any(
+                field in truncated
+                for field in (
+                    "assumptions",
+                    "next_question",
+                    "skeptic_output.next_question",
+                    "evidence_status",
+                )
+            ):
+                continue
+            if artifact.get("retracted_by_artifact_ids"):
+                continue
+            skeptic = artifact.get("skeptic_output")
+            if not isinstance(skeptic, dict):
+                continue
+            if skeptic.get("stop_reason") in {
+                "decisive_counterexample",
+                "productive_conclusion",
+                "no_progress",
+            }:
+                continue
+            if artifact.get("coordinator_decision") in {
+                "stop_decisive_counterexample",
+                "stop_productive_conclusion",
+                "stop_no_progress",
+            }:
+                continue
+            objective = artifact.get("objective_review")
+            if isinstance(objective, dict) and objective.get("status") == "achieved":
+                continue
+            decision = artifact.get("coordinator_decision")
+            if decision not in {"continue", "revise", "stop_budget_exhausted"}:
+                continue
+            if decision == "stop_budget_exhausted" and skeptic.get("assessment") not in {
+                "continue",
+                "revise",
+            }:
+                continue
+            question = artifact.get("next_question")
+            field = "artifact.next_question"
+            if not isinstance(question, str) or not question.strip():
+                if decision != "stop_budget_exhausted":
+                    continue
+                question = skeptic.get("next_question")
+                field = "skeptic_output.next_question"
+            if not isinstance(question, str) or not question.strip():
+                continue
+            sources[strategy_id] = {
+                "question": question.strip(),
+                "session_id": str(session.get("id", "")),
+                "artifact_id": str(artifact_id),
+                "strategy_id": strategy_id,
+                "source_field": field,
+                "status": "model_suggested_unverified",
+            }
+    return sources
+
+
 async def start_session(
     path: str,
     strategy_id: str,
@@ -3301,6 +3468,17 @@ async def start_session(
                 strategy_ids=record["strategy_ids"],
                 obligation_source_ids=obligation_source_ids,
             )
+            followups = _saved_followup_questions(
+                records, selected_ids, record["prior_session_findings"]
+            )
+            for branch in record["strategy_runs"]:
+                source = followups.get(branch["strategy_id"])
+                if source and branch["strategy_id"] not in packets:
+                    branch["current_question"] = source["question"]
+                    branch["initial_question_source"] = source
+                    if branch["strategy_id"] == strategy.id:
+                        record["current_question"] = source["question"]
+                        record["initial_question_source"] = source
             (
                 record["prior_session_failures"],
                 record["prior_session_failures_omitted"],
@@ -4059,6 +4237,8 @@ def _agent_context(record: dict[str, Any], role: str, cycle: int) -> dict[str, A
         "context_manifest": manifest,
         "project_strategy_snapshot": strategy_snapshot,
     }
+    if cycle == 1 and isinstance(record.get("initial_question_source"), dict):
+        context["question_source"] = record["initial_question_source"]
     if role == "skeptic" and isinstance(investigator_step_id, str):
         context["investigator_step_id"] = investigator_step_id
     manifest["omitted_project_strategies"] = {
@@ -4850,6 +5030,7 @@ def _compact_context_artifact(artifact: dict[str, Any], project_path_value: Any)
                     isinstance(note, str) and len(note.strip()) > limit for note in skeptic[key]
                 ):
                     result["extract_truncated_fields"].append(f"skeptic_output.{key}")
+    result["source_readiness"] = _finding_source_readiness(result)
     return result
 
 
@@ -5266,6 +5447,7 @@ def _portfolio_context(
         "strategy_title": branch["strategy_title"],
         "strategy_text": branch["strategy_text"],
         "current_question": branch["current_question"],
+        "initial_question_source": branch.get("initial_question_source"),
         "artifacts": branch_artifacts,
         "pending_investigation": branch.get("pending_investigation"),
     }
@@ -7154,6 +7336,9 @@ def _prior_session_findings_index(
                 ),
                 "coordinator_decision": artifact.get("coordinator_decision"),
                 "next_question": _bounded_note(artifact.get("next_question"), 500),
+                "skeptic_output": {
+                    "next_question": _bounded_note(skeptic_output.get("next_question"), 500)
+                },
                 "session_id": session.get("id"),
                 "session_number": session.get("session_number"),
                 "strategy_id": artifact.get("strategy_id"),
@@ -7171,6 +7356,11 @@ def _prior_session_findings_index(
                 )
                 if isinstance(artifact.get(key), str) and len(artifact[key].strip()) > limit
             ]
+            if (
+                isinstance(skeptic_output.get("next_question"), str)
+                and len(skeptic_output["next_question"].strip()) > 500
+            ):
+                finding["extract_truncated_fields"].append("skeptic_output.next_question")
             saved_steps = artifact.get("reasoning_steps")
             if isinstance(saved_steps, list) and saved_steps:
                 finding["reasoning_steps"] = []
@@ -7236,6 +7426,7 @@ def _prior_session_findings_index(
                 computation = _peer_python_evidence(artifact, field, session.get("project_path"))
                 if computation is not None:
                     finding[field] = computation
+            finding["source_readiness"] = _finding_source_readiness(finding)
             priority = (
                 0
                 if artifact.get("id") in (obligation_source_ids or set())

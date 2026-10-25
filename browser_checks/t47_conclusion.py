@@ -186,6 +186,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )
+            # Start in Advanced Outcome explicitly, independent of a historical project default.
+            settings = page.get_by_role("button", name="Project settings", exact=True)
+            settings.click()
+            dialog = page.get_by_role("dialog", name="Settings")
+            dialog.get_by_role("tab", name="Preferences").click()
+            detail_setting = dialog.get_by_role(
+                "checkbox", name="Show advanced Outcome details"
+            )
+            if not detail_setting.is_checked():
+                detail_setting.check()
+                dialog.get_by_role("button", name="Save", exact=True).click()
+                expect(dialog).to_be_hidden()
+            else:
+                dialog.get_by_role("button", name="Cancel", exact=True).click()
             for session in sessions:
                 row = page.locator(f'li[data-session-id="{session["id"]}"]')
                 expect(row).to_be_visible(timeout=15000)
@@ -197,9 +211,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(conclusion).to_be_visible()
                 assert conclusion.get_attribute("open") is not None
                 assert conclusion.locator("summary").inner_text().strip() == "Conclusion"
-                assert conclusion.evaluate(
-                    "element => element.previousElementSibling.classList.contains('outcome-heading')"
-                )
+                prelude = outcome.locator(".outcome-evidence-prelude")
+                expect(prelude).to_be_visible()
+                expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
+                expect(prelude).to_contain_text("No persisted Python/SageMath execution records")
+                assert prelude.evaluate(
+                    "element => element.nextElementSibling.classList.contains('outcome-subsections')"
+                ), "Saved computation provenance must precede the Advanced Outcome narrative"
                 expect(conclusion).to_contain_text(session["outcome"]["conclusion"].splitlines()[2])
                 toggle = outcome.get_by_role("button", name="Render Conclusion as Markdown")
                 toggle.click()
@@ -210,7 +228,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 toggle = outcome.get_by_role("button", name="Show Conclusion Markdown source")
                 toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
-                outcome.get_by_text("Citations, Evidence & Obligations", exact=True).click()
+                outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
                 expect(outcome).to_contain_text("The intersection bound yields at most n pieces.")
@@ -238,10 +256,63 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 conclusion = row.locator("details.outcome-conclusion")
                 expect(conclusion).to_be_visible()
                 assert conclusion.get_attribute("open") is not None
-            overflow = page.evaluate(
-                "({width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth})"
+            # Switch to Simple Outcome and verify the same provenance is above the narrative.
+            settings = page.get_by_role("button", name="Project settings", exact=True)
+            settings.click()
+            dialog = page.get_by_role("dialog", name="Settings")
+            dialog.get_by_role("tab", name="Preferences").click()
+            detail_setting = dialog.get_by_role(
+                "checkbox", name="Show advanced Outcome details"
             )
-            assert overflow["scroll"] <= overflow["width"], overflow
+            expect(detail_setting).to_be_checked()
+            detail_setting.uncheck()
+            dialog.get_by_role("button", name="Save", exact=True).click()
+            expect(dialog).to_be_hidden()
+            row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
+            expect(row.locator(".outcome-simple")).to_be_visible()
+            prelude = row.locator(".outcome-evidence-prelude")
+            expect(prelude).to_contain_text("0 completed of 0 identified saved executions")
+            assert prelude.evaluate(
+                "element => (element.compareDocumentPosition("
+                "element.parentElement.querySelector('.outcome-simple')) & "
+                "Node.DOCUMENT_POSITION_FOLLOWING) !== 0"
+            ), "Simple Outcome must not put authored prose before the saved ledger"
+
+            for width in (375, 320):
+                page.set_viewport_size({"width": width, "height": 812})
+                expect(prelude).to_be_visible()
+                overflow = page.evaluate(
+                    "({width: document.documentElement.clientWidth, "
+                    "scroll: document.documentElement.scrollWidth})"
+                )
+                assert overflow["scroll"] <= overflow["width"], overflow
+
+            # Adversarial, no-provider record: one saved timeout must never count as success.
+            inspected = sessions[0]
+            inspected["artifacts"][-1].setdefault("investigator_output", {})[
+                "python_execution"
+            ] = {
+                "id": "offline-timeout",
+                "runtime": "python",
+                "status": "timeout",
+                "source": "print('nothing measured')",
+                "stderr": "Timed out before producing a measurement",
+            }
+            (sessions_path / f"{inspected['id']}.json").write_text(
+                json.dumps(inspected, ensure_ascii=False), encoding="utf-8"
+            )
+            page.reload()
+            saved_row = page.locator(f'li[data-session-id="{inspected["id"]}"]')
+            expect(saved_row).to_be_visible(timeout=15000)
+            disclosure = saved_row.locator("button.session-row-disclosure")
+            if disclosure.get_attribute("aria-expanded") != "true":
+                disclosure.click()
+            prelude = saved_row.locator(".outcome-evidence-prelude")
+            expect(prelude).to_contain_text("0 completed of 1 identified saved execution")
+            prelude.locator("summary").click()
+            expect(prelude).to_contain_text("offline-timeout")
+            expect(prelude).to_contain_text("timeout")
+            expect(saved_row.locator(".outcome-simple")).to_be_visible()
             assert not starts, "Fixtures must not start provider sessions"
             assert not errors, errors
             browser.close()
@@ -255,4 +326,4 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 process.kill()
                 process.wait(timeout=5)
 
-print("T47 conclusion real Chrome checks passed at 1440px and 375px; no provider calls made.")
+print("Outcome provenance real Chrome checks passed: Advanced/Simple at 1440px/375px/320px, zero and timed-out executions, no provider calls.")

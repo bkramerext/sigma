@@ -27,11 +27,149 @@ from sigma.text_views import inspect_text, save_source
 from sigma.tooling import run_tooling
 from sigma.ui import run_shutdown, run_ui
 
+COMMAND_DETAILS = {
+    "init": (
+        "Create and initialize a project at an explicit path.",
+        "./sigma init projects/demo.sigma --title 'Demo' --problem 'What explains this result?'",
+        "SIGMA_PROJECTS_ROOT is not used; the path is explicit. Use `create` to place a project under the configured projects root.",
+    ),
+    "create": (
+        "Create a project in the configured projects root.",
+        "./sigma create --title 'Demo' --problem 'What explains this result?'",
+        "SIGMA_PROJECTS_ROOT selects the root; otherwise the repository projects directory is used. The root must exist and be writable.",
+    ),
+    "open": (
+        "Open a project and report its current contents.",
+        "./sigma open projects/demo.sigma",
+        "The project path must identify a valid SIGMA project.",
+    ),
+    "inspect": (
+        "Inspect project settings and saved strategies without changing them.",
+        "./sigma inspect projects/demo.sigma",
+        "The project path must identify a valid SIGMA project.",
+    ),
+    "events": (
+        "List the recorded project history.",
+        "./sigma events projects/demo.sigma",
+        "The project path must identify a valid SIGMA project.",
+    ),
+    "strategies": (
+        "List the project's persistent strategies.",
+        "./sigma strategies projects/demo.sigma",
+        "Removed strategies remain in research history.",
+    ),
+    "new-strategy": (
+        "Save a human-authored strategy to a project.",
+        "./sigma new-strategy projects/demo.sigma --title 'Compare cases' --approach 'Test small cases first.'",
+        "The project path must identify a valid SIGMA project.",
+    ),
+    "remove-strategy": (
+        "Remove a strategy from the active pool while retaining its research history.",
+        "./sigma remove-strategy projects/demo.sigma STRATEGY_ID",
+        "The strategy ID must belong to the project.",
+    ),
+    "edit-strategy": (
+        "Update a strategy's title and approach while preserving earlier text in history.",
+        "./sigma edit-strategy projects/demo.sigma STRATEGY_ID --title 'Revised' --approach 'Check boundary cases.'",
+        "The strategy ID must belong to the project.",
+    ),
+    "stage-strategy": (
+        "Set a strategy's manually tracked stage.",
+        "./sigma stage-strategy projects/demo.sigma STRATEGY_ID ready",
+        "Stage must be draft, ready, exploring, or hold.",
+    ),
+    "reorder-strategies": (
+        "Reorder all active strategies with protection against stale ordering.",
+        "./sigma reorder-strategies projects/demo.sigma --order ID_A ID_B --expected-order ID_B ID_A",
+        "`--expected-order` must match the project's current active order.",
+    ),
+    "edit-project": (
+        "Atomically update project settings using the previously inspected settings snapshot.",
+        "./sigma edit-project projects/demo.sigma --title 'Demo' --problem 'Question?' --research-mode default --model gpt-6.1-sol --thinking high --expected '{...}'",
+        "Use `inspect` to obtain the current settings snapshot for `--expected`; stale snapshots are rejected.",
+    ),
+    "text": (
+        "Inspect authored and cached Plain/Markdown project or strategy text.",
+        "./sigma text projects/demo.sigma --scope project",
+        "Use `--strategy-id` with strategy scope.",
+    ),
+    "agentic-runs": (
+        "List saved agentic generation evidence or export one complete run record.",
+        "./sigma agentic-runs projects/demo.sigma [RUN_ID]",
+        "A supplied run ID must exist in this project's saved evidence.",
+    ),
+    "save-text": (
+        "Save authored Plain or Markdown source using a digest to prevent overwriting newer text.",
+        "./sigma save-text projects/demo.sigma --scope project --format markdown --body '# Notes' --expected-digest DIGEST",
+        "Obtain the current digest with `text`; stale digests are rejected. Strategy scope requires `--strategy-id`.",
+    ),
+    "close": (
+        "Close the current local project context.",
+        "./sigma close",
+        "No project path is required.",
+    ),
+    "sandbox-build": (
+        "Build an optional pinned isolated Python or SageMath research runtime.",
+        "./sigma sandbox-build --runtime python",
+        "Requires the configured container runtime and network access to fetch the pinned image.",
+    ),
+    "sandbox-execute": (
+        "Execute a source file in an isolated research runtime for a project.",
+        "./sigma sandbox-execute projects/demo.sigma --runtime python --source-file experiment.py",
+        "Requires the matching sandbox image to be built. Execution failures are returned as structured JSON.",
+    ),
+    "sandbox-capabilities": (
+        "Report locally available research execution runtimes.",
+        "./sigma sandbox-capabilities",
+        "A runtime is available only when its image and container runtime are ready.",
+    ),
+    "make_sample": (
+        "Create a Samples catalog entry from an exported project JSON file.",
+        "./sigma make_sample export.json --name demo",
+        "The export must be valid; the sample name must satisfy catalog naming rules.",
+    ),
+    "setup": (
+        "Install locked Python and frontend dependencies.",
+        "./sigma setup",
+        "Requires `uv` and `npm` on PATH; see the setup output for a missing-tool diagnostic.",
+    ),
+    "test": (
+        "Run project scenarios, API/CLI checks, lint, types, and frontend build.",
+        "./sigma test",
+        "Requires the repository's locked development tools; this command makes no paid model calls.",
+    ),
+    "start": (
+        "Start or safely restart this checkout's browser UI.",
+        "./sigma start --navigate",
+        "Uses SIGMA local configuration and the configured UI ports; `--navigate` opens a browser tab.",
+    ),
+    "shutdown": (
+        "Stop identifiable local SIGMA UI servers safely.",
+        "./sigma shutdown",
+        "Only processes identifiable as SIGMA instances are stopped; unrelated port owners are left alone.",
+    ),
+}
+
+
+def add_command(subparsers: argparse._SubParsersAction, name: str, **kwargs):
+    """Create command help with a consistent purpose, examples, and diagnostics."""
+    purpose, example, notes = COMMAND_DETAILS[name]
+    return subparsers.add_parser(
+        name,
+        description=purpose,
+        epilog=f"Example:\n  {example}\n\nNotes: {notes}",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        **kwargs,
+    )
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SIGMA projects and repository maintenance")
+    parser = argparse.ArgumentParser(
+        description="SIGMA projects and repository maintenance",
+        epilog="Use `sigma -h COMMAND` or `sigma COMMAND --help` for detailed command help.",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
-    init = commands.add_parser("init")
+    init = add_command(commands, "init")
     init.add_argument("path")
     init.add_argument("--title", required=True)
     init.add_argument("--problem", required=True)
@@ -39,7 +177,9 @@ def main() -> None:
     init.add_argument("--model", default="gpt-6.1-sol")
     init.add_argument("--thinking", default="high")
     init.add_argument("--difficulty", choices=["easy", "medium", "hard"], default="medium")
-    create = commands.add_parser("create", help="Create a project in the configured projects root")
+    create = add_command(
+        commands, "create", help="Create a project in the configured projects root"
+    )
     create.add_argument("--title", required=True)
     create.add_argument("--problem", required=True)
     create.add_argument("--research-mode", default="default")
@@ -47,36 +187,37 @@ def main() -> None:
     create.add_argument("--thinking", default="high")
     create.add_argument("--difficulty", choices=["easy", "medium", "hard"], default="medium")
     for name in ("open", "inspect", "events"):
-        commands.add_parser(name).add_argument("path")
-    strategies = commands.add_parser("strategies", help="List persistent strategies")
+        add_command(commands, name).add_argument("path")
+    strategies = add_command(commands, "strategies", help="List persistent strategies")
     strategies.add_argument("path")
-    strategy = commands.add_parser("new-strategy", help="Save a human-authored strategy")
+    strategy = add_command(commands, "new-strategy", help="Save a human-authored strategy")
     strategy.add_argument("path")
     strategy.add_argument("--title", required=True)
     strategy.add_argument("--approach", required=True)
-    remove = commands.add_parser(
-        "remove-strategy", help="Remove from pool, retaining research history"
+    remove = add_command(
+        commands, "remove-strategy", help="Remove from pool, retaining research history"
     )
     remove.add_argument("path")
     remove.add_argument("strategy_id")
-    edit = commands.add_parser(
-        "edit-strategy", help="Edit name/description, retaining earlier text"
+    edit = add_command(
+        commands, "edit-strategy", help="Edit name/description, retaining earlier text"
     )
     edit.add_argument("path")
     edit.add_argument("strategy_id")
     edit.add_argument("--title", required=True)
     edit.add_argument("--approach", required=True)
-    stage = commands.add_parser("stage-strategy", help="Change a manually tracked stage")
+    stage = add_command(commands, "stage-strategy", help="Change a manually tracked stage")
     stage.add_argument("path")
     stage.add_argument("strategy_id")
     stage.add_argument("stage", choices=["draft", "ready", "exploring", "hold"])
-    reorder = commands.add_parser(
-        "reorder-strategies", help="Reorder all active IDs with stale-order protection"
+    reorder = add_command(
+        commands, "reorder-strategies", help="Reorder all active IDs with stale-order protection"
     )
     reorder.add_argument("path")
     reorder.add_argument("--order", nargs="+", required=True)
     reorder.add_argument("--expected-order", nargs="+", required=True)
-    edit_project = commands.add_parser(
+    edit_project = add_command(
+        commands,
         "edit-project",
         help="Atomically update project settings with a prior settings JSON snapshot",
     )
@@ -84,41 +225,47 @@ def main() -> None:
     for field in ("title", "problem", "research-mode", "model", "thinking", "expected"):
         edit_project.add_argument("--" + field, required=True)
     edit_project.add_argument("--difficulty", choices=["easy", "medium", "hard"])
-    text = commands.add_parser("text", help="Inspect current and cached Plain/Markdown text")
+    text = add_command(commands, "text", help="Inspect current and cached Plain/Markdown text")
     text.add_argument("path")
     text.add_argument("--scope", choices=["project", "strategy"], required=True)
     text.add_argument("--strategy-id")
-    runs = commands.add_parser(
-        "agentic-runs", help="List saved agentic generation evidence or export one run as JSON"
+    runs = add_command(
+        commands,
+        "agentic-runs",
+        help="List saved agentic generation evidence or export one run as JSON",
     )
     runs.add_argument("path")
     runs.add_argument("run_id", nargs="?", help="Run ID to export as a complete JSON record")
-    save_text = commands.add_parser("save-text", help="Save an authored Plain or Markdown source")
+    save_text = add_command(commands, "save-text", help="Save an authored Plain or Markdown source")
     save_text.add_argument("path")
     save_text.add_argument("--scope", choices=["project", "strategy"], required=True)
     save_text.add_argument("--strategy-id")
     save_text.add_argument("--format", choices=["plain", "markdown"], required=True)
     save_text.add_argument("--body", required=True)
     save_text.add_argument("--expected-digest", required=True)
-    commands.add_parser("close")
-    build = commands.add_parser("sandbox-build", help="Build an optional pinned research runtime")
+    add_command(commands, "close")
+    build = add_command(commands, "sandbox-build", help="Build an optional pinned research runtime")
     build.add_argument("--runtime", choices=["python", "sagemath"], required=True)
-    execute = commands.add_parser(
-        "sandbox-execute", help="Execute a source file in an isolated research runtime"
+    execute = add_command(
+        commands, "sandbox-execute", help="Execute a source file in an isolated research runtime"
     )
     execute.add_argument("path")
     execute.add_argument("--runtime", choices=["python", "sagemath"], default="python")
     execute.add_argument("--source-file", required=True)
-    commands.add_parser("sandbox-capabilities", help="Inspect locally available research runtimes")
-    sample = commands.add_parser(
-        "make_sample", help="Create a Samples catalog entry from a project export JSON file"
+    add_command(
+        commands, "sandbox-capabilities", help="Inspect locally available research runtimes"
+    )
+    sample = add_command(
+        commands,
+        "make_sample",
+        help="Create a Samples catalog entry from a project export JSON file",
     )
     sample.add_argument("exported_project")
     sample.add_argument("--name", required=True)
-    commands.add_parser("setup", help="Install locked Python and frontend dependencies")
-    commands.add_parser("test", help="Run tests, API/CLI checks, lint, types and build")
-    ui_command = commands.add_parser(
-        "start", help="Start or safely restart this checkout's browser UI"
+    add_command(commands, "setup", help="Install locked Python and frontend dependencies")
+    add_command(commands, "test", help="Run tests, API/CLI checks, lint, types and build")
+    ui_command = add_command(
+        commands, "start", help="Start or safely restart this checkout's browser UI"
     )
     ui_command.add_argument(
         "--navigate",
@@ -127,8 +274,18 @@ def main() -> None:
         action="store_true",
         help="Open SIGMA in a browser tab after startup",
     )
-    commands.add_parser("shutdown", help="Stop identifiable local SIGMA UI servers safely")
-    args = parser.parse_args()
+    add_command(commands, "shutdown", help="Stop identifiable local SIGMA UI servers safely")
+    for command_parser in commands.choices.values():
+        for action in command_parser._actions:
+            if action.help is None:
+                label = action.dest.replace("_", " ")
+                action.help = f"Set {label}" if action.option_strings else label.capitalize()
+            if action.required:
+                action.help += " (required)"
+    argv = sys.argv[1:]
+    if len(argv) == 2 and argv[0] in {"-h", "--help"} and argv[1] in COMMAND_DETAILS:
+        argv = [argv[1], "--help"]
+    args = parser.parse_args(argv)
     if args.command == "make_sample":
         from sigma.samples import make_sample
 

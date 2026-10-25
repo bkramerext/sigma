@@ -65,3 +65,91 @@ def argument_availability(
             "Inspect any retained artifacts before assessing this claim."
         ),
     }
+
+
+def execution_provenance(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Inventory persisted tool execution, never infer it from authored prose.
+
+    Deduplicate the same execution seen in a step and its resulting artifact.
+    Missing IDs and conflicting statuses remain explicit rather than becoming
+    successful observations. This is an inventory, not a claim-evidence checker.
+    """
+    rows: dict[tuple[str, str], dict[str, Any]] = {}
+    unidentified = 0
+
+    def collect(value: Any, runtime: str, artifact_id: str = "", step_id: str = "") -> None:
+        nonlocal unidentified
+        if not isinstance(value, dict):
+            return
+        execution_id = value.get("id")
+        if not isinstance(execution_id, str) or not execution_id:
+            unidentified += 1
+            return
+        stored_runtime = value.get("runtime")
+        if isinstance(stored_runtime, str) and stored_runtime in {"python", "sagemath"}:
+            runtime = stored_runtime
+        key = (runtime, execution_id)
+        row = rows.setdefault(
+            key,
+            {
+                "id": execution_id,
+                "runtime": runtime,
+                "statuses": [],
+                "artifact_ids": [],
+                "step_ids": [],
+                "source_recorded": False,
+                "output_recorded": False,
+            },
+        )
+        status = value.get("status")
+        status = status if isinstance(status, str) and status else "unavailable"
+        if status not in row["statuses"]:
+            row["statuses"].append(status)
+        if artifact_id and artifact_id not in row["artifact_ids"]:
+            row["artifact_ids"].append(artifact_id)
+        if step_id and step_id not in row["step_ids"]:
+            row["step_ids"].append(step_id)
+        row["source_recorded"] |= isinstance(value.get("source"), str)
+        row["output_recorded"] |= any(key in value for key in ("stdout", "stderr", "artifacts"))
+
+    def collect_fields(value: Any, artifact_id: str = "", step_id: str = "") -> None:
+        if not isinstance(value, dict):
+            return
+        for field, runtime in (("python_execution", "python"), ("sage_execution", "sagemath")):
+            collect(value.get(field), runtime, artifact_id, step_id)
+
+    for artifact in record.get("artifacts") or []:
+        if isinstance(artifact, dict):
+            identifier = artifact.get("id")
+            collect_fields(
+                artifact.get("investigator_output"),
+                artifact_id=identifier if isinstance(identifier, str) else "",
+            )
+    for step in record.get("steps") or []:
+        if isinstance(step, dict):
+            identifier = step.get("id")
+            collect_fields(
+                step.get("output"),
+                step_id=identifier if isinstance(identifier, str) else "",
+            )
+    for branch in record.get("strategy_runs") or []:
+        if isinstance(branch, dict):
+            collect_fields(branch.get("pending_investigation"))
+
+    records = list(rows.values())
+    completed = sum(row["statuses"] == ["completed"] for row in records)
+    inconclusive = len(records) - completed
+    return {
+        "records": records,
+        "unidentified_count": unidentified,
+        "completed_count": completed,
+        "other_count": inconclusive,
+        "note": (
+            "No persisted Python/SageMath execution records; authored measurement "
+            "claims are not established by a saved computation."
+            if not records and not unidentified
+            else "Saved execution status and IDs are provenance, not independent "
+            "verification of a model-authored claim. Failed or interrupted "
+            "executions establish no measured result."
+        ),
+    }

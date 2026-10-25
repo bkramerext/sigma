@@ -4,8 +4,8 @@
 
 Rewrote the newcomer README with a local quick start, optional AI/API-key
 configuration, a separate optional local Google administrator bootstrap, and
-links to the main product and engineering guides. The owner-provided screenshot
-is pending from Brian; the README keeps the requested explicit placeholder.
+links to the main product and engineering guides. Brian's Home and RH screenshots
+are pending; the README keeps two separate, clearly labeled placeholders.
 Setup and bootstrap details were checked against `./sigma setup`,
 `src/sigma/ui.py`, `src/sigma/local_config.py`, and the local Google sign-in
 section of `CLOUD_DEPLOYMENT.md`.
@@ -17,8 +17,26 @@ and API health URLs returned HTTP 200, and `./sigma shutdown` completed. The
 checkout contained Google OAuth client settings but no bootstrap email in that
 launch environment, so the observed run stayed in local single-user mode and
 printed its existing configuration warning. Credentialed Google sign-in was
-not exercised. WOLF remains unchanged pending Brian's approval of its outline,
-as required by T86.
+not exercised. The updated T86 assigns WOLF drafting to ChatGPT after Brian
+approves its outline; Gray's work on this branch is limited to the README.
+
+## T84 detailed command-specific CLI help (2026-10-25)
+
+Extended the existing `argparse` command tree with a shared detailed-help format.
+`sigma -h COMMAND`, `sigma COMMAND -h`, and `sigma COMMAND --help` use the same
+parser help, including purpose, required arguments, options/defaults, examples,
+relevant configuration notes, and common input/runtime errors. Root `sigma -h`
+remains concise. This changes presentation only; command dispatch and services
+are unchanged.
+
+Regression coverage exercises both requested help forms, top-level help, and the
+common example/notes structure for every registered command. Validation:
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL uv run python tests/tooling.py` passed;
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff, formatting, Pyright, frontend typecheck, and production build. The
+environment variable is unset because this local checkout's launch-time Google
+configuration otherwise makes an existing UI lifecycle mock fail before its
+cleanup assertion.
 
 ## Blue Increment 7: saved reasoning and adversarial continuity (2026-10-25)
 
