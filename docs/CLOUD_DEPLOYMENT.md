@@ -6,6 +6,59 @@
 
 This document consolidates deployment architecture, executable operator runbook, hosted authentication, and earlier hosting feasibility analysis. **Current implementation and operator instructions are in Parts 1–3. Parts 4–5 are historical alternatives, not approved deployment plans.**
 
+## Cloud resource inventory (T127)
+
+Maintain this inventory as the central record for actual cloud identifiers and the approved resource plan. **Observed** means reported from the operator's Google Cloud Console (not independently verified by live GCP access); **planned** means not confirmed created. Do not treat planned names as provisioned resources. Record actual IDs and verification dates as work proceeds. Keep secrets, credentials and tokens out of this document.
+
+| Resource | Identifier or configuration | Status / evidence |
+| --- | --- | --- |
+| Existing Google Cloud OAuth project | Name: `SIGMA Auth`; Project ID: `sigma-auth-512601`; Project number: `665111821572` | Operator-reported from Cloud Console, 2026-10-25 |
+| Production infrastructure GCP project | Name: `SIGMA Production`; Project ID: `sigma-research-prod`; Project number: `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
+| Duplicate production project | `SIGMA Production`; ID `sigma-production-512718` | Operator reports shutdown completed 2026-10-25; pending deletion/recovery period; do not use |
+| GCP organization | No organization suspected | Not verified |
+| Registered DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Selected/registered; IP assignment and DNS verification pending |
+| GCE VM | `sigma-gce-01`, Ubuntu 24.04 LTS amd64, `e2-standard-4`, `us-west1-b` | Planned; no live resource ID confirmed |
+| Boot disk | 100 GiB `pd-standard` | Planned |
+| State disk | `sigma-state`, 30 GB `pd-balanced`, zonal `us-west1-b`, blank disk, Google-managed encryption; no backup schedule | Operator reports created 2026-10-25; pending table verification and VM attachment with `auto-delete=no` |
+| Static external IPv4 | `sigma-web-ip`, **`136.66.128.82`**, regional `us-west1`, Premium tier, Google external IP pool | Operator verified appears in address table 2026-10-25; currently unassigned, VM attachment pending |
+| Network | `sigma-vpc` custom VPC; `sigma-us-west1` subnet; proposed `10.42.0.0/24` | Planned; CIDR approval pending |
+| Ingress | IAP SSH `35.235.240.0/20` to TCP 22 only; public TCP 80/443 deferred until launch gates | Planned |
+| Runtime service account | `sigma-runtime@sigma-research-prod.iam.gserviceaccount.com` | Created/enabled, operator screenshot 2026-10-25; secret-level grants pending; no keys or project roles assigned during creation |
+| Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Deferred: Console requires an initial value; no resource or version created, 2026-10-25 |
+| Production Google OAuth client | HTTPS origin `https://sigma-research.duckdns.org`; callback `https://sigma-research.duckdns.org/api/cloud-auth/callback` | Planned; client/project decision pending |
+| Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; project association and trial unverified |
+| Billing / trial / project budget | Both projects linked to `015C1D-E6B877-9913D6`; free trial $300 credit, $0 used (Oct 25); `SIGMA Production - Trial Budget`, $300 custom-range Oct 24 2026–Jan 22 2027, alerts at 50/75/90/100% | Operator screenshots and report Oct 25; trial expiry estimated from start+90 days, not independently confirmed |
+| Enabled project APIs | `compute.googleapis.com`, `iam.googleapis.com`, `cloudresourcemanager.googleapis.com`, `secretmanager.googleapis.com`, `iap.googleapis.com`, `billingbudgets.googleapis.com` | Enabled: operator screenshots/reports on 2026-10-25 |
+| Application release | Exact deployed Git SHA | Pending deployment |
+
+**Cost decision (2026-10-25):** Operator rejected the 200 GiB initial disk and requested a leaner size. 30 GiB is now recommended (approximately $3/month), pending operator confirmation. Monitor usage and expand only if needed. This is a deliberate T127 deviation; older baseline estimates and provisioning command examples elsewhere in this document still specify 200 GiB and must be reconciled before executing them.
+
+**Operator IAM checkpoint (2026-10-25):** The human operator confirmed their existing role is **Owner** on `sigma-research-prod`. Dedicated `roles/compute.osAdminLogin`, `roles/iap.tunnelResourceAccessor`, and runtime service-account-level `roles/iam.serviceAccountUser` grants are not yet verified. Preserve existing owner role during provisioning; review privileges after setup.
+
+**IAM verification (2026-10-25):** Operator screenshot shows named human account assigned Owner, Compute OS Admin Login, and IAP-secured Tunnel User in `sigma-research-prod`. Default Compute Engine service account retains Editor; do not attach it to SIGMA VM. Dedicated runtime service account attachment and its `iam.serviceAccountUser` grant remain to be verified.
+
+**Service account attachment authorization (2026-10-25):** Operator confirmed `roles/iam.serviceAccountUser` saved for the named human operator on the `sigma-runtime` service account resource only. No condition or additional roles; ready for VM attachment.
+
+**VM creation checkpoint (2026-10-25):** Operator confirmed pre-create configuration for `sigma-gce-01`: `e2-standard-2` (2 vCPU, 8 GiB), Ubuntu 24.04 LTS amd64, 100 GB standard boot disk, existing 30 GB `sigma-state` with Keep disk, `sigma-vpc`/`sigma-us-west1`, static IPv4 `136.66.128.82`, IAP-only network tag, `sigma-runtime` with cloud-platform scope, OS Login, shielded settings, deletion protection and labels. VM creation authorized in operator workflow; **creation and running state not yet verified**. This machine type deviates from earlier `e2-standard-4` plan for cost control.
+
+**Live VM status (2026-10-25):** Operator reports `sigma-gce-01` appears with green running status in VM instances and external IPv4 `136.66.128.82`. Attached disk identity/deletion rule, VM detailed settings, and IAP SSH remain to be verified.
+
+**Disk attachment verification (2026-10-25):** Operator confirmed `sigma-state` attached to running `sigma-gce-01`, 30 GB, read/write, deletion rule **Keep disk**. Guest filesystem identity, mount, restart persistence, and IAP SSH are not yet verified.
+
+**IAP SSH verification (2026-10-25):** Operator ran `gcloud compute ssh sigma-gce-01 --project=sigma-research-prod --zone=us-west1-b --tunnel-through-iap` from Google Cloud Shell and successfully reached guest shell without errors. Cloud Shell generated SSH key for OS Login. Read-only guest block-device identity and filesystem checks remain pending.
+
+**Guest device check (2026-10-25):** Read-only `lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS` on `sigma-gce-01` showed `/dev/sda` 100G boot with ext4 root `/`, plus separate `/dev/sdb` 30G with no FSTYPE or mount. Guest by-id mapping and `blkid` still pending before any filesystem initialization.
+
+**State filesystem initialization (2026-10-25):** Operator verified `/dev/disk/by-id/google-sigma-state -> ../../sdb`, with empty `blkid` and `wipefs -n` output, then ran `sudo mkfs.ext4 -L sigma-state /dev/disk/by-id/google-sigma-state`. `mke2fs` reported successful ext4 creation, UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5`. Post-format `blkid`, mount and reboot checks pending. Never repeat mkfs on this disk.
+
+**State mount observation (2026-10-25):** Operator mounted UUID `28ef67cb-4da8-46e7-9a8b-dce0470153a5` at `/srv/sigma-state`; `findmnt` showed `/dev/sdb`, ext4, `rw,relatime`. Filesystem root ownership/mode, persistent fstab entry and reboot validation remain pending.
+
+**State mount permissions (2026-10-25):** Operator confirmed `sudo stat -c '%U:%G %a %n' /srv/sigma-state` returned `root:root 700 /srv/sigma-state`. Persistent fstab configuration and reboot validation remain pending.
+
+**T127 reboot acceptance (2026-10-25):** VM boot time `2026-10-25 22:01:51 UTC` after operator reboot. `findmnt /srv/sigma-state` reported `/dev/sdb` ext4 `rw,relatime`; `stat` reported `root:root 700`. Persistent UUID mount survived reboot. Host application installation, backup policy, and hosted launch remain separate work.
+
+**Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
+
 ## Contents
 
 1. [Deployment architecture and operations](#part-1-deployment-architecture-and-operations)
