@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 from sigma.api import app, export_project_view
 from sigma.project_reports import render_report
 from sigma.projects import create_strategy, initialize_project
+from sigma.research_epistemics import verification_label
 
 
 def fixture() -> dict:
@@ -155,7 +157,12 @@ def test_unequal_metric_groups() -> None:
         html_report, _ = render_report(data, "html")
         assert isinstance(plain, str) and isinstance(html_report, str)
         for item in ops + research:
-            assert f"{item['label']}: {item['value']}" in plain
+            value = (
+                verification_label(data["research_sessions"][0]["outcome"]["solution_review"])
+                if item["label"] == "Verification"
+                else item["value"]
+            )
+            assert f"{item['label']}: {value}" in plain
             assert f"<dt>{item['label']}</dt>" in html_report
         assert ("Operational metrics" in plain) == bool(ops)
         assert ("Research-quality metrics" in plain) == bool(research)
@@ -306,7 +313,41 @@ def test_context_manifest_is_reported() -> None:
         assert expected in report
 
 
+def test_verification_presentation() -> None:
+    for code, label in (
+        ("incomplete", "Incomplete"),
+        ("convincing_unverified", "Convincing but unverified"),
+        ("unknown", "Unknown"),
+        ("verified", "Reported verified; not independently checked by SIGMA"),
+        ("unrecognized-legacy-value", "Unknown"),
+        (None, "Not recorded"),
+    ):
+        for structured in (True, False):
+            data = fixture()
+            outcome = data["research_sessions"][0]["outcome"]
+            review = outcome["solution_review"]
+            if code is None:
+                review.pop("verification_status")
+            else:
+                review["verification_status"] = code
+            if not structured:
+                review.pop("argument_steps")
+            original = deepcopy(data)
+            for format in ("txt", "html", "tex"):
+                rendered, _ = render_report(data, format)
+                assert isinstance(rendered, str)
+                assert label in rendered
+                # The old cached metric label cannot override the saved code.
+                assert "Convincing, unverified" not in rendered
+                if code != "convincing_unverified":
+                    assert "Convincing but unverified" not in rendered
+                if not structured:
+                    assert "saved narrative is available" in rendered
+            assert data == original  # reports never migrate or rewrite the archive
+
+
 def main() -> None:
+    test_verification_presentation()
     test_unequal_metric_groups()
     test_context_manifest_is_reported()
     data = fixture()
@@ -325,10 +366,10 @@ def main() -> None:
         "Operational metrics",
         "Model calls: 2 dispatched · 2 completed",
         "Research-quality metrics",
-        "Verification: Convincing, unverified",
+        "Verification: Convincing but unverified",
         "Solution claim: Candidate formula",
         "Claim scope: conditional",
-        "Verification status: convincing_unverified",
+        "Saved verification code: convincing_unverified",
         "Strategy Assessments",
         "Productive: The linked counterexample attempt clarified the boundary case.",
         "Claim: A < B & C",
@@ -344,7 +385,7 @@ def main() -> None:
     del legacy_data["research_sessions"][0]["outcome"]["solution_review"]["verification_status"]
     legacy_report, _ = render_report(legacy_data, "txt")
     assert isinstance(legacy_report, str)
-    assert "Verification status:" not in legacy_report
+    assert "Saved verification code:" not in legacy_report
     assert "Difficulty:" not in plain
     data["project"]["difficulty"] = "easy"
     plain_with_difficulty, _ = render_report(data, "txt")

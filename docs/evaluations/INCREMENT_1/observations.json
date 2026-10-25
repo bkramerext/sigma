@@ -1,0 +1,107 @@
+{
+  "browser": "156.0.8078.47",
+  "observed": [
+    {
+      "record": "archive",
+      "label": "Convincing but unverified",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        }
+      ],
+      "kind": "unchanged historical archive"
+    },
+    {
+      "record": "incomplete",
+      "label": "Incomplete",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        }
+      ],
+      "kind": "synthetic declaration variant only"
+    },
+    {
+      "record": "unknown",
+      "label": "Unknown",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        }
+      ],
+      "kind": "synthetic declaration variant only"
+    },
+    {
+      "record": "verified",
+      "label": "Reported verified; not independently checked by SIGMA",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        }
+      ],
+      "kind": "synthetic declaration variant only"
+    },
+    {
+      "record": "missing",
+      "label": "Unknown",
+      "dimensions": [
+        {
+          "width": 1440,
+          "scrollWidth": 1440
+        },
+        {
+          "width": 390,
+          "scrollWidth": 390
+        }
+      ],
+      "kind": "synthetic declaration variant only"
+    }
+  ],
+  "nonconsecutive_fixture_sessions": 5,
+  "source_hashes": {
+    "docs/evaluations/fixtures/t17-8-answer-free/live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json": "724f0ff42aaa849cd44f26b02ebf6381f7ee1bbf0e5807f1b4b0f8eaeb66226f",
+    "samples/jesus-cannabis/project.json": "bfa48c4e3740e1a8d1e41a0817aba4bd2273ca13c9a9940a411ac13ca797ed37",
+    "samples/riemann-hypothesis-research/project.json": "60e101c24381078a7f9381464321d4857c836321d1e6d067c35455407882fb75",
+    "samples/warp-drive-engineering/project.json": "87d9f757f1366de75fbd498c2e8d2fc1bb33e0420396578d8924aabd22b00dbb",
+    "samples/nonconsecutive-subset-sums/sample-evidence.json": "1a149cbd3fa079a676fa8c8417a4762b4fb3f9ebeec87ffbd0282e0f8870a8d0",
+    "samples/nonconsecutive-subset-sums/project.json": "cb4e67fe05d521776bc3afb67fef800d112fefa550db4957fa36d399829463b8",
+    "samples/maximum-regions-by-lines/project.json": "bf8a59e5feda7dc856022d7a3c7ce2e282788886ede80322ce88ec7c35c37365",
+    "samples/theta-functional-equation/project.json": "887d311f3f66bed9f1c780f35c4103c342e6198120e3bbb1499f53c49cf1ff00",
+    "samples/arrival-sequel/project.json": "1fdf9ab93e76387115fd56db76e7f07850bab961fbc86570085c9c30971e9a6c",
+    "samples/alternating-zeta-boundary/project.json": "b0b4cdd855c87b1c7312abc9a9c3a13978a4a2d3a1e6ee0629597be13619d30f",
+    "samples/operation-narrow-passage/scenario.md": "a18416ad103d221de889e40e5ad10bcbd745f7a8452384314c6dfd29a66c0558",
+    "samples/operation-narrow-passage/project.json": "12c561e911937735ffe0902ded40093b6feba276b1836298f1c58e9b311d0581",
+    "samples/first-principles-catalysis/project.json": "fb10020e94905c3747dab27b4dffe3d889a3ca703497721ac2fc9ea1c7a652d7",
+    "samples/euler-product-primes/project.json": "f24d6596b29aeb77e251b53d2f3aa221d78418da5cf1b436c228f622f61850e2",
+    "samples/algorithm-design/project.json": "5b9cb114597cf2f93d6af35f1be0568c1d4c0dac88f7affaf5a98df31cf4f70d",
+    "samples/counting-constrained-binary-strings/project.json": "e31ce6a79ecb2143af1881f7449e110c7b011bfb1275e59a1f38912a2b59d8d0",
+    "samples/xenopus-tail-regeneration/project.json": "e2acf3288c73d00db1a7062f49c5bc6eb85565980237df46933335720c8e6f7b",
+    "samples/scientific-investigation/project.json": "43f3ab6dc4484d027e8b6c6812f3e2954ac71de04ebb96bbfdbabbadef65ea6e",
+    "samples/handshake-count-easy/project.json": "b57ef2d223893da4f08f367a82bf7b33be855308fd9188a75e40d8a273b068b2",
+    "samples/warp-drive-physics/project.json": "e0a911ea2c049f4ce1c7af9b12e9c445bc8e8f04bd7fa0b681a5c4bc7431b6d9"
+  },
+  "source_records_unchanged": true,
+  "page_errors": [],
+  "inference_requests": [],
+  "provider_calls": 0
+}

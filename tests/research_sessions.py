@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
@@ -2696,6 +2697,7 @@ def test_outcome_conclusions_are_bounded_honest_and_synthesized(path: Path):
         "open_obligations": [],
         "objective_review": {
             "status": "achieved",
+            "verification_status": "convincing_unverified",
             "claim": "R(n) = 1 + n(n+1)/2 for every n ≥ 0.",
             "argument_summary": "The insertion bound and explicit arrangement match.",
             "argument_steps": [conclusion_step],
@@ -6311,7 +6313,88 @@ def test_intervention_recovery_supersession_and_rejection(path: Path):
     assert "intervention.rejected" in [event["kind"] for event in final["events"]]
 
 
+def test_epistemic_presentation_is_conservative_and_read_only() -> None:
+    archive = Path(__file__).resolve().parents[1] / (
+        "docs/evaluations/fixtures/t17-8-answer-free/"
+        "live-session-91e96112-27ce-412e-841f-5cbf67cbba75.json"
+    )
+    archive_bytes = archive.read_bytes()
+    original = json.loads(archive_bytes)["research_sessions"][0]
+    for code, expected in (
+        ("incomplete", "Incomplete"),
+        ("convincing_unverified", "Convincing but unverified"),
+        ("unknown", "Unknown"),
+        ("verified", "Reported verified; not independently checked by SIGMA"),
+        (None, "Unknown"),  # legacy derived default, never written back
+    ):
+        for status in ("ended", "failed"):
+            for structured in (True, False):
+                record = deepcopy(original)
+                record["status"] = status
+                for artifact in record["artifacts"]:
+                    review = artifact["objective_review"]
+                    if code is None:
+                        review.pop("verification_status", None)
+                    else:
+                        review["verification_status"] = code
+                    if structured:
+                        # Representation fixture only, not an enriched historical proof.
+                        review["argument_steps"] = [
+                            {
+                                "number": 1,
+                                "title": "Representation fixture",
+                                "argument": "This tests structured availability, not mathematical validity.",
+                                "epistemic_status": "conjecture",
+                                "basis_artifact_ids": [],
+                            }
+                        ]
+                before = deepcopy(record)
+                outcome = research_sessions._outcome(record)
+                assert outcome["verification_label"] == expected
+                if code != "convincing_unverified":
+                    assert outcome["assessment"] == "mixed"
+                    assert "Complete reviewed candidate answer" not in outcome["conclusion"]
+                assert expected in outcome["conclusion"]
+                if code != "convincing_unverified":
+                    assert "convincing but unverified candidate" not in " ".join(outcome["caveats"])
+                public = research_sessions._public(record)
+                assert public["outcome"]["verification_label"] == expected
+                metric = next(
+                    item
+                    for item in public["outcome"]["metrics"]["research_quality"]
+                    if item["label"] == "Verification status"
+                )
+                assert metric["value"] == expected
+                availability = public["outcome"]["argument_availability"]
+                assert availability["status"] == ("structured" if structured else "narrative")
+                if not structured:
+                    assert "saved narrative is available" in availability["label"]
+                    assert "unstructured argument, unassessed" in outcome["label"]
+                    assert (
+                        "cannot be assessed as a complete argument from this record"
+                        not in outcome["summary"]
+                    )
+                    # Historical summaries remain available without being
+                    # misattributed as an agent-authored Conclusion.
+                    assert public["outcome"]["conclusion"] is None
+                    assert public["outcome"]["summary"]
+                assert record == before
+    # Absence and partial work remain distinct from a recorded candidate narrative.
+    partial = deepcopy(original)
+    partial["artifacts"][-1]["objective_review"]["status"] = "partial"
+    partial["artifacts"][-1]["objective_review"]["verification_status"] = "incomplete"
+    assert research_sessions._outcome(partial)["verification_label"] == "Incomplete"
+    empty = research_sessions._outcome({"status": "failed", "artifacts": []})
+    assert empty["verification_label"] == "Not recorded"
+    assert empty["argument_availability"]["status"] == "not_recorded"
+    from sigma.research_epistemics import argument_availability
+
+    assert argument_availability({"claim": "An assertion alone"})["status"] == "not_recorded"
+    assert archive.read_bytes() == archive_bytes
+
+
 def main():
+    test_epistemic_presentation_is_conservative_and_read_only()
     test_request_audit_truncation_tokens_and_reconciliation()
     with TemporaryDirectory() as temporary:
         root = Path(temporary)

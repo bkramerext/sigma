@@ -380,10 +380,24 @@ def research_limits_update(body: ResearchLimitsRequest):
     )
 
 
+@app.get("/api/projects/current-understanding")
+def current_understanding_view(path: str):
+    from sigma.research_state import current_understanding
+
+    return current_understanding(path)
+
+
 @app.get("/api/projects/research-sessions")
 async def research_sessions_view(path: str):
     await research_sessions.ensure_queued_workers(path)
-    return {"sessions": research_sessions.list_sessions(path)}
+    from sigma.research_state import build_current_understanding
+
+    sessions = research_sessions.list_sessions(path)
+    project = inspect_project(path).project
+    return {
+        "sessions": sessions,
+        "current_understanding": build_current_understanding(project.id, sessions),
+    }
 
 
 @app.get("/api/projects/research-sessions/{session_id}")
