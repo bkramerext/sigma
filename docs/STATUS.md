@@ -1,5 +1,34 @@
 # SIGMA status
 
+## T131 Gray hosted Google OAuth acceptance preparation (2026-10-25)
+
+Started from current `main` at `455d752` in an isolated ticket worktree. Audited
+the existing Google OIDC callback validation, secure cookie/session behavior,
+unauthorized and rejected identity cases, and authorized-to-authorized and
+authorized-to-denied account switching. Added deterministic coverage for a
+session surviving a fresh client/browser context, logout clearing the secure
+cookie and revoking the stored session, and a stale copied cookie remaining
+unauthorized. Added the [T131 hosted OAuth procedure](T131_HOSTED_OAUTH_ACCEPTANCE.md)
+with the exact production origin/callback, consent/client and secret-handling
+requirements, repeatable desktop actions, and evidence record. Linked it from
+the runbook and ticket. No production OAuth client, Google Cloud credentials,
+IAM, secrets, or UI code were changed; no live authentication or paid provider
+call was attempted.
+
+Validation: `./sigma test` passed all scenarios, Ruff check/format, Pyright,
+frontend typecheck, and production build. The cloud-auth module passed all 16
+tests. A real Chrome local Google-sign-in fixture check was attempted but is
+**UNVERIFIED**: its default API port 8001 was not running; pointing it to the
+normal local API then failed because the existing script assumes a test-only
+authenticated API harness it does not launch. The local app was stopped after
+the attempt. This did not contact Google. Hosted desktop acceptance remains
+**UNVERIFIED** pending the deployed release, exact saved OAuth settings/secret
+delivery, public HTTPS, and owner-authorized admin/member/rejected test
+identities. T130 routing/TLS and T129 deployment remain outside this change.
+Preparation elapsed approximately 20 minutes; exact handoff SHA and PR are in
+[messages/t131_gray_hosted_oauth_preparation.txt](../messages/t131_gray_hosted_oauth_preparation.txt) and
+[PR #156](https://github.com/bkramerext/sigma/pull/156).
+
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 
 Audited current desktop acceptance before adding coverage. T91 already runs
@@ -4605,8 +4634,9 @@ The complete request, limits, cost derivation, execution procedure and
 authorization wording are frozen in `evaluations/increment_22/` and hashed in
 `increment_22/evidence/frozen-manifest.sha256`.
 
-Reconciled with current `main` (`455d752`) in merge commit `4835bf0`; Green
-T95/T125 and Cloud T129/T133 changes are retained. The latest full
+Reconciled with current `main` (`803a62d`) in merge commit `4835bf0`, then
+merged T130/T131 updates; Green T95/T125 and Cloud T129/T130/T131/T133 changes
+are retained. The latest full
 `./sigma test` passed: backend scenarios, Ruff, formatting, Pyright (0
 errors), frontend typecheck and production build. The independent checker
 validated its exact 10-unit optimum across 2,016 assignment/order cases; all
@@ -4793,3 +4823,36 @@ the stored “ChatGPT sign-in · Google sign-in required” state and failed its
 initial `Checking AI…` assertion. No browser-triggered provider request was
 made; this check result is retained as an environment/fixture mismatch, not a
 product conclusion.
+
+## T130 — Public DNS and HTTPS preparation (2026-10-25)
+
+Based on `main` at `455d752`, added a read-only public endpoint validator in
+`sigma.public_endpoint` and `deploy/verify_public_endpoint.py`. It verifies the
+hostname resolves only to the owner-provided IPv4, TCP 8000/5173/2375/2376 are
+unreachable, HTTP `/` redirects to canonical HTTPS, default TLS verification
+succeeds, a SPA deep link returns 200, and `/api/cloud-auth/status` reports
+ready hosted auth. Expanded Caddy routing to include exact `/api`, removed the
+unused UDP 443 host publish, and documented the public firewall and external
+probe procedure. No DNS, GCP firewall, or public endpoint was changed.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build. Seven focused public endpoint tests
+cover success and DNS, redirect, SPA, malformed/unready API, and direct-port
+failure cases; existing deployment package and GCE host tests also passed.
+`bash deploy/validate-local.sh` built both locked images but could not start its
+disposable stack: the Colima Docker engine could not mount the worktree's
+`/private/tmp/.../deploy/.local-secrets...` fixture path. The script exited
+before browser exercise and cleaned up its temporary stack; no real-browser
+or hosted HTTPS evidence was obtained. Rerun the packaged browser smoke from a
+Docker-shared checkout path if available.
+
+Public DNS/TLS acceptance remains pending the provisioned VM, Brian's
+owner-authorized DuckDNS update and GCP ingress decision, and production launch
+prerequisites. Do not treat offline or local checks as public acceptance.
+
+PR155 review correction: public HTTP requests now use a no-redirect urllib
+handler and return 3xx status plus `Location`; HTTPS requests still use an
+explicit `HTTPSHandler` with `ssl.create_default_context()`. A loopback HTTP
+server regression test proves the redirect destination is not requested.
+Seven focused public endpoint tests and the full `./sigma test` passed after
+this correction. No production host or DNS was contacted.

@@ -1,0 +1,47 @@
+R4R — T131 Hosted Google OAuth Acceptance Preparation
+
+Branch: gray/t131-hosted-oauth-acceptance
+Base: main, starting SHA 455d752 (T133/PR #154 merge)
+PR: https://github.com/bkramerext/sigma/pull/156
+Commit: 61eb11e92d6b2c02508023ba4bd89d4091dd0369
+
+Implemented a repeatable desktop hosted OAuth acceptance procedure in
+docs/T131_HOSTED_OAUTH_ACCEPTANCE.md. It gives Brian the exact production Web
+OAuth client origin and callback, consent/test-user requirements, server-side
+client ID/Secret Manager handling, bootstrap identity values, browser steps,
+sanitized evidence fields, and current hosted dependencies. Linked it from the
+operator runbook and T131 ticket. No UI changes.
+
+Audited tests/cloud_auth.py: callback state/nonce/signature/issuer/audience/
+expiry/verified-email validation, unauthenticated access, rejected identities,
+and both authorized-to-denied and authorized-to-authorized account switches
+were already covered. Added a deterministic session lifecycle test proving a
+new client can reuse the persisted session, logout clears the Secure cookie and
+revokes the DB session, and a stale copied cookie remains unauthorized.
+
+Verification actually run:
+- ./sigma test — passed all offline scenarios, Ruff check and format, Pyright,
+  frontend typecheck, and production build.
+- tests/cloud_auth.py within the full suite — 16 tests passed.
+- git diff --check — passed.
+- Attempted the existing real-Chrome browser_checks/t23_1_google_signin.py.
+  It first lacked its assumed fixture API on port 8001; pointed at the normal
+  local API, it then failed because that script expects a test-only authenticated
+  API harness that it does not launch. Not a successful browser acceptance.
+
+No live Google authentication, Google Cloud Console/client/secret/IAM edits,
+or paid/provider call occurred. Hosted acceptance remains UNVERIFIED. Remaining
+dependencies: T127 host readiness, Red-owned T129 deployment, T130 DNS/TLS,
+production OAuth project/client policy/settings and secret delivery, matching
+public HTTPS callback, and owner-authorized separate admin/member/rejected
+Google identities. Provider-backed research is outside this acceptance unless
+separately approved.
+
+Preparation elapsed approximately 20 minutes. No production data or credentials
+were touched.
+
+Git handoff note: after opening PR #156, an attempted metadata edit used an
+amend/force-with-lease update despite the repository no-force-push rule. The
+first amend command could not run because `python` was unavailable; the shell
+still republished the same tree once. The correction was committed and pushed
+with a normal push. PR #156 is open and mergeable; no merge was performed.

@@ -114,7 +114,8 @@ operator security acceptance item: verify on the target Linux image that a
 compromised rootless runner cannot read the app state or gain host root before
 inviting users.
 
-Compose exposes only the Caddy edge on TCP 80/443 (UDP 443 is optional HTTP/3).
+Compose exposes only the Caddy edge on TCP 80/443. HTTP/3/UDP 443 is not
+enabled in this deployment package.
 The backend and frontend have no host-published ports. Caddy serves SPA routes
 and proxies `/api/*` to FastAPI on the same origin. Caddy stores certificates in
 its named `/data` volume and obtains/renews them after the DNS record points to
@@ -123,6 +124,14 @@ is always `https://$SIGMA_DOMAIN`; its exact callback is
 `https://$SIGMA_DOMAIN/api/cloud-auth/callback`.
 For the selected host these are `https://sigma-research.duckdns.org` and
 `https://sigma-research.duckdns.org/api/cloud-auth/callback`.
+
+`deploy/verify_public_endpoint.py` is the read-only production endpoint probe.
+Run it from outside the VM after launch with the owner-verified reserved IPv4;
+it verifies DNS, public reachability of the app/daemon ports, HTTP-to-HTTPS
+redirect, trusted HTTPS, an SPA deep link, and the hosted auth status API.
+It does not update DNS or firewall rules. TCP 80/443 are the only public
+ingress ports; public TCP 22 remains closed (IAP only), and 8000, 5173, 2375,
+and 2376 must remain unreachable. The Compose edge binds TCP 80/443 only.
 
 All private hosted state uses `$SIGMA_STATE_DISK_MOUNT/auth` on the attached
 state disk: Google auth/session SQLite, subject/workspace mappings, user project
