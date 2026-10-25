@@ -2102,6 +2102,9 @@ async def generate(
             )
         except RuntimeError as exc:
             raise ProjectError(str(exc)) from exc
+        # Keep the exact source that produced this version's PDF alongside the
+        # frozen evidence and draft. A PDF alone is not a reproducible artifact.
+        record["tex_source"] = tex
         _save(path, record, pdf)
         if long_form:
             try:

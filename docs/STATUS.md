@@ -1,5 +1,44 @@
 # SIGMA status
 
+## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
+
+Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
+musl release asset and a SHA-256 checked download. Paper versions now retain the
+exact TeX source used for compilation beside the frozen evidence snapshot and
+the existing hash-checked PDF in the project's paper archive. No cloud storage
+adapter or sponsored-inference accounting code changed.
+
+Added `python -m sigma.cloud_runtime_check`, an opt-in smoke proof that checks
+the selected Docker daemon reports rootless mode, executes real Python and
+SageMath through the existing bounded executor, verifies non-root/no-network/
+no-host-secret access, retrieves preserved execution artifacts, compiles actual
+TeX to PDF, and verifies source/evidence/PDF round trips. The local command in
+`CLOUD_DEPLOYMENT.md` explicitly permits Docker Desktop/Colima for development;
+the GCE command omits that override and requires the dedicated rootless daemon.
+
+Observed locally on Colima: both images completed against their resolved image
+IDs; both reported UID 65532, blocked the disposable host-secret probe and
+network probe, and round-tripped `runtime-evidence.json`. TeX compiled to a
+5,747-byte PDF; the paper archive returned byte-identical TeX, evidence
+snapshot, and PDF. Separately, the built cloud backend image reported Tectonic
+0.15.0 and compiled a real 4,160-byte PDF under the backend's non-root/read-only
+container settings. Local Docker reported `daemon_rootless: false`; actual
+rootless daemon execution and host-boundary attacks remain **UNVERIFIED** until
+Red reruns the documented command on GCE. No Google Cloud resources or inference
+provider calls were used.
+
+Validation: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and focused
+paper tests passed. The first bare `./sigma test` attempt failed in the
+pre-existing UI tooling scenario because this shell has a bootstrap-admin
+environment setting. A later attempt also showed the fresh worktree lacked
+frontend dependencies; after `./sigma setup`, the environment-adjusted full
+suite passed, including Ruff, formatting, Pyright, frontend typecheck, and
+production build. Backend Docker image build and in-image Tectonic compilation
+passed. The runtime smoke script was exercised on actual Docker containers.
+The GCE command and real rootless execution remain a required Red follow-up;
+hosted AI paper generation, identity authorization, restart persistence, and
+sponsored budget operations are outside this Blue runtime increment.
+
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.
