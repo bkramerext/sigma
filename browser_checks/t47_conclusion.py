@@ -312,6 +312,20 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 "source": "print('nothing measured')",
                 "stderr": "Timed out before producing a measurement",
             }
+            # A metadata-only completed status is not evidence of a recorded
+            # measurement. Check the warning alongside a distinct timeout.
+            inspected.setdefault("steps", []).append(
+                {
+                    "id": "missing-output-step",
+                    "output": {
+                        "python_execution": {
+                            "id": "offline-reported-only",
+                            "runtime": "python",
+                            "status": "completed",
+                        }
+                    },
+                }
+            )
             (sessions_path / f"{inspected['id']}.json").write_text(
                 json.dumps(inspected, ensure_ascii=False), encoding="utf-8"
             )
@@ -322,10 +336,15 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             if disclosure.get_attribute("aria-expanded") != "true":
                 disclosure.click()
             prelude = saved_row.locator(".outcome-evidence-prelude")
-            expect(prelude).to_contain_text("0 completed of 1 identified saved execution")
+            expect(prelude).to_contain_text("1 completed of 2 identified saved executions")
+            expect(prelude).to_contain_text(
+                "1 completed-status record(s) do not include saved source and output"
+            )
             prelude.locator("summary").click()
             expect(prelude).to_contain_text("offline-timeout")
             expect(prelude).to_contain_text("timeout")
+            expect(prelude).to_contain_text("offline-reported-only")
+            expect(prelude).to_contain_text("source unavailable, output unavailable")
             expect(saved_row.locator(".outcome-simple")).to_be_visible()
             page.screenshot(
                 path=str(SCREENSHOT_DIR / "sigma-increment13-timeout-mobile.png"),
