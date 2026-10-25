@@ -1,5 +1,30 @@
 # SIGMA status
 
+## T129 GCE application deployment (2026-10-25)
+
+Offline deployment review adds a Caddy edge healthcheck against its local
+admin endpoint; the GCE preflight now fails unless backend, frontend and Caddy
+all have healthchecks, while Caddy remains ordered after healthy backend and
+frontend. Focused package tests pin the GCE state bind to
+`/srv/sigma-state/auth`, hosted `persistent_disk` configuration, auth/workspace
+paths, app UID/GID ownership, mount guard and systemd Docker/rootless/mount
+ordering. GCE preflight tests exercise acceptance and reject a missing edge
+healthcheck. Existing storage scenarios cover backend restart, full state-root
+backup/restore, Recent-path rebasing and no startup when the persistent mount
+is absent.
+
+Validation: focused `tests/deployment_package.py`, `tests/gce_host.py` (16
+tests), and `tests/storage.py` passed. Final `./sigma test` passed all offline
+scenarios, Ruff, formatting, Pyright, frontend typecheck and production build.
+One preceding full run had a transient `tests/storage.py` restore response
+failure; an immediate isolated rerun and the final full run both passed. The
+local Docker engine reports 29.5.2, but `docker compose version` exits 1
+because the Compose plugin is missing; merged Compose rendering, packaged
+container smoke and real Chrome checks could not run. No GCE resources, hosted
+endpoints, provider calls or secrets were used. Actual deployment SHA, mount
+identity/ownership, service health and persistence after container recreation
+remain pending Brian's T127 handoff; no hosted acceptance is claimed.
+
 ## Green UI tickets #95 and #125 (2026-10-25)
 
 Implemented on one branch, `green/t95-t125-ui`, from current `main` at

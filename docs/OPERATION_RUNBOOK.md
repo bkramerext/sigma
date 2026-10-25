@@ -58,6 +58,38 @@ sudo journalctl -u sigma.service -n 100 --no-pager
 
 Verify public HTTPS, `/api` routing and application health with the documented probe, not only process status. Redact tokens, personal data and request bodies from captured logs. For failure classify DNS/TLS, VM/network, disk mount, Docker/rootless socket, service, OAuth, secret access, quota, provider or persistent state before restarting.
 
+After starting or restarting the service, verify all three container healthchecks
+and the public app/API paths. Run on the host from the reviewed release
+checkout; this uses the system Docker daemon for Compose and does not start or
+mutate the stack:
+
+```sh
+cd /opt/sigma/current
+compose=(sudo docker compose --project-name sigma --env-file /etc/sigma/deploy.env \
+  -f deploy/compose.yaml -f deploy/compose.gce.yaml)
+for service in backend frontend edge; do
+  container=$("${compose[@]}" ps -q "$service")
+  test -n "$container"
+  test "$(sudo docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy
+done
+curl --fail --silent --show-error https://sigma-research.duckdns.org/ -o /dev/null
+curl --fail --silent --show-error https://sigma-research.duckdns.org/api/cloud-auth/status \
+  | python3 -c 'import json,sys; s=json.load(sys.stdin); assert s["enabled"] and s["ready"] and s["target"] == "hosted"'
+findmnt --mountpoint /srv/sigma-state --output SOURCE,UUID,FSTYPE,OPTIONS
+sudo stat -c '%U:%G %a %n' /srv/sigma-state /srv/sigma-state/auth
+sudo docker inspect --format '{{.Mounts}}' "$("${compose[@]}" ps -q backend)"
+```
+
+The backend healthcheck validates hosted auth, persistent storage, required
+secret configuration, spending limits and rootless Docker reachability. The
+frontend probes its Nginx listener; Caddy probes its loopback-only admin API.
+The edge waits for both application healthchecks before starting. Require the
+state mount UUID to match the approved disk inventory and `/srv/sigma-state`
+to remain `root:root` mode `700`; `auth` must be the mounted disk's
+`10001:10001` mode `700` directory. The Compose bind source must resolve to
+`/srv/sigma-state/auth`. Container health alone does not prove hosted identity,
+workspace privacy or saved-state recovery; those checks remain separate.
+
 ### Automated host and backup checks (T136)
 
 After T128/T129 host setup and the T135 scheduler are installed, configure the

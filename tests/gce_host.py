@@ -21,6 +21,52 @@ import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
+    def test_preflight_requires_all_healthchecks_and_healthy_startup_dependencies(self) -> None:
+        services = {
+            "backend": {
+                "read_only": True,
+                "group_add": ["1002"],
+                "volumes": [
+                    {
+                        "source": "/run/user/1002/docker.sock",
+                        "target": "/run/sigma-sandbox/docker.sock",
+                        "read_only": True,
+                    }
+                ],
+                "healthcheck": {"test": ["CMD", "python", "-m", "sigma.deployment_health"]},
+            },
+            "frontend": {"healthcheck": {"test": ["CMD-SHELL", "wget /"]}},
+            "edge": {
+                "ports": ["80:80"],
+                "healthcheck": {"test": ["CMD-SHELL", "wget localhost:2019"]},
+                "depends_on": {
+                    "backend": {"condition": "service_healthy"},
+                    "frontend": {"condition": "service_healthy"},
+                },
+            },
+        }
+        configuration = {
+            "services": services,
+            "volumes": {"sigma-state": {"driver_opts": {"device": "/srv/sigma-state/auth"}}},
+        }
+        preflight = gce_preflight.Preflight(repository=ROOT)
+        preflight.values = {
+            "SIGMA_SANDBOX_DOCKER_GID": "1002",
+            "SIGMA_SANDBOX_DOCKER_SOCKET": "/run/user/1002/docker.sock",
+        }
+
+        def compose_result(argv, **kwargs):
+            return subprocess.CompletedProcess(argv, 0, json.dumps(configuration), "")
+
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "PASS")
+
+        services["edge"].pop("healthcheck")
+        with patch.object(preflight, "command", side_effect=compose_result):
+            preflight.check_compose()
+        self.assertEqual(preflight.results[-1].status, "FAIL")
+
     def test_installer_guard_accepts_ubuntu_os_release_spellings(self) -> None:
         guard = DEPLOY / "gce_host_guard.sh"
         for identity in ('ID=ubuntu\nVERSION_ID="24.04"\n', 'ID="ubuntu"\nVERSION_ID=24.04\n'):

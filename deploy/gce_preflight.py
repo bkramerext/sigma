@@ -694,6 +694,7 @@ class Preflight:
             configured_gid = self.values["SIGMA_SANDBOX_DOCKER_GID"]
             backend_healthcheck = backend["healthcheck"]
             frontend_healthcheck = services["frontend"]["healthcheck"]
+            edge_healthcheck = services["edge"]["healthcheck"]
             edge_dependencies = services["edge"]["depends_on"]
             valid = (
                 {"backend", "frontend", "edge"}.issubset(services)
@@ -707,6 +708,7 @@ class Preflight:
                 and bool(services["edge"].get("ports"))
                 and bool(backend_healthcheck.get("test"))
                 and bool(frontend_healthcheck.get("test"))
+                and bool(edge_healthcheck.get("test"))
                 and all(
                     edge_dependencies[name].get("condition") == "service_healthy"
                     for name in ("backend", "frontend")
@@ -718,7 +720,7 @@ class Preflight:
             self.add(
                 "Production Compose configuration",
                 "PASS",
-                "Caddy edge, healthy private app ports, state bind, and read-only rootless socket are configured",
+                "Caddy, backend, and frontend healthchecks, healthy edge dependencies, persistent state bind, and read-only rootless socket are configured",
             )
         else:
             self.add(
