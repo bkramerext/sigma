@@ -264,11 +264,14 @@ SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 \
   uv run --locked --with playwright python browser_checks/t45_long_paper.py
 ```
 
-This real-Chrome check opens the Xenopus sample, confirms the expanded
-multi-section call ceiling, verifies streamed progress and saved-version
-metadata, and downloads the compiled PDF. The provider is deterministic and
-local; no live model or paid usage is involved. The PDF is saved at
-`/tmp/sigma-t45-xenopus.pdf` for visual inspection.
+This real-Chrome check opens the Xenopus sample, verifies the compact paper
+dialog at desktop and 390px mobile widths, checks inline cancellation and
+focus behavior, and authors a long-form paper using the deterministic local
+provider fixture. It checks the bounded completed-preview scroll area and both
+PDF modes: the “Open in browser tab” option returns an inline PDF, while the
+default still returns an attachment. No live model or paid usage is involved.
+The PDF is saved at `/tmp/sigma-t45-xenopus.pdf`; dialog captures are in
+`docs/evaluations/t45-paper-dialog/`.
 
 ## T40 Google account and administrator controls
 

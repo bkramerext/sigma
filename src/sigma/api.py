@@ -340,13 +340,14 @@ def paper_view(paper_id: str, path: str):
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
-def paper_pdf_view(paper_id: str, path: str):
+def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
+    disposition = "inline" if open_in_browser else "attachment"
     return Response(
         papers.get_pdf(path, paper_id),
         media_type="application/pdf",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.pdf"',
+            "Content-Disposition": f'{disposition}; filename="sigma-ai-paper-{paper_id}.pdf"',
         },
     )
 

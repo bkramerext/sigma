@@ -1124,7 +1124,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: string; projectId: string; downloadFilename: string; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -1137,6 +1137,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   const [checkpoint, setCheckpoint] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [longForm, setLongForm] = useState(false);
+  const [openInTab, setOpenInTab] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1287,9 +1288,9 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       await refresh(selected?.paper_id);
     } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
-  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
+  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path, ...(openInTab ? { open_in_browser: 'true' } : {}) })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button></div></header>
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
       <p className="settings-hint">SIGMA uses the project's complete research history to prepare a paper, including supporting evidence, unsuccessful approaches, contradictions, and unresolved questions. It distinguishes established findings from conjectures and identifies gaps rather than inventing missing proof steps.</p>
@@ -1297,13 +1298,14 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
       <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
       <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
+      <label className="ai-paper-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>
       {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
         {checkpoint.resume_available
           ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
           : `A checkpoint exists but does not match current settings. It records ${checkpoint.provider_calls_attempted} calls in its current run and ${checkpoint.provider_calls_previous_runs} in earlier runs; restart to keep this accounting before authoring.`}
       </p>}
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
-      {(busy || phase.startsWith('Generation cancelled.')) && <p role="status" aria-live="polite">{phase}</p>}
+      <div className="ai-paper-controls">{!busy && <button type="button" className="settings-submit" disabled={loading || !binding} onClick={() => void generatePaper()}>{papers.length ? 'Generate new version' : 'Generate paper'}</button>}{!busy && checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}</div>
+      {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span>{busy && <button type="button" title="Cancel paper generation" onClick={() => request.current?.abort()}>Cancel</button>}</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
       {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}
@@ -3253,7 +3255,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" openInTab={false} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" onCancel={() => {
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />

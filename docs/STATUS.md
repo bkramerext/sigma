@@ -1,5 +1,27 @@
 # SIGMA status
 
+## AI paper dialog polish (2026-10-25)
+
+Reduced unused space in the TeX dialog, increased its explanatory text to 14px,
+and made the dialog height follow its contents while capping the completed
+preview to a viewport-height scroll area. The header action now reads
+“Cancel”. During generation, the duplicate disabled “Authoring…” button is
+gone; the status line has an underlined Cancel action aligned at its right.
+Added the Project Export checkbox label exactly as “Open in browser tab”. When
+checked, the saved-PDF link opens a browser tab and requests inline PDF
+disposition; when unchecked, the link downloads as before. The PDF endpoint
+keeps attachment as its default, so existing downloads are unchanged.
+
+Updated `browser_checks/t45_long_paper.py` to exercise the progress cancel,
+desktop and 390px mobile layouts, completed-preview scrolling, inline PDF
+opening and attachment fallback, initial dialog focus, and focus restoration.
+Real Chrome passed. Captures are in
+`docs/evaluations/t45-paper-dialog/`: owner-provided desktop before, completed
+desktop and mobile after, and authoring progress. `env -u
+SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+formatting, Pyright, frontend typecheck, and production build. No paid provider
+calls or cloud changes.
+
 ## Adversarial review transparency and documentation cleanup (2026-10-25)
 
 The README and Product Rationale now state that Investigator and Skeptic use
@@ -4023,4 +4045,3 @@ discard those open items. The essay was left unchanged.
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
 Pyright, frontend typecheck, and production build. No paid provider calls or
 cloud changes.
-
