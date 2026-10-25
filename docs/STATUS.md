@@ -3588,7 +3588,8 @@ separate acceptance items in T91 and the cloud runbook.
 
 ## T91 — packaged Chrome workflow increment (2026-10-25)
 
-From current `main` (`f0dd5c63dd88cdd79190231856119dbfb317522d`), expanded the
+From `main` at `f0dd5c63dd88cdd79190231856119dbfb317522d` and reconciled with
+current `main` (`903a356230267390aa7fdcc20d774eda56195c48`), expanded the
 local Compose check to drive installed Chrome against the packaged Caddy,
 Nginx, and FastAPI services. The backend image now includes the stock `samples/`
 catalog, which the packaged sample endpoint requires. See the explicit
@@ -3600,6 +3601,6 @@ project, report, and session evidence; the same session and edited project
 survived backend container recreation; packaged Compose health and auth SQLite
 survived restart and full container recreation. **SKIPPED:** real Google OAuth
 (the workflow seeds two ephemeral local sessions), PDF download (no saved PDF
-fixture), T100 persistent-disk storage (not in current `main`), and T99
-inference (no provider calls). This is local acceptance, not live OAuth or
-cloud-deployment evidence.
+fixture), and the T100 persistent-disk configuration (this run uses Compose's
+default local storage). T99 inference is also skipped; no provider calls were
+made. This is local acceptance, not live OAuth or cloud-deployment evidence.

@@ -42,7 +42,7 @@ MATRIX = {
     "user B denied user A project and saved evidence": "NOT RUN",
     "real Google OAuth": "SKIPPED — simulated sessions only; no OAuth exchange",
     "compiled PDF download": "SKIPPED — no saved PDF fixture; generation would require provider work",
-    "persistent_disk storage backend from T100": "SKIPPED — T100 PR #103 is not integrated into current main",
+    "persistent_disk storage backend from T100": "SKIPPED — this run uses Compose's default local storage configuration",
     "inference generation from T99": "SKIPPED — this workflow is read/edit/export only; no provider calls",
 }
 

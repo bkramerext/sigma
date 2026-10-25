@@ -27,12 +27,12 @@ It makes no external Google or inference-provider calls.
 | Local deployment smoke | PASS | Packaged images built, services became healthy, and auth SQLite remained through backend restart and full container recreation. |
 | Real Google OAuth | SKIPPED | Browser used ephemeral sessions inserted into disposable local auth storage. This tests authenticated app behavior, not Google sign-in or OAuth. |
 | Compiled PDF download | SKIPPED | No saved compiled PDF fixture was available; generating one would require provider work. |
-| T100 persistent-disk backend | SKIPPED | T100 remains under review in PR #103 and is not in current `main`; its implementation is not duplicated here. |
+| T100 persistent-disk backend | SKIPPED | This run used Compose's default local storage configuration. T100's separate persistent-disk acceptance is documented in `docs/evaluations/t100/README.md`. |
 | T99 inference generation | SKIPPED | No inference was requested; no paid provider calls were made. |
 
 ## Scope
 
 This is a local acceptance increment for the current hosted-workspace Compose
 path, not evidence of production cloud deployment or a completion claim for all
-of T91. Real OAuth, the T100 storage backend, PDF availability, and T99
-inference remain separate acceptance work.
+of T91. Real OAuth, this run's persistent-disk configuration, PDF availability,
+and T99 inference remain separate acceptance work.
