@@ -112,11 +112,14 @@ With a fresh `provider_fixture:app` on port 8001 and the normal UI on 5173, run
 project name and header reflow at 1280, 1100, 700, 390 and 320px, the absence of
 the workspace tagline, shared Home/Close button states, the existing functional
 connection disclosure in its compact project-header presentation, disclosure/
-focus behavior, and keyboard Back to home. It verifies the upper-right 2×2 Model/Google and Thinking/ChatGPT
-arrangement, cycles and persists model/thinking settings (including explicit
-effort reconciliation when a new model does not support the current effort),
-relative cost disclosure, noninteractive Google placeholder, functional
-ChatGPT connection disclosure/actions, and no horizontal overflow. Screenshots
+focus behavior, and keyboard Back to home. It verifies the desktop 3×2
+Difficulty/Model/Thinking and About/Google/ChatGPT arrangement. About matches
+the compact Home pill and sits directly below Difficulty. On narrow screens,
+the header reflows to two columns with About still beneath Difficulty. It cycles
+and persists model/thinking settings (including explicit effort reconciliation
+when a new model does not support the current effort), relative cost disclosure,
+noninteractive Google placeholder, functional ChatGPT connection disclosure/
+actions, and no horizontal overflow. Screenshots
 are `/tmp/sigma-a23-model-controls-*.png` and
 `/tmp/sigma-a13-header-*.png`.
 
@@ -264,11 +267,16 @@ SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 \
   uv run --locked --with playwright python browser_checks/t45_long_paper.py
 ```
 
-This real-Chrome check opens the Xenopus sample, confirms the expanded
-multi-section call ceiling, verifies streamed progress and saved-version
-metadata, and downloads the compiled PDF. The provider is deterministic and
-local; no live model or paid usage is involved. The PDF is saved at
-`/tmp/sigma-t45-xenopus.pdf` for visual inspection.
+This real-Chrome check opens the Xenopus sample, verifies the compact paper
+dialog at desktop and 390px mobile widths, starts long-form authoring directly
+without a browser-native confirmation, injects a temporary failure and verifies
+that Generate is available for retry, then checks in-dialog cancellation and
+focus behavior. It authors a long-form paper using the deterministic local
+provider fixture and checks the bounded completed-preview scroll area and both
+PDF modes: the “Open in browser tab” option returns an inline PDF, while the
+default still returns an attachment. No live model or paid usage is involved.
+The PDF is saved at `/tmp/sigma-t45-xenopus.pdf`; dialog captures are in
+`docs/evaluations/t45-paper-dialog/`.
 
 ## T40 Google account and administrator controls
 
@@ -317,3 +325,19 @@ order, Reasoning / proof Markdown rendering, and computational source/output
 access, narrow Outcome rendering, and the Model/Thinking side-by-side desktop
 and stacked mobile layouts. This is browser
 emulation at 390px and 320px, not physical-phone testing.
+
+
+## Project creation request and About math-formatting regressions
+
+With the local UI running, execute these real-Chrome checks:
+
+```sh
+SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 uv run --with playwright python browser_checks/project_create_contract.py
+SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 uv run --with playwright python browser_checks/about_math_formatting.py
+```
+
+The project-creation check intercepts the create request and verifies the
+frontend sends only fields accepted by the strict API; it creates no project.
+The About check verifies the AI-assisted mathematical formatting description
+and dialog fit at desktop and narrow mobile widths. All APIs are mocked and no
+provider calls are made.

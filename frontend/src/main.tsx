@@ -133,17 +133,26 @@ function researchOutcomeMarkdown(session: ResearchSession): string {
   return lines.join('\n');
 }
 
-function researchConclusionMarkdown(session: ResearchSession): string {
-  return session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.';
+function containsMathNotation(text: string): boolean {
+  return /\\\[|\\\(|\$\$?[^$\n]+\$/.test(text)
+    || /[\p{Script=Greek}A-Za-z][\p{L}\p{N}]*(?:\([^()\s]+\))?\s*[\^_]\s*\{?[+\-]?[\p{L}\p{N}]+\}?/u.test(text)
+    || text.split('\n').some(line => {
+    const expression = line.trim();
+    return expression.length > 0 && expression.length <= 240
+      && !/\s|[`$\\]/u.test(expression)
+      && (/[\p{Script=Greek}∫∑√≤≥≠≈∞±×÷^_]/u.test(expression)
+        || (/[=<>≤≥≠]/u.test(expression) && /[\d()[\]]/u.test(expression)))
+      && /[=+*/^_∫∑√≤≥≠≈]/u.test(expression);
+  });
 }
 
-function simpleOutcomeLead(session: ResearchSession): { text: string; shortened: boolean } {
+function simpleOutcomeLead(session: ResearchSession): string {
   const saved = (session.outcome.conclusion || session.outcome.summary || 'No outcome summary was recorded.').trim();
   const firstSection = session.outcome.conclusion ? saved.split(/\n(?=#{2,6}\s)/, 2)[0] : saved;
   const lead = firstSection.replace(/^#{2,6}\s+[^\n]+\n+/, '').trim() || session.outcome.summary || saved;
-  if (lead.length <= 900) return { text: lead, shortened: firstSection.length < saved.length };
+  if (lead.length <= 900) return lead;
   const boundary = lead.lastIndexOf(' ', 900);
-  return { text: `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`, shortened: true };
+  return `${lead.slice(0, boundary >= 600 ? boundary : 900).trimEnd()}…`;
 }
 
 function researchReasoningMarkdown(session: ResearchSession): string {
@@ -323,16 +332,26 @@ function ContextManifestNotes({ manifest }: { manifest: ContextManifest }) {
   return <ul className="context-omission-notes">{notes.map(item => <li key={item.key}>{item.text}</li>)}</ul>;
 }
 
-function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
+function ResearchSessionContents({ path, session, expanded, busy, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onViewPriorSession, onForkFromFindings, onInterventionSaved }: {
   path: string;
   session: ResearchSession; advancedOutcomeDetails: boolean; expanded: boolean; busy: boolean;
+  onEnableAdvancedOutcome: () => Promise<void>;
   onViewStrategy: (id: string) => void;
   onViewPriorSession: (id: string) => void;
   onForkFromFindings: (session: ResearchSession) => void;
   onInterventionSaved: (sessionId: string) => Promise<void>;
 }) {
-  const [outcomeMarkdown, setOutcomeMarkdown] = useState(false);
+  const startsWithRenderedMath = containsMathNotation(
+    `${session.outcome.conclusion || ''}\n${session.outcome.summary || ''}`,
+  );
+  const [outcomeMarkdown, setOutcomeMarkdown] = useState(startsWithRenderedMath);
   const [conclusionMarkdown, setConclusionMarkdown] = useState(false);
+  const [convertedConclusion, setConvertedConclusion] = useState<string | null>(null);
+  const [conclusionRendering, setConclusionRendering] = useState(false);
+  const [conclusionFormatError, setConclusionFormatError] = useState('');
+  const [advancedOutcomeEnableError, setAdvancedOutcomeEnableError] = useState('');
+  const [enablingAdvancedOutcome, setEnablingAdvancedOutcome] = useState(false);
+  const conclusionConversionAbort = useRef<AbortController | null>(null);
   const [reasoningMarkdown, setReasoningMarkdown] = useState(false);
   const [artifactsMarkdown, setArtifactsMarkdown] = useState(false);
   const [activityExpanded, setActivityExpanded] = useState(session.status === 'queued' || session.status === 'running');
@@ -345,6 +364,7 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   useEffect(() => {
     setActivityExpanded(session.status === 'queued' || session.status === 'running');
   }, [session.status]);
+  useEffect(() => () => conclusionConversionAbort.current?.abort(), []);
   const lastActivity = session.events.at(-1);
   const lastStep = session.steps.at(-1);
   const approvedPackets = Object.values(session.approved_continuations ?? {});
@@ -407,8 +427,69 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       reportRequestFailure(errorMessage(cause));
     } finally { setInterventionBusy(false); }
   }
+  async function toggleConclusionMarkdown() {
+    if (conclusionMarkdown) {
+      setConclusionMarkdown(false);
+      return;
+    }
+    if (convertedConclusion !== null) {
+      setConclusionMarkdown(true);
+      return;
+    }
+    const source = session.outcome.conclusion;
+    if (!source || conclusionRendering) return;
+    const controller = new AbortController();
+    conclusionConversionAbort.current = controller;
+    setConclusionRendering(true);
+    setConclusionFormatError('');
+    let finishProviderRequest = () => {};
+    try {
+      const settingsResponse = await fetch(
+        `/api/projects/proposals/config?${new URLSearchParams({ path })}`,
+        { signal: controller.signal },
+      );
+      const settings = await settingsResponse.json();
+      if (!settingsResponse.ok || !settings.available) {
+        throw new Error(settings.message ?? settings.error ?? 'Connect AI in the header, then retry.');
+      }
+      finishProviderRequest = beginProviderRequest('text-conversion');
+      const sourceDigest = await sha256Text(source);
+      const converted = await post<{ body: string; warnings: string[]; source_digest: string }>(
+        'text/convert',
+        {
+          path,
+          scope: 'research-conclusion',
+          session_id: session.id,
+          target: 'markdown',
+          expected_digest: sourceDigest,
+          expected_binding: settings.binding,
+        },
+        controller.signal,
+      );
+      if (converted.source_digest !== sourceDigest) {
+        throw new Error('The saved Conclusion changed during formatting. Reopen the session and retry.');
+      }
+      setConvertedConclusion(converted.body);
+      setConclusionMarkdown(true);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        const message = errorMessage(cause);
+        setConclusionFormatError(message);
+        reportRequestFailure(message);
+      }
+    } finally {
+      finishProviderRequest();
+      if (conclusionConversionAbort.current === controller) {
+        conclusionConversionAbort.current = null;
+        setConclusionRendering(false);
+      }
+    }
+  }
   const outcomeFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} aria-pressed={outcomeMarkdown} data-tooltip={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} title={outcomeMarkdown ? 'Show plain outcome text' : 'Render outcome as Markdown'} onClick={() => setOutcomeMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
-  const conclusionFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} aria-pressed={conclusionMarkdown} data-tooltip={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} title={conclusionMarkdown ? 'Show Conclusion Markdown source' : 'Render Conclusion as Markdown'} onClick={() => setConclusionMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
+  const conclusionToggleLabel = conclusionMarkdown
+    ? 'Show saved Conclusion'
+    : convertedConclusion !== null ? 'Render Conclusion as Markdown' : 'Format Conclusion with AI';
+  const conclusionFormatToggle = <button type="button" className={`sigma-render-toggle${conclusionMarkdown ? ' sigma-render-active' : ''}${conclusionRendering ? ' sigma-render-pending' : ''}`} aria-label={conclusionToggleLabel} aria-pressed={conclusionMarkdown} aria-busy={conclusionRendering} data-tooltip={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} title={conclusionRendering ? 'Formatting Conclusion' : conclusionToggleLabel} disabled={conclusionRendering} onClick={() => void toggleConclusionMarkdown()}>{conclusionRendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
   const reasoningFormatToggle = <button type="button" className="sigma-render-toggle" aria-label={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} aria-pressed={reasoningMarkdown} data-tooltip={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} title={reasoningMarkdown ? 'Show reasoning Markdown source' : 'Render reasoning as Markdown'} onClick={() => setReasoningMarkdown(value => !value)}><svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg></button>;
   const renderMetricGroup = (title: string, items: OutcomeMetric[] | undefined) => <div className="outcome-metric-group">
     <h5>{title}</h5>
@@ -420,8 +501,14 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
       {provenancePrelude}
       {!advancedOutcomeDetails && <div className="outcome-simple">
         <div className="outcome-summary-text"><span className="outcome-summary-kicker">{resultLabel}</span>
-          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult.text}</p>}><RenderedMarkdown body={simpleResult.text}/></Suspense></div> : <p>{simpleResult.text}</p>}
-          {simpleResult.shortened && <small>Opening excerpt from the saved {session.outcome.conclusion ? 'Conclusion' : 'summary'}; the full text is in Advanced Outcome.</small>}
+          {outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{simpleResult}</p>}><RenderedMarkdown body={simpleResult}/></Suspense></div> : <p>{simpleResult}</p>}
+          <p className="advanced-outcome-hint">Want more detail? Turn on <button type="button" className="advanced-outcome-link" disabled={enablingAdvancedOutcome} onClick={async () => {
+            setEnablingAdvancedOutcome(true); setAdvancedOutcomeEnableError('');
+            try { await onEnableAdvancedOutcome(); }
+            catch (cause) { setAdvancedOutcomeEnableError(errorMessage(cause)); }
+            finally { setEnablingAdvancedOutcome(false); }
+          }}>{enablingAdvancedOutcome ? 'Advanced Outcome…' : 'Advanced Outcome'}</button> to see the full research findings and evidence.</p>
+          {advancedOutcomeEnableError && <p className="advanced-outcome-hint-error" role="alert">{advancedOutcomeEnableError}</p>}
           {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
           <p className="outcome-confidence"><strong>Verification:</strong> {verificationLabel}{session.outcome.provisional ? ' · provisional assessment' : ''}</p>
         </div>
@@ -432,9 +519,10 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
           <summary><DisclosureChevron expanded={false}/>Conclusion</summary>
           <div className="outcome-subsection-content outcome-conclusion-content">
             {!session.outcome.conclusion && <span className="outcome-summary-kicker">{resultLabel}</span>}
-            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}</div>}
+            {session.outcome.conclusion && <div className="outcome-conclusion-actions">{conclusionFormatToggle}{conclusionRendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}</div>}
+            {conclusionFormatError && <p role="alert" className="outcome-conclusion-format-error">{conclusionFormatError}</p>}
             {session.outcome.conclusion && conclusionMarkdown
-              ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchConclusionMarkdown(session)}/></Suspense></div>
+              ? <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted Conclusion…</p>}><RenderedMarkdown body={convertedConclusion ?? session.outcome.conclusion}/></Suspense></div>
               : !session.outcome.conclusion && outcomeMarkdown ? <div className="outcome-markdown"><Suspense fallback={<p>{resultText}</p>}><RenderedMarkdown body={researchOutcomeMarkdown(session)}/></Suspense></div>
                 : <div className="outcome-conclusion-source">{resultText}</div>}
             {primaryEvidenceIds.length > 0 && <p className="outcome-primary-evidence"><strong>Supporting evidence:</strong> {outcomeArtifactReferences(primaryEvidenceIds, session)}</p>}
@@ -627,7 +715,7 @@ function ContinuationApproval({ path, strategies, state, onEvidence, onSaved, on
   </details>;
 }
 
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
@@ -874,7 +962,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
                 <small className="session-progress-inline">Cycle {item.cycle} of {item.cycle_limit ?? 3} · {item.calls_used}/{item.call_limit} calls</small>
               </div>
             </div>
-            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
+            <ResearchSessionContents path={path} session={{ ...item, current_action: currentAction }} expanded={sessionExpanded} advancedOutcomeDetails={advancedOutcomeDetails} busy={busy} onEnableAdvancedOutcome={onEnableAdvancedOutcome} onViewStrategy={onViewStrategy} onViewPriorSession={revealSession} onForkFromFindings={onForkFromFindings} onInterventionSaved={interventionSaved}/>
           </li>;
         })}
       </ol> : !confirmStart && <p className="sessions-empty">No sessions yet. Use Play in Strategies to start one.</p>}
@@ -901,6 +989,10 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
   return data;
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+async function sha256Text(value: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
 const projectUrl = (path: string) => `/project?${new URLSearchParams({ path })}`;
 const dateLabel = (value: string) => new Date(value).toLocaleString();
 function formatDuration(totalSeconds: number) {
@@ -1038,7 +1130,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel }: { path: string; projectId: string; downloadFilename: string; openInTab: boolean; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: string; projectId: string; downloadFilename: string; onCancel: () => void }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -1051,6 +1143,7 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
   const [checkpoint, setCheckpoint] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [longForm, setLongForm] = useState(false);
+  const [openInTab, setOpenInTab] = useState(false);
   const [phase, setPhase] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1136,21 +1229,6 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       if (preflight.checkpoint_exists && !preflight.resume_available) {
         throw new Error('A checkpoint exists for different project or provider settings. Use Restart checkpoint to preserve its attempt history before generating.');
       }
-      const resumeDisclosure = preflight.resume_available
-        ? ' This resumes after ' + Number(preflight.completed_batches).toLocaleString() + ' completed evidence batches, ' + Number(preflight.reduction_groups_completed).toLocaleString() + ' index-reduction groups' + (preflight.outline_complete ? ', with the outline saved' : '') + ', and ' + Number(preflight.completed_sections).toLocaleString() + ' sections. ' + Number(preflight.provider_calls_attempted).toLocaleString() + ' calls were already attempted in this run; ' + Number(preflight.provider_calls_previous_runs).toLocaleString() + ' in prior runs. Up to ' + Number(preflight.provider_calls_remaining).toLocaleString() + ' more calls may be made.'
-        : '';
-      const callBreakdown = preflight.long_form
-        ? ' Call ceiling by stage: ' + preflight.maximum_evidence_calls + ' evidence, up to ' + preflight.maximum_index_reduction_calls + ' index reduction, 1 outline, and up to ' + preflight.maximum_section_calls + ' sections.'
-        : ' This uses one provider call.';
-      const tokenCeiling = ' Structured stage-input limits total up to ' + (Number(preflight.maximum_structured_input_bytes) / 1_000_000).toFixed(1) + ' MB.' + (mode === 'api_key'
-        ? ' At 12,000 requested output tokens per API-key call, the run could request up to ' + Number(preflight.maximum_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar estimate.'
-        : ' ChatGPT-plan use is subject to provider allowance; this client cannot convert it to a dollar estimate.');
-      if (preflight.long_form && !window.confirm(
-        'This frozen snapshot is ' + Number(preflight.snapshot_bytes).toLocaleString() + ' bytes across ' + Number(preflight.source_count).toLocaleString() + ' saved sources. Long-form authoring will use ' + Number(preflight.evidence_batches).toLocaleString() + ' evidence batches, then a plan and separate section calls. The run may use up to ' + Number(preflight.maximum_provider_calls).toLocaleString() + ' calls.' + callBreakdown + tokenCeiling + resumeDisclosure + ' ' + (mode === 'api_key' ? 'API-key mode can incur separate usage charges.' : 'ChatGPT-plan usage is subject to provider allowance.') + ' Continue?'
-      )) {
-        setPhase('Large paper generation was not started; no provider calls were made.');
-        return;
-      }
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.long_form
         ? `Indexing ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then authoring the planned sections…`
@@ -1197,25 +1275,29 @@ function AIPaperDialog({ path, projectId, downloadFilename, openInTab, onCancel 
       await refresh(result.paper_id);
     } catch (cause) {
       if (controller.signal.aborted) setPhase('Generation cancelled. No new version was published.');
-      else { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+      else reportRequestFailure(errorMessage(cause));
       await refresh(selected?.paper_id);
+      if (!controller.signal.aborted) setError(errorMessage(cause));
     } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
-  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path })}` : '';
+  const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path, ...(openInTab ? { open_in_browser: 'true' } : {}) })}` : '';
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
-    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
+    <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Cancel</button></div></header>
     <div className="settings-body ai-paper-body">
       <p className="settings-hint">This is a bounded AI authoring operation, separate from Project Audit and deterministic Research Reports. It uses the complete current evidence snapshot and creates a new saved version. {mode === 'api_key' ? 'API-key mode may incur separate usage charges.' : 'ChatGPT plan usage is subject to provider allowance.'}</p>
+      <p className="settings-hint">SIGMA uses the project's complete research history to prepare a paper, including supporting evidence, unsuccessful approaches, contradictions, and unresolved questions. It distinguishes established findings from conjectures and identifies gaps rather than inventing missing proof steps.</p>
+      <p className="settings-hint">The resulting paper is AI-generated and has not been independently verified. Readers should examine its evidence and limitations before relying on its conclusions.</p>
       <p className="settings-hint">Selected model: <strong>{model || 'Loading…'}</strong>. No research session will be started.</p>
       <p className="settings-hint"><strong>Generation bounds:</strong> the complete snapshot is archived up to 20 MB. Snapshots above 100,000 bytes use 48 KB evidence batches, an outline, and one call per section, with at most 512 batches, 48 sections, and 593 provider calls. Each call has a 120-second deadline; API-key calls request up to 12,000 output tokens with a 1 MB response cap, while ChatGPT-plan responses are capped at 4 MB per stream. TeX compilation allows 50 MB and 300 seconds, with PDFs up to 80 MB. Each saved version is capped at 100 MB.</p>
       <label className="ai-paper-long-form"><input type="checkbox" checked={longForm} disabled={busy} onChange={event => setLongForm(event.target.checked)}/> Use expanded multi-section authoring for a more detailed paper</label>
+      <label className="ai-paper-open-tab"><input type="checkbox" checked={openInTab} disabled={busy} onChange={event => setOpenInTab(event.target.checked)}/> Open in browser tab</label>
       {checkpoint?.checkpoint_can_restart && <p className="settings-hint" role="status">
         {checkpoint.resume_available
           ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
           : `A checkpoint exists but does not match current settings. It records ${checkpoint.provider_calls_attempted} calls in its current run and ${checkpoint.provider_calls_previous_runs} in earlier runs; restart to keep this accounting before authoring.`}
       </p>}
-      <div className="ai-paper-controls"><button type="button" className="settings-submit" disabled={busy || loading || !binding} onClick={() => void generatePaper()}>{busy ? 'Authoring…' : papers.length ? 'Generate new version' : 'Generate paper'}</button>{checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={busy || loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}{busy && <button type="button" className="settings-cancel" onClick={() => request.current?.abort()}>Cancel generation</button>}</div>
-      {(busy || phase.startsWith('Generation cancelled.')) && <p role="status" aria-live="polite">{phase}</p>}
+      <div className="ai-paper-controls">{busy ? <button type="button" className="settings-submit ai-paper-cancel-generation" onClick={() => request.current?.abort()}>Cancel generation</button> : <button type="button" className="settings-submit" disabled={!binding} onClick={() => void generatePaper()}>{papers.length ? 'Generate new version' : 'Generate paper'}</button>}{!busy && checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}</div>
+      {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
       {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}
@@ -1379,6 +1461,21 @@ function SettingsGearIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 1.72l-.08.54a2 2 0 0 1-1 1.44l-.47.27a2 2 0 0 1-1.74 0l-.44-.22a2 2 0 0 0-2.72.73l-.22.38a2 2 0 0 0 .73 2.73l.44.25a2 2 0 0 1 1 1.73v.54a2 2 0 0 1-1 1.73l-.44.25a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.72.73l.44-.22a2 2 0 0 1 1.74 0l.47.27a2 2 0 0 1 1 1.44l.08.54a2 2 0 0 0 2 1.72h.44a2 2 0 0 0 2-1.72l.08-.54a2 2 0 0 1 1-1.44l.47-.27a2 2 0 0 1 1.74 0l.44.22a2 2 0 0 0 2.72-.73l.22-.38a2 2 0 0 0-.73-2.73l-.44-.25a2 2 0 0 1-1-1.73v-.54a2 2 0 0 1 1-1.73l.44-.25a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.72-.73l-.44.22a2 2 0 0 1-1.74 0l-.47-.27a2 2 0 0 1-1-1.44l-.08-.54A2 2 0 0 0 12.22 2z"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
+const NEW_PROJECT_VALUES_KEY = 'sigma.newProjectValues';
+function savedNewProjectValues(): Settings | null {
+  try {
+    const raw = window.localStorage.getItem(NEW_PROJECT_VALUES_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<Settings>;
+    if (typeof value.title !== 'string' || typeof value.problem !== 'string' ||
+        typeof value.investigation_type !== 'string' || typeof value.ai_model !== 'string' ||
+        typeof value.reasoning_effort !== 'string' ||
+        !(value.difficulty === null || value.difficulty === 'easy' || value.difficulty === 'medium' || value.difficulty === 'hard') ||
+        typeof value.show_advanced_outcome_details !== 'boolean') return null;
+    return value as Settings;
+  } catch { return null; }
+}
+
 function TextViews({ path, scope, strategyId, source, projectTitle, contentClass, onSaved, mathematical, onSettings, settingsDisabled, settingsButtonRef, hideProjectHeading, hideProjectActions = false, hideEditAction = false, modeDisabled = false, combinedEditMode = false, editSignal = 0, markdownSlotId, onCombinedDraftChange, onEnterMode, onExitMode }: {
   path: string; scope: 'project' | 'strategy'; strategyId?: string; source: string; projectTitle?: string;
   contentClass: string; onSaved: (view: ProjectView) => void; mathematical: boolean; onSettings?: () => void; settingsDisabled?: boolean; settingsButtonRef?: React.RefObject<HTMLButtonElement | null>; hideProjectHeading?: boolean; hideProjectActions?: boolean; hideEditAction?: boolean; modeDisabled?: boolean; combinedEditMode?: boolean; editSignal?: number; markdownSlotId?: string; onCombinedDraftChange?: (draft: string) => void; onEnterMode?: () => boolean; onExitMode?: () => void;
@@ -1400,10 +1497,16 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   const editorForm = useRef<HTMLFormElement>(null);
   const editorArea = useRef<HTMLDivElement>(null);
   const [markdownPortalTarget, setMarkdownPortalTarget] = useState<HTMLElement | null>(null);
+  const [copyPortalTarget, setCopyPortalTarget] = useState<HTMLElement | null>(null);
+  const [copied, setCopied] = useState(false);
+  const renderedContent = useRef<HTMLDivElement>(null);
+  const copyTimer = useRef<number | null>(null);
   const handledEditSignal = useRef(0);
   useLayoutEffect(() => {
     setMarkdownPortalTarget(markdownSlotId ? document.getElementById(markdownSlotId) : null);
+    setCopyPortalTarget(markdownSlotId ? document.getElementById(`${markdownSlotId}-copy`) : null);
   }, [markdownSlotId, modeDisabled, combinedEditMode, editSignal]);
+  useEffect(() => () => { if (copyTimer.current !== null) window.clearTimeout(copyTimer.current); }, []);
   useEffect(() => {
     const controller = new AbortController();
     setData(null); setError(''); setEditing(false);
@@ -1423,6 +1526,18 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
   }
   const version = data?.[format];
   const current = version?.current ?? false;
+  async function copyText() {
+    if (!version || !current || editing) return;
+    const text = selected === 'rendered'
+      ? (renderedContent.current?.innerText ?? version.body).replace(/\n{3,}/g, '\n\n').trim()
+      : version.body;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopied(false), 1600);
+    } catch (cause) { reportRequestFailure(`Could not copy ${name}: ${errorMessage(cause)}`); }
+  }
   function beginBodyEdit(fromRendered = false, alreadyInMode = false) {
     if (!version?.current || busy || (modeDisabled && !alreadyInMode) || (!alreadyInMode && onEnterMode && !onEnterMode())) return;
     setDraft(version.body); onCombinedDraftChange?.(version.body); setEditingFromRendered(fromRendered);
@@ -1487,8 +1602,13 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
         else if (data?.markdown?.current) { chooseView('rendered'); setError(''); }
         else { void convert(plainRecovery ? 'plain' : 'markdown'); }
       }} title={renderTooltip}>{rendering ? <span aria-hidden="true">⌛</span> : <svg aria-hidden="true" className="markdown-logo" viewBox="20 25 160 78" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 92V30h20l20 25 20-25h20v62H80V59L60 84 40 59v33H20Z" fill="currentColor"/><path d="M120 30v38h-18l28 28 28-28h-18V30h-20Z" fill="currentColor"/></svg>}</button>;
+  const markdownControl = <span className="text-view-format-control">
+    {markdownToggle}
+    {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
+  </span>;
+  const copyControl = <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={!current || editing || busy || combinedEditMode} onClick={() => void copyText()}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="m8 12 3 3 10-10"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
   const viewActions = <>
-    {!markdownSlotId && markdownToggle}
+    {!markdownSlotId && markdownControl}
 
     {editing ? combinedEditMode ? null : <>
       <button type="submit" form={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-link" title={`Save ${name}`} disabled={busy || !draft.trim()}>Save</button>
@@ -1499,7 +1619,8 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {!hideProjectActions && onSettings && !editing && <button ref={settingsButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button" aria-label="Project settings" title="Project settings" data-tooltip="Project settings" disabled={settingsDisabled} onClick={onSettings}><SettingsGearIcon /></button>}
   </>;
   return <div ref={editorArea} className={`text-views${scope === 'project' ? ' project-text-views' : ''}${mathematical ? ' math-text-views' : ''}`}>
-    {markdownPortalTarget && createPortal(markdownToggle, markdownPortalTarget)}
+    {markdownPortalTarget && createPortal(markdownControl, markdownPortalTarget)}
+    {copyPortalTarget && createPortal(copyControl, copyPortalTarget)}
     {scope === 'project' && exportOpen && <ProjectExportDialog path={path} title={projectTitle ?? 'project'} onCancel={closeExport}/>}
     <div className="text-view-controls">
       {scope === 'project' && !hideProjectHeading && <h2 className="investigation-heading">Project</h2>}
@@ -1508,14 +1629,13 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {editing ? <form ref={editorForm} id={`text-form-${scope}-${strategyId ?? 'project'}`} className="text-view-editor" onSubmit={save}>
       <textarea id={`text-editor-${scope}-${strategyId ?? 'project'}`} autoFocus value={draft} maxLength={scope === 'project' ? 20000 : MAX_STRATEGY_APPROACH} rows={8} required disabled={busy} onChange={event => { setDraft(event.target.value); onCombinedDraftChange?.(event.target.value); }} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); cancelBodyEdit(); } }}/>
     </form> : current && version ? selected === 'rendered'
-      ? <div className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
+      ? <div ref={renderedContent} className={`${contentClass} rendered-text`} aria-label={`Rendered ${name}`}><Suspense fallback={<p>Preparing preview…</p>}><RenderedMarkdown body={version.body}/></Suspense></div>
       : <p className={contentClass}>{version.body}</p>
       : !data ? <p className={contentClass}>{source}</p> : <div className="text-view-missing">
         <p>{version ? 'The previous conversion is out of date with the current source.' : `No ${format === 'markdown' ? 'Markdown' : 'Plain'} representation is stored yet.`}</p>
         {mathematical && plainRecovery && format === 'plain' && <button type="button" className="text-view-link" disabled={busy || modeDisabled} onClick={() => void convert('plain')}>Convert to Plain</button>}
         {version && <details><summary>Inspect previous {format === 'markdown' ? 'Markdown' : 'Plain'} text</summary><pre>{version.body}</pre></details>}
       </div>}
-    {busy && !editing && <span className="sr-only" role="status">Converting to Markdown…</span>}
     {error && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -1552,7 +1672,7 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
     </form> : <><h3 className="current-project">{view.project.title}</h3>
       <span id="project-markdown-slot" className="project-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button project-title-pencil" aria-label={`Edit project title and description: ${view.project.title}`} data-tooltip-disabled disabled={disabled || modeDisabled} onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}>
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg>
-      </button> </>}
+      </button><span id="project-markdown-slot-copy" className="project-copy-slot"/> </>}
   </div>;
 }
 
@@ -1795,6 +1915,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
       <section className="about-feature"><h4>Human Guidance</h4><p>Researchers can provide feedback, revise strategies, and choose which directions to pursue.</p></section>
       <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
       <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
+      <section className="about-feature"><h4>Readable Mathematical Text</h4><p>AI can reformat plain-text project descriptions and saved Conclusions as Markdown with typeset equations. The saved text remains available; formatted mathematics still needs review.</p></section>
       <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
           <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
         </div>
@@ -1828,7 +1949,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <GoogleIdentityPill compact/>
       <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>?</button>
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
   </header>;
 }
@@ -2145,7 +2266,7 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   const dialog = useRef<HTMLDialogElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
-  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
+  const [values, setValues] = useState<Settings>(() => initial ? settingsOf(initial) : savedNewProjectValues() ?? { title: '', problem: '', investigation_type: 'default', ai_model: '', reasoning_effort: 'high', difficulty: 'medium', show_advanced_outcome_details: false });
   const [catalog, setCatalog] = useState<CatalogChoice[]>([]);
   const [catalogMessage, setCatalogMessage] = useState('Checking model availability…');
   const [destination, setDestination] = useState<Destination | null>(null);
@@ -2199,7 +2320,18 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
     event.preventDefault(); if (submitting.current || !compatible || (initial && !limitValidation.value) || (!initial && (!destination?.path || destination.exists || previewBusy))) return;
     submitting.current = true; setBusy(true); setError('');
     try {
-      const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : values);
+      const createValues = {
+        title: values.title,
+        problem: values.problem,
+        investigation_type: values.investigation_type,
+        ai_model: values.ai_model,
+        reasoning_effort: values.reasoning_effort,
+        difficulty: values.difficulty,
+      };
+      const next = await post<ProjectView>(initial ? 'update' : 'create', initial ? { path: initial.path, ...values, expected: settingsOf(initial) } : createValues);
+      if (!initial) {
+        try { window.localStorage.setItem(NEW_PROJECT_VALUES_KEY, JSON.stringify(values)); } catch { /* Project creation must not depend on browser storage availability. */ }
+      }
       if (initial) {
         const response = await fetch('/api/projects/research-limits', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: initial.path, ...limitValidation.value }) });
         const result = await response.json(); if (!response.ok) throw new Error(result.error ?? 'Research limits were not saved');
@@ -2496,7 +2628,7 @@ function Home({ initialPath, onOpen }: {
         <HomeCatalog onOpen={onOpen}/>
       </section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer &amp;</span><span>OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
@@ -2546,7 +2678,7 @@ function StrategyTitleEditor({ strategy, path, onSaved, modeDisabled, descriptio
     </form> : <div className="strategy-title-line">
       <button type="button" id={`strategy-${strategy.id}`} className={`strategy-row-disclosure${strategy.enabled ? '' : ' is-disabled'}`} title={`${expanded ? 'Collapse' : 'Expand'} strategy: ${shownTitle}`} aria-expanded={expanded} aria-controls={`strategy-content-${strategy.id}`} onClick={onToggle}><DisclosureChevron expanded={expanded}/><h3>{shownTitle}</h3></button>
       <span id={`strategy-markdown-slot-${strategy.id}`} className="strategy-markdown-slot"/><button type="button" ref={trigger} className="text-view-link text-view-icon workspace-icon-button strategy-title-pencil" aria-label={`Edit strategy title and description: ${shownTitle}`} data-tooltip-disabled disabled={modeDisabled}
-        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button>
+        onClick={() => { if (onEnterMode()) { setEditing(true); onEditDescription(); } }}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m15 5 4 4M4 20l4.5-1 11-11a2.83 2.83 0 0 0-4-4l-11 11L4 20Z"/></svg></button><span id={`strategy-markdown-slot-${strategy.id}-copy`} className="strategy-copy-slot"/>
       {commands}
     </div>}
     {error && <p className="error" role="alert">{error}</p>}
@@ -3105,11 +3237,17 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
-    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
+    <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
+      const current = settingsOf(view);
+      if (current.show_advanced_outcome_details) return;
+      const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
+      setView(next);
+      setAnnouncement('Advanced Outcome enabled.');
+    }} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" openInTab={false} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} downloadFilename="sigma-paper.pdf" onCancel={() => {
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />

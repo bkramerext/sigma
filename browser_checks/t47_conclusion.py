@@ -1,6 +1,7 @@
 """Real Chrome checks for saved session Conclusions at desktop and phone widths."""
 
 import json
+import hashlib
 import os
 import socket
 import subprocess
@@ -56,9 +57,35 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
     (project_path / "project.json").write_text(json.dumps(project), encoding="utf-8")
     session["project_path"] = str(project_path.resolve())
     session["outcome"]["conclusion"] = (
-        "### Complete reviewed candidate answer\n\n"
-        "Conditional on general position, the arrangement reaches the triangular bound for every n.\n\n"
-        "### Verification and scope\n\nSIGMA has not independently verified the result."
+        "### Preliminary finding\n\n"
+        "For the meromorphic continuation ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1} dx on Re(s)>0, "
+        "ζ(σ+it)≠0 whenever T=|t|≥1 and σ≥1−1/[256(4T+9)^4(2T+4)]. "
+        "This does not prove or disprove the Riemann Hypothesis.\n\n"
+        "The investigation is paused; this is not a completed conclusion.\n\n"
+        "The Euler-product logarithm and 3+4cosθ+cos(2θ)≥0 imply ζ(1+it)^3|ζ(1+2it)|≥1. "
+        "A zero at β+it with β≥1−ε would imply |ζ(1+it)|≤2rM(T), "
+        "where M(T)=4T+9. Choosing ε=1/[256(4T+9)^4(2T+4)] forces the product to be at most 1/2."
+    )
+    ai_formatted_conclusion = (
+        "### Preliminary finding\n\n"
+        "For the meromorphic continuation\n\n"
+        "$$\n"
+        r"\zeta(s)=\frac{s}{s-1}-s\int_1^\infty\{x\}^{-s-1}\,dx"
+        "\n$$\n\n"
+        "on $\\operatorname{Re}(s)>0$,\n\n"
+        "$$\n"
+        r"\zeta(\sigma+it)\ne 0,\quad T=|t|\ge 1,\quad "
+        r"\sigma\ge 1-\frac{1}{256(4T+9)^4(2T+4)}"
+        "\n$$\n\n"
+        "This does not prove or disprove the Riemann Hypothesis.\n\n"
+        "The investigation is paused; this is not a completed conclusion.\n\n"
+        "The Euler-product logarithm and $3+4\\cos\\theta+\\cos(2\\theta)\\ge0$ imply\n\n"
+        "$$\n"
+        r"\zeta(1+it)^3|\zeta(1+2it)|\ge1"
+        "\n$$\n\n"
+        "A zero at $\\beta+it$ with $\\beta\\ge1-\\epsilon$ would imply "
+        "$|\\zeta(1+it)|\\le2rM(T)$, where $M(T)=4T+9$. "
+        "Choosing $\\epsilon=1/[256(4T+9)^4(2T+4)]$ forces the product to be at most $1/2$."
     )
     session["outcome"]["solution_review"] = {
         "status": "achieved",
@@ -173,6 +200,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 executable_path=CHROME, headless=True, args=["--disable-web-security"]
             )
             page = browser.new_page(viewport={"width": 1440, "height": 1000})
+            page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=ui_url)
             errors: list[str] = []
             starts: list[str] = []
             page.on("pageerror", lambda error: errors.append(str(error)))
@@ -184,11 +212,156 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     else None
                 ),
             )
+            conversion_requests: list[dict] = []
+            pending_conclusion_responses: list[tuple[object, dict]] = []
+            pending_text_routes: list[object] = []
+
+            def mock_conversion_settings(route):
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps({"available": True, "binding": "fixture-binding"}),
+                )
+
+            def mock_conclusion_conversion(route):
+                request = json.loads(route.request.post_data or "{}")
+                if request.get("scope") != "research-conclusion":
+                    pending_text_routes.append(route)
+                    return
+                assert request["scope"] == "research-conclusion", request
+                assert request["session_id"] == session["id"], request
+                assert request["target"] == "markdown", request
+                assert request["expected_digest"] == hashlib.sha256(
+                    session["outcome"]["conclusion"].encode("utf-8")
+                ).hexdigest(), request
+                conversion_requests.append(request)
+                pending_conclusion_responses.append((route, {
+                    "status": 200,
+                    "content_type": "application/json",
+                    "body": json.dumps(
+                        {
+                            "body": ai_formatted_conclusion,
+                            "warnings": [],
+                            "source_digest": request["expected_digest"],
+                            "provenance": {
+                                "provider": "openai",
+                                "model": "fixture-model",
+                                "reasoning_effort": "high",
+                            },
+                        }
+                    ),
+                }))
+
+            page.route("**/api/projects/proposals/config**", mock_conversion_settings)
+            page.route("**/api/projects/text/convert", mock_conclusion_conversion)
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
+            project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
+            expect(project_markdown).to_be_visible()
+            project_copy = page.locator("#project-markdown-slot-copy .text-copy-button")
+            expect(project_copy).to_be_enabled()
+            page.locator(".project-pane-title-line").screenshot(path="/tmp/sigma-copy-buttons-desktop.png")
+            project_copy.click()
+            expect(project_copy).to_have_accessible_name("Copied research problem to clipboard")
+            assert page.evaluate("navigator.clipboard.readText()") == project["problem"]
+            # The confirmation checkmark does not disable the button; a second click copies again.
+            project_copy.click()
+            assert page.evaluate("navigator.clipboard.readText()") == project["problem"]
+            project_markdown.click()
+            project_status = page.locator("#project-markdown-slot .text-view-format-status")
+            expect(project_status).to_be_visible()
+            assert project_status.evaluate(
+                "element => getComputedStyle(element.parentElement).gap"
+            ) == "6px"
+            page.locator(".project-pane-title-line").screenshot(
+                path="/tmp/sigma-project-markdown-formatting.png"
+            )
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            expect(project_status).to_be_visible()
+            page.screenshot(path="/tmp/sigma-project-markdown-formatting-mobile.png")
+            page.locator(".project-pane-title-line").screenshot(path="/tmp/sigma-copy-buttons-mobile.png")
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            project_copy_response = {
+                "scope": "project",
+                "strategy_id": None,
+                "source_format": "plain",
+                "source_digest": hashlib.sha256(project["problem"].encode("utf-8")).hexdigest(),
+                "plain": {"body": project["problem"], "current": True},
+                "markdown": {
+                    "body": "## Fixture\n\nThis **description** has regular text.",
+                    "current": True,
+                },
+            }
+            pending_text_routes.pop(0).fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps(project_copy_response),
+            )
+            expect(page.locator(".project-intro .rendered-text")).to_contain_text("This description has regular text.")
+            project_markdown = page.locator("#project-markdown-slot .sigma-render-toggle")
+            expect(project_markdown).to_have_attribute("aria-pressed", "true")
+            project_copy.click()
+            expect(project_copy).to_have_accessible_name("Copied research problem to clipboard")
+            copied_rendered_text = page.evaluate("navigator.clipboard.readText()")
+            assert copied_rendered_text == "Fixture\n\nThis description has regular text.", repr(copied_rendered_text)
+            assert "**" not in copied_rendered_text
+            strategy_markdown = page.locator(".strategy-markdown-slot .sigma-render-toggle").first
+            expect(strategy_markdown).to_be_visible()
+            strategy_copy = page.locator(".strategy-copy-slot .text-copy-button").first
+            expect(strategy_copy).to_be_enabled()
+            strategy_copy.click()
+            expect(strategy_copy).to_have_accessible_name("Copied strategy approach to clipboard")
+            assert page.evaluate("navigator.clipboard.readText()") == project["strategies"][0]["approach"]
+            strategy_copy.click()
+            assert page.evaluate("navigator.clipboard.readText()") == project["strategies"][0]["approach"]
+            strategy_markdown.click()
+            strategy_status = page.locator(".strategy-markdown-slot .text-view-format-status").first
+            expect(strategy_status).to_be_visible()
+            assert strategy_status.evaluate(
+                "element => getComputedStyle(element.parentElement).gap"
+            ) == "6px"
+            page.locator(".strategy-title-line").first.screenshot(
+                path="/tmp/sigma-strategy-markdown-formatting.png"
+            )
+            pending_text_routes.pop(0).fulfill(
+                status=503,
+                content_type="application/json",
+                body='{"error":"Mock provider unavailable"}',
+            )
+            latex_button = page.get_by_role("button", name="LaTeX research paper")
+            expect(latex_button).to_be_visible()
+            latex_button.hover()
+            latex_hover = latex_button.evaluate(
+                "el => ({width: el.getBoundingClientRect().width, "
+                "height: el.getBoundingClientRect().height, "
+                "backgroundImage: getComputedStyle(el).backgroundImage})"
+            )
+            assert latex_hover["width"] == 34 and latex_hover["height"] == 34, latex_hover
+            assert "gradient" in latex_hover["backgroundImage"], latex_hover
             expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
                 "1 session", timeout=15000
             )
-            # Start in Advanced Outcome explicitly, independent of a historical project default.
+            # The simplified Outcome hint directly enables the saved project preference.
+            first_row = page.locator(f'li[data-session-id="{session["id"]}"]')
+            first_disclosure = first_row.locator("button.session-row-disclosure")
+            if first_disclosure.get_attribute("aria-expanded") != "true":
+                first_disclosure.click()
+            simple_outcome = first_row.get_by_role("region", name="Research outcome")
+            hint = simple_outcome.locator(".advanced-outcome-hint")
+            expect(hint).to_contain_text(
+                "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
+            )
+            dismiss_errors = page.get_by_role("button", name="Dismiss request error")
+            while dismiss_errors.count():
+                dismiss_errors.first.click()
+            simple_outcome.screenshot(path="/tmp/sigma-advanced-outcome-hint.png")
+            preference_link = hint.get_by_role("button", name="Advanced Outcome")
+            preference_link.focus()
+            expect(preference_link).to_be_focused()
+            preference_link.press("Enter")
+            expect(hint).to_have_count(0)
+            expect(simple_outcome.locator(".outcome-subsections")).to_be_visible()
+            # Confirm the preference was persisted in the project settings.
             settings = page.get_by_role("button", name="Project settings", exact=True)
             settings.click()
             dialog = page.get_by_role("dialog", name="Settings")
@@ -196,12 +369,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             detail_setting = dialog.get_by_role(
                 "checkbox", name="Show advanced Outcome details"
             )
-            if not detail_setting.is_checked():
-                detail_setting.check()
-                dialog.get_by_role("button", name="Save", exact=True).click()
-                expect(dialog).to_be_hidden()
-            else:
-                dialog.get_by_role("button", name="Cancel", exact=True).click()
+            expect(detail_setting).to_be_checked()
+            dialog.get_by_role("button", name="Cancel", exact=True).click()
             for session in sessions:
                 row = page.locator(f'li[data-session-id="{session["id"]}"]')
                 expect(row).to_be_visible(timeout=15000)
@@ -222,16 +391,71 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert prelude.evaluate(
                     "element => element.nextElementSibling.classList.contains('outcome-subsections')"
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
-                expect(conclusion).to_contain_text(session["outcome"]["conclusion"].splitlines()[2])
-                toggle = outcome.get_by_role("button", name="Render Conclusion as Markdown")
+                expect(conclusion).to_contain_text("The investigation is paused")
+                toggle = outcome.get_by_role("button", name="Format Conclusion with AI")
+                toggle.hover()
+                toggle_style = toggle.evaluate(
+                    "e => ({rect:e.getBoundingClientRect().toJSON(), "
+                    "border:getComputedStyle(e).borderTopWidth, "
+                    "background:getComputedStyle(e).backgroundColor, "
+                    "color:getComputedStyle(e).color, "
+                    "icon:e.querySelector('svg').getBoundingClientRect().toJSON()})"
+                )
+                assert toggle_style["rect"]["width"] == 28, toggle_style
+                assert toggle_style["rect"]["height"] == 28, toggle_style
+                assert toggle_style["border"] == "0px", toggle_style
+                assert toggle_style["background"] == "rgba(0, 0, 0, 0)", toggle_style
+                assert toggle_style["color"] == "rgb(170, 180, 186)", toggle_style
+                assert toggle_style["icon"]["width"] == 24, toggle_style
+                assert toggle_style["icon"]["height"] == 20, toggle_style
+                expect(toggle).to_have_attribute("aria-pressed", "false")
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
+                    "ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1}"
+                )
                 toggle.click()
-                expect(
-                    outcome.get_by_role("button", name="Show Conclusion Markdown source")
-                ).to_have_attribute("aria-pressed", "true")
-                expect(conclusion.locator(".outcome-markdown h3").first).to_be_visible()
-                toggle = outcome.get_by_role("button", name="Show Conclusion Markdown source")
-                toggle.click()
+                format_status = outcome.locator(".text-view-format-status")
+                expect(format_status).to_be_visible()
+                assert format_status.evaluate(
+                    "element => getComputedStyle(element.parentElement).gap"
+                ) == "6px"
+                response_route, response = pending_conclusion_responses.pop(0)
+                response_route.fulfill(**response)
+                source_toggle = conclusion.locator(".outcome-conclusion-actions .sigma-render-toggle")
+                expect(source_toggle).to_have_attribute("aria-pressed", "true", timeout=15000)
+                expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion")
+                assert source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(241, 197, 141)"
+                assert len(conversion_requests) == 1
+                finding = conclusion.locator(".outcome-markdown h3").first
+                expect(finding).to_be_visible()
+                expect(finding).to_have_text("Preliminary finding")
+                expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
+                assert conclusion.locator(".outcome-markdown .katex-display").count() == 3
+                assert conclusion.locator(".outcome-markdown .katex").count() >= 8
+                expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
+                expect(conclusion.locator(".outcome-markdown img")).to_have_count(0)
+                expect(conclusion.locator(".outcome-markdown")).not_to_contain_text(
+                    "### Preliminary finding"
+                )
+                expect(conclusion.locator(".outcome-markdown .katex-display").first).to_be_visible()
+                expect(conclusion.locator(".outcome-markdown")).to_contain_text(
+                    "The investigation is paused; this is not a completed conclusion."
+                )
+                conclusion.screenshot(path="/tmp/sigma-conclusion-ai-desktop.png")
+                source_toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
+                expect(source_toggle).to_have_attribute("aria-pressed", "false")
+                assert source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(170, 180, 186)", (
+                    "Plain-text state must remain visibly gray even while the pointer hovers over the toggle"
+                )
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text("ζ(s)=s/(s−1)")
+                expect(conclusion.locator(".outcome-conclusion-source")).not_to_contain_text("$$")
+                source_toggle.click()
+                expect(source_toggle).to_have_attribute("aria-pressed", "true")
+                assert source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(241, 197, 141)"
+                assert len(conversion_requests) == 1, "Toggling to saved AI Markdown must not call the provider again"
+                expect(conclusion.locator(".outcome-markdown h3").first).to_have_text(
+                    "Preliminary finding"
+                )
                 outcome.locator(".outcome-evidence-subsection > summary").click()
                 expect(outcome.locator(".outcome-evidence-subsection")).to_be_visible()
                 expect(outcome).to_contain_text("Bound the pieces made by the new line")
@@ -250,8 +474,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 first_row.locator("button.session-row-disclosure").click()
             expect(first_row.locator("details.outcome-conclusion")).to_have_attribute("open", "")
             expect(first_row.locator("details.outcome-conclusion")).to_contain_text(
-                "triangular bound"
+                "The investigation is paused"
             )
+            expect(first_row.locator(".advanced-outcome-hint")).to_have_count(0)
 
             page.set_viewport_size({"width": 375, "height": 812})
             for session in sessions:
@@ -268,6 +493,28 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 path=str(SCREENSHOT_DIR / "sigma-increment13-advanced-mobile.png"),
                 full_page=True,
             )
+            mobile_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
+            mobile_conclusion = mobile_row.locator("details.outcome-conclusion")
+            mobile_toggle = mobile_conclusion.locator(
+                ".outcome-conclusion-actions .sigma-render-toggle"
+            )
+            mobile_toggle.click()
+            mobile_status = mobile_conclusion.locator(".text-view-format-status")
+            expect(mobile_status).to_be_visible()
+            mobile_route, mobile_response = pending_conclusion_responses.pop(0)
+            mobile_route.fulfill(**mobile_response)
+            expect(mobile_toggle).to_have_attribute("aria-pressed", "true")
+            expect(mobile_conclusion.locator(".outcome-markdown .katex-display")).to_have_count(3)
+            for width in (375, 320):
+                page.set_viewport_size({"width": width, "height": 812})
+                overflow = page.evaluate(
+                    "({width: document.documentElement.clientWidth, "
+                    "scroll: document.documentElement.scrollWidth})"
+                )
+                assert overflow["scroll"] <= overflow["width"], overflow
+                assert mobile_conclusion.locator(".outcome-markdown .katex-display").count() == 3
+                mobile_conclusion.screenshot(path=f"/tmp/sigma-conclusion-ai-{width}.png")
+            page.mouse.move(1400, 10)
             # Switch to Simple Outcome and verify the same provenance is above the narrative.
             settings = page.get_by_role("button", name="Project settings", exact=True)
             settings.click()
@@ -282,6 +529,13 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             expect(dialog).to_be_hidden()
             row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
             expect(row.locator(".outcome-simple")).to_be_visible()
+            expect(row.locator(".advanced-outcome-hint")).to_contain_text(
+                "Want more detail? Turn on Advanced Outcome to see the full research findings and evidence."
+            )
+            expect(row.locator(".outcome-simple .katex").first).to_be_visible()
+            expect(row.get_by_role("button", name="Show plain outcome text")).to_have_attribute(
+                "aria-pressed", "true"
+            )
             prelude = row.locator(".outcome-evidence-prelude")
             expect(prelude).to_contain_text("0 reported completed of 0 identified saved executions")
             expect(prelude).to_contain_text("No local Python or Sage computation is recorded for this session.")
@@ -295,6 +549,10 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
             for width in (375, 320):
                 page.set_viewport_size({"width": width, "height": 812})
                 expect(prelude).to_be_visible()
+                if width == 375:
+                    row.locator(".session-outcome").screenshot(
+                        path="/tmp/sigma-advanced-outcome-hint-mobile.png"
+                    )
                 overflow = page.evaluate(
                     "({width: document.documentElement.clientWidth, "
                     "scroll: document.documentElement.scrollWidth})"
@@ -367,4 +625,4 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 process.kill()
                 process.wait(timeout=5)
 
-print("Outcome provenance real Chrome checks passed: Advanced/Simple at 1440px/375px/320px, zero and timed-out executions, no provider calls.")
+print("Real Chrome passed: AI-formatted historical Conclusion, gray/copper toggle, raw/rendered modes and KaTeX at desktop/mobile widths; Outcome provenance, zero and timed-out executions; mocked conversion only.")
