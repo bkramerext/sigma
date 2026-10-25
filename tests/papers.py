@@ -1189,6 +1189,8 @@ def main() -> None:
         assert len(papers.list_papers(str(path))) == 2
         record = papers.get_paper(str(path), first["paper_id"])
         assert record["snapshot_sha256"] == first["snapshot_sha256"]
+        assert record["tex_source"].startswith(r"\documentclass")
+        assert r"\end{document}" in record["tex_source"]
         assert record["generation"]["call_limit"] == 1
         assert papers.get_pdf(str(path), first["paper_id"]).startswith(b"%PDF-")
         assert record["snapshot"]["sources"][0]["id"] == "project:" + record["project_id"]

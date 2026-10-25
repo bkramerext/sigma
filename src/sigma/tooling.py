@@ -61,6 +61,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/sage_execution.py"],
             [*python, "python", "tests/computational_evidence.py"],
             [*python, "python", "tests/project_reports.py"],
+            [*python, "python", "tests/increment13_integrity.py"],
             [*python, "python", "tests/papers.py"],
             [*python, "python", "tests/text_views.py"],
             [*python, "python", "tests/strategies.py"],

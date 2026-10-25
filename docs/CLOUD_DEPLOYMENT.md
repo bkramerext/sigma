@@ -43,6 +43,11 @@ are fixed to amd64 digests. The lockfiles pin Python/JavaScript packages. Build
 the Python and Sage execution images from the existing `sandbox-poc` recipes
 and tags in `src/sigma/python_sandbox.py`; SIGMA continues to apply its existing
 no-network, non-root, memory, CPU, process, wall-time, and output limits.
+The backend image also includes pinned Tectonic 0.15.0 for paper PDF
+compilation. Each paper version persists its exact TeX source, frozen evidence
+snapshot, metadata, and hash-checked PDF in the owner's existing project
+workspace on the state disk. Tectonic runs in untrusted mode with bounded input,
+time, and output; first compilation may download its typesetting bundle.
 
 The web/API container is unprivileged, has a read-only root filesystem, drops
 Linux capabilities, and sees only a **separate rootless Docker daemon** for
@@ -443,9 +448,55 @@ limits, read-only root, and non-root user; deterministic `print(6 * 7)` returned
 first local Python build took about two minutes under emulation; first-time
 Sage image build on GCE and memory use remain unmeasured.
 
+Run the opt-in runtime proof after building the Python and Sage runner images.
+On a developer workstation using Docker Desktop/Colima, this proves real bounded
+Python and Sage runs, UID/network/host-secret isolation probes, artifact
+round-trips, actual PDF compilation, and paper source/evidence/PDF persistence.
+The workstation daemon is not the production rootless daemon, so this does not
+close GCE isolation acceptance:
+
+```sh
+docker build -t sigma-research-python:0.1 -f sandbox-poc/Dockerfile sandbox-poc
+docker build --platform linux/amd64 -t sigma-research-sage:10.8 -f sandbox-poc/Dockerfile.sage sandbox-poc
+uv run --locked python src/sigma/cloud_runtime_check.py --allow-nonrootless-dev
+```
+
+To verify the pinned compiler included in the actual backend image (the
+workstation command above uses the workstation's installed Tectonic):
+
+```sh
+docker build -t sigma-backend:runtime-check .
+docker run --rm -i --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001 \
+  -e SIGMA_STATE_DIR=/tmp/sigma sigma-backend:runtime-check python - <<'PY'
+from sigma.project_reports import _compile_pdf
+pdf = _compile_pdf(r"\documentclass{article}\begin{document}SIGMA PDF smoke.\end{document}")
+assert pdf.startswith(b"%PDF-")
+print({"pdf_bytes": len(pdf)})
+PY
+```
+
+For GCE, run the same proof inside the backend container after the dedicated
+rootless daemon and both runner images are ready. Compose already points the
+backend Docker CLI at `/run/sigma-sandbox/docker.sock`; omitting the development
+override makes the proof fail unless Docker reports rootless mode:
+
+```sh
+docker compose --env-file /etc/sigma/deploy.env \
+  -f deploy/compose.yaml -f deploy/compose.gce.yaml \
+  exec -T backend python -m sigma.cloud_runtime_check
+```
+
+The output includes the daemon's reported rootless status, image IDs, execution
+IDs, isolation observations, and PDF SHA-256. Preserve that output with the
+GCE acceptance record. This proof creates a disposable project under the
+container's `/tmp`; it does not exercise Google login, sponsored inference,
+cross-user HTTP authorization, or persistence across container/VM restart.
+
 UNVERIFIED until measured on the approved GCE VM: exact regional invoice,
 first-time Sage image build duration/bytes/RAM, VM memory under application plus
-Sage concurrency, rootless Docker socket behavior and adversarial isolation,
+Sage concurrency, successful target-VM run of the rootless runtime proof above
+and adversarial escape/isolation checks,
 end-to-end HTTPS certificate issuance, production OAuth client behavior, actual
 Secret Manager IAM, snapshot/GCS restore and retention, service boot after VM
 restart, and production latency/capacity. The local tests cannot establish
