@@ -26,7 +26,8 @@ the attempt. This did not contact Google. Hosted desktop acceptance remains
 delivery, public HTTPS, and owner-authorized admin/member/rejected test
 identities. T130 routing/TLS and T129 deployment remain outside this change.
 Preparation elapsed approximately 20 minutes; exact handoff SHA and PR are in
-the linked T131 message file.
+[messages/t131_gray_hosted_oauth_preparation.txt](../messages/t131_gray_hosted_oauth_preparation.txt) and
+[PR #156](https://github.com/bkramerext/sigma/pull/156).
 
 ## T133 Gray cloud workflow and export acceptance preparation (2026-10-25)
 

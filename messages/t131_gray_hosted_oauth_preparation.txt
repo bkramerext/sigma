@@ -2,8 +2,8 @@ R4R — T131 Hosted Google OAuth Acceptance Preparation
 
 Branch: gray/t131-hosted-oauth-acceptance
 Base: main, starting SHA 455d752 (T133/PR #154 merge)
-PR: pending
-Commit: pending
+PR: https://github.com/bkramerext/sigma/pull/156
+Commit: 61eb11e92d6b2c02508023ba4bd89d4091dd0369
 
 Implemented a repeatable desktop hosted OAuth acceptance procedure in
 docs/T131_HOSTED_OAUTH_ACCEPTANCE.md. It gives Brian the exact production Web
