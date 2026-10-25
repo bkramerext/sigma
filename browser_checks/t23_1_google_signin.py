@@ -75,17 +75,17 @@ with sync_playwright() as playwright:
     page.route("**/api/cloud-auth/login", begin_login)
     page.route("**/api/cloud-auth/logout", sign_out)
 
-    # The real local sign-in control opens the established account dialog.
+    # The Google pill is the sign-in action: activating it enters the existing
+    # local OAuth route directly without an intermediate account dialog.
     page.goto(UI + "/", wait_until="networkidle")
     expect(page.get_by_role("heading", name="Sign in with approved Gmail account to access projects.")).to_be_visible()
     expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-    google = page.get_by_role("button", name="Sign in with Google")
+    google = page.get_by_role("link", name="Sign in with Google")
     expect(google).to_have_text("Sign in with Google")
+    expect(google).to_have_attribute("href", "/api/cloud-auth/login")
     google.click()
-    account = page.get_by_role("dialog", name="Connect your Google account")
-    expect(account.locator(".google-account-target")).to_have_count(0)
-    account.get_by_role("link", name="Sign in with Google", exact=True).click()
     expect(page.get_by_text("Google OAuth fixture route", exact=False)).to_be_visible()
+    expect(page.get_by_role("dialog")).to_have_count(0)
     assert len(login_attempts) == 1
 
     # A verified ordinary member sees identity only in the dialog; the project

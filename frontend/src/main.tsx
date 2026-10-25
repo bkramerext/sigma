@@ -1542,20 +1542,15 @@ function ProjectPaneTitle({ view, onSaved, disabled, modeDisabled, descriptionDr
 
 function AboutArchitecture() {
   const descriptions = {
-    project: 'A project holds the central research question and multiple persistent research directions. Results from a local investigation do not automatically settle the entire question.',
-    strategies: 'Strategies are durable, bounded research ideas. They may be tested, revised or forked, and failed attempts retain their evidence and history.',
+    project: 'A project holds the overarching research question. A session can make progress on part of it without settling the whole question.',
+    strategies: 'Strategies are persistent, revisable approaches to a project question. They can be explored across sessions, and earlier work remains in the history.',
     strategyA: 'A strategy can investigate an observed pattern or relationship. Its objective is bounded: identify supporting evidence, find limits, or expose a useful unanswered question. It does not need to solve the entire project.',
     strategyB: 'The same problem may become clearer through a different model, formalism, or computational method. Its results can complement, challenge, or refine the evidence from other strategies, without being assumed equivalent.',
     strategyC: 'A strategy may deliberately stress-test an assumption or search for a counterexample. A negative result can rule out a local claim while leaving the wider research problem open and the strategy history intact.',
-    session: 'A session is a recorded attempt using one or more selected strategies. It schedules specialist research roles, observes limits, preserves intermediate work and records the outcome.',
-    orchestration: "SIGMA's session engine assembles bounded context, dispatches Investigator and Skeptic work, schedules eligible branches, manages budgets and decides whether another cycle can run.",
+    session: 'A research session is a bounded attempt using one or more selected strategies. Its Investigator and Skeptic turns, intermediate work and outcome are saved together.',
     investigator: 'A role-specific AI agent that develops claims, arguments, testable hypotheses and code proposals, while identifying assumptions and what remains uncertain.',
-    investigatorFollowup: 'A later Investigator turn can take up the Skeptic’s critique, revise an approach, and explore what the session has learned so far.',
-    tools: 'The Investigator can draw on tools such as SciPy and SageMath to explore ideas, test patterns, and carry out calculations.',
-    workingEvidence: 'Claims, objections, code outputs, prior artifacts and source identifiers inform subsequent work. Relevant evidence is selected into bounded role contexts; this is not a global chat memory.',
     skeptic: "A separate role-specific AI agent that examines the Investigator's claims and assumptions, looks for counterexamples or gaps, and suggests next tests. Its review is model-reported, not independent proof certification.",
-    decision: 'After a review, SIGMA applies the recorded assessment, next question and remaining work within resource limits. A strategy can remain available for later revision or another session.',
-    savedEvidence: 'Persisted artifacts preserve findings, reasoning, objections, execution results and open questions. Researchers can revisit prior evidence to guide later sessions or strategy revisions.',
+    savedEvidence: 'Findings, objections, experiments and open questions stay in the research history. Later sessions can draw on selected prior findings without changing the original records.',
   } as const;
   type DiagramNode = keyof typeof descriptions;
   const [activeInfoNode, setActiveInfoNode] = useState<DiagramNode | null>(null);
@@ -1685,12 +1680,12 @@ function AboutArchitecture() {
     setSessionExpanded(next);
   }
 
-  return <section className="about-architecture" aria-label="How SIGMA Works: Multi-Agentic Research">
+  return <section className="about-architecture" aria-label="Research flow">
     <div className="about-research-flow">
-      <div className="about-flow-project">{card('project', 'Research Project', 'The overarching hard question')}</div>
-      <div className="about-flow-connector"><span>Branches into distinct research directions</span><i aria-hidden="true"/></div>
+      <div className="about-flow-project">{card('project', 'Research Project', 'One overarching question')}</div>
+      <div className="about-flow-connector" aria-label="Strategies address the project question"><i aria-hidden="true"/></div>
       <div className="about-strategy-group">
-        {infoRegion('strategies', <div className="about-strategy-group-heading"><span>Project Strategies</span>{help('strategies', 'Project Strategies')}</div>)}
+        {infoRegion('strategies', <div className="about-strategy-group-heading"><span>Persistent Strategies</span>{help('strategies', 'Persistent Strategies')}</div>)}
         <div className="about-strategy-cards">
           {strategyExamples.map(strategy => {
             return infoRegion(strategy.id, <div className="about-strategy-card">
@@ -1703,58 +1698,32 @@ function AboutArchitecture() {
           })}
         </div>
       </div>
-      <div className="about-flow-connector about-strategy-parallel-note"><span>Several selected directions can advance side by side</span><i aria-hidden="true"/></div>
+      <div className="about-flow-connector about-strategy-parallel-note"><span>Choose one or more</span><i aria-hidden="true"/></div>
       <div className="about-session-frame">
-        <div className="about-session-heading">{card('session', 'Research Session', 'Brings specialist agent turns together')}</div>
+        <div className="about-session-heading">{card('session', 'Research Session', 'A bounded attempt using selected strategies')}</div>
         <div className="about-agent-cycle-preview">
           <span className="about-agent-role">Investigator<small>AI agent</small></span>
           <svg className="about-agent-review-arrow" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-agent-arrow-metal" x1="0" x2="1"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M4 20 H226 M212 6 L228 20 L212 34" fill="none" stroke="url(#about-agent-arrow-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           <span className="about-agent-role">Skeptic<small>AI agent</small></span>
-          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show Me') + ' Investigator and Skeptic details'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Show Me'}</button>
+          <button ref={sessionToggle} type="button" className="about-session-toggle" aria-expanded={sessionExpanded} aria-controls="about-session-details" aria-label={(sessionExpanded ? 'Hide' : 'Show') + ' Investigator and Skeptic details'} onClick={toggleSession}>{sessionExpanded ? 'Hide' : 'Details'}</button>
         </div>
         <div id="about-session-details" ref={sessionPanel} className="about-session-detail" role="region" aria-labelledby="about-session-detail-heading" aria-hidden={!sessionExpanded} inert={!sessionExpanded} hidden={!sessionExpanded}>
           <div className="about-session-detail-inner">
-            <h4 id="about-session-detail-heading">Different minds take turns on the same hard question</h4>
-            <p className="about-multi-agent-intro">SIGMA brings specialist AI agents into the research. Investigators develop ideas and test possibilities. Skeptics challenge assumptions and probe the evidence. Investigators return with the critique in view, and the exchange can continue. Each turn adds another perspective while the work stays together in the research session.</p>
-            <section className="about-agent-instantiation" aria-label="Different AI agents contribute successive research turns">
-              <h5>One investigation. Multiple agent turns.</h5>
-              <div className="about-agent-turns">
-                <div className="about-agent-turn">
-                  <span className="about-turn-number">01 · INVESTIGATE</span>
-                  {card('investigator', 'Investigator', 'Develops an approach and tests ideas', 'blue')}
-                  <span className="about-turn-detail">Explores the direction</span>
-                </div>
-                <span className="about-turn-arrow" aria-hidden="true">→</span>
-                <div className="about-agent-turn">
-                  <span className="about-turn-number">02 · CHALLENGE</span>
-                  {card('skeptic', 'Skeptic', 'Questions assumptions and probes evidence', 'blue')}
-                  <span className="about-turn-detail">Finds gaps and next questions</span>
-                </div>
-                <div className="about-agent-return">
-                  <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs><linearGradient id="about-turn-return-metal" x1="1" x2="0"><stop stopColor="#4c83a8"/><stop offset=".5" stopColor="#acd9fa"/><stop offset="1" stopColor="#4c83a8"/></linearGradient></defs><path d="M510 3 V27 H170 V72 M162 62 L170 72 L178 62" fill="none" stroke="url(#about-turn-return-metal)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  <span>The Skeptic's critique feeds the next Investigator turn</span>
-                  <b aria-hidden="true">↓</b>
-                </div>
-                <div className="about-agent-turn about-agent-turn--return">
-                  <span className="about-turn-number">03 · BUILD ON IT</span>
-                  {card('investigatorFollowup', 'Investigator', 'Takes up the critique and continues', 'blue')}
-                  <span className="about-turn-detail">Carries the research forward</span>
-                </div>
-              </div>
-              <div className="about-agent-turn-more"><span aria-hidden="true">···</span> More Investigator and Skeptic turns can follow as the research develops</div>
-              <p className="about-agent-instantiation-note">Investigator turns can draw on tools such as SciPy and SageMath. Every turn and its research stay with the session for complete recoverability and auditing.</p>
-            </section>
-            <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
-            <p className="about-multiple-strategies-note">A project can explore several strategies. Each gives agents another direction to investigate, and the saved findings remain available for later work.</p>
-            <p className="about-multiple-sessions-note">Multiple sessions let researchers revisit a strategy with new evidence, try revised approaches, and compare results over time.</p>
+            <h4 id="about-session-detail-heading">The critique loop</h4>
+            <p className="about-multi-agent-intro">The exchange can repeat, with each critique guiding what the Investigator explores next.</p>
+            <div className="about-agent-loop" aria-label="Investigator to Skeptic, then critique informs the next Investigator turn">
+              <div className="about-agent-loop-card">{card('investigator', 'Investigator', 'Develops an approach and tests ideas', 'blue')}</div>
+              <span className="about-turn-arrow" aria-hidden="true">→</span>
+              <div className="about-agent-loop-card">{card('skeptic', 'Skeptic', 'Challenges assumptions and evidence', 'blue')}</div>
+            </div>
+            <p className="about-agent-feedback"><span aria-hidden="true">↶</span> Critique informs the next Investigator turn</p>
+            <p className="about-session-record">Each turn and its evidence remain in the session history.</p>
           </div>
         </div>
       </div>
-      <div className="about-flow-connector"><span>Save findings</span><i aria-hidden="true"/></div>
-      <div className="about-flow-evidence">{card('savedEvidence', 'Saved Evidence & Outcome', 'Findings, objections, experiments and unresolved questions')}</div>
-      <div className="about-history-return"><span aria-hidden="true">↶</span> Findings may inform later sessions or researcher-approved strategy revisions.</div>
+      <div className="about-flow-connector" aria-label="The session records outcomes and evidence"><i aria-hidden="true"/></div>
+      <div className="about-flow-evidence">{card('savedEvidence', 'Outcomes & Saved Evidence', 'Findings · objections · experiments · open questions')}</div>
     </div>
-    <p className="about-architecture-caption">SIGMA coordinates specialized AI agents to investigate and challenge ideas, while keeping a record of what they find.</p>
   </section>;
 }
 function AboutDialog({ onClose }: { onClose: () => void }) {
@@ -1767,35 +1736,32 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialog} className="project-entry-dialog about-dialog" aria-labelledby="about-heading" onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="entry-dialog-header"><h2 id="about-heading">About SIGMA</h2><button ref={closeButton} type="button" className="entry-cancel" onClick={onClose}>Close</button></div>
     <div className="about-dialog-content">
-      <p className="about-intro"><strong>SIGMA is a research workbench for exploring answers to hard questions from different angles.</strong></p>
-      <p className="about-terms">Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate.</p>
+      <p className="about-intro"><strong>SIGMA is a research workspace for exploring hard questions through distinct approaches and saved evidence.</strong></p>
+      <p className="about-terms">Strategies propose. Sessions investigate. Outcomes answer. Reports communicate.</p>
+      <AboutArchitecture/>
       <details className="about-disclosure">
-        <summary>Key Features</summary>
+        <summary>More capabilities</summary>
         <div className="about-disclosure-content">
-      <section className="about-feature"><h4>Multi-Strategy Exploration</h4><p>Hard problems often need more than one approach. Each strategy explores a particular angle, rather than proposing an answer. Strategies can be tested, revised, or combined as the research develops. Even failed approaches can teach us something useful.</p></section>
-      <section className="about-feature"><h4>Multiple Research Agents</h4><p>Different agents investigate ideas, challenge assumptions, and look for weaknesses in the reasoning.</p></section>
-      <section className="about-feature"><h4>Research History</h4><p>SIGMA keeps a record of strategies, research sessions, experiments, and findings so earlier work isn't lost. Failed approaches remain available for review and further investigation.</p></section>
-      <section className="about-feature"><h4>Research That Builds on Earlier Work</h4><p>Researchers can use earlier findings to guide later investigations, including findings that ruled out an approach. SIGMA does not automatically combine discoveries across strategies.</p></section>
-      <section className="about-feature"><h4>Human Guidance</h4><p>Researchers can provide feedback, revise strategies, and choose which directions to pursue.</p></section>
-      <section className="about-feature"><h4>Python and SageMath Execution</h4><p>Agents can write and run Python code to test ideas, perform calculations, and check results. The code and execution output are saved with the research session. SageMath execution has not yet been independently verified.</p></section>
-      <section className="about-feature"><h4>Evidence and Uncertainty</h4><p>Outcomes distinguish supported findings from unresolved questions and claims that still need verification. SIGMA records evidence and review status; it does not independently verify mathematical proofs.</p></section>
-      <section className="about-feature"><h4>Reports and Exports</h4><p>Research records and reports can be exported for review, sharing, and further work.</p></section>
-          <section className="about-feature"><h4>Experimental LaTeX Paper Generation</h4><p>SIGMA can generate a draft mathematical paper in LaTeX format with equations, arguments, and supporting evidence. This feature is experimental; the draft needs human review and may contain errors.</p></section>
+          <section className="about-feature"><h4>Experiments</h4><p>When available, agents can run Python and SageMath calculations. Code and output are saved as evidence, not proof.</p></section>
+          <section className="about-feature"><h4>Human direction</h4><p>Researchers can guide the work, revise strategies, choose what to explore next, and review unresolved objections.</p></section>
+          <section className="about-feature"><h4>Reports and paper drafts</h4><p>Export research reports or generate experimental LaTeX paper drafts. Drafts need human review and may contain errors.</p></section>
         </div>
       </details>
-      <details className="about-disclosure about-architecture-disclosure">
-        <summary>How SIGMA Works: Multi-Agentic Research</summary>
-        <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
-      </details>
+      <p className="about-boundary">Model-generated reasoning and computations need human review. SIGMA does not independently verify proofs. Connected models, optional computation, paper generation, and hosted features depend on your environment and configuration.</p>
     </div>
-    <small className="about-build-commit">Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog>;
 }
 
 function Header({ goHome, close, projectTitle, projectType, projectDifficulty, projectView, onProjectUpdated, projectArtwork = false, connectionDisabled = false }: { goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
   close?: { action: () => void; busy: boolean }; projectTitle?: string; projectType?: ResearchMode; projectDifficulty?: ProjectDifficulty | null; projectView?: ProjectView; onProjectUpdated?: (view: ProjectView) => void; projectArtwork?: boolean; connectionDisabled?: boolean }) {
   const cloud = useCloudIdentity();
-  return <header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const aboutButton = useRef<HTMLButtonElement>(null);
+  function closeAbout() {
+    setAboutOpen(false);
+    requestAnimationFrame(() => aboutButton.current?.focus());
+  }
+  return <><header className={projectArtwork ? 'site-header project-art-header' : 'site-header'}>
     <div className="brand-block">
       <a href="/" className={projectArtwork ? 'brand project-header-art' : 'brand'} onClick={goHome} aria-label="SIGMA home"><img src={projectArtwork ? '/sigma-project-header.png' : '/sigma-workspace-logo.png'} alt="SIGMA" /></a>
       {projectArtwork && close && <div className="project-back-row project-art-back-row">
@@ -1812,9 +1778,9 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <GoogleIdentityPill compact/>
       <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>?</button>
+    <button ref={aboutButton} type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" aria-haspopup="dialog" aria-expanded={aboutOpen} data-tooltip="About SIGMA" onClick={() => setAboutOpen(true)}>About</button>
     </div>
-  </header>;
+  </header>{aboutOpen && <AboutDialog onClose={closeAbout}/>}</>;
 }
 
 function WorkspaceIcon({ name }: { name: string }) {
@@ -2402,7 +2368,6 @@ function Home({ initialPath, onOpen }: {
   const cloud = useCloudIdentity();
   const [entry, setEntry] = useState<'open' | 'new' | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
-  useEffect(() => { const openAbout = () => setAboutOpen(true); window.addEventListener('sigma-open-about', openAbout); return () => window.removeEventListener('sigma-open-about', openAbout); }, []);
   const aboutButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
@@ -2468,7 +2433,7 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills"><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <div className="home-topline"><div className="home-header-actions"><button ref={aboutButton} type="button" className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div><div className="home-auth-pills"><GoogleIdentityPill/><ConnectionStatus projectHeader homeHeader cloudFunding={cloudFundingFor(cloud)}/></div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail} contactEmail={cloud.admin_contact_email}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Sign in with approved Gmail account to access projects.</h1></section>}
       {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
@@ -3246,9 +3211,11 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const setupMissing = cloud?.local_setup_missing ?? [];
   const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
-    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
-    </button>
+    {!cloud?.authenticated && canSignIn ? <a className={`project-google-signin${compact ? ' compact' : ''}`} href="/api/cloud-auth/login" aria-label={description} data-tooltip-disabled="">
+      <span className="connection-dot connection-disconnected" aria-hidden="true"/><span>Sign in with Google</span>
+    </a> : <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : 'Google sign-in setup required'}</span>
+    </button>}
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
       <div ref={panel} className="connection-details google-connection-details" role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>

@@ -92,6 +92,8 @@
 .home-page .home-samples .sample-open:hover:not(:disabled) { background: #a9654824; }
 
 .home-cloud-prompt, .home-cloud-denied { position: relative; z-index: 1; width: min(520px, calc(100% - 56px)); margin: 18px 0 0 clamp(26px, 5.4vw, 90px); padding: 20px 22px; border: 1px solid #9a684c; border-radius: 7px; background: linear-gradient(118deg, #090e16ec, #15120ff0); box-shadow: 0 18px 48px #0008; color: #d7d0c7; }
+.home-page .home-cloud-prompt { --home-cloud-prompt-inset: clamp(26px, 5.4vw, 90px); position: absolute; top: var(--home-cloud-prompt-inset); left: var(--home-cloud-prompt-inset); width: min(430px, calc(100vw - var(--home-cloud-prompt-inset) - var(--home-cloud-prompt-inset))); margin: 0; }
+@media (max-width: 700px) { .home-page:has(.home-cloud-prompt) .home-topline { position: absolute; top: 150px; right: clamp(22px, 5.4vw, 38px); width: max-content; min-height: 52px; flex-wrap: nowrap; } }
 .home-cloud-prompt > p, .home-cloud-denied > .cloud-auth-kicker { margin: 0 0 8px; color: #d9a77b; font: 600 10px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .15em; text-transform: uppercase; }
 .home-page .home-cloud-prompt h1, .home-page .home-cloud-denied h1 { margin: 0; color: #edc39c; font: 400 clamp(19px, 2vw, 23px)/1.35 Georgia, serif; letter-spacing: 0; text-shadow: none; }
 .home-cloud-prompt > span, .home-cloud-denied > p { color: #c1b9ad; font: 13px/1.65 Inter, ui-sans-serif, system-ui, sans-serif; }
@@ -113,7 +115,7 @@
 .cloud-text-button { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .cloud-secondary-button:disabled { opacity: .55; cursor: default; }
 .cloud-auth-footnote { margin-top: 23px; font-size: 12px; }
-@media (max-width: 560px) { .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } }
+@media (max-width: 560px) { .home-cloud-prompt, .home-cloud-denied { margin-left: 22px; width: calc(100% - 44px); padding: 17px; } .home-page .home-cloud-prompt { --home-cloud-prompt-inset: 22px; width: min(430px, calc(100vw - 44px)); margin: 0; } }
 
 .home-page .home-samples .sample-type-group { border-bottom: 1px solid #a965483d; }
 .home-page .home-samples .sample-type-group > summary { display: grid; grid-template-columns: 10px 16px 120px max-content; align-items: center; gap: 8px; min-height: 40px; margin-left: -8px; padding: 6px 8px; color: #e0aa8b; font: 500 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; cursor: pointer; list-style: none; }
@@ -127,7 +129,7 @@
 .home-page > .home-shell { height: 100%; min-height: 0; overflow: hidden; }
 .home-page .home-effect-definitions { position: absolute; display: block; width: 0; height: 0; }
 .home-page .home-content { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 16px; overflow: hidden; }
-.home-page .home-topline { flex: 0 0 auto; height: auto; min-height: 52px; }
+.home-page .home-topline { flex: 0 0 auto; height: auto; min-height: 88px; }
 .home-page .home-auth-pills, .home-page .home-header-actions { display: grid; flex: 0 0 auto; justify-items: end; gap: 8px; }
 .home-page .home-projects { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .home-page .home-catalog { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
@@ -154,10 +156,11 @@
 
 /* Account controls and administrator editing follow the established pill and underlined-action language. */
 .home-page .administrator-settings-link { position: relative; z-index: 2; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; margin: 0; text-decoration: none; cursor: pointer; }
-.project-google-signin { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 27px; padding: 4px 9px; border: 1px solid #5b5148; border-radius: 999px; background: #091824ed; color: #c9b18f; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; white-space: nowrap; }
+.project-google-signin { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; min-height: 27px; padding: 4px 9px; border: 1px solid #5b5148; border-radius: 999px; background: #091824ed; color: #c9b18f; font: 500 10px/1.25 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: .015em; text-decoration: none; white-space: nowrap; }
 .project-google-signin > span { margin-left: 0; }
 button.project-google-signin { cursor: pointer; }
 button.project-google-signin:hover:not(:disabled), button.project-google-signin:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
+a.project-google-signin:hover, a.project-google-signin:focus-visible { border-color: #c08a57; background: #3a291c; color: #fff0dc; }
 button.project-google-signin:disabled { border-color: #5b5148; background: #091824ed; color: #b4bdc5; cursor: not-allowed; opacity: 1; }
 button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .home-page .project-google-signin { position: relative; z-index: 2; }
@@ -244,15 +247,9 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .google-connection-details .google-setup-missing { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
 .google-connection-details .google-setup-missing code { color: #f0cca0; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 @media (max-width: 700px) {
-  .home-page .administrator-settings-link { top: 46px; left: 22px; font-size: 10px; }
-  .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 78px; height: 78px; }
   .cloud-access-dialog { width: calc(100vw - 20px); height: min(680px, calc(100dvh - 20px)); max-height: calc(100dvh - 20px); padding: 16px 13px; }
   .admin-dialog-heading h2 { font-size: 23px; }
   .admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 7px; }
-}
-@media (max-width: 560px) {
-  .home-page .administrator-settings-link { top: 58px; }
-  .home-page:has(.administrator-settings-link) .home-topline { flex-basis: 96px; height: 96px; }
 }
 @media (max-width: 520px) {
   .home-page .home-topline .project-google-signin,

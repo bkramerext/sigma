@@ -148,6 +148,46 @@ the hit area and opens via its outer edge. The header arrangement is captured in
 `/tmp/sigma-t46-about-project-header-mobile.png`. The browser check used the local
 deterministic provider fixture; no live provider calls were made.
 
+## About and Home polish (2026-10-25)
+
+Follow-up to T46 keeps the architecture illustration and its hover/focus/touch
+details, but shows the four-stage flow immediately and reduces the session detail
+to a two-role critique loop with one cumulative-history note. Repeated copy and
+unused diagram styling were removed; the About dialog grows to 760px on desktop
+for more breathing room. The About copy still describes capabilities and limits
+without implying that SIGMA independently verifies proofs.
+
+Home’s signed-out access notice is now at the same responsive top and left inset,
+with a 430px maximum width. On narrow screens the Home controls move below that
+notice to keep the two from overlapping. About/Admin now sit left of Google and
+ChatGPT. The signed-out ChatGPT pill reads “Connect to ChatGPT.” The Project
+header’s former `?` is now an “About” pill beneath Difficulty, with a 44px mobile
+hit area.
+
+The Google pill investigation found no direct-auth fix in reachable current-main
+history. The signed-out pill was still a button that opened an account dialog,
+and `browser_checks/t23_1_google_signin.py` explicitly expected a second click
+on a sign-in link. When local Google auth is ready, the pill now links directly
+to the existing `/api/cloud-auth/login` route. The details dialog remains for
+signed-in account actions and unavailable-setup guidance.
+
+Verification on 2026-10-25: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma
+test` passed all scenarios, Ruff, formatting, Pyright, frontend typecheck and
+production build. `uv run --with playwright python browser_checks/about.py`
+passed in real Chrome at 1440px, 390px and 320px, from Home and Project,
+including tooltips, disclosure, keyboard/touch access, dialog scrolling, focus
+restoration, unchanged route/tab state, and the Project About layout. The
+updated `browser_checks/t40_cloud_ui.py` passed in real Chrome at desktop and
+narrow widths (1440px through 320px), including direct login routing, no
+intermediate dialog, signed-in account controls, Home pill order and spacing,
+and the signed-out notice’s inset and overlap checks. A separate real-Chrome
+login-route check confirmed one mocked login request and no dialog. Ruff checks,
+frontend typecheck, `git diff --check`, and build all passed. No paid provider
+calls or cloud changes were made.
+
+Before/after Chrome captures, with a brief simplification summary, are in
+[About polish screenshots](evaluations/about-polish/README.md).
+
 ## Outcome presentation and Project Settings (2026-10-24)
 
 Added project-scoped `show_advanced_outcome_details`, defaulting off. Simple mode

@@ -227,7 +227,7 @@ export function ConnectAction({ signal }: { signal?: AbortSignal }) {
     {ai.connecting && <><p role="status">Connecting… Complete sign-in in the browser.</p>{ai.handoff && <a href={ai.handoff} target="_blank" rel="noreferrer">Open sign-in browser</a>}<button type="button" className="connection-text-action" onClick={ai.cancelSignIn}>Cancel sign-in</button></>}
   </div>;
 }
-export function ConnectionStatus({ disabled = false, projectHeader = false, cloudFunding }: { disabled?: boolean; projectHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean } } = {}) {
+export function ConnectionStatus({ disabled = false, projectHeader = false, homeHeader = false, cloudFunding }: { disabled?: boolean; projectHeader?: boolean; homeHeader?: boolean; cloudFunding?: { target: 'local' | 'hosted'; budget: { allowance_usd: number; estimated_usage_usd: number; held_usd: number; remaining_usd: number; unknown_provider_attempts: number } | null; loading: boolean; error: string | null; authorized: boolean } } = {}) {
   const ai = useAI(); const disclosure = useRef<HTMLDetailsElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -271,12 +271,12 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const projectHeaderLabel = serviceFunded
     ? 'ChatGPT · SIGMA service'
     : localGoogleRequired
-      ? 'ChatGPT sign-in · Google sign-in required'
-    : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
-    ? 'ChatGPT connected'
-    : status === 'connected' && ai.info?.mode === 'api_key'
-      ? 'OpenAI API connected'
-      : `ChatGPT sign-in · ${label}`;
+      ? homeHeader ? 'Connect to ChatGPT' : 'ChatGPT sign-in · Google sign-in required'
+      : status === 'connected' && ai.info?.mode === 'chatgpt' && ai.info.active_account
+        ? 'ChatGPT connected'
+        : status === 'connected' && ai.info?.mode === 'api_key'
+          ? 'OpenAI API connected'
+          : `ChatGPT sign-in · ${label}`;
   const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;

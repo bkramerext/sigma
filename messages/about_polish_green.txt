@@ -1,0 +1,27 @@
+GREEN: About and Home polish — R4R
+
+Branch: green/about-polish
+Base: main at 617570b when fetched
+PR: pending
+Dependencies/conflicts: none found
+
+## Result
+
+- Simplified the About architecture diagram while keeping its interactive details; the four-stage research flow is now visible without an extra disclosure.
+- Reduced the expanded Investigator/Skeptic explanation to the two-role critique loop and cumulative saved-history behavior. Widened the About dialog for more desktop breathing room and removed repeated copy/dead styling.
+- Replaced the Project header `?` action with an About pill in the row below Difficulty; the narrow layout retains a 44px hit area.
+- Reordered Home About/Admin before the Google/ChatGPT pills. The signed-out notice is 430px maximum width and uses matching top/left insets. Mobile controls are placed below the notice to avoid overlap.
+- Shortened Home’s signed-out ChatGPT label to “Connect to ChatGPT.”
+- Investigated the previous Google sign-in behavior: the reachable main history contains the two-step dialog flow, and the T23.1 browser check codified the second click. When local Google sign-in is ready, the pill now links directly to the existing OAuth route. Signed-in account actions and setup/error guidance remain in their dialog.
+
+## Verification
+
+- `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` — passed all tests, Ruff, format check, Pyright, frontend typecheck, and production build. The first bare invocation stopped at `tests/tooling.py` because this shell had the bootstrap-admin variable set without the OAuth client configuration; unsetting only that variable allowed the complete suite to pass.
+- `SIGMA_ABOUT_SCREENSHOT_DIR=docs/evaluations/about-polish uv run --with playwright python browser_checks/about.py` — passed in installed Chrome at 1440px, 390px, and 320px from Home and Project; checked tooltip/focus/touch interactions, expanded details, scroll, focus restoration, route/tab preservation, and mobile Project hit area/layout.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5193 SIGMA_BROWSER_API_URL=http://127.0.0.1:8001 uv run --with playwright python browser_checks/t40_cloud_ui.py` — passed in installed Chrome across desktop/narrow layouts; checked direct Google login routing with a local OAuth fixture, absence of an intermediate sign-in dialog, signed-in account controls, Home pill order/gaps, and signed-out notice alignment/overlap.
+- Ruff checks on the changed browser checks and `git diff --check` — passed.
+- No live Google OAuth, paid provider calls, or cloud changes.
+
+## Screenshots
+
+See [docs/evaluations/about-polish/README.md](../docs/evaluations/about-polish/README.md) for before/after desktop and mobile captures and the short simplification note. Individual Chrome captures are preserved in that directory.

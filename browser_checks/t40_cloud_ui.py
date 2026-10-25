@@ -183,11 +183,17 @@ def main() -> None:
             ).to_be_visible()
             expect(page.locator(".request-toast")).to_have_count(0)
             expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
-            google = page.get_by_role("button", name="Sign in with Google")
+            google = page.get_by_role("link", name="Sign in with Google")
             expect(google).to_have_text("Sign in with Google")
+            expect(google).to_have_attribute("href", "/api/cloud-auth/login")
+            about_home = page.locator(".home-topline .home-about-button")
+            about_home_box = about_home.bounding_box()
+            google_home_box = google.bounding_box()
+            assert about_home_box and google_home_box
+            assert about_home_box["x"] + about_home_box["width"] <= google_home_box["x"]
             expect(page.locator(".home-topline .api-connection > summary")).to_be_visible()
-            expect(page.locator(".home-topline .api-connection > summary")).to_contain_text(
-                "Google sign-in required"
+            expect(page.locator(".home-topline .api-connection > summary")).to_have_text(
+                "Connect to ChatGPT"
             )
             expect(page.locator(".home-topline .api-connection > summary")).to_have_attribute(
                 "aria-disabled", "true"
@@ -211,7 +217,15 @@ def main() -> None:
                 page.locator(".request-toast").filter(has_text="Authentication required.")
             ).to_be_visible()
             page.get_by_role("button", name="Dismiss request error").click()
-            for width, height in ((1440, 900), (390, 844)):
+            for width, height in (
+                (1440, 900),
+                (700, 850),
+                (600, 850),
+                (520, 844),
+                (390, 844),
+                (360, 740),
+                (320, 700),
+            ):
                 page.set_viewport_size({"width": width, "height": height})
                 expect(
                     page.get_by_role(
@@ -224,32 +238,30 @@ def main() -> None:
                     "element => parseFloat(getComputedStyle(element).fontSize)"
                 )
                 assert font_size <= 24, (width, font_size)
+                prompt_box = page.locator(".home-cloud-prompt").bounding_box()
+                assert prompt_box is not None and prompt_box["width"] <= 430, prompt_box
+                assert abs(prompt_box["x"] - prompt_box["y"]) <= 1, prompt_box
+                about_box = about_home.bounding_box()
+                google_box = google.bounding_box()
+                chatgpt_box = page.locator(".home-topline .api-connection > summary").bounding_box()
+                assert about_box and google_box and chatgpt_box
+                assert about_box["x"] + about_box["width"] <= google_box["x"], (
+                    width, about_box, google_box
+                )
+                for pill_box in (about_box, google_box, chatgpt_box):
+                    overlaps = (
+                        prompt_box["x"] < pill_box["x"] + pill_box["width"]
+                        and prompt_box["x"] + prompt_box["width"] > pill_box["x"]
+                        and prompt_box["y"] < pill_box["y"] + pill_box["height"]
+                        and prompt_box["y"] + prompt_box["height"] > pill_box["y"]
+                    )
+                    assert not overlaps, (width, prompt_box, pill_box)
                 page.screenshot(path=f"/tmp/sigma-t43-signin-{width}.png", full_page=True)
-                google.click()
-                google_panel = page.locator(".google-connection-details")
-                expect(google_panel).to_be_visible()
-                assert (
-                    google_panel.evaluate("element => getComputedStyle(element).position")
-                    == "fixed"
-                )
-                assert google_panel.evaluate(
-                    "element => { const r = element.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; }"
-                )
-                page.keyboard.press("Escape")
-                expect(google).to_be_focused()
+                expect(page.locator(".google-connection-details")).to_have_count(0)
             page.set_viewport_size({"width": 1440, "height": 900})
             google.click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            expect(account).to_be_visible()
-            assert account.evaluate("element => getComputedStyle(element).position") == "fixed"
-            assert account.evaluate("element => element.getBoundingClientRect().width") <= 300
-            expect(account.locator(".google-account-target")).to_have_count(0)
-            page.keyboard.press("Escape")
-            expect(google).to_be_focused()
-            google.click()
-            account = page.get_by_role("dialog", name="Connect your Google account")
-            account.get_by_role("link", name="Sign in with Google").click()
             expect(page.get_by_text("OAuth fixture route")).to_be_visible()
+            expect(page.get_by_role("dialog")).to_have_count(0)
 
             # Admin status is supplied by deterministic API fixture only.
             status.update(authenticated=True, user={"email": BOOTSTRAP, "role": "admin"})
@@ -281,7 +293,7 @@ def main() -> None:
                 assert google_box["x"] >= 0 and chatgpt_box["x"] >= 0, (width, google_box, chatgpt_box)
                 assert google_box["x"] + google_box["width"] <= width, (width, google_box)
                 assert chatgpt_box["x"] + chatgpt_box["width"] <= width, (width, chatgpt_box)
-                assert chatgpt_box["x"] - (google_box["x"] + google_box["width"]) >= 8, (
+                assert chatgpt_box["y"] - (google_box["y"] + google_box["height"]) >= 8, (
                     width, google_box, chatgpt_box
                 )
                 assert projects_box["y"] >= max(
@@ -290,8 +302,16 @@ def main() -> None:
                 ) - 1, (width, projects_box, google_box, chatgpt_box)
                 admin_link = page.locator(".administrator-settings-link")
                 if admin_link.count():
+                    about_admin = page.locator(".home-about-button")
                     admin_box = admin_link.bounding_box()
-                    assert admin_box
+                    about_admin_box = about_admin.bounding_box()
+                    assert admin_box and about_admin_box
+                    assert about_admin_box["x"] + about_admin_box["width"] <= google_box["x"], (
+                        width, about_admin_box, google_box
+                    )
+                    assert admin_box["y"] - (about_admin_box["y"] + about_admin_box["height"]) >= 8, (
+                        width, about_admin_box, admin_box
+                    )
                     for pill_box in (google_box, chatgpt_box):
                         overlaps = (
                             admin_box["x"] < pill_box["x"] + pill_box["width"]
