@@ -4,6 +4,8 @@
 
 **A local research workspace with bounded AI investigation, computational experiments, and durable evidence.**
 
+[**Why SIGMA?**](docs/WHY_SIGMA.md) Discover why research needs continuity, productive criticism, and evidence that can be inspected.
+
 SIGMA helps people investigate difficult problems through multiple strategies. Its initial showcase is mathematical research, including the Riemann Hypothesis, but projects and sample investigations span other domains.
 
 Instead of treating a long conversation as the research record, SIGMA organizes work as **projects → research sessions → strategies → evidence artifacts**. Research findings, criticisms, experiments, and unresolved obligations can be inspected and revisited.
