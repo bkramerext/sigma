@@ -1147,6 +1147,12 @@ async def test_new_session_receives_prior_saved_findings(path: Path):
                     },
                 }
             ],
+            "source_readiness": {
+                "state": "model_reviewed_steps",
+                "assumptions": "model_reviewed",
+                "original_in_context": False,
+                "independently_verified": False,
+            },
         }
     ], next_context["prior_session_findings"]
     assert next_context["prior_session_artifact_ids"] == [completed["artifacts"][0]["id"]]
