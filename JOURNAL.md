@@ -207,3 +207,79 @@ The chosen hostname is **`sigma-research.duckdns.org`**, with DuckDNS intended t
 SIGMA finished the day with a materially stronger **research engine, computational tooling, evidence model, operator interface, and deployment foundation**. The team integrated a large amount of parallel work and completed local acceptance without claiming that the live trial proved general mathematical reliability or that the cloud service was already online.
 
 Three lessons stand out: **research progress must be backed by inspectable evidence; a polished control surface is part of operational correctness; and parallel AI development succeeds only when review and integration converge.** Day 4's priority is provisioning and validating the hosted alpha, with real access, isolation, persistence, and spending behavior checked against the prepared launch gates.
+
+
+## Day 4 — October 24, 2026
+
+**Theme: improve the substance and continuity of research, simplify the product's explanations, and confront the limits of autonomous development coordination.**
+
+- Integrated **T70 substantive research outcomes**, **T45 resumable long-form papers**, **T47 persisted Outcome conclusions**, and **T46 About SIGMA**, with corresponding browser and regression work. Strengthened reasoning preservation, report fidelity, and the separation of qualified findings from proof.
+- Reworked strategy generation toward **bounded research directions**, not solution-sized plans. Continued consolidating the documentation and backlog, while preserving the distinction between durable strategies and individual session outcomes.
+- Launched a new Blue research-quality initiative in short increments: conservative verification labels, a current-research-state view, explicit evidence continuations, and real Python/SageMath execution feedback. **Blue Increment 5** reconciled these capabilities with Green's Simple/Advanced Outcome modes and was merged through **PR #77**.
+- Refined Home presentation, account/status pills, copper background artwork, and the About diagram. Discovered that Red's supposedly authoritative About branch had diverged from the branch containing its latest implementation; began a clean selective integration on current `main` through **PR #78**.
+- Reworked the Blue/coordinator mailbox protocol to support repeated 30-second polling after each completed increment. Established that the coordinator's hourly automation does **not** provide an equivalent low-latency handoff, and did not claim that an indefinitely sleeping assistant could solve that limitation.
+
+### Research conclusions, papers, and bounded strategies
+
+The first half of Day 4 continued the prior day's push to make outcomes intellectually useful rather than merely polished. **T70** preserved structured Investigator arguments and step-level Skeptic review in outcomes, sessions, reports, and paper evidence. Assumptions remain explicit premises, conditional conclusions retain their scope, and failed strategies retain attribution and reasons rather than acquiring invented supporting artifacts. A failed branch need not fail a mixed portfolio when a sibling completes. Limits on step count or length should produce a named gap or partial result, not silently discard reasoning. T70 was integrated through **PR #70**.
+
+**T47** added a persisted session-level Outcome conclusion with explicit qualifications and verification warnings, integrated through **PR #72**. **T45** addressed the practical limits of generating a long LaTeX paper in one model response: resumable stages preserve research evidence and continuity instead of forcing a deceptively compressed argument. It was integrated through **PR #68**. These changes improve the fidelity of presentation and export; they do not certify the mathematical validity of generated proofs.
+
+Strategy generation was corrected to emphasize **narrow, testable directions** within a project's overarching problem. The project's question, a durable strategy, and a particular session attempt remain distinct. A strategy may fail locally, be revised and rerun, or lead to a child strategy without erasing the evidence of previous attempts. We also refined Getting Started and the backlog, consolidated overlapping cloud and collaboration documentation, and pruned superseded material. Documentation cleanup is useful only when it retains consequential design rationale and recoverable history.
+
+### Blue's research-quality increments
+
+Blue's new initiative deliberately separated an operational research loop from claims of autonomous mathematical discovery. **Increment 1** unified conservative verification labels and surfaced saved argument narratives. It avoided presenting agent confidence, numerical checks, or a candidate conclusion as an independently verified proof. **Increment 2** projected a compact **Current Research State** from explicitly saved evidence, including unresolved source references and recorded resolutions, without rewriting prior sessions or turning the summary into a new source of truth. Actual project exports and browser acceptance evidence were requested for review rather than relying solely on an agent's account of its work.
+
+**Increment 3** exercised cross-strategy continuation: researcher-approved evidence could be selected for a later role dispatch, and the work retained the source's identity and limits. The evaluation distinguished real causal use of an earlier artifact from simply mentioning it in a generated narrative. **Increment 4** connected observed sandboxed Python/SageMath results to subsequent Investigator and Skeptic work and reduced repeated context without discarding information. The recorded offline exercises involved **scripted model responses**, not an autonomous live-model discovery. Finite computational tests remain evidence about the cases executed, not proofs of general claims.
+
+**Increment 5** was the integration and provenance pass. It reconciled Blue's research changes with Green's current UI, retained explicit computational attribution, kept experimental context pooling opt-in, strengthened audit/export checks, and prepared a **blind research-quality gate** for eventual comparison against a simpler single-role baseline. **PR #77** merged into `main` at `4e25bd3`, with the reported post-merge verification green. The resulting machine can preserve and feed back evidence; whether the coordinated agents produce better research than a matched-budget baseline remains an open empirical question. Blue's next increment was assigned release verification and evaluation preparation, not a declaration of research success.
+
+### Outcome and About: clearer explanations without overstating capability
+
+**Green's Outcome hierarchy**, merged through **PR #76**, added project-level **Simple/Advanced** presentation choices and tightened concise conclusions and qualifications. The distinction is presentational: Simple should be readable without hiding uncertainty; Advanced should retain evidence and provenance. Preferences and research settings were preserved across the Blue integration. The Markdown icon visibility issue was also corrected.
+
+**T46**, merged through **PR #73**, introduced an About SIGMA entry point and an accessible product explanation. Red subsequently developed a richer, interactive diagram depicting multiple strategy directions and the Investigator → Skeptic → Investigator critique loop, with expandable detail, tooltips, and a build identifier. This illustrates the intended research workflow without inventing a third AI 'coordinator' agent or suggesting that agent agreement constitutes proof. The visual work also included stacked account and administration pills and a revised copper Home background. The image was maintained in both `assets/` and `frontend/public/`.
+
+The Home artwork received detailed manual review: the zeta summation was moved downward, the critical-line depiction was made dotted, the spurious glowing point at the origin was removed, and the intended symmetric first-zero markers were refined without numerical labels. These visual changes were directed at the **source asset**, not at a screenshot of the UI. The final source image was later found on Red's substantive branch rather than the branch Red had designated authoritative.
+
+### Branch recovery and integration discipline
+
+By evening, both Red and Blue worker sessions had stopped. Red had repeatedly checked out **`red/substantive-research-outcomes`** despite identifying **`red/about-green-integration`** as authoritative. The branches diverged: the latter retained the detailed About design specification, while the former held the newer About interactions, Home controls, and image assets. The substantive branch was also based on much older mainline history. Neither was safe to merge wholesale without risking more recent Blue and Green work.
+
+The coordinator therefore created **`integration/red-home-about-20261024`** from current `main`, selectively transplanted the About/Home source and CSS, restored both matching copper image assets, added About browser acceptance checks, and preserved `docs/ABOUT_AGENT_COORDINATION_DIAGRAM.md` from the other Red branch. **PR #78** was opened against `main` with both original Red branches untouched as recovery points. GitHub reported it mergeable, but its initial **`verify` check failed**. The integration is therefore **not yet accepted or merged**; the CI failure and real-Chrome Home/About/auth/Outcome regressions require follow-up. Git mergeability is not a substitute for validation.
+
+### Autonomous coordination and its limits
+
+The Blue mailbox uses committed `messages/blue_in_N.md` and `messages/blue_out_M.md` on `blue_session`. After finishing an increment, Blue repeatedly fetches and polls approximately every 30 seconds until the next coordinator instruction appears, then repeats the process after the following increment. Inbound and outbound numbers are independent; treating them as matching caused avoidable confusion. The coordinator was required to inspect real diffs, tests, project exports, and evidence before accepting an increment or assigning another.
+
+The remaining limitation is asymmetric: **Blue can poll every 30 seconds, but the standard coordinator automation wakes at most hourly**. The user rightly challenged the possibility of an overnight handoff waiting nearly an hour. A blocking `sleep` inside an active tool execution cannot guarantee an indefinitely self-running assistant after the conversation ends. Event-driven external orchestration was discussed as a possible remedy, but **was not installed or authorized**, and no continuous sub-hourly coordinator was claimed to exist. Short-lived branches, frequent integration, and truthful handoffs remain essential even with more automation.
+
+### Day 4 retrospective
+
+Day 4 advanced SIGMA from a functioning multi-agent workflow toward a more **evidence-preserving, cumulatively useful research machine**. It improved the fidelity of outcomes and papers, made the current research state inspectable, and connected actual computation to later research steps. The next scientific test is whether these mechanisms improve unscripted research quality against a simpler matched-budget baseline. The day's branch recovery also exposed a different reliability requirement: multiple coding agents need one unambiguous source of truth, not just successful local tests and confident handoff messages.
+
+The day ended with **Blue Increment 5 integrated in `main`**, a further release-quality increment assigned, and **Red's newer Home/About work preserved in PR #78 but blocked on failed CI and browser acceptance**. No claim of autonomous discovery, formal proof, continuously active overnight coordination, or completed public cloud launch is warranted.
+
+### Ticket throughput (snapshot: October 25, 2026 UTC)
+
+The following cumulative counts include **GitHub issues and pull requests**. They are grouped by UTC date, so the final point includes activity after the Day 4 calendar boundary.
+
+```mermaid
+xychart-beta
+    title "SIGMA tickets opened vs. closed (cumulative)"
+    x-axis ["Oct 21", "Oct 22", "Oct 23", "Oct 24", "Oct 25"]
+    y-axis "Tickets" 0 --> 80
+    line [1, 3, 56, 74, 79]
+    line [0, 1, 46, 64, 70]
+```
+
+| UTC date | Opened (cumulative) | Closed (cumulative) | Open backlog |
+| --- | ---: | ---: | ---: |
+| Oct 21 | 1 | 0 | 1 |
+| Oct 22 | 3 | 1 | 2 |
+| Oct 23 | 56 | 46 | 10 |
+| Oct 24 | 74 | 64 | 10 |
+| Oct 25 | 79 | 70 | 9 |
+
+**Interpretation:** 70 of 79 tracked items were closed (**89%**), with nine remaining open. The backlog stayed near ten despite a sharp increase in ticket creation, indicating strong completion throughput relative to intake. This is encouraging delivery momentum, not by itself evidence of software quality or research validity. In the chart, the first line represents **opened** and the second **closed**.
