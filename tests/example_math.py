@@ -77,7 +77,7 @@ def main():
         f"PASS independent residue/adjacency DP and enumeration; a_12=128; initial values {counts[:12]}; recurrence through n=120"
     )
     print(
-        "PASS exact period-three traces/determinants/Cayley-Hamilton over Z[omega] in all three phases; analytic recurrence/density proof is in docs/example-math-verification.md"
+        "PASS exact period-three traces/determinants/Cayley-Hamilton over Z[omega] in all three phases; independent recurrence/density proof is in docs/EXAMPLE_MATH_VERIFICATION.md"
     )
 
 

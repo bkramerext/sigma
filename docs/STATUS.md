@@ -4326,3 +4326,42 @@ normalizer is intentionally token-based and conservative; unusual notation can
 still use the existing explicit AI formatting path or the exact saved-source
 view. PR #97 and issues #93/#95 remain open pending coordinator review and
 acceptance; this entry does not close them.
+
+## Round 2 Increment 20 — newcomer and sample credibility review (2026-10-25)
+
+Blue reviewed the newcomer surfaces and the curated 17-sample catalog against
+the T89 audit, preserving research scope and avoiding overlap with Green's open
+T95 UI branch. The canonical sample IDs remain intact and RH remains the
+flagship.
+The sample review found no content basis for unilateral removal, consolidation,
+or substantial rewriting. It added the omitted primary 2022 RDB7 dataset citation
+to the catalysis sample without changing its problem or scope. The review
+records a per-sample credibility assessment, cross-surface wording gaps, owner
+decisions, verification, and limitations in
+[the Increment 20 review](evaluations/increment_20/domain-credibility-review.md).
+
+Real Chrome opened the existing Nonconsecutive Subset Sums sample as an
+independent copy and inspected all five mixed/unresolved saved fixture sessions,
+their evidence and report, plus desktop and mobile layouts. The Current
+Understanding and historical-session summary visibly mark the records as
+deterministic fixtures. A separate human proof note remains outside this sample
+history and is not presented as a SIGMA result. The exact project export and
+capture manifest are retained in
+[Increment 20 exports](evaluations/increment_20/exports/manifest.json). No new
+session, provider inference, or cloud operation occurred. `./sigma test` passed
+after locked frontend dependencies were installed, including lint, format,
+Pyright, typecheck, and production build. The established `about.py` browser
+check still expects the obsolete accessible label “About SIGMA”; a direct Chrome
+check using the current “About” label exposed the expanded copy's “Different
+minds” wording and absolute recoverability promise.
+
+Increment 20 first-user acceptance remains **open**: Getting Started does not
+define Project, Session, and Outcome clearly or disclose that both research
+roles use the same underlying model; About's “Different minds” wording conflicts
+with the README; and sample cards omit the problem description already supplied
+by the sample catalog API. PR #135 intentionally retains title plus
+strategy/difficulty metadata on Samples, so the coordinator must decide after
+that review whether its presentation satisfies newcomer selection. Gray/Green
+own the About/documentation implementation. The proposed warp-drive
+pathway/consolidation remains an owner decision; both sample identities remain
+preserved pending that decision.
