@@ -1,6 +1,7 @@
 """Real Chrome checks for saved session Conclusions at desktop and phone widths."""
 
 import json
+import hashlib
 import os
 import socket
 import subprocess
@@ -57,14 +58,34 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
     session["project_path"] = str(project_path.resolve())
     session["outcome"]["conclusion"] = (
         "### Preliminary finding\n\n"
-        "Conditional on general position, the arrangement reaches the triangular bound for every n.\n\n"
-        "The displayed relation is preserved from the saved conclusion:\n\n"
-        "\\[R(n) = 1 + \\frac{n(n+1)}{2}\\]\n\n"
-        r"The inline relation is \(s^2\)." + "\n\n"
-        "This prose retains its meaning while the growth term t^4 is typeset.\n\n"
-        "ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1}dx\n\n"
-        "$$\n$$\n\n"
-        "### Verification and scope\n\nSIGMA has not independently verified the result."
+        "For the meromorphic continuation ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1} dx on Re(s)>0, "
+        "ζ(σ+it)≠0 whenever T=|t|≥1 and σ≥1−1/[256(4T+9)^4(2T+4)]. "
+        "This does not prove or disprove the Riemann Hypothesis.\n\n"
+        "The investigation is paused; this is not a completed conclusion.\n\n"
+        "The Euler-product logarithm and 3+4cosθ+cos(2θ)≥0 imply ζ(1+it)^3|ζ(1+2it)|≥1. "
+        "A zero at β+it with β≥1−ε would imply |ζ(1+it)|≤2rM(T), "
+        "where M(T)=4T+9. Choosing ε=1/[256(4T+9)^4(2T+4)] forces the product to be at most 1/2."
+    )
+    ai_formatted_conclusion = (
+        "### Preliminary finding\n\n"
+        "For the meromorphic continuation\n\n"
+        "$$\n"
+        r"\zeta(s)=\frac{s}{s-1}-s\int_1^\infty\{x\}^{-s-1}\,dx"
+        "\n$$\n\n"
+        "on $\\operatorname{Re}(s)>0$,\n\n"
+        "$$\n"
+        r"\zeta(\sigma+it)\ne 0,\quad T=|t|\ge 1,\quad "
+        r"\sigma\ge 1-\frac{1}{256(4T+9)^4(2T+4)}"
+        "\n$$\n\n"
+        "This does not prove or disprove the Riemann Hypothesis.\n\n"
+        "The investigation is paused; this is not a completed conclusion.\n\n"
+        "The Euler-product logarithm and $3+4\\cos\\theta+\\cos(2\\theta)\\ge0$ imply\n\n"
+        "$$\n"
+        r"\zeta(1+it)^3|\zeta(1+2it)|\ge1"
+        "\n$$\n\n"
+        "A zero at $\\beta+it$ with $\\beta\\ge1-\\epsilon$ would imply "
+        "$|\\zeta(1+it)|\\le2rM(T)$, where $M(T)=4T+9$. "
+        "Choosing $\\epsilon=1/[256(4T+9)^4(2T+4)]$ forces the product to be at most $1/2$."
     )
     session["outcome"]["solution_review"] = {
         "status": "achieved",
@@ -190,6 +211,43 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                     else None
                 ),
             )
+            conversion_requests: list[dict] = []
+
+            def mock_conversion_settings(route):
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps({"available": True, "binding": "fixture-binding"}),
+                )
+
+            def mock_conclusion_conversion(route):
+                request = json.loads(route.request.post_data or "{}")
+                assert request["scope"] == "research-conclusion", request
+                assert request["session_id"] == session["id"], request
+                assert request["target"] == "markdown", request
+                assert request["expected_digest"] == hashlib.sha256(
+                    session["outcome"]["conclusion"].encode("utf-8")
+                ).hexdigest(), request
+                conversion_requests.append(request)
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "body": ai_formatted_conclusion,
+                            "warnings": [],
+                            "source_digest": request["expected_digest"],
+                            "provenance": {
+                                "provider": "openai",
+                                "model": "fixture-model",
+                                "reasoning_effort": "high",
+                            },
+                        }
+                    ),
+                )
+
+            page.route("**/api/projects/proposals/config**", mock_conversion_settings)
+            page.route("**/api/projects/text/convert", mock_conclusion_conversion)
             page.goto(f"{ui_url}/project?path={quote(str(project_path), safe='')}")
             latex_button = page.get_by_role("button", name="LaTeX research paper")
             expect(latex_button).to_be_visible()
@@ -236,56 +294,61 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 assert prelude.evaluate(
                     "element => element.nextElementSibling.classList.contains('outcome-subsections')"
                 ), "Saved computation provenance must precede the Advanced Outcome narrative"
-                expect(conclusion).to_contain_text(session["outcome"]["conclusion"].splitlines()[2])
-                toggle = outcome.get_by_role("button", name="Show Conclusion Markdown source")
+                expect(conclusion).to_contain_text("The investigation is paused")
+                toggle = outcome.get_by_role("button", name="Format Conclusion with AI")
                 toggle.hover()
                 toggle_style = toggle.evaluate(
                     "e => ({rect:e.getBoundingClientRect().toJSON(), "
                     "border:getComputedStyle(e).borderTopWidth, "
                     "background:getComputedStyle(e).backgroundColor, "
+                    "color:getComputedStyle(e).color, "
                     "icon:e.querySelector('svg').getBoundingClientRect().toJSON()})"
                 )
                 assert toggle_style["rect"]["width"] == 28, toggle_style
                 assert toggle_style["rect"]["height"] == 28, toggle_style
                 assert toggle_style["border"] == "0px", toggle_style
                 assert toggle_style["background"] == "rgba(0, 0, 0, 0)", toggle_style
+                assert toggle_style["color"] == "rgb(170, 180, 186)", toggle_style
                 assert toggle_style["icon"]["width"] == 24, toggle_style
                 assert toggle_style["icon"]["height"] == 20, toggle_style
-                expect(
-                    toggle
-                ).to_have_attribute("aria-pressed", "true")
+                expect(toggle).to_have_attribute("aria-pressed", "false")
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
+                    "ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1}"
+                )
+                toggle.click()
+                source_toggle = conclusion.locator(".outcome-conclusion-actions .sigma-render-toggle")
+                expect(source_toggle).to_have_attribute("aria-pressed", "true", timeout=15000)
+                expect(source_toggle).to_have_attribute("aria-label", "Show saved Conclusion")
+                assert source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(241, 197, 141)"
+                assert len(conversion_requests) == 1
                 finding = conclusion.locator(".outcome-markdown h3").first
                 expect(finding).to_be_visible()
                 expect(finding).to_have_text("Preliminary finding")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
-                expect(conclusion.locator(".outcome-markdown .katex")).to_have_count(4)
-                expect(conclusion.locator(".outcome-markdown .katex").nth(3)).to_contain_text(
-                    "{x}"
-                )
+                assert conclusion.locator(".outcome-markdown .katex-display").count() == 3
+                assert conclusion.locator(".outcome-markdown .katex").count() >= 8
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
                 expect(conclusion.locator(".outcome-markdown img")).to_have_count(0)
-                expect(conclusion.locator(".outcome-markdown .katex-display")).to_have_count(1)
                 expect(conclusion.locator(".outcome-markdown")).not_to_contain_text(
                     "### Preliminary finding"
                 )
-                toggle.click()
+                expect(conclusion.locator(".outcome-markdown .katex-display").first).to_be_visible()
+                expect(conclusion.locator(".outcome-markdown")).to_contain_text(
+                    "The investigation is paused; this is not a completed conclusion."
+                )
+                conclusion.screenshot(path="/tmp/sigma-conclusion-ai-desktop.png")
+                source_toggle.click()
                 expect(conclusion.locator(".outcome-conclusion-source")).to_be_visible()
-                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
-                    "### Preliminary finding"
+                expect(source_toggle).to_have_attribute("aria-pressed", "false")
+                assert source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(170, 180, 186)", (
+                    "Plain-text state must remain visibly gray even while the pointer hovers over the toggle"
                 )
-                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
-                    r"\[R(n) = 1 + \frac{n(n+1)}{2}\]"
-                )
-                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
-                    "$$"
-                )
-                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
-                    "t^4"
-                )
-                render_toggle = outcome.get_by_role(
-                    "button", name="Render Conclusion as Markdown"
-                )
-                render_toggle.click()
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text("ζ(s)=s/(s−1)")
+                expect(conclusion.locator(".outcome-conclusion-source")).not_to_contain_text("$$")
+                source_toggle.click()
+                expect(source_toggle).to_have_attribute("aria-pressed", "true")
+                assert source_toggle.evaluate("e => getComputedStyle(e).color") == "rgb(241, 197, 141)"
+                assert len(conversion_requests) == 1, "Toggling to saved AI Markdown must not call the provider again"
                 expect(conclusion.locator(".outcome-markdown h3").first).to_have_text(
                     "Preliminary finding"
                 )
@@ -307,7 +370,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 first_row.locator("button.session-row-disclosure").click()
             expect(first_row.locator("details.outcome-conclusion")).to_have_attribute("open", "")
             expect(first_row.locator("details.outcome-conclusion")).to_contain_text(
-                "triangular bound"
+                "The investigation is paused"
             )
 
             page.set_viewport_size({"width": 375, "height": 812})
@@ -325,6 +388,24 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 path=str(SCREENSHOT_DIR / "sigma-increment13-advanced-mobile.png"),
                 full_page=True,
             )
+            mobile_row = page.locator(f'li[data-session-id="{sessions[0]["id"]}"]')
+            mobile_conclusion = mobile_row.locator("details.outcome-conclusion")
+            mobile_toggle = mobile_conclusion.locator(
+                ".outcome-conclusion-actions .sigma-render-toggle"
+            )
+            mobile_toggle.click()
+            expect(mobile_toggle).to_have_attribute("aria-pressed", "true")
+            expect(mobile_conclusion.locator(".outcome-markdown .katex-display")).to_have_count(3)
+            for width in (375, 320):
+                page.set_viewport_size({"width": width, "height": 812})
+                overflow = page.evaluate(
+                    "({width: document.documentElement.clientWidth, "
+                    "scroll: document.documentElement.scrollWidth})"
+                )
+                assert overflow["scroll"] <= overflow["width"], overflow
+                assert mobile_conclusion.locator(".outcome-markdown .katex-display").count() == 3
+                mobile_conclusion.screenshot(path=f"/tmp/sigma-conclusion-ai-{width}.png")
+            page.mouse.move(1400, 10)
             # Switch to Simple Outcome and verify the same provenance is above the narrative.
             settings = page.get_by_role("button", name="Project settings", exact=True)
             settings.click()
@@ -426,4 +507,4 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 process.kill()
                 process.wait(timeout=5)
 
-print("Outcome provenance real Chrome checks passed: Advanced/Simple at 1440px/375px/320px, zero and timed-out executions, no provider calls.")
+print("Real Chrome passed: AI-formatted historical Conclusion, gray/copper toggle, raw/rendered modes and KaTeX at desktop/mobile widths; Outcome provenance, zero and timed-out executions; mocked conversion only.")

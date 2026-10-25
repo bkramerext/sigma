@@ -851,6 +851,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.expected_digest,
             body.expected_binding,
             body.expected_project_id,
+            body.session_id,
         )
     )
     connection = asyncio.create_task(disconnected())

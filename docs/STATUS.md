@@ -19,6 +19,30 @@ an existing UI lifecycle cleanup assertion); focused Chrome check
 `uv run --with playwright python browser_checks/t47_conclusion.py`, frontend
 typecheck, and `git diff --check` passed. No provider calls or cloud changes.
 
+Follow-up: the Conclusion Markdown toggle had been missed by the earlier
+Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
+That left it inheriting the generic workspace button padding/border, while its
+SVG had no size rule and rendered at 0×0: Chrome showed a 42×50 empty outlined
+box. The Conclusion action now uses the same 28×28 borderless control and 24×20
+glyph as the Outcome heading. The focused Chrome regression asserts those
+dimensions and transparent hover surface while continuing to verify rendered
+Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
+full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
+calls or cloud changes.
+
+The next Chrome inspection exposed a separate issue: the pressed copper icon
+could accompany raw formula characters because the Conclusion was only passed
+through the local Markdown/KaTeX parser. It now uses the same AI formatting
+endpoint and preservation instructions as project text, with an explicit
+user click. The source digest is checked before and after conversion; formatted
+Markdown stays in the view state and the saved session archive is never edited.
+The button stays gray in plain mode even under hover and turns copper when the
+formatted result is displayed. An offline API regression checks display-math
+and layout instructions plus byte-identical saved history. Real Chrome with a
+mocked conversion checked the RH-style source, formatted line breaks and three
+display equations at 1440, 375 and 320 px; screenshots are in `/tmp/sigma-conclusion-ai-desktop.png`,
+`/tmp/sigma-conclusion-ai-375.png` and `/tmp/sigma-conclusion-ai-320.png`. No
+provider calls or cloud changes.
 ## T91.2 packaged PDF and disaster-recovery acceptance (2026-10-25)
 
 Started on fresh branch `gray/t91.2-packaged-pdf-recovery` from current `main`
@@ -67,7 +91,6 @@ because `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` is set in this shell;
 including merged `tests/gce_host.py`, Ruff, formatting, Pyright, frontend
 typecheck and production build. No provider calls, OAuth, or GCP resources were
 used.
-
 ## T98 production host readiness pre-cloud (2026-10-25)
 
 Added a pinned Ubuntu 24.04 amd64 host installer for Docker Engine/Compose v2
@@ -93,7 +116,6 @@ rootless daemon/socket permissions, image builds, disk mount, and runtime escape
 probes still require an Ubuntu 24.04 amd64 Linux host. No GCP resources, DNS,
 OAuth, Secret Manager, credentials, or paid inference were used. See
 `messages/t98_red_host_readiness.txt` for rerun commands and commit details.
-
 ## T41 — Sponsored cloud inference verification (2026-10-23)
 
 Added deterministic sponsored-inference API coverage through the production
@@ -111,7 +133,6 @@ failures, timeout, quota and cross-owner checks. The T41 scenario uniquely
 exercises the production sponsored credential and Responses transport for
 research-session dispatch; shared cloud-ledger tests cover contention and
 restart/recovery.
-
 ## T100 persistent-disk storage (2026-10-25)
 
 Implemented opt-in `SIGMA_STORAGE_BACKEND=persistent_disk` with a validated
@@ -136,7 +157,6 @@ guarded host script from the deployment runbook, with `/etc/sigma/deploy.env` as
 its default env file; the exact env-file handoff and refusal to invoke Docker on
 a missing mount are covered in `tests/storage.py`. See
 `messages/t100_red_r4r.txt` for the complete handoff and commit details.
-
 ## T86 README validation (2026-10-25)
 
 Rewrote the newcomer README with a local quick start, optional AI/API-key
@@ -157,7 +177,6 @@ launch environment, so the observed run stayed in local single-user mode and
 printed its existing configuration warning. Credentialed Google sign-in was
 not exercised. The updated T86 assigns WOLF drafting to ChatGPT after Brian
 approves its outline; Gray's work on this branch is limited to the README.
-
 ## T99 Blue: Python/SageMath and TeX/PDF runtime increment (2026-10-25)
 
 Pinned Tectonic 0.15.0 into the backend image using the official x86_64 Linux
@@ -199,7 +218,6 @@ passed. The runtime smoke script was exercised on actual Docker containers.
 The GCE command and real rootless execution remain a required Red follow-up;
 hosted AI paper generation, identity authorization, restart persistence, and
 sponsored budget operations are outside this Blue runtime increment.
-
 ## T99 Blue: sponsored inference outside sessions (2026-10-25)
 
 Started from current `main` at `d4ca2194b68314336855823970b4b97f55c1256a` on
@@ -222,7 +240,6 @@ or cloud resources were used.
 
 `docs/CLOUD_DEPLOYMENT.md` still describes these routes as disabled; that
 Red-owned deployment document was left untouched for its owner to reconcile.
-
 ## T99.1 Blue: pre-cloud sponsored inference acceptance (2026-10-25)
 
 Extended the existing `tests/cloud_research_api.py` scenario rather than adding
@@ -293,7 +310,6 @@ dimensions and transparent hover surface while continuing to verify rendered
 Markdown/TeX and raw-source modes. Focused Chrome passed at 1440/375/320 px; the
 full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
 calls or cloud changes.
-
 ## Project header About pill placement (2026-10-25)
 
 The project header uses the labeled About pill in the left column beside Google
@@ -309,7 +325,6 @@ including Home placement and no horizontal overflow. Screenshots:
 SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios, Ruff,
 formatting, Pyright, frontend typecheck and production build. No live provider
 calls or cloud changes.
-
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.
@@ -327,7 +342,6 @@ Ruff, formatting, Pyright, frontend typecheck, and production build. The
 environment variable is unset because this local checkout's launch-time Google
 configuration otherwise makes an existing UI lifecycle mock fail before its
 cleanup assertion.
-
 ## Blue Increment 7: saved reasoning and adversarial continuity (2026-10-25)
 
 On cumulative PR #80, the Skeptic guidance now reviews the current claim against actually supplied prior steps rather than demanding a complete proof rewrite each cycle. Bounded prior-session extracts include saved reasoning arguments and reviews, with truncation and retraction signals. A Skeptic cannot mark an obligation addressed solely by a retracted, reasoning-truncated or absent older source. This checks source availability, not mathematical truth.
@@ -335,13 +349,11 @@ On cumulative PR #80, the Skeptic guidance now reviews the current claim against
 Offline scripted roles exercised real session dispatch/persistence across a two-cycle parity derivation, later same-strategy reuse, an unrelated-source rejection, retracted and truncated isolated copies, and paired graph computation-present/withheld controls. The graph path includes a real failed Docker Python attempt, a real completed three-vertex counterexample, a later same-strategy session and a researcher-approved fork carrying the exact negative witness. The failed run is an operational failure; the completed result refutes only the immediate-reverse-edge guard. Twenty-one captured role request bodies totaled 674,575 wire bytes; scripted response bodies totaled 34,358 bytes. No live provider calls or charges occurred; stored usage fields are fixture values. The corrected Skeptic guidance is 287 UTF-8 bytes longer than the static baseline, so no token or cost saving is claimed.
 
 The withheld control remains an explicit research communication failure: authored Conclusion and Simple lead imply computational support even though the typed Outcome is Incomplete, current understanding is unverified and the report states zero executions. No fragile semantic filter or immutable-Conclusion rewrite was added. No UI or report code changed, so no new browser check was required. The first Increment 7 CI attempt exposed that its runner lacks the local Python Docker image; the test now explicitly skips only that real execution control when the image is absent, while export mode requires the image and refuses to fabricate results. Full audits, current-understanding exports, native TXT/HTML/TeX reports, exact request bodies, manifests, command transcripts, CI failure excerpt, no-sandbox control, and MET/UNMET/UNVERIFIED assessment are in [Increment 7 research continuity](evaluations/increment_7/RESEARCH_CONTINUITY.md). Autonomous reasoning quality and actual cost benefit remain unverified pending a separately authorized blind provider gate.
-
 ## Blue Increment 6: main release audit and evidence anchor (2026-10-24/25)
 
 Verified merged main `4e25bd3fcb4a80a6b0f204f6726ec57c289d9f2c` after PR #77: post-merge GitHub Actions run 40159404783 succeeded, local `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, and focused continuation, feedback, session and settings scripts passed. A second full suite passed after a one-line candidate fix `fd87685` for Current Understanding's exact-artifact anchor. Main then advanced to `afebf33`; its CI run 40163068467 succeeded, and the merged candidate `06cb8c4` passed another full suite and Chrome run. No live provider calls or new research sessions occurred.
 
 Real Chrome 156 on isolated copies of the saved subset and graph projects checked Home/open, project preferences, Simple and Advanced Outcomes, historical Conclusions, approved and unapproved evidence, execution JSON against API, Markdown rendering and 1440/390/320 widths. Twelve viewport checks had no overflow or page errors; all copied session objects were unchanged after preference inspection. Main's “Inspect finding” opened only the owning session; the candidate fix focuses the cited artifact. The fix awaits coordinator review/merge. Full actual `.txt` command transcripts, screenshots, machine observations, new preference-state Project Audit JSON, native reports and the explicit research-quality boundaries are in [Increment 6 release audit](evaluations/increment_6/RELEASE_AUDIT.md). The missing Increment 5 `.log` files were not reconstructed. A frozen blind gate is proposed, not executed; it requires explicit human provider/model/budget authorization.
-
 ## PR #76 integration with main (2026-10-24)
 
 Merged `origin/main` at `81384dd` into `green/outcome-hierarchy` without
@@ -361,7 +373,6 @@ distinction, preference save/reload/isolation, Reasoning Markdown, computational
 source/output access, and desktop/mobile settings at 390px and 320px. No page
 errors. Test copies were isolated under `/private/tmp/sigma-outcome-reconcile`;
 original saved projects were read only. Provider calls: 0.
-
 ## Blue Increment 2: read-only current understanding (2026-10-24)
 
 Implemented on `blue_session` under `messages/blue_out_2.md` plus the standing
@@ -412,7 +423,6 @@ original provider archives, deterministic history and synthetic schema regressio
 Provider calls/charges: 0/$0. Live research, agent uptake, independent correctness
 and AI paper quality remain N/O. Next product work waits for the coordinator's
 next numbered assignment after the review response.
-
 ## Blue Increment 1: confidence and argument-state integrity (2026-10-24)
 
 Implemented on `blue_session` under `messages/blue_out_1.md`; initiative record:
@@ -446,7 +456,6 @@ reproduction and test outputs: [Increment 1 evidence](evaluations/INCREMENT_1/RE
 No paid/live provider calls, fresh sandbox experiment or independent checker ran.
 Live research and AI-authored paper quality remain unverified. Waiting for the
 coordinator's next numbered outgoing message after review.
-
 ## T46 Home and Project About dialog (2026-10-24)
 
 Added one shared About action and modal dialog to both Home and Project headers.
@@ -475,7 +484,6 @@ viewport fit. Visual screenshots are `/tmp/sigma-t46-about-home-desktop.png`,
 the hit area and opens via its outer edge. The header arrangement is captured in
 `/tmp/sigma-t46-about-project-header-mobile.png`. The browser check used the local
 deterministic provider fixture; no live provider calls were made.
-
 ## Outcome presentation and Project Settings (2026-10-24)
 
 Added project-scoped `show_advanced_outcome_details`, defaulting off. Simple mode
@@ -3597,7 +3605,6 @@ function AccessNotGranted({ email, contactEmail }: { email: string; contactEmail
 
 installRequestErrorToasts();
 createRoot(document.getElementById('root')!).render(<><CloudAuthGate/><RequestErrorToasts/></>);
-
 ## Blue Increment 3 — approved causal research continuation (2026-10-24)
 
 Coordinator assignment: `messages/blue_out_4.md`; implementation app revision
@@ -3639,7 +3646,6 @@ rather than dropping lineage. Dense/repetitive reading surfaces and relevance
 selection remain product weaknesses documented in the assessment. No stock
 sample or historical source project was changed. Permanent clean-tree mailbox
 polling resumes after the report is pushed; no self-merge.
-
 ## Blue Increment 4 — real computational research feedback (2026-10-24)
 
 Assignment: `messages/blue_out_5.md`; engine implementation `d9b1b19`, annotation-only
@@ -3682,7 +3688,6 @@ overflow. No Sage installation, cloud provisioning, live research, worker
 coordination or self-merge. Unscripted reasoning, general proof/discovery quality,
 PDF/AI papers and native Markdown reports are not claimed. Return to permanent
 clean-tree 30-second fetch/fast-forward-only polling after pushing `blue_in_4`.
-
 ## Blue Increment 5 — integrated research Outcome and provenance gate (2026-10-24)
 
 Coordinator assignment: `messages/blue_out_6.md`. The isolated PR #77 integration
@@ -3740,7 +3745,6 @@ test logs, synthetic-test diagnostics and provenance are in
 `docs/evaluations/increment_5/`. The blind unscripted quality gate is proposed
 there but awaits explicit paid-provider authorization. No PDF/AI-paper quality,
 unprompted reasoning advantage or general mathematical proof is claimed.
-
 ## T91 — production-shaped local Compose smoke (2026-10-25)
 
 Ran `./deploy/validate-local.sh` against the tree at
@@ -3760,7 +3764,6 @@ path. It is not a clean-machine README onboarding/browser acceptance run, live
 Google OAuth, sponsored inference, GCE startup, rootless-daemon isolation,
 public HTTPS, backup restore, or cloud deployment approval. Those remain
 separate acceptance items in T91 and the cloud runbook.
-
 ## T91 — packaged Chrome workflow increment (2026-10-25)
 
 From `main` at `f0dd5c63dd88cdd79190231856119dbfb317522d` and reconciled with
