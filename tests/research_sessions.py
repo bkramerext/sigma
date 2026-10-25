@@ -6506,6 +6506,8 @@ def test_saved_followup_question_selection():
     assert select([older, current], ["A"], shortened) == {}
     shortened[1]["extract_truncated_fields"] = ["next_question"]
     assert select([older, current], ["A"], shortened) == {}
+    shortened[1]["extract_truncated_fields"] = ["skeptic_output.next_question"]
+    assert select([older, current], ["A"], shortened) == {}
     # A shortened *argument* does not invalidate a bounded next test by itself.
     shortened[1]["extract_truncated_fields"] = ["reasoning_steps"]
     assert select([older, current], ["A"], shortened)["A"]["artifact_id"] == "artifact-2"
@@ -6611,6 +6613,7 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
             for finding in carried["prior_session_findings"]
             if finding["id"] == artifact["id"]
         )
+        assert source_finding["skeptic_output"]["next_question"] == question
         assert source_finding["source_readiness"]["independently_verified"] is False
         assert source_finding["source_readiness"]["original_in_context"] is False
         await research_sessions.control_session(str(path), next_session["id"], "stop")
@@ -6748,6 +6751,7 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
                 for row in contexts[0]["prior_session_findings"]
                 if row["id"] == ended["artifacts"][0]["id"]
             )
+            assert finding["skeptic_output"]["next_question"] == followup
             assert finding["source_readiness"]["independently_verified"] is False
             assert finding["source_readiness"]["assumptions"] == "model_reviewed"
             assert finding["strategy_id"] == strategy.id
