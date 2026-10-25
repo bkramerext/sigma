@@ -62,8 +62,8 @@ tools/search/retries/fallback or extended cache retention; four calls per arm,
 4,096 output tokens per call, 200,000 reserved input and 16,384 output tokens
 per arm, 15 minutes per arm / 45 minutes overall, and $0.67 local pre-dispatch
 cost ceiling per arm? Before any provider request, please explicitly authorize
-the one trial and confirm the OpenAI project hard spend limit is set and
-verified at $1.40. The price-based maximum is $0.66384 per arm / $1.32768
+the one trial and confirm the correct OpenAI API project has a $1.40 monthly limit with
+**Enforce a hard limit** enabled. The price-based maximum is $0.66384 per arm / $1.32768
 combined; provider enforcement can lag and slightly overshoot. The output cap
 is a defensible compromise, not a no-clipping guarantee. Clipping is preserved
 as incomplete, never scored as wrong, and never retried. No live calls or spend

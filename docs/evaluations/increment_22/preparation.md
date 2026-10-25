@@ -72,8 +72,9 @@ or clipped call.
 - Cost: local pre-dispatch cost ceiling is $0.67 per arm. At the configured
   ceilings, the highest applicable listed Standard short-cache write rate
   ($2.50/M) plus output rate ($10/M) reserves at most $0.66384 per arm /
-  $1.32768 total. The owner must set and verify a $1.40 OpenAI project hard
-  spend limit before any request. OpenAI says enforcement
+  $1.32768 total. The operator must set the monthly limit to $1.40 for the exact API project and
+  turn on **Enforce a hard limit** before any request. A threshold without this
+  toggle only alerts. OpenAI says enforcement
   is not instantaneous and may slightly overshoot the setting, so that control
   alone is not the absolute cap. Before any call, demonstrate a local
   pre-dispatch token guard and reserve for any ambiguous in-flight call; if it
@@ -83,9 +84,9 @@ At the official OpenAI Standard rates checked 2026-10-25, `gpt-6.1-sol` is
 $2/M input, $0.10/M cached input, $2.50/M short cache writes and $10/M output
 tokens. At the revised ceilings, short cache writes and output give a
 conservative $0.66384 per arm / $1.32768 combined upper bound, assuming no
-extended cache retention or external tools. The $1.40 provider project control is a backstop;
-the pre-dispatch guard is needed because provider enforcement may lag. Recheck
-pricing and model availability before approval:
+extended cache retention or external tools. The $1.40 provider hard limit is a backstop; the pre-dispatch guard is needed
+because provider enforcement may lag. Recheck pricing and model availability
+before approval:
 [OpenAI API pricing](https://developers.openai.com/api/docs/pricing).
 
 ### Output-cap reassessment
@@ -106,10 +107,14 @@ retry. No provider inference was used to tune this number.
 With 200,000 reserved input tokens/arm at the maximum applicable $2.50/M input
 cache-write rate, and 16,384 output tokens/arm at $10/M, the conservative cap is
 `(200,000 × $2.50 + 16,384 × $10) / 1,000,000 = $0.66384` per arm, $1.32768
-total. Use $0.67 as the local cost ceiling per arm and require the operator to
-set and verify a $1.40 OpenAI project spend limit before any request. The
-provider limit is defense in depth and can overshoot; the local request ledger
-enforces the usage ceiling.
+total. Use $0.67 as the local cost ceiling per arm. Before any request, the
+operator must open OpenAI Platform organization settings, select the exact API
+project, open Limits, set Monthly spend limit to $1.40, and enable **Enforce a
+hard limit**. Confirm that the enforcement toggle is on for that project, the
+API key is scoped to it, and `gpt-6.1-sol` is allowed. A budget threshold alone
+only alerts. Provider enforcement can lag and overshoot; the local request
+ledger enforces the token and estimated-cost ceilings. See [OpenAI project spend
+limits](https://help.openai.com/en/articles/9186755-managing-projects-in-the-api-platform).
 
 ## Procedure and validation
 
@@ -159,16 +164,17 @@ deployment are in scope.
 API on `gpt-6.1-sol` at high reasoning / standard tier, API-key billing only,
 with no tools, search, retries, fallback, or extended cache retention; up to
 four calls per arm, 4,096 output tokens per call, 200,000 reserved input and
-16,384 output tokens per arm, 15 minutes per arm / 45 minutes overall, $0.67
-local pre-dispatch cost ceiling per arm, and an owner-configured, verified
-$1.40 OpenAI project spend limit? The conservative local upper bound is $0.66384
-per arm / $1.32768 combined; provider enforcement can lag and slightly
-overshoot. I recommend 4,096 because output caps include hidden reasoning and
+16,384 output tokens per arm, 15 minutes per arm / 45 minutes overall, and a
+$0.67 local pre-dispatch cost ceiling per arm? Before any request, will the
+operator set the exact API project's monthly spend limit to $1.40 and enable
+**Enforce a hard limit** in its Limits settings? The conservative local upper
+bound is $0.66384 per arm / $1.32768 combined; provider enforcement can lag and
+slightly overshoot. I recommend 4,096 because output caps include hidden reasoning and
 visible text, but no live run has established that this prevents clipping.
 Clipped responses remain incomplete, are not scored incorrect, and are not
-retried. The operator must verify the project limit and model/account
-availability; I will make no request before explicit approval and that
-verification. Approval covers this one trial under only these stated limits.
+retried. The operator must verify that the correct project/key is selected, hard-limit
+enforcement is on, the model is enabled, and the account is eligible; I will
+make no request before explicit approval and that verification. Approval covers this one trial under only these stated limits.
 
 ## Offline review notes
 

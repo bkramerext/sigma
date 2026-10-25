@@ -4593,7 +4593,8 @@ tier, no tools/search/retries/fallback; four calls per arm, 4,096 output tokens
 per call, 200,000 reserved input and 16,384 output tokens per arm, 15 minutes
 per arm / 45 minutes overall, $0.67 local pre-dispatch cost ceiling per arm.
 The conservative price-based reservation is $0.66384 per arm / $1.32768 total;
-operator verification of a $1.40 OpenAI project spend limit remains required.
+operator verification that the selected OpenAI API project has a $1.40
+monthly limit with **Enforce a hard limit** enabled remains required.
 The 1,024-token cap included hidden reasoning and was not adequate to defend
 against clipping at high reasoning. The smallest recommended adjustment is
 4,096 output tokens/call. Clipping remains an incomplete result, is not scored
