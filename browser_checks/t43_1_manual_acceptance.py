@@ -7,6 +7,7 @@ project categories and connected-account popup states can be exercised safely.
 
 import json
 import os
+import re
 from urllib.parse import urlsplit
 
 from playwright.sync_api import expect, sync_playwright
@@ -126,6 +127,9 @@ def main() -> None:
                 )
                 expect(about.locator(".about-dialog-content > .about-terms")).to_have_text(
                     "Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate."
+                )
+                expect(about.locator(".about-build-commit")).to_have_text(
+                    re.compile(r"^Build [0-9a-f]{7}$")
                 )
                 for feature in (
                     "Multi-Strategy Exploration",
@@ -262,21 +266,13 @@ def main() -> None:
                 chatgpt = page.locator(".home-topline .api-connection > summary")
                 chatgpt_box = chatgpt.bounding_box()
                 assert google_box and chatgpt_box
-                expected_gap = 12 if width > 700 else 8
-                if width > 430:
-                    assert abs(chatgpt_box["x"] - google_box["x"] - google_box["width"] - expected_gap) <= 1, (
-                        width,
-                        google_box,
-                        chatgpt_box,
-                    )
-                else:
-                    assert google_box["x"] >= 0 and google_box["x"] + google_box["width"] <= width
-                    assert chatgpt_box["x"] >= 0 and chatgpt_box["x"] + chatgpt_box["width"] <= width
-                    assert chatgpt_box["y"] >= google_box["y"] + google_box["height"] - 1, (
-                        width,
-                        google_box,
-                        chatgpt_box,
-                    )
+                assert chatgpt_box["y"] >= google_box["y"] + google_box["height"] + 7, (
+                    width, google_box, chatgpt_box
+                )
+                assert abs(chatgpt_box["x"] + chatgpt_box["width"]
+                           - google_box["x"] - google_box["width"]) <= 1, (width, google_box, chatgpt_box)
+                assert google_box["x"] >= 0 and google_box["x"] + google_box["width"] <= width
+                assert chatgpt_box["x"] >= 0 and chatgpt_box["x"] + chatgpt_box["width"] <= width
                 google_style = google.evaluate(
                     "e => { const s = getComputedStyle(e); return [s.height, s.padding, s.gap, s.fontFamily, s.fontSize, s.lineHeight]; }"
                 )

@@ -186,7 +186,7 @@ def main() -> None:
                 )
             ).to_be_visible()
             expect(page.locator(".request-toast")).to_have_count(0)
-            expect(page.get_by_role("link", name="Administrator Settings")).to_have_count(0)
+            expect(page.locator(".administrator-settings-link")).to_have_count(0)
             google = page.locator(".home-topline .project-google-signin")
             expect(google).to_have_text("Sign in with Google")
             expect(page.locator(".home-topline .api-connection > summary")).to_be_visible()
@@ -266,7 +266,9 @@ def main() -> None:
             # Admin status is supplied by deterministic API fixture only.
             status.update(authenticated=True, user={"email": BOOTSTRAP, "role": "admin"})
             page.goto(URL, wait_until="networkidle")
-            expect(page.get_by_role("link", name="Administrator Settings")).to_be_visible()
+            admin_link = page.locator(".administrator-settings-link")
+            expect(admin_link).to_be_visible()
+            expect(admin_link).to_have_text("Admin")
             expect(page.locator(".home-topline .project-google-signin")).to_have_text(
                 "Google account connected"
             )
@@ -293,17 +295,38 @@ def main() -> None:
                 assert google_box["x"] >= 0 and chatgpt_box["x"] >= 0, (width, google_box, chatgpt_box)
                 assert google_box["x"] + google_box["width"] <= width, (width, google_box)
                 assert chatgpt_box["x"] + chatgpt_box["width"] <= width, (width, chatgpt_box)
-                assert chatgpt_box["x"] - (google_box["x"] + google_box["width"]) >= 8, (
+                assert chatgpt_box["y"] - (google_box["y"] + google_box["height"]) >= 7, (
                     width, google_box, chatgpt_box
+                )
+                assert abs((chatgpt_box["x"] + chatgpt_box["width"])
+                           - (google_box["x"] + google_box["width"])) <= 1, (width, google_box, chatgpt_box)
+                auth_group_box = page.locator(".home-auth-pills").bounding_box()
+                actions_group_box = page.locator(".home-header-actions").bounding_box()
+                assert auth_group_box and actions_group_box
+                assert abs(actions_group_box["x"] - auth_group_box["x"] - auth_group_box["width"] - 12) <= 1, (
+                    width, auth_group_box, actions_group_box
+                )
+                assert abs(width - actions_group_box["x"] - actions_group_box["width"] - 12) <= 1, (
+                    width, actions_group_box
                 )
                 assert projects_box["y"] >= max(
                     google_box["y"] + google_box["height"],
                     chatgpt_box["y"] + chatgpt_box["height"],
                 ) - 1, (width, projects_box, google_box, chatgpt_box)
-                admin_link = page.locator(".administrator-settings-link")
                 if admin_link.count():
                     admin_box = admin_link.bounding_box()
                     assert admin_box
+                    about_box = page.locator(".home-about-button").bounding_box()
+                    assert about_box and admin_box["y"] >= about_box["y"] + about_box["height"] + 7, (
+                        width, about_box, admin_box
+                    )
+                    admin_style = admin_link.evaluate(
+                        "e => { const s = getComputedStyle(e); return [s.padding, s.minHeight, s.borderRadius]; }"
+                    )
+                    google_admin_style = google_home.evaluate(
+                        "e => { const s = getComputedStyle(e); return [s.padding, s.minHeight, s.borderRadius]; }"
+                    )
+                    assert admin_style == google_admin_style, (width, admin_style, google_admin_style)
                     for pill_box in (google_box, chatgpt_box):
                         overlaps = (
                             admin_box["x"] < pill_box["x"] + pill_box["width"]
@@ -347,7 +370,7 @@ def main() -> None:
             page.keyboard.press("Escape")
             expect(page.locator(".home-topline .project-google-signin")).to_be_focused()
 
-            page.get_by_role("link", name="Administrator Settings").click()
+            page.locator(".administrator-settings-link").click()
             dialog = page.get_by_role("dialog", name="Administrator Settings")
             expect(dialog).to_be_visible()
             expect(dialog.get_by_role("tab", name="Access Management")).to_be_visible()
@@ -462,7 +485,7 @@ def main() -> None:
             dialog.get_by_role("button", name="Close", exact=True).click()
 
             grants.clear()
-            page.get_by_role("link", name="Administrator Settings").click()
+            page.locator(".administrator-settings-link").click()
             dialog = page.get_by_role("dialog", name="Administrator Settings")
             expect(dialog.locator(".admin-empty-row")).to_contain_text(
                 "No authorization entries yet."
@@ -488,7 +511,7 @@ def main() -> None:
                     chatgpt_box,
                 )
                 page.screenshot(path=f"/tmp/sigma-t40-admin-home-{width}.png", full_page=True)
-                page.get_by_role("link", name="Administrator Settings").click()
+                page.locator(".administrator-settings-link").click()
                 dialog = page.get_by_role("dialog", name="Administrator Settings")
                 expect(dialog).to_be_visible()
                 expect(dialog.locator(".admin-table-scroll").first).to_be_visible()
@@ -531,7 +554,7 @@ def main() -> None:
             expect(member.locator(".home-topline .project-google-signin")).to_have_text(
                 "Google account connected"
             )
-            expect(member.get_by_role("link", name="Administrator Settings")).to_have_count(0)
+            expect(member.locator(".administrator-settings-link")).to_have_count(0)
             expect(member.get_by_text("member@example.org", exact=True)).to_have_count(0)
             assert not errors, errors
             assert admin_requests and all("127.0.0.1" in request for request in admin_requests)

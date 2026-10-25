@@ -1,5 +1,22 @@
 # SIGMA status
 
+## Home header pill alignment in launch checkout (2026-10-24)
+
+Applied the About/Admin pill arrangement in `red/substantive-research-outcomes`,
+the checkout used to launch SIGMA. Google and ChatGPT status pills stack as a
+group; About and Admin stack as a second group. Both groups use consistent
+12px horizontal spacing and a 12px right inset at desktop and narrow widths.
+The Admin pill appears only for an authenticated administrator. Status text can
+wrap without overlapping the controls. The About dialog shows the deployed
+build's seven-character commit hash.
+
+Verification in this checkout: `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed. Real Chrome T40 passed administrator and layout checks at
+1440, 800, 700, 600, 520, 390 and 360px, including the 12px group gap and right
+inset. Real Chrome T43.1 passed About content, build hash, diagram hover/focus/
+touch, and desktop/mobile layout checks. No external OAuth or provider calls
+were made.
+
 ## Google header sign-in and TeX hover target (2026-10-24)
 
 The signed-out Google identity pill now starts the existing OAuth endpoint
