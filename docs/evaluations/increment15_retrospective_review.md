@@ -28,3 +28,9 @@ The original Increment 15 hypothesis is **not tested**. Declining paid inference
 ## Escalation rule
 
 If a user decision is necessary, present the exact requested decision and what it blocks **in the first paragraph** of the next status. Do not quietly accumulate dependencies or describe an unavailable paid experiment as an engineering task that is merely 'pending'.
+
+## Increment 15 closeout decision (resource-constrained scope)
+
+Retrospective acceptance is **met** as a zero-cost archival evidence audit; the original prospective randomized evaluation is **not met** and cannot be inferred. This is not a finding for or against the product hypothesis. Evidence checker: `scripts/increment15_retrospective.py`, dedicated offline CI, and `scripts/increment15_offline_pairs.py` with negative-control corruptions. The archived live proof review remains bounded to one problem and its historical aggregate usage bug.
+
+Proceed to Increment 16 using fixed archived counterfactuals and independently checked arithmetic, retaining the distinction between a causal effect on *dispatched questions* and a causal effect on *research quality*. Do not spend money, claim unseen replication, or build broad new infrastructure.
