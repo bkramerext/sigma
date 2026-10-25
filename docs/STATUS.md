@@ -4604,7 +4604,7 @@ The complete request, limits, cost derivation, execution procedure and
 authorization wording are frozen in `evaluations/increment_22/` and hashed in
 `increment_22/evidence/frozen-manifest.sha256`.
 
-Reconciled with current `main` (`455d752`) in merge commit `PENDING`; Green
+Reconciled with current `main` (`455d752`) in merge commit `4835bf0`; Green
 T95/T125 and Cloud T129/T133 changes are retained. The latest full
 `./sigma test` passed: backend scenarios, Ruff, formatting, Pyright (0
 errors), frontend typecheck and production build. The independent checker
