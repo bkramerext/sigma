@@ -53,6 +53,7 @@ def run_tooling(command: str) -> int:
             [*python, "python", "tests/agentic_evidence.py"],
             [*python, "python", "tests/research_sessions.py"],
             [*python, "python", "tests/epistemic_continuity.py"],
+            [*python, "python", "tests/closure_basis.py"],
             [*python, "python", "tests/research_state.py"],
             [*python, "python", "tests/continuations.py"],
             [*python, "python", "tests/research_feedback.py"],

@@ -3554,9 +3554,7 @@ def _call_timeout_seconds(record: dict[str, Any]) -> float:
     return min(float(CALL_TIMEOUT), max(0.0, remaining))
 
 
-def _usable_addressed_obligation_basis(
-    source: Any, citations: list[dict[str, Any]]
-) -> bool:
+def _usable_addressed_obligation_basis(source: Any, citations: list[dict[str, Any]]) -> bool:
     """Check evidence availability, not the truth of an obligation's conclusion.
 
     A saved argument can support a reported disposition without being repeated.
@@ -3569,11 +3567,7 @@ def _usable_addressed_obligation_basis(
     if not isinstance(truncated, list):
         return False
     steps = source.get("reasoning_steps")
-    if (
-        isinstance(steps, list)
-        and bool(steps)
-        and "reasoning_steps" not in truncated
-    ):
+    if isinstance(steps, list) and bool(steps) and "reasoning_steps" not in truncated:
         return True
 
     investigation = source.get("investigator_output")
