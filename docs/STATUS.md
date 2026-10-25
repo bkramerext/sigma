@@ -1,5 +1,22 @@
 # SIGMA status
 
+## T98 Red cloud-deployment checkpoint (2026-10-25)
+
+On current `main` (`f76d834`), the existing host-readiness package, sponsored
+cloud inference, and Python/Sage/TeX runtime passed the full offline `./sigma
+test` suite. A local Colima persistent-volume smoke retained hosted-mode auth
+state across backend restart and container recreation. Docker Compose v2 is
+missing in this workstation, so the packaged Compose/Chrome check did not run;
+the read-only production preflight correctly blocks on this macOS ARM64 host.
+
+The live hostname resolves to `50.47.237.240`, but HTTP returned 406 and HTTPS
+port 443 refused the connection; no SIGMA page or TLS endpoint was verified. No
+GCP resources, DNS writes, OAuth changes, secrets, or paid provider calls were
+made. GCE project/operator access and spend approval, production OAuth and
+Secret Manager values, DuckDNS update access, a second Google test account,
+rootless Ubuntu 24.04 host verification, and an approved backup mechanism
+remain required. Full results and exact owner actions: [T98 cloud checkpoint](../messages/t98_red_cloud_checkpoint_20261025.txt).
+
 ## Current owner follow-ups (2026-10-25)
 
 - TeX authoring: removed the extra white browser confirmation for long-form
