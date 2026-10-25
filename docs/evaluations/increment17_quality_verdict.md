@@ -29,3 +29,7 @@ Neither an automated text rule nor a structural archive audit is a mathematical 
 Current main already contains `_saved_followup_questions` with frozen-context provenance checks and automatic transfer into a new session's first Investigator question. Its existing tests exercise actual subsequent dispatch, precedence of approved continuations, and tampered/truncated source rejection. Therefore the archived generic reset describes the earlier captured run; **it must not be represented as an outstanding current-main engine regression without a new reproduction**. No redundant changes to the research engine are introduced by this PR.
 
 Current main also already renders recorded computation provenance *before* agent-authored Outcome prose. This PR strengthens that guard with an explicit **zero saved local computations** warning, where the recorded metric or saved provenance confirms none. It does not rewrite historical conclusions or claim to perform semantic verification. The archived scripted misleading sentence remains as an honest negative control. Browser acceptance and full verification are required because the display changed.
+
+## Release verification
+
+Shared Cloud CI preflight negative-control test corrected independently in merged PR #122. Production installer and preflight behavior remain unchanged. Increment 17 acceptance additionally requires its own browser checks and full SIGMA verification on the updated base.
