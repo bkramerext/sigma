@@ -157,6 +157,7 @@ class Monitor:
             ("sigma-sandbox.service", "rootless sandbox daemon"),
             ("docker.service", "Docker engine"),
             ("sigma-backup.timer", "daily backup timer"),
+            ("sigma-monitor.timer", "host monitor timer"),
         ):
             self.command_ok(
                 label,
