@@ -51,12 +51,21 @@ class GceHostToolingTests(unittest.TestCase):
                 patch.object(
                     gce_preflight.Preflight,
                     "check_platform",
-                    lambda instance: instance.add("Platform", "BLOCKED", "simulated unsupported host"),
+                    lambda instance: instance.add(
+                        "Platform", "BLOCKED", "simulated unsupported host"
+                    ),
                 ),
                 patch.object(
                     sys,
                     "argv",
-                    ["gce_preflight.py", "--json", "--env-file", str(env_file), "--repository", str(ROOT)],
+                    [
+                        "gce_preflight.py",
+                        "--json",
+                        "--env-file",
+                        str(env_file),
+                        "--repository",
+                        str(ROOT),
+                    ],
                 ),
                 contextlib.redirect_stdout(output),
             ):
