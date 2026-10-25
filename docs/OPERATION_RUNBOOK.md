@@ -17,10 +17,13 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 | Disk | Planned `sigma-state` 200 GiB `pd-balanced`, retained; boot 100 GiB `pd-standard` | Provisioning and UUID verification pending |
 | Network | Planned `sigma-vpc`, subnet `sigma-us-west1`, proposed `10.42.0.0/24`, static IP name `sigma-web-ip` | CIDR and resource creation pending |
 | VM identity and access | Planned `sigma-runtime` service account, secret-scoped access; IAP SSH with OS Login | Creation and live IAM verification pending |
+| Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; production project association unverified |
 | Billing / alert | Trial/billing link and $300 project budget | Not yet verified |
 | Production release | Exact Git SHA and live host evidence | Not deployed |
 
 **Change log**
+
+- 2026-10-25: Operator screenshot showed active Direct billing account `My Billing Account` (`015C1D-E6B877-9913D6`) and $0 spend over 30 days. Project linkage and free trial remain unverified.
 
 - 2026-10-25: Operator created `SIGMA Production`, ID `sigma-research-prod`, project number `224387813390`. Billing and permissions have not yet been verified.
 
