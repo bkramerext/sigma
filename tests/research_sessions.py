@@ -6409,6 +6409,43 @@ def test_epistemic_presentation_is_conservative_and_read_only() -> None:
     assert archive.read_bytes() == archive_bytes
 
 
+def test_source_readiness_distinguishes_content_from_verification():
+    """Typed source availability is domain-neutral and never proof certification."""
+    source = {
+        "id": "saved-evidence",
+        "assumptions": ["Samples were randomly assigned"],
+        "assumptions_reviewed": ["  samples WERE randomly   assigned "],
+        "reasoning_steps": [
+            {
+                "argument": "Under the recorded sampling procedure the two groups differ.",
+                "review": {"disposition": "accepted", "objection": ""},
+            }
+        ],
+        "extract_truncated_fields": [],
+    }
+    readiness = research_sessions._finding_source_readiness
+    assert readiness(source) == {
+        "state": "model_reviewed_steps",
+        "assumptions": "model_reviewed",
+        "original_in_context": False,
+        "independently_verified": False,
+    }
+    disputed = deepcopy(source)
+    disputed["assumptions_reviewed"] = ["Different selection procedure"]
+    assert readiness(disputed)["assumptions"] == "requires_review"
+    truncated = deepcopy(source)
+    truncated["extract_truncated_fields"] = ["method", "reasoning_steps"]
+    assert readiness(truncated)["state"] == "incomplete_extract"
+    withdrawn = deepcopy(truncated)
+    withdrawn["retracted_by_artifact_ids"] = ["retraction"]
+    assert readiness(withdrawn)["state"] == "withdrawn"
+    narrative = {"method": "Compare conflicting archive sources."}
+    assert readiness(narrative)["state"] == "narrative_unverified"
+    assert readiness(narrative)["assumptions"] == "none_declared"
+    incomplete = {"reasoning_steps": [{"argument": "A hypothesis, not a finding."}]}
+    assert readiness(incomplete)["state"] == "unresolved_steps"
+
+
 def test_saved_followup_question_selection():
     """A newer terminal outcome must block stale or unprovided follow-ups."""
 
@@ -6457,6 +6494,15 @@ def test_saved_followup_question_selection():
     assert result["A"]["status"] == "model_suggested_unverified"
     assert result["B"]["artifact_id"] == "artifact-3"
     assert select([older, current], ["A"], supplied[:1]) == {}
+    # A shortened material scope cannot silently authorize carrying a question.
+    shortened = [dict(item) for item in supplied]
+    shortened[1]["extract_truncated_fields"] = ["assumptions"]
+    assert select([older, current], ["A"], shortened) == {}
+    shortened[1]["extract_truncated_fields"] = ["next_question"]
+    assert select([older, current], ["A"], shortened) == {}
+    # A shortened *argument* does not invalidate a bounded next test by itself.
+    shortened[1]["extract_truncated_fields"] = ["reasoning_steps"]
+    assert select([older, current], ["A"], shortened)["A"]["artifact_id"] == "artifact-2"
     for blocked in (
         session(2, "A", stop_reason="decisive_counterexample"),
         session(2, "A", stop_reason="productive_conclusion"),
@@ -6554,6 +6600,13 @@ async def test_saved_followup_question_reaches_real_dispatch(path: Path):
         assert carried["question"] == question
         assert carried["question_source"] == source
         assert artifact["id"] in carried["prior_session_artifact_ids"]
+        source_finding = next(
+            finding
+            for finding in carried["prior_session_findings"]
+            if finding["id"] == artifact["id"]
+        )
+        assert source_finding["source_readiness"]["independently_verified"] is False
+        assert source_finding["source_readiness"]["original_in_context"] is False
         await research_sessions.control_session(str(path), next_session["id"], "stop")
 
         # Researcher-approved continuations have priority over automatic suggestions.
