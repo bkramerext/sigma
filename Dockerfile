@@ -21,6 +21,7 @@ COPY --from=tectonic /usr/local/bin/tectonic /usr/local/bin/tectonic
 WORKDIR /opt/sigma
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+COPY samples ./samples
 RUN uv sync --locked --no-dev --no-install-project \
     && uv sync --locked --no-dev \
     && mkdir -p /var/lib/sigma-auth /opt/sigma/demo \
