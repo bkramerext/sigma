@@ -20,7 +20,7 @@ We got a surprising amount done this way, but it wasn't effortless. Keeping four
 
 SIGMA now has a working research engine, a browser UI, persistent investigations, computational tools, research reports, and automated tests. But getting the software to work is different from demonstrating that it produces genuinely better research.
 
-Maybe this work bites off more than it can chew, but the goal really was to build a product that looks credible, supports Markdown and stays open to new ideas such as on-demand TeX paper generation, and inspires others to try it out. I appreciate you taking a second reading.
+Maybe this work bites off more than it can chew, but the goal really was to build a product that looks credible and supports ideas such as reformatting plain-text mathematical descriptions and Conclusions into Markdown with typeset equations. The AI formatter leaves the saved text available, but its mathematical output still needs review. I also want SIGMA to stay open to future ideas such as on-demand TeX paper generation, and to inspire others to try it out. I appreciate you taking a second reading.
 
 ---
 

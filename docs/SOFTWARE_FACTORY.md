@@ -173,7 +173,7 @@ The process has been exercised, not merely designed:
 - Gray's T21 PR #38 documented real Chrome and Python/Sage acceptance. Its provider fixture was updated to include the new `computational_citations` schema field; the PR was reviewed and merged. The handoff was recorded at `messages/t21_gray_alpha_acceptance.txt`.
 - T29, T30, and T17.8 remain subject to their own PR review and final integration. Do not treat assignment as completion.
 
-See `WOLF.md` for the narrative, `WOLF_IDEAS.md` for writing ideas, `WOLF_TODO.md` for retrospective evidence gaps, and `docs/STATUS.md` for implementation and test observations.
+See `WOLF.md` for the narrative, `WOLF_IDEAS.md` for writing ideas, `WOLF_TODO.md` for retrospective evidence gaps, `docs/JOURNAL.md` for milestone history, and `docs/STATUS.md` for implementation and test observations.
 
 ## 9. Failure modes to watch
 

@@ -340,13 +340,14 @@ def paper_view(paper_id: str, path: str):
 
 
 @app.get("/api/projects/papers/{paper_id}/pdf")
-def paper_pdf_view(paper_id: str, path: str):
+def paper_pdf_view(paper_id: str, path: str, open_in_browser: bool = False):
+    disposition = "inline" if open_in_browser else "attachment"
     return Response(
         papers.get_pdf(path, paper_id),
         media_type="application/pdf",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'attachment; filename="sigma-ai-paper-{paper_id}.pdf"',
+            "Content-Disposition": f'{disposition}; filename="sigma-ai-paper-{paper_id}.pdf"',
         },
     )
 
@@ -826,6 +827,7 @@ def text_source_view(body: TextSourceRequest):
 class TextConversionRequest(OpenRequest):
     scope: str
     strategy_id: str | None = None
+    session_id: str | None = Field(default=None, max_length=36)
     target: str
     expected_digest: str
     expected_binding: str | None = None
@@ -851,6 +853,7 @@ async def text_conversion_view(body: TextConversionRequest, request: Request):
             body.expected_digest,
             body.expected_binding,
             body.expected_project_id,
+            body.session_id,
         )
     )
     connection = asyncio.create_task(disconnected())
