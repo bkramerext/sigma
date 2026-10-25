@@ -1838,7 +1838,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
       <GoogleIdentityPill compact/>
       <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/>
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
-    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>?</button>
+    <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
   </header>;
 }

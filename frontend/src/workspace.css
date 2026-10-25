@@ -41,8 +41,9 @@
   color: var(--workspace-copper);
 }
 .workspace-page .header-controls { display: flex; align-items: center; justify-content: flex-end; gap: 24px; margin-left: auto; min-width: 0; }
-.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content max-content; grid-template-areas: "difficulty model google about" ". thinking chatgpt ."; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
+.workspace-page .project-art-header .header-controls { position: relative; z-index: 1; display: grid; flex: 0 0 auto; grid-template-columns: max-content max-content max-content max-content; grid-template-areas: "difficulty model about google" ". thinking . chatgpt"; align-items: center; justify-content: end; gap: 6px 8px; margin-left: auto; padding-top: 12px; }
 .workspace-page .project-art-header .about-action { grid-area: about; }
+.workspace-page .project-art-header .about-action { box-sizing: border-box; flex: 0 0 auto; width: auto; min-width: 0; min-height: 34px; padding: 7px 12px; font: 400 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
 .workspace-page .project-art-header .api-connection { min-width: 0; width: max-content; max-width: 240px; grid-area: chatgpt; }
 .workspace-page .project-title-line { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; min-width: 0; max-width: min(54vw, 760px); padding-top: 12px; }
 .workspace-page .project-art-back-row { position: absolute; z-index: 2; top: -6px; left: clamp(140px, calc(min(34vw, 390px) - 172px), 218px); }
@@ -188,9 +189,9 @@
   .workspace-page .project-art-back-row { left: auto; right: 40px; }
   .workspace-page .project-back-label { display: none; }
   .workspace-page .current-project { padding-top: 0; }
-  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto; grid-template-areas: "difficulty difficulty" "model google" "thinking chatgpt"; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
-  .workspace-page .project-art-header .about-action { position: absolute; top: 0; right: 0; grid-area: auto; justify-self: end; }
-  .workspace-page .project-art-header .project-difficulty-badge { width: calc(100% - 52px); justify-self: start; align-self: center; }
+  .workspace-page .project-art-header .header-controls { display: grid; width: 100%; align-self: stretch; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 44px auto auto auto; grid-template-areas: "difficulty difficulty" "about google" "model chatgpt" "thinking ."; justify-content: stretch; gap: 6px 8px; margin-left: 0; }
+  .workspace-page .project-art-header .about-action { position: relative; top: auto; right: auto; grid-area: about; justify-self: start; }
+  .workspace-page .project-art-header .project-difficulty-badge { width: 100%; justify-self: start; align-self: center; }
   .workspace-page .api-connection { min-width: 0; width: auto; max-width: min(100%, 240px); }
   .workspace-page .expansion { font-size: 8px; letter-spacing: .06em; max-width: 240px; }
   .workspace-page .header-controls { align-self: flex-start; gap: 0; }

@@ -118,6 +118,8 @@ with sync_playwright() as playwright:
     assert art.get_attribute("src") == "/sigma-project-header.png"
     close = header.get_by_role("button", name="Back to home", exact=True)
     controls = header.locator(".header-controls")
+    about = header.get_by_role("button", name="About SIGMA")
+    expect(about).to_have_text("About")
     model_control = controls.get_by_role("button", name=re.compile("^Model"))
     thinking_control = controls.get_by_role("button", name=re.compile("^Thinking level"))
     difficulty_control = controls.get_by_role("button", name=re.compile("^Project difficulty"))
@@ -145,10 +147,10 @@ with sync_playwright() as playwright:
     page.on("request", lambda request: auth_requests.append(request.url) if "/api/cloud-auth/login" in request.url else None)
     google_signin.click(force=True)
     assert not auth_requests
-    expect(page.get_by_role("dialog", name="Connect your Google account")).to_be_visible()
+    expect(page.get_by_role("dialog", name="Google account")).to_be_visible()
     expect(page.get_by_text("header-reviewer@example.org", exact=True)).to_be_visible()
     page.keyboard.press("Escape")
-    expect(page.get_by_role("dialog", name="Connect your Google account")).to_have_count(0)
+    expect(page.get_by_role("dialog", name="Google account")).to_have_count(0)
     assert "not actual research session charges" in header.locator(".sr-only").inner_text()
     grid = controls.bounding_box()
     model_box = model_control.bounding_box()
@@ -157,6 +159,9 @@ with sync_playwright() as playwright:
     pill = header.locator(".api-connection > summary")
     chatgpt_box = pill.bounding_box()
     assert grid and model_box and thinking_box and google_box and chatgpt_box
+    about_box = about.bounding_box()
+    assert about_box and about_box["x"] + about_box["width"] <= google_box["x"]
+    assert about_box["x"] + about_box["width"] <= chatgpt_box["x"]
     assert model_box["y"] < thinking_box["y"] and google_box["y"] < chatgpt_box["y"]
     assert model_box["x"] < google_box["x"] and thinking_box["x"] < chatgpt_box["x"]
     assert grid["x"] + grid["width"] <= 1280
@@ -329,6 +334,7 @@ with sync_playwright() as playwright:
         close_box = close.bounding_box()
         pill_box = pill.bounding_box()
         controls_box = controls.bounding_box()
+        about_box = about.bounding_box()
         assert (
             art_box
             and art_frame
@@ -337,7 +343,13 @@ with sync_playwright() as playwright:
             and close_box
             and pill_box
             and controls_box
+            and about_box
         )
+        google_box = google_signin.bounding_box()
+        chatgpt_box = pill.bounding_box()
+        assert google_box and chatgpt_box
+        assert about_box["x"] + about_box["width"] <= google_box["x"] + 1, width
+        assert about_box["x"] + about_box["width"] <= chatgpt_box["x"] + 1, width
         assert abs(art_box["x"]) < 1 and abs(art_box["y"] - 5) < 1
         assert abs(art_box["width"] / art_box["height"] - 2) < 0.01
         assert abs(art_frame["height"] / art_box["height"] - 0.64) < 0.02

@@ -19,6 +19,18 @@ an existing UI lifecycle cleanup assertion); focused Chrome check
 `uv run --with playwright python browser_checks/t47_conclusion.py`, frontend
 typecheck, and `git diff --check` passed. No provider calls or cloud changes.
 
+## Project header About pill placement (2026-10-25)
+
+The project header now uses the labeled About pill in the left column beside
+Google and ChatGPT, matching Home. On narrow screens About and Google share a
+row, with Model beside ChatGPT below; Thinking remains in the left column. The
+real Chrome `browser_checks/header.py` check passed at 1280, 1100, 700, 390 and
+320 px, including left-of-auth-pill placement and no horizontal overflow.
+Screenshots: `/tmp/sigma-a13-header-1280.png` and
+`/tmp/sigma-a13-header-390.png`. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed all scenarios, Ruff, formatting, Pyright, frontend typecheck
+and production build. No live provider calls or cloud changes.
+
 ## T84 detailed command-specific CLI help (2026-10-25)
 
 Extended the existing `argparse` command tree with a shared detailed-help format.
