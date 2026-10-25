@@ -61,6 +61,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
         "The displayed relation is preserved from the saved conclusion:\n\n"
         "\\[R(n) = 1 + \\frac{n(n+1)}{2}\\]\n\n"
         r"The inline relation is \(s^2\)." + "\n\n"
+        "This prose retains its meaning while the growth term t^4 is typeset.\n\n"
         "ζ(s)=s/(s−1)−s∫_1^∞{x}^{−s−1}dx\n\n"
         "$$\n$$\n\n"
         "### Verification and scope\n\nSIGMA has not independently verified the result."
@@ -234,8 +235,8 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 expect(finding).to_be_visible()
                 expect(finding).to_have_text("Preliminary finding")
                 expect(conclusion.locator(".outcome-markdown .katex").first).to_be_visible()
-                expect(conclusion.locator(".outcome-markdown .katex")).to_have_count(3)
-                expect(conclusion.locator(".outcome-markdown .katex").nth(2)).to_contain_text(
+                expect(conclusion.locator(".outcome-markdown .katex")).to_have_count(4)
+                expect(conclusion.locator(".outcome-markdown .katex").nth(3)).to_contain_text(
                     "{x}"
                 )
                 expect(conclusion.locator(".outcome-markdown .katex-error")).to_have_count(0)
@@ -254,6 +255,9 @@ with tempfile.TemporaryDirectory(prefix="sigma-t47-browser-") as temporary:
                 )
                 expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
                     "$$"
+                )
+                expect(conclusion.locator(".outcome-conclusion-source")).to_contain_text(
+                    "t^4"
                 )
                 render_toggle = outcome.get_by_role(
                     "button", name="Render Conclusion as Markdown"
