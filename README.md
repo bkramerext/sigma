@@ -6,6 +6,8 @@
 
 SIGMA helps people investigate difficult problems through multiple strategies. Its initial showcase is mathematical research, including the Riemann Hypothesis, but projects and sample investigations span other domains.
 
+See the [Product Rationale](docs/PRODUCT_RATIONALE.md) for the research principles behind SIGMA, and the [development journal](docs/JOURNAL.md) for milestone history.
+
 Instead of treating a long conversation as the research record, SIGMA organizes work as **projects → research sessions → strategies → evidence artifacts**. Research findings, criticisms, experiments, and unresolved obligations can be inspected and revisited.
 
 ## What you can do
@@ -48,6 +50,8 @@ The runtime does not pull or install packages during an experiment. The containe
 ## Research quality and current limits
 
 **Implemented engineering is not the same as demonstrated scientific discovery.** SIGMA has deterministic tests for orchestration, evidence handoff, cancellation/recovery, isolated computation, and reporting. Early live-agent trials have shown correct handling of a simple mathematical problem and one useful numerical experiment, but **robust independent work on Medium/Hard problems, subtle mathematical error detection, and reliable cross-strategy synthesis remain unproven**.
+
+SIGMA's Investigator and Skeptic roles challenge proposed reasoning and preserve unresolved objections, but currently use the same underlying language model. This provides structured scrutiny, not independent validation by a different model; both roles may share systematic biases or blind spots. Different models for investigation and review are a possible future enhancement to evaluate.
 
 Research output must distinguish conjecture, finite computation, agent-reviewed argument, and independently verified theorem. Python and model consensus do not constitute formal proof. Integrating Lean for machine-checked proofs is a future consideration, not a current SIGMA capability.
 
