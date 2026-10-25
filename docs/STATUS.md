@@ -203,7 +203,8 @@ T117. The current-main merge is commit `f5b5a61`. After the merge,
 lint/format across 107 files, Pyright, frontend typecheck/build, and all
 scenarios. Direct `tests/gce_host.py` passed 10 tests; `tests/tooling.py`
 passed with a synthetic inherited bootstrap value and with it unset. No
-installer or infrastructure work was run. Final PR-head Ubuntu CI is pending.
+installer or infrastructure work was run. Ubuntu Actions run #461 passed on
+code head `5efdf3f` with focused host/lifecycle checks and full verification.
 
 ## Issue 114 first increment (2026-10-25)
 

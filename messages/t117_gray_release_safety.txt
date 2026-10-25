@@ -59,5 +59,6 @@ at `f5b5a61`. PR #132's two Ruff fixture corrections are present in
 no duplicate implementation was added. After merge, the full env-isolated
 `./sigma test` passed (Ruff 107 files, Pyright, frontend typecheck/build),
 `tests/gce_host.py` passed all 10 tests, and `tests/tooling.py` passed with a
-synthetic inherited bootstrap variable and unset. Final Ubuntu PR CI is pending.
+synthetic inherited bootstrap variable and unset. Ubuntu Actions run #461 passed on code head 5efdf3f, including focused
+host/lifecycle checks and the full repository suite.
 No installer or infrastructure was run.
