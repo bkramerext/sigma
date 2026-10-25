@@ -382,6 +382,48 @@ class Preflight:
                 "persistent disk is not mounted at the approved path",
             )
             return
+        expected_source = self._mount_identity(mount, fstab=True)
+        actual_source = self._mount_identity(mount, fstab=False)
+        if expected_source is None or actual_source is None:
+            self.add(
+                "Persistent state source",
+                "FAIL",
+                "mounted state disk must have a UUID-backed fstab entry",
+            )
+            return
+        if expected_source[:2] != actual_source[:2]:
+            self.add(
+                "Persistent state source",
+                "FAIL",
+                "mounted state filesystem does not match its persistent fstab entry",
+            )
+            return
+        required_mount_options = {"nodev", "nosuid", "noexec"}
+        if any(
+            not required_mount_options.issubset(set(source[2].split(",")))
+            for source in (expected_source, actual_source)
+        ):
+            self.add(
+                "Persistent state options",
+                "FAIL",
+                "fstab and mounted state disk must use nodev, nosuid, and noexec",
+            )
+            return
+        if not re.fullmatch(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+            actual_source[0],
+        ) or actual_source[1] not in {"ext4", "xfs"}:
+            self.add(
+                "Persistent state source",
+                "FAIL",
+                "mounted state source is not a supported UUID-backed disk filesystem",
+            )
+            return
+        self.add(
+            "Persistent state source",
+            "PASS",
+            "mounted filesystem matches its UUID-backed fstab entry",
+        )
         self.add(
             "Persistent state mount", "PASS", "persistent disk is mounted at the approved path"
         )
@@ -417,6 +459,39 @@ class Preflight:
             self.add(
                 "Sandbox state isolation", "FAIL", "sandbox account can read the mounted state root"
             )
+
+    def _mount_identity(self, mount: Path, *, fstab: bool) -> tuple[str, str, str] | None:
+        if fstab:
+            arguments = [
+                "findmnt",
+                "--fstab",
+                "--evaluate",
+                "--noheadings",
+                "--output",
+                "UUID,FSTYPE,OPTIONS",
+                "--target",
+                str(mount),
+            ]
+        else:
+            arguments = [
+                "findmnt",
+                "--mountpoint",
+                str(mount),
+                "--noheadings",
+                "--output",
+                "UUID,FSTYPE,OPTIONS",
+            ]
+        try:
+            result = self.command(
+                arguments,
+                environment={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"},
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        values = result.stdout.split()
+        if result.returncode != 0 or len(values) != 3:
+            return None
+        return values[0].lower(), values[1], values[2]
 
     def check_services(self) -> None:
         for unit in (
