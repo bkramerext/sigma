@@ -49,13 +49,14 @@ Markdown-rendered Conclusions now show a neutral loading message while the lazy
 renderer loads instead of briefly presenting raw Markdown as if it were the
 rendered result. Explicit legacy LaTeX `\(...\)` and `\[...\]` delimiters are
 translated for `remark-math`; empty math blocks are omitted from rendered mode,
-and compact standalone legacy formula lines are typeset conservatively. Outcomes
+compact standalone legacy formula lines and unambiguous inline powers are typeset
+conservatively. Outcomes
 with recognizable math open in rendered mode by default; ordinary prose keeps
 its existing mode. The source toggle continues to show the original saved text
 unchanged. A real-Chrome regression covers the live RH-style `### Preliminary
 finding` heading, display and inline equations, an un-delimited zeta formula, an
-empty math block, and both rendered/source modes at desktop and 375/320 px
-widths. `./sigma test` passed
+inline exponent in prose, an empty math block, and both rendered/source modes at
+desktop and 375/320 px widths. `./sigma test` passed
 with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset (the first run with it set failed
 an existing UI lifecycle cleanup assertion); focused Chrome check
 `uv run --with playwright python browser_checks/t47_conclusion.py`, frontend

@@ -16,10 +16,18 @@ export function markdownWithMathDelimiters(body: string): string {
     .replace(/^[ \t]*\$\$[ \t]*\r?\n[ \t]*\$\$[ \t]*(?:\r?\n|$)/gm, '')
     .replace(/\$[ \t]+\$/g, '');
   return withLegacyDelimiters.split('\n').map(line => {
+    const mayContainMarkdownCodeOrMath = /[`$\\]/u.test(line);
+    if (!mayContainMarkdownCodeOrMath && !/^\s*[#>*+\-|]/u.test(line)) {
+      line = line.replace(
+        /([\p{Script=Greek}A-Za-z][\p{L}\p{N}]*(?:\([^()\s]+\))?)\s*([\^_]\s*\{?[+\-]?[\p{L}\p{N}]+\}?)/gu,
+        (_match, base: string, power: string) => `$${base}${power.replace(/\s+/g, '')}$`,
+      );
+    }
     const expression = line.trim();
     const compactFormula = expression.length > 0 && expression.length <= 240
       && !/\s|[`$\\]/u.test(expression)
-      && /[\p{Script=Greek}∫∑√≤≥≠≈∞±×÷^_]/u.test(expression)
+      && (/[\p{Script=Greek}∫∑√≤≥≠≈∞±×÷^_]/u.test(expression)
+        || (/[=<>≤≥≠]/u.test(expression) && /[\d()[\]]/u.test(expression)))
       && /[=+*/^_∫∑√≤≥≠≈]/u.test(expression);
     if (!compactFormula || /^[#>*+\-|]/u.test(expression)) return line;
     const start = line.indexOf(expression);
