@@ -1,0 +1,31 @@
+SIGMA T22 architecture assessment
+
+SIGMA’s current architecture is a local Python/FastAPI research application with a React/Vite frontend. Typed Python services are shared across the browser API, CLI, and scenarios. Project metadata and history use versioned JSON with filesystem locks and atomic writes; sessions and Python execution records are stored in per-project directories. The design distinguishes research evidence from verification and preserves interrupted work.
+
+The cloud assignment is broader than hosting the current server. It requires public access, Google sign-in, guest access to a read-only Demo, private per-user workspaces, server-side ownership checks, durable concurrent writes and session recovery, access administration, resource limits, backup and restore, and local-mode compatibility. The external-host planning document emphasizes choosing the smallest reliable architecture and treats hosted ChatGPT authorization as unresolved. Google sign-in is not present in the current code.
+
+Relevant implementation constraints:
+
+- `src/sigma/research_sessions.py` stores records on disk and runs workers in process-local asyncio tasks. It checkpoints state and turns a session into paused/interrupted after a backend restart, without replaying an uncertain call. Hosted durability therefore needs persistent storage and a deliberate worker/recovery design.
+- `src/sigma/python_sandbox.py` invokes a local Docker daemon with network disabled and strict container limits. That isolation model cannot be assumed available in a Cloudflare runtime; execution needs a separately evaluated hosted design and budget controls.
+- ChatGPT sign-in uses a loopback callback and owner-only local credential files. It is built for local use, so it cannot simply be reused as hosted visitor identity or server-side multi-user credential storage. API-key billing is an explicitly selected separate mode; hosted access must preserve that separation and must not silently charge an operator key.
+- `src/sigma/server.py`, `src/sigma/api.py`, `sigma`, and the Vite setup assume a local application and local filesystem paths. Public hosting needs production routing, secure sessions/origins, and a storage boundary while retaining the current local commands and data behavior.
+
+The key architecture decision is a conventional Python host with durable relational storage versus a Cloudflare-native API/storage approach or a limited hybrid. The assignment calls for a time-boxed compatibility check, including Python dependencies, streaming, long-running work, and persistence. D1’s SQLite compatibility alone does not make it a drop-in database for the existing FastAPI/file-locking services. A Cloudflare Tunnel could help with a controlled demonstration but would not satisfy independent hosting or private multi-user storage.
+
+The main dependencies are hosted Google identity and verified claims; authorization and tenant isolation on every data and session operation; durable project/session persistence with atomic updates and conflict handling; a worker model compatible with session lifecycle and sandbox execution; and a provider-access design that keeps each user’s AI authorization distinct from SIGMA identity and operator billing. Export privacy, HTML/LaTeX escaping, budgets, admin bootstrap, recovery, and operational documentation depend on those choices.
+
+Recommended bounded implementation sequence, once T22 is explicitly started:
+
+1. Time-box the runtime and storage feasibility check, including a small concurrency/transaction proof and a hosted authentication feasibility check.
+2. Select the hosting/storage and worker approach; document the data model, migration, backup, and recovery behavior.
+3. Add provider-independent identity, server-side authorization, guest Demo restrictions, and private workspace ownership.
+4. Add durable persistence, revisions/idempotency, session recovery, and bounded hosted execution.
+5. Integrate Home and project workflows, admin access management, privacy information, and deployment operations.
+6. Verify local regression, two-user isolation, guest restrictions, restart/recovery, and browser flows with fixtures; avoid paid model calls in automated checks.
+
+The assignment itself does not specify a Codex model or thinking level. Recommended: GPT-6.1-Sol, high for implementation, with extra high reserved for reviewing security and tenant isolation. This is a substantial cross-cutting task, but an economical workhorse model is appropriate if work follows the bounded sequence above.
+
+Checkout state at assessment time: clean on `main` at `aa1b4a2`. Fetched remote branches include `docs/ticket-terminology-migration`, `a23-1-model-controls`, and `feature/a24-research-outcome-metrics`; the local tracker says T23.1 is proposed and T24 is ready to assign. `gh` is not installed, and the available GitHub page fetch did not provide PR metadata, so the live state or mapping of PRs #11–#13 could not be confirmed. No PR changes were assumed merged. The tracker says A22/T22 is planned and not started.
+
+No T22 implementation was started, no infrastructure was provisioned, and no costs were incurred.

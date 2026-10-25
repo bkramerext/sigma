@@ -84,6 +84,8 @@ def main() -> None:
                 expect(details.locator(".about-agent-return")).to_contain_text("critique feeds the next Investigator turn")
                 expect(details.locator(".about-agent-return svg path")).to_have_count(1)
                 expect(details.locator(".about-agent-instantiation-note")).to_contain_text("complete recoverability and auditing")
+                expect(details.locator(".about-multiple-sessions-note")).to_contain_text("revisit a strategy with new evidence")
+                expect(details.locator(".about-multiple-sessions-note")).to_contain_text("compare results over time")
                 expect(details.get_by_text("Coordinator", exact=False)).to_have_count(0)
                 expanded_style = details.evaluate("e => ({background: getComputedStyle(e).backgroundImage, border: getComputedStyle(e).borderColor})")
                 assert "20, 43, 61" in expanded_style["background"] and expanded_style["border"] == "rgb(76, 131, 168)", (width, expanded_style)

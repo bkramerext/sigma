@@ -5657,6 +5657,10 @@ calls and schedules eligible branches in waves under one shared call budget.
 
 Each agent turn and its research are described as staying with the session for
 complete recoverability and auditing.
+Separate sessions are described as a way to revisit strategies with new
+evidence, try revised approaches, and compare results over time.
 
 **Verification:** Real Chrome About acceptance passed at 1440px, 390px, and
-320px, including touch help at 390px. Frontend TypeScript typecheck passed.
+320px, including touch help at 390px. `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL
+./sigma test` passed all steps, including Ruff, Pyright, frontend typecheck, and
+production build.

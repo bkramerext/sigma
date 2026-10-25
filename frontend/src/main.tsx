@@ -2005,6 +2005,7 @@ function AboutArchitecture() {
             </section>
             <div className="about-working-evidence">{card('workingEvidence', 'A growing research record', 'Ideas · challenges · calculations · open questions')}</div>
             <p className="about-multiple-strategies-note">A project can explore several strategies. Each gives agents another direction to investigate, and the saved findings remain available for later work.</p>
+            <p className="about-multiple-sessions-note">Multiple sessions let researchers revisit a strategy with new evidence, try revised approaches, and compare results over time.</p>
           </div>
         </div>
       </div>
