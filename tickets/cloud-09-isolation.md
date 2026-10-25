@@ -1,0 +1,15 @@
+# Cloud 09-isolation: Cross-user identity and persistent workspace isolation
+
+**Owner:** Gray / Green; Red backend
+**Status:** Pending; evidence must come from real deployment unless stated otherwise.
+**Depends on:** 06,07
+**Master:** [GitHub #98](https://github.com/bkramerext/sigma/issues/98)
+
+## Work
+Use two distinct nonadmin/admin Google identities; verify project IDs, artifacts, mapping DB, Recent, quotas and session data remain owner-isolated across signout/relogin and invalid direct API paths.
+
+## Acceptance
+Recorded actual hosted A/B matrix, unauthorized requests denied, no traversal/cross-owner disclosure, durable mappings.
+
+## Handoff
+Record actual host/release SHA, commands/tests and observed results, failed/blocked checks, owner actions, elapsed time, and links to PR or acceptance evidence. Do not self-merge or weaken coordinator-owned acceptance criteria. Distinguish local/mocked checks from real hosted evidence.
