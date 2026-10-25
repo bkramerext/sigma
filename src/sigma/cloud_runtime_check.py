@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -53,6 +54,8 @@ def main() -> None:
             project, "Runtime acceptance", "Verify Python, SageMath and PDF artifacts"
         )
 
+        state_root = os.environ.get("SIGMA_STORAGE_ROOT", "/var/lib/sigma-auth")
+        sandbox_socket = "/run/sigma-sandbox/docker.sock"
         probe = f"""import json, os, pathlib, socket
 checks = {{"uid": os.getuid()}}
 try:
@@ -65,6 +68,19 @@ try:
     checks["network"] = "reachable"
 except OSError:
     checks["network"] = "blocked"
+try:
+    list(pathlib.Path({state_root!r}).iterdir())
+    checks["host_state"] = "readable"
+except (OSError, PermissionError):
+    checks["host_state"] = "blocked"
+try:
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    client.settimeout(1)
+    client.connect({sandbox_socket!r})
+    client.close()
+    checks["docker_socket"] = "reachable"
+except OSError:
+    checks["docker_socket"] = "blocked"
 pathlib.Path("/artifacts/runtime-evidence.json").write_text(json.dumps(checks, sort_keys=True))
 print(json.dumps(checks, sort_keys=True))
 """
@@ -80,7 +96,13 @@ print(json.dumps(checks, sort_keys=True))
             if record["status"] != "completed" or record["exit_code"] != 0:
                 raise AssertionError(f"{runtime} did not complete: {record}")
             observations = json.loads(record["stdout"])
-            if observations != {"uid": 65532, "host_secret": "blocked", "network": "blocked"}:
+            if observations != {
+                "uid": 65532,
+                "host_secret": "blocked",
+                "network": "blocked",
+                "host_state": "blocked",
+                "docker_socket": "blocked",
+            }:
                 raise AssertionError(f"{runtime} isolation probe failed: {observations}")
             evidence, _mime = python_sandbox.get_execution_artifact(
                 project, record["id"], "runtime-evidence.json"
