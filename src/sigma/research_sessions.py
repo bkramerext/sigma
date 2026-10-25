@@ -30,7 +30,11 @@ from sigma.plan_stream import completed, failure
 from sigma.projects import ProjectError, _stage, inspect_project, project_path
 from sigma.proposals import configuration
 from sigma.python_sandbox import execute_research_code, find_session_execution
-from sigma.research_epistemics import argument_availability, execution_provenance, verification_label
+from sigma.research_epistemics import (
+    argument_availability,
+    execution_provenance,
+    verification_label,
+)
 from sigma.research_feedback import ComputationFeedback, validate_feedback
 from sigma.research_tools import capability_guidance, execution_capabilities
 
