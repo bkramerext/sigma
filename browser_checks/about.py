@@ -49,6 +49,11 @@ with sync_playwright() as playwright:
         assert len(api_requests) == before, "Opening About made an API request"
         assert dialog.evaluate("element => element.matches(':modal')")
         assert_flow(dialog)
+        source = dialog.locator("details.about-source-disclosure")
+        source.locator("summary").click()
+        expect(source.get_by_role("link", name="github.com/bkramerext/sigma")).to_be_visible()
+        assert_dialog_fits(page.viewport_size["width"])
+        source.locator("summary").click()
         return button, dialog
 
     def assert_dialog_fits(viewport_width):
@@ -70,7 +75,17 @@ with sync_playwright() as playwright:
         expect(dialog.locator(".about-strategy-card")).to_have_count(3)
         expect(dialog.locator(".about-session-heading")).to_contain_text("Research Session")
         expect(dialog.locator(".about-flow-evidence")).to_contain_text("Outcomes & Saved Evidence")
-        expect(dialog.locator("details")).to_have_count(1)
+        # Allow additional purpose disclosures without weakening source-link checks.
+        expect(dialog.locator("details.about-source-disclosure")).to_have_count(1)
+        source = dialog.locator("details.about-source-disclosure")
+        expect(source.locator("summary")).to_have_text("Source code & license")
+        assert source.get_attribute("open") is None
+        expect(source.get_by_role("link", name="github.com/bkramerext/sigma")).to_have_attribute(
+            "href", "https://github.com/bkramerext/sigma"
+        )
+        expect(source.get_by_role("link", name="Apache 2.0")).to_have_attribute(
+            "href", "https://github.com/bkramerext/sigma/blob/main/LICENSE"
+        )
 
     def assert_interactions(dialog):
         toggle = dialog.locator(".about-session-toggle")
