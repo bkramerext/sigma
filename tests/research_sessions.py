@@ -6676,9 +6676,7 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
     )
     for index, (mode, question, approach, assumption, followup) in enumerate(cases):
         root = path / f"domain-{index}.sigma"
-        view = initialize_project(
-            root, f"Cross-domain case {index}", question, research_mode=mode
-        )
+        view = initialize_project(root, f"Cross-domain case {index}", question, research_mode=mode)
         strategy = create_strategy(root, "Bounded local test", approach).project.strategies[0]
         limits = research_sessions.get_limits(str(root))
         limits.update(research_rounds=1, model_calls=2)
@@ -6712,12 +6710,8 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             return httpx.Response(200, json=provider_response(response))
 
         with (
-            patch.object(
-                research_sessions, "auth_context", new=AsyncMock(return_value=credential)
-            ),
-            patch.object(
-                research_sessions, "configuration", new=AsyncMock(return_value=config)
-            ),
+            patch.object(research_sessions, "auth_context", new=AsyncMock(return_value=credential)),
+            patch.object(research_sessions, "configuration", new=AsyncMock(return_value=config)),
             patch.object(research_sessions, "execution_capabilities", return_value=[]),
             patch(
                 "sigma.research_sessions.httpx.AsyncClient",
@@ -6750,7 +6744,8 @@ async def test_cross_domain_continuation_dispatch_with_offline_roles(path: Path)
             assert contexts and contexts[0]["question"] == followup
             assert contexts[0]["question_source"] == later["initial_question_source"]
             finding = next(
-                row for row in contexts[0]["prior_session_findings"]
+                row
+                for row in contexts[0]["prior_session_findings"]
                 if row["id"] == ended["artifacts"][0]["id"]
             )
             assert finding["source_readiness"]["independently_verified"] is False
