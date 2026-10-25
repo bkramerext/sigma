@@ -1223,21 +1223,6 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       if (preflight.checkpoint_exists && !preflight.resume_available) {
         throw new Error('A checkpoint exists for different project or provider settings. Use Restart checkpoint to preserve its attempt history before generating.');
       }
-      const resumeDisclosure = preflight.resume_available
-        ? ' This resumes after ' + Number(preflight.completed_batches).toLocaleString() + ' completed evidence batches, ' + Number(preflight.reduction_groups_completed).toLocaleString() + ' index-reduction groups' + (preflight.outline_complete ? ', with the outline saved' : '') + ', and ' + Number(preflight.completed_sections).toLocaleString() + ' sections. ' + Number(preflight.provider_calls_attempted).toLocaleString() + ' calls were already attempted in this run; ' + Number(preflight.provider_calls_previous_runs).toLocaleString() + ' in prior runs. Up to ' + Number(preflight.provider_calls_remaining).toLocaleString() + ' more calls may be made.'
-        : '';
-      const callBreakdown = preflight.long_form
-        ? ' Call ceiling by stage: ' + preflight.maximum_evidence_calls + ' evidence, up to ' + preflight.maximum_index_reduction_calls + ' index reduction, 1 outline, and up to ' + preflight.maximum_section_calls + ' sections.'
-        : ' This uses one provider call.';
-      const tokenCeiling = ' Structured stage-input limits total up to ' + (Number(preflight.maximum_structured_input_bytes) / 1_000_000).toFixed(1) + ' MB.' + (mode === 'api_key'
-        ? ' At 12,000 requested output tokens per API-key call, the run could request up to ' + Number(preflight.maximum_requested_output_tokens).toLocaleString() + ' output tokens; this is a ceiling, not expected consumption or a dollar estimate.'
-        : ' ChatGPT-plan use is subject to provider allowance; this client cannot convert it to a dollar estimate.');
-      if (preflight.long_form && !window.confirm(
-        'This frozen snapshot is ' + Number(preflight.snapshot_bytes).toLocaleString() + ' bytes across ' + Number(preflight.source_count).toLocaleString() + ' saved sources. Long-form authoring will use ' + Number(preflight.evidence_batches).toLocaleString() + ' evidence batches, then a plan and separate section calls. The run may use up to ' + Number(preflight.maximum_provider_calls).toLocaleString() + ' calls.' + callBreakdown + tokenCeiling + resumeDisclosure + ' ' + (mode === 'api_key' ? 'API-key mode can incur separate usage charges.' : 'ChatGPT-plan usage is subject to provider allowance.') + ' Continue?'
-      )) {
-        setPhase('Large paper generation was not started; no provider calls were made.');
-        return;
-      }
       finishProvider = beginProviderRequest('ai-paper');
       setPhase(preflight.long_form
         ? `Indexing ${Number(preflight.evidence_batches).toLocaleString()} evidence batches, then authoring the planned sections…`
@@ -1284,8 +1269,9 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
       await refresh(result.paper_id);
     } catch (cause) {
       if (controller.signal.aborted) setPhase('Generation cancelled. No new version was published.');
-      else { setError(errorMessage(cause)); reportRequestFailure(errorMessage(cause)); }
+      else reportRequestFailure(errorMessage(cause));
       await refresh(selected?.paper_id);
+      if (!controller.signal.aborted) setError(errorMessage(cause));
     } finally { if (timer) window.clearTimeout(timer); finishProvider(); request.current = null; setBusy(false); }
   }
   const pdfUrl = selected ? `/api/projects/papers/${encodeURIComponent(selected.paper_id)}/pdf?${new URLSearchParams({ path, ...(openInTab ? { open_in_browser: 'true' } : {}) })}` : '';
@@ -1304,8 +1290,8 @@ function AIPaperDialog({ path, projectId, downloadFilename, onCancel }: { path: 
           ? `Checkpoint: ${checkpoint.completed_batches} evidence batches, ${checkpoint.reduction_groups_completed} reduction groups, ${checkpoint.completed_sections} sections complete; ${checkpoint.provider_calls_attempted} calls attempted in this run, ${checkpoint.provider_calls_previous_runs} in prior runs. ${checkpoint.provider_calls_remaining} remain in this run's call ceiling.`
           : `A checkpoint exists but does not match current settings. It records ${checkpoint.provider_calls_attempted} calls in its current run and ${checkpoint.provider_calls_previous_runs} in earlier runs; restart to keep this accounting before authoring.`}
       </p>}
-      <div className="ai-paper-controls">{!busy && <button type="button" className="settings-submit" disabled={loading || !binding} onClick={() => void generatePaper()}>{papers.length ? 'Generate new version' : 'Generate paper'}</button>}{!busy && checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}</div>
-      {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span>{busy && <button type="button" title="Cancel paper generation" onClick={() => request.current?.abort()}>Cancel</button>}</p>}
+      <div className="ai-paper-controls">{busy ? <button type="button" className="settings-submit ai-paper-cancel-generation" onClick={() => request.current?.abort()}>Cancel generation</button> : <button type="button" className="settings-submit" disabled={!binding} onClick={() => void generatePaper()}>{papers.length ? 'Generate new version' : 'Generate paper'}</button>}{!busy && checkpoint?.checkpoint_can_restart && <button type="button" className="settings-cancel" disabled={loading || !binding} onClick={() => void restartCheckpoint()}>Restart checkpoint</button>}</div>
+      {(busy || phase.startsWith('Generation cancelled.')) && <p className="ai-paper-status" role="status" aria-live="polite"><span>{phase}</span></p>}
       {error && <p role="alert" className="error">{error}</p>}
       {loading && <p>Loading saved versions…</p>}
       {!loading && papers.length > 0 && <label htmlFor="ai-paper-version">Saved versions</label>}

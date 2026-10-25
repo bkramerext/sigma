@@ -1,5 +1,26 @@
 # SIGMA status
 
+## Current owner follow-ups (2026-10-25)
+
+- TeX authoring: removed the extra white browser confirmation for long-form
+  generation; provider-use bounds are still visible in the dialog. Generate
+  becomes “Cancel generation” in place while running. Failed generation leaves
+  its error visible and restores an enabled Generate action for retry.
+- Project header: About matches Home's compact style in normal and hover states
+  and sits below Difficulty in the desktop 3×2 layout; narrow layout stays
+  responsive.
+- Real-Chrome checks now cover direct long-form start without a browser prompt,
+  failure then retry, cancel, saved version/PDF, mobile dialog scrolling, and
+  About placement/style. `browser_checks/t45_long_paper.py` and
+  `browser_checks/header.py` passed in real Chrome; the full
+  `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+  Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
+  All checks used local deterministic fixtures; no paid provider calls or cloud
+  changes.
+
+Screenshots: `docs/evaluations/t45-paper-dialog/` and
+`docs/evaluations/project-about-pill/`.
+
 ## T89 stock sample catalog audit (2026-10-25)
 
 Gray started from current `main` `7a2f445` and inventoried all 17 shipped
@@ -36,23 +57,34 @@ Reduced unused space in the TeX dialog, increased its explanatory text to 14px,
 and made the dialog height follow its contents while capping the completed
 preview to a viewport-height scroll area. The header action now reads
 “Cancel”. During generation, the duplicate disabled “Authoring…” button is
-gone; the status line has an underlined Cancel action aligned at its right.
+gone; Generate becomes a “Cancel generation” button in the same controls row,
+and the status line no longer carries a duplicate cancel action. Long-form
+generation now starts directly from Generate without the white browser-native
+confirmation; the static bounds remain visible before start and checkpoint
+restart keeps its explicit confirmation. A forced temporary generation failure
+in the Chrome check confirms the error remains visible and Generate is
+re-enabled for retry.
 Added the Project Export checkbox label exactly as “Open in browser tab”. When
 checked, the saved-PDF link opens a browser tab and requests inline PDF
 disposition; when unchecked, the link downloads as before. The PDF endpoint
 keeps attachment as its default, so existing downloads are unchanged.
 
-Updated `browser_checks/t45_long_paper.py` to exercise the progress cancel,
-desktop and 390px mobile layouts, completed-preview scrolling, inline PDF
+Updated `browser_checks/t45_long_paper.py` to exercise the no-prompt start,
+failure recovery, progress cancel, desktop and 390px mobile scrolling, completed-preview scrolling, inline PDF
 opening and attachment fallback, initial dialog focus, and focus restoration.
 Real Chrome passed. Captures are in
 `docs/evaluations/t45-paper-dialog/`: owner-provided desktop before, completed
-desktop and mobile after, and authoring progress. `env -u
+desktop and scrollable mobile after, retry-ready error, and authoring progress.
+The browser regression verifies the version count increases after retry, so an
+older saved paper cannot mask a failed generation. `env -u
 SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
 formatting, Pyright, frontend typecheck, and production build. No paid provider
 calls or cloud changes. After merging the latest `main` update, reran
 `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real
 Chrome `browser_checks/t45_long_paper.py`; both passed on the published tree.
+The latest follow-up additionally verifies direct start without the browser
+confirmation, retry after a simulated service failure, in-place cancellation,
+and a newly saved version.
 
 ## Adversarial review transparency and documentation cleanup (2026-10-25)
 
@@ -472,11 +504,12 @@ full `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed. No provider
 calls or cloud changes.
 ## Project header About pill placement (2026-10-25)
 
-The project header uses the labeled About pill in the left column beside Google
-and ChatGPT. On narrow screens About and Google share a row, with Model beside
-ChatGPT below; Thinking remains in the left column. The Home header orders its
-About/Admin group left of the Google/ChatGPT connection pills. Removing mobile
-offsets keeps Admin in its aligned second row instead of over the project list.
+The project header uses a compact About pill that matches Home's color, type,
+border and dimensions. Desktop controls form three columns and two rows:
+Difficulty/Model/Thinking, then About/Google/ChatGPT. On narrow screens About
+remains directly below Difficulty in the responsive two-column arrangement.
+The Home header orders its About/Admin group left of Google/ChatGPT and keeps
+the intended gaps between pills.
 Real Chrome `browser_checks/header.py` passed at 1280, 1100, 700, 390 and 320 px,
 including Home placement and no horizontal overflow. Screenshots:
 `/tmp/sigma-a13-header-1280.png`, `/tmp/sigma-a13-header-390.png`,

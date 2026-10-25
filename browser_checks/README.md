@@ -112,11 +112,14 @@ With a fresh `provider_fixture:app` on port 8001 and the normal UI on 5173, run
 project name and header reflow at 1280, 1100, 700, 390 and 320px, the absence of
 the workspace tagline, shared Home/Close button states, the existing functional
 connection disclosure in its compact project-header presentation, disclosure/
-focus behavior, and keyboard Back to home. It verifies the upper-right 2×2 Model/Google and Thinking/ChatGPT
-arrangement, cycles and persists model/thinking settings (including explicit
-effort reconciliation when a new model does not support the current effort),
-relative cost disclosure, noninteractive Google placeholder, functional
-ChatGPT connection disclosure/actions, and no horizontal overflow. Screenshots
+focus behavior, and keyboard Back to home. It verifies the desktop 3×2
+Difficulty/Model/Thinking and About/Google/ChatGPT arrangement. About matches
+the compact Home pill and sits directly below Difficulty. On narrow screens,
+the header reflows to two columns with About still beneath Difficulty. It cycles
+and persists model/thinking settings (including explicit effort reconciliation
+when a new model does not support the current effort), relative cost disclosure,
+noninteractive Google placeholder, functional ChatGPT connection disclosure/
+actions, and no horizontal overflow. Screenshots
 are `/tmp/sigma-a23-model-controls-*.png` and
 `/tmp/sigma-a13-header-*.png`.
 
@@ -265,9 +268,11 @@ SIGMA_T45_UI_ORIGIN=http://127.0.0.1:5181 SIGMA_T45_FIXTURE_PORT=8015 \
 ```
 
 This real-Chrome check opens the Xenopus sample, verifies the compact paper
-dialog at desktop and 390px mobile widths, checks inline cancellation and
-focus behavior, and authors a long-form paper using the deterministic local
-provider fixture. It checks the bounded completed-preview scroll area and both
+dialog at desktop and 390px mobile widths, starts long-form authoring directly
+without a browser-native confirmation, injects a temporary failure and verifies
+that Generate is available for retry, then checks in-dialog cancellation and
+focus behavior. It authors a long-form paper using the deterministic local
+provider fixture and checks the bounded completed-preview scroll area and both
 PDF modes: the “Open in browser tab” option returns an inline PDF, while the
 default still returns an attachment. No live model or paid usage is involved.
 The PDF is saved at `/tmp/sigma-t45-xenopus.pdf`; dialog captures are in

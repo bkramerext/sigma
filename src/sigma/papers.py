@@ -2031,7 +2031,7 @@ async def generate(
         package, snapshot_hash = _snapshot(path)
         if expected_snapshot_sha256 and expected_snapshot_sha256 != snapshot_hash:
             raise ProjectError(
-                "Research changed after paper preflight. Review the updated size and confirm again."
+                "Research changed after paper preflight. Review the updated snapshot and start again."
             )
         if progress:
             await progress("snapshot", 1, 1)
