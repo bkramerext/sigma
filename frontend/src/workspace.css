@@ -319,3 +319,11 @@ button.project-control-pill:disabled { cursor: default; opacity: .62; }
 .workspace-page .current-understanding button.text-view-link:hover { color: #ffe2b9; }
 .workspace-page .current-understanding button.text-view-link:focus-visible { outline: 2px solid #edbc77; outline-offset: 3px; }
 @media (max-width: 600px) { .workspace-page .current-understanding button.text-view-link { min-height: 44px; } }
+
+.continuation-approval label { display: block; margin-block: .6rem; }
+.continuation-approval select, .continuation-approval textarea, .continuation-approval input:not([type="checkbox"]) { display: block; width: 100%; max-width: 100%; box-sizing: border-box; }
+.continuation-approval textarea { min-height: 7rem; }
+.continuation-approval code { overflow-wrap: anywhere; }
+.continuation-approval pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.continuation-evidence pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
+.continuation-evidence p, .continuation-evidence summary { overflow-wrap: anywhere; }

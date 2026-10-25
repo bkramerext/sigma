@@ -739,6 +739,8 @@ def create_strategy(
     approach: str,
     summary: str = "",
     provenance: Provenance | None = None,
+    *,
+    _continuation_writer: Callable[[Project, Strategy], None] | None = None,
 ) -> ProjectView:
     """Append a human strategy and event together; migrate legacy projects on write."""
     title = _text(title, "Strategy title", 200)
@@ -758,6 +760,8 @@ def create_strategy(
             summary=summary.strip(),
             provenance=provenance,
         )
+        if _continuation_writer is not None:
+            _continuation_writer(project, strategy)
         return replace(
             project,
             schema_version=max(
