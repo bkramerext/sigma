@@ -138,11 +138,14 @@ function researchConclusionMarkdown(session: ResearchSession): string {
 }
 
 function containsMathNotation(text: string): boolean {
-  return /\\\[|\\\(|\$\$?[^$\n]+\$/.test(text) || text.split('\n').some(line => {
+  return /\\\[|\\\(|\$\$?[^$\n]+\$/.test(text)
+    || /[\p{Script=Greek}A-Za-z][\p{L}\p{N}]*(?:\([^()\s]+\))?\s*[\^_]\s*\{?[+\-]?[\p{L}\p{N}]+\}?/u.test(text)
+    || text.split('\n').some(line => {
     const expression = line.trim();
     return expression.length > 0 && expression.length <= 240
       && !/\s|[`$\\]/u.test(expression)
-      && /[\p{Script=Greek}∫∑√≤≥≠≈∞±×÷^_]/u.test(expression)
+      && (/[\p{Script=Greek}∫∑√≤≥≠≈∞±×÷^_]/u.test(expression)
+        || (/[=<>≤≥≠]/u.test(expression) && /[\d()[\]]/u.test(expression)))
       && /[=+*/^_∫∑√≤≥≠≈]/u.test(expression);
   });
 }
