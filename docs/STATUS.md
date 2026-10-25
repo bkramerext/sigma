@@ -225,6 +225,13 @@ remain required. Full results and exact owner actions: [T98 cloud checkpoint](..
   Ruff format, Pyright (0 diagnostics), frontend typecheck and production build.
   All checks used local deterministic fixtures; no paid provider calls or cloud
   changes.
+- After syncing current `main` (`19e5bd7`), `./sigma test` passed all steps,
+  including the frontend production build. Real Chrome
+  `browser_checks/saved_paper_library.py` and `browser_checks/t45_long_paper.py`
+  passed against deterministic local fixtures. The recents test now tolerates
+  project initialization creating its research-session directory. The long
+  paper browser fixture uses a unique project title so repeated runs do not
+  collide with prior local fixture data.
 
 Screenshots: `docs/evaluations/t45-paper-dialog/` and
 `docs/evaluations/project-about-pill/`.
