@@ -23,11 +23,12 @@ Maintain this inventory as the central record for actual cloud identifiers and t
 | Static external IPv4 | `sigma-web-ip`, `us-west1`, Premium tier | Planned; actual IPv4 pending |
 | Network | `sigma-vpc` custom VPC; `sigma-us-west1` subnet; proposed `10.42.0.0/24` | Planned; CIDR approval pending |
 | Ingress | IAP SSH `35.235.240.0/20` to TCP 22 only; public TCP 80/443 deferred until launch gates | Planned |
-| Runtime service account | `sigma-runtime@PROJECT_ID.iam.gserviceaccount.com`; two secret-scoped grants only | Planned; PROJECT_ID unresolved |
-| Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Planned, no secret payloads here |
+| Runtime service account | `sigma-runtime@sigma-research-prod.iam.gserviceaccount.com` | Created/enabled, operator screenshot 2026-10-25; secret-level grants pending; no keys or project roles assigned during creation |
+| Secret Manager resources | `sigma-google-oauth-client-secret`; `sigma-sponsored-openai-api-key` | Deferred: Console requires an initial value; no resource or version created, 2026-10-25 |
 | Production Google OAuth client | HTTPS origin `https://sigma-research.duckdns.org`; callback `https://sigma-research.duckdns.org/api/cloud-auth/callback` | Planned; client/project decision pending |
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; project association and trial unverified |
-| Billing / trial / project budget | Both `sigma-research-prod` and `sigma-auth-512601` linked to billing account `015C1D-E6B877-9913D6`; $300 budget proposal, trial credit and dates | Billing links observed in operator screenshot 2026-10-25; trial/budget still unverified |
+| Billing / trial / project budget | Both projects linked to `015C1D-E6B877-9913D6`; free trial $300 credit, $0 used (Oct 25); `SIGMA Production - Trial Budget`, $300 custom-range Oct 24 2026–Jan 22 2027, alerts at 50/75/90/100% | Operator screenshots and report Oct 25; trial expiry estimated from start+90 days, not independently confirmed |
+| Enabled project APIs | `compute.googleapis.com`, `iam.googleapis.com`, `cloudresourcemanager.googleapis.com`, `secretmanager.googleapis.com`, `iap.googleapis.com`, `billingbudgets.googleapis.com` | Enabled: operator screenshots/reports on 2026-10-25 |
 | Application release | Exact deployed Git SHA | Pending deployment |
 
 **Scope control:** T127 references an *existing* approved infrastructure project. Creating a second project is an explicit operator decision/deviation, not a completed prerequisite. The existing `SIGMA Auth` project is not automatically the infrastructure project. Keep any production OAuth client location consistent with the approved auth design.
