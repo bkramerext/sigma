@@ -20,6 +20,15 @@
 
 Screenshots: `docs/evaluations/t45-paper-dialog/` and
 `docs/evaluations/project-about-pill/`.
+
+PR #108 merge-readiness refresh: fetched `main` at `f5388d8` (including Blue
+#116, Gray #120 and subsequent main history) and merged it without conflicts.
+The current-state summary and newer research/sample records in this file were
+preserved. Real Chrome `browser_checks/t45_long_paper.py` and
+`browser_checks/header.py` passed against the reconciled tree. The required
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed, including Ruff,
+format, Pyright (0 diagnostics), frontend typecheck and production build. No
+paid provider calls or cloud changes.
 ## Current state for newcomers (2026-10-25)
 
 SIGMA is a local research workspace that stores questions, role responses,
