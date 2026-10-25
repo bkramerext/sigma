@@ -183,6 +183,7 @@ with `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` unset (the first run with it set failed
 an existing UI lifecycle cleanup assertion); focused Chrome check
 `uv run --with playwright python browser_checks/t47_conclusion.py`, frontend
 typecheck, and `git diff --check` passed. No provider calls or cloud changes.
+The API conversion request also accepts a bounded optional session ID for saved Conclusions. Sponsored-cloud provider attempt accounting remains active for both project and Conclusion conversions; `tests/text_views.py` and `tests/cloud_research_api.py` cover the API route and usage accounting. The rebased tree passed `env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` and the focused real-Chrome paper dialog check.
 
 Follow-up: the Conclusion Markdown toggle had been missed by the earlier
 Outcome-heading styling because it renders in `.outcome-conclusion-actions`.
