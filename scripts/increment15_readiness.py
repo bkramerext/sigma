@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Offline pilot readiness gate. This tool never calls a model or network."""
+
 from __future__ import annotations
 
 import argparse
@@ -40,7 +41,9 @@ def main() -> None:
         "planned_model_runs": manifest["total_arm_runs"],
         "manifest_is_frozen": manifest["status"] == "FROZEN" and manifest["freeze_approved"],
         "paid_runs_approved": manifest["user_approved"],
-        "model_version_configured": bool(manifest["model_provider"] and manifest["model_exact_version"]),
+        "model_version_configured": bool(
+            manifest["model_provider"] and manifest["model_exact_version"]
+        ),
         "cost_cap_configured": manifest["total_usd_cap"] is not None,
         "runner_isolation_demonstrated": False,
         "baseline_and_sigma_run_adapter_tested": False,
