@@ -55,26 +55,31 @@ or clipped call.
 - Calls: at most four provider calls per arm (eight total); SIGMA uses two
   Investigator/Skeptic cycles. Baseline uses four sequential self-review turns.
 - Output: at most 1,024 generated tokens per call (4,096 per arm).
-- Input/total: proposed ceiling 12,000 input and 16,096 total usage tokens per
-  arm (32,192 total across the comparison). The current SIGMA setting derives a
-  much larger `total_token_limit` from context bytes and does not expose this
+- Input/total: proposed ceiling 48,000 input and 52,096 total usage tokens per
+  arm (104,192 total across the comparison). The current SIGMA setting derives
+  a much larger `total_token_limit` from context bytes and does not expose this
   useful cumulative input ceiling as a start-session setting. A trial-only
   pre-dispatch guard must enforce the shared cumulative usage ceiling before
   each next request; if it cannot reliably do so, do not run.
 - Wall time: 15 minutes per arm, with a 45-minute overall trial window. Stop
   at the limit; do not retry failed calls.
-- Estimated-cost reserve: at most $0.55 per arm / $1.10 total, with a proposed
-  $1.25 absolute comparison ceiling including any unavoidable provider-side
-  accounting difference. This is not a provider-invoice hard cap: SIGMA's
-  local limit reserves against published token prices and recorded usage.
-  Require an isolated provider project/key budget or another enforceable
-  provider-side hard limit before execution; if unavailable, do not run.
+- Cost: keep SIGMA's conservative estimated-cost reservation at $0.55 per arm.
+  With the token ceilings above and no extended prompt-cache retention, the
+  highest applicable listed Standard input cache-write rate ($2.50/M) plus
+  output rate ($10/M) gives at most $0.16096 per arm, $0.32192 total. Set a $0.35
+  OpenAI project hard spend limit as defense in depth. OpenAI says enforcement
+  is not instantaneous and may slightly overshoot the setting, so that control
+  alone is not the absolute cap. Before any call, demonstrate a local
+  pre-dispatch token guard and reserve for any ambiguous in-flight call; if it
+  cannot enforce the token ceilings, do not run.
 
-At the official OpenAI standard rates checked 2026-10-25, `gpt-6.1-sol` is
-$2/M input and $10/M output tokens (cached input and cache writes differ).
-The proposed uncached token maxima imply $0.0644 per arm before other billable
-items. These are estimates, not authorization or a substitute for a hard spend
-control. Recheck the official rate and the exact provider model at approval:
+At the official OpenAI Standard rates checked 2026-10-25, `gpt-6.1-sol` is
+$2/M input, $0.10/M cached input, $2.50/M short cache writes and $10/M output
+tokens. At the proposed ceilings, short cache writes and output give a
+conservative $0.16096 per arm / $0.32192 combined upper bound, assuming no extended
+cache retention or tools. The $0.35 provider project control is a backstop;
+the pre-dispatch guard is needed because provider enforcement may lag. Recheck
+pricing and model availability before approval:
 [OpenAI API pricing](https://developers.openai.com/api/docs/pricing).
 
 ## Procedure and validation
@@ -119,13 +124,15 @@ deployment are in scope.
 
 **Approval requested:** May I run one exploratory comparison using the OpenAI
 API on `gpt-6.1-sol` at high reasoning / standard tier, API-key billing only,
-with no tools, search, retries, or fallback; up to four calls per arm, 1,024
-output tokens per call, 12,000 input / 16,096 total usage tokens per arm,
-15 minutes per arm / 45 minutes overall, $0.55 estimated-cost reserve per arm
-and $1.25 absolute total spend ceiling? I will start only after demonstrating
-the cumulative token guard, confirming the provider-side hard spend limit, and
-freezing the task/checker/procedure. If you approve, that approval covers this
-single trial under these limits only.
+with no tools, search, retries, fallback, or extended cache retention; up to
+four calls per arm, 1,024 output tokens per call, 48,000 input / 52,096 total
+usage tokens per arm, 15 minutes per arm / 45 minutes overall, $0.55 SIGMA
+estimated-cost reservation per arm, and a $0.35 OpenAI project hard spend
+limit? The token ceilings imply at most $0.32192 at the checked short-cache-write
+and output rates; the provider setting is a backstop and may slightly overshoot.
+I will make no live call until the local token guard is demonstrated and the
+task/checker/prompt/caps are frozen. Approval covers this single trial under
+these limits only.
 
 ## Offline review notes
 

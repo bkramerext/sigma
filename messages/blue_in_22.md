@@ -44,7 +44,10 @@
 See the exact proposal and conditions in
 [`docs/evaluations/increment_22/preparation.md`](../docs/evaluations/increment_22/preparation.md).
 The proposal is OpenAI API `gpt-6.1-sol`, high reasoning, standard tier,
-API-key billing, no tools/search/retries/fallback; four calls per arm, 1,024
-output tokens per call, 12,000 input / 16,096 total usage tokens per arm,
-15 minutes per arm, $0.55 estimated-cost reserve per arm, and a proposed $1.25
-overall spend ceiling. These limits remain proposed; no live execution occurred.
+API-key billing, no tools/search/retries/fallback or extended cache retention;
+four calls per arm, 1,024 output tokens per call, 48,000 input / 52,096 total
+usage tokens per arm, 15 minutes per arm, $0.55 estimated-cost reserve per
+arm, and a proposed $0.35 OpenAI project hard spend limit. The token maxima
+imply $0.32192 total at current short-cache-write/output rates. Provider hard
+limits can slightly overshoot, so this is a backstop. The pre-dispatch token
+guard is not implemented or demonstrated yet; no live execution occurred.

@@ -4382,16 +4382,19 @@ machine assignments/orders, finding an exact 10-unit minimum; M1-only jobs
 also provide a direct matching lower bound. This is a validated offline oracle,
 not provider research evidence, and its answer is withheld from model contexts.
 
-The candidate run is OpenAI API-key billing, `gpt-6.1-sol`, high reasoning,
-standard tier, with no tools/search/retries/fallback; four calls per arm, 1,024
-output tokens per call, 12,000 input / 16,096 total usage tokens per arm, 15
-minutes per arm, $0.55 estimated-cost reserve per arm and a proposed $1.25
-provider-side hard total spend cap. Official standard rates checked 2026-10-25
-are $2/M input and $10/M output tokens. These are proposals, not authorization.
-The trial is **not ready to execute**: current SIGMA derives a much larger
-token limit from context size, and its local cost control is an estimated
-reservation rather than a provider-invoice hard cap. Demonstrate a cumulative
-token guard and confirm provider-side spend enforcement before any call.
+Proposed run: OpenAI API-key billing, `gpt-6.1-sol`, high reasoning, standard
+tier, no tools/search/retries/fallback; four calls per arm, 1,024 output tokens
+per call, 48,000 input / 52,096 total usage tokens per arm, 15 minutes per arm,
+$0.55 estimated-cost reservation per arm, and a $0.35 provider-project hard
+spend limit. Official Standard rates checked 2026-10-25 are $2/M input,
+$0.10/M cached input, $2.50/M short cache writes and $10/M output. Under those
+rates the token maxima imply $0.32 combined; provider hard-limit enforcement
+may slightly overshoot. These are proposals, not authorization. The trial is
+**not ready to execute**: current SIGMA derives a much larger token limit from
+context size; the capped request total gives a calculated upper spend of
+$0.32192 at the listed cache-write/output rates. Demonstrate a cumulative
+pre-dispatch token guard and configure the provider hard-limit backstop before
+any call.
 
 `./sigma test` **passed** on this base, including all backend research checks,
 Ruff, format, Pyright (0 diagnostics), frontend typecheck and production build.
