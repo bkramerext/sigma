@@ -14,7 +14,7 @@ SIGMA treats research as cumulative work. Different strategies can be pursued ov
 
 Claims also need to remain distinguishable from their support. A proposed explanation, a recorded computation, and an independently established result are not the same thing. SIGMA aims to preserve those distinctions across mathematics, science, history, and other complex investigations, while respecting different standards of evidence.
 
-The real test is whether this process produces better research than a simpler AI assistant using comparable resources. **That is SIGMA's hypothesis, not a proven advantage.**
+The real test is whether this process produces better research than a simpler AI assistant using comparable resources. **That is SIGMA's hypothesis, not a proven advantage.** And we're prepared to simplify SIGMA if the answer is no.
 
 ## UI integration
 
