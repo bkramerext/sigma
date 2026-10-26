@@ -6113,3 +6113,28 @@ skipped by `./sigma test` after those failures and was run separately
 successfully. See the [Blue guest-samples handoff](../messages/guest_samples_blue_r4r.md).
 Implementation is in [PR #246](https://github.com/bkramerext/sigma/pull/246),
 open against `main` and not merged.
+
+## ChatGPT authentication guidance copy (2026-10-26)
+
+Updated the existing ChatGPT connection guidance to distinguish a user with no
+connected ChatGPT account (`disconnected`) from a saved account requiring
+interactive recovery (`reauth_required`). The first is told “Research requires a
+ChatGPT connection. Sign in to continue.”; the second is told “Your ChatGPT
+session has expired. Please sign in again to continue.” The state distinction
+comes from the existing auth snapshot: no active account versus a retained
+account record that needs reauthorization. No credential, authentication, or
+research persistence behavior changed.
+
+Focused verification: `uv run python tests/chatgpt.py` passed. Ruff check,
+format, and Pyright passed for `src/sigma/openai_connection.py` and
+`tests/chatgpt.py`. `./sigma test` ran to completion but retained four known
+failures: the admin-contact warning assertion; four Gmail delivery Ruff
+findings; formatting in Gmail delivery, CLI, UI instance, and the previously
+committed `browser_checks/guest_samples.py`; and the Gmail test `.decode`
+Pyright error. All ChatGPT tests passed during the full run. The frontend
+typecheck passed; the full runner skipped its build after failures. No
+authentication flow, credentials, or saved research were changed. Handoff:
+[`messages/blue_chatgpt_auth_messaging_r4r.md`](../messages/blue_chatgpt_auth_messaging_r4r.md).
+The change is included in [PR #246](https://github.com/bkramerext/sigma/pull/246)
+against `main` due to overlap with the active Guest connection UI branch; it is
+open and not merged.
