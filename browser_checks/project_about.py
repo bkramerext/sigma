@@ -44,6 +44,18 @@ with sync_playwright() as playwright:
         about_button.click()
         dialog = page.get_by_role("dialog", name="About SIGMA")
         expect(dialog).to_be_visible()
+        appearance = dialog.evaluate(
+            "element => { const root = getComputedStyle(element); const heading = getComputedStyle(element.querySelector('h2')); const content = getComputedStyle(element.querySelector('.about-dialog-content')); return { background: root.backgroundColor, border: root.borderTopColor, borderWidth: root.borderTopWidth, radius: root.borderRadius, headingColor: heading.color, contentFont: content.fontFamily, contentColor: content.color }; }"
+        )
+        assert appearance == {
+            "background": "rgb(7, 17, 30)",
+            "border": "rgb(169, 101, 72)",
+            "borderWidth": "1px",
+            "radius": "8px",
+            "headingColor": "rgb(229, 173, 143)",
+            "contentFont": "Inter, ui-sans-serif, system-ui, sans-serif",
+            "contentColor": "rgb(196, 206, 216)",
+        }, (width, appearance)
         expect(dialog.locator(".about-intro")).to_contain_text("research workbench")
         expect(dialog.locator(".about-terms")).to_have_text(
             "Strategies set direction. Sessions investigate. Outcomes assess. Reports communicate."
@@ -52,6 +64,7 @@ with sync_playwright() as playwright:
         assert dialog.evaluate("element => element.matches(':modal')")
         box = dialog.bounding_box()
         assert box and box["x"] >= 0 and box["x"] + box["width"] <= width, (width, box)
+        page.screenshot(path=f"/tmp/t226-about-project-{width}-after.png")
         page.keyboard.press("Escape")
         expect(dialog).not_to_be_visible()
         expect(about_button).to_be_focused()
