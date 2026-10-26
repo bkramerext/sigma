@@ -13,12 +13,14 @@ import test_environment as _test_environment  # noqa: F401
 from fastapi.testclient import TestClient
 
 from sigma.api import app
+from sigma.project_bundle import read_file
 from sigma.projects import (
     ROOT,
     STATE,
     ProjectError,
     ResearchMode,
     create_project,
+    create_json_project,
     create_strategy,
     edit_strategy,
     initialize_project,
@@ -55,7 +57,7 @@ def main() -> None:
                 assert created.project.difficulty is not None
                 assert created.project.difficulty.value == "medium"
                 assert created.project.research_mode == mode
-                raw = json.loads((Path(created.path) / STATE).read_bytes())
+                raw = json.loads(read_file(Path(created.path), STATE))
                 assert raw["investigation_type"] == mode.value
                 assert raw["show_advanced_outcome_details"] is False
                 assert open_project(created.path) == created
@@ -67,7 +69,7 @@ def main() -> None:
                 removed = remove_strategy(created.path, strategy_id)
                 assert removed.project.research_mode == mode
                 assert removed.project.schema_version == 9
-                snapshot = (Path(created.path) / STATE).read_bytes()
+                snapshot = Path(created.path).read_bytes()
                 rejects(
                     lambda title=title, mode=mode: create_project(title, "Overwrite attempt", mode)
                 )
@@ -122,22 +124,19 @@ def main() -> None:
                     f"sigma.projects.os.{operation}", side_effect=OSError("publication failed")
                 ):
                     rejects(lambda: create_project("Failed publication", "Question"))
-                assert not (managed / "failed-publication.sigma").exists()
+                assert not (managed / "failed-publication.json").exists()
 
             # If another local process inserts research into a reserved directory, never remove it.
             def inserted_research(path, *args):
                 # Simulate another writer publishing research during initialization.
                 # The mocked initializer must create its own destination because
                 # create_project delegates directory creation to initialize_project.
-                Path(path).mkdir(exist_ok=True)
-                (Path(path) / "notes.txt").write_text("Concurrent research")
+                Path(path).write_text("Concurrent research")
                 raise ProjectError("Initialization failed")
 
             with patch("sigma.projects.initialize_project", side_effect=inserted_research):
                 rejects(lambda: create_project("Preserve partial", "Question"))
-            assert (
-                managed / "preserve-partial.sigma/notes.txt"
-            ).read_text() == "Concurrent research"
+            assert (managed / "preserve-partial.json").read_text() == "Concurrent research"
 
             def competing_create(index):
                 try:
@@ -157,7 +156,7 @@ def main() -> None:
             with TestClient(app) as client:
                 preview = client.get("/api/projects/destination", params={"title": "API math"})
                 assert preview.status_code == 200
-                assert preview.json()["path"] == str(managed / "api-math.sigma")
+                assert preview.json()["path"] == str(managed / "api-math.json")
                 body = {
                     "title": "API math",
                     "problem": "A mathematical question",
