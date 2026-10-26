@@ -52,20 +52,20 @@ def main() -> None:
         assert "artifacts/transient.bin" not in list_files(migrated)
         assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
         update_files(migrated, {
-            "research-sessions/second.json": b'{"status":"complete"}',
+            "legacy-data/second.json": b'{"status":"complete"}',
             "artifacts/new-evidence.bin": b"binary\\x00data",
             "research-sessions/session.json": None,
         })
         assert "research-sessions/session.json" not in list_files(migrated)
-        assert read_file(migrated, "research-sessions/second.json") == b'{"status":"complete"}'
+        assert read_file(migrated, "legacy-data/second.json") == b'{"status":"complete"}'
         assert read_file(migrated, "artifacts/new-evidence.bin") == b"binary\\x00data"
         assert read_file(migrated, "project.json") == original_project
         transformed = transform_file(
-            migrated, "research-sessions/second.json",
+            migrated, "legacy-data/second.json",
             lambda previous: previous.replace(b"complete", b"reviewed"),
         )
         assert transformed == b'{"status":"reviewed"}'
-        assert read_file(migrated, "research-sessions/second.json") == transformed
+        assert read_file(migrated, "legacy-data/second.json") == transformed
         assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
         try:
             delete_file(migrated, "project.json")
@@ -123,7 +123,7 @@ def main() -> None:
         imported = root / "imported.json"
         assert import_bundle(read_bundle(migrated), imported) == imported
         assert read_bundle(imported) == read_bundle(migrated)
-        assert read_file(imported, "research-sessions/second.json") == b'{"status":"reviewed"}'
+        assert read_file(imported, "legacy-data/second.json") == b'{"status":"reviewed"}'
         assert read_file(imported, "artifacts/evidence.bin") == original_evidence
         try:
             import_bundle(read_bundle(migrated), imported)
