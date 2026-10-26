@@ -79,6 +79,27 @@ Write a message file for coordinator handoff.
 
 No invented test results. Report skipped, unavailable, or inconclusive verification as such. Screenshots left only under a worker's `/tmp` may be inaccessible to the coordinator; preserve important evidence in an accessible artifact or provide a reproducible command. Distinguish code inspection, automated tests, real-browser exercise, real sandbox execution, and real-provider quality assessment.
 
+## 4A. Messaging process: dispatch, handoff, correction, and closure
+
+**Single routing rule:** The human forwards messages between the ChatGPT coordinator and color-identified Codex sessions. GitHub tickets, PRs, and `messages/` files are the durable record. Writing a message does not dispatch it; a worker's completion claim does not constitute review or merge.
+
+**Coordinator to worker (via human):**
+1. The coordinator names the recipient **color outside** one self-contained, copyable message block. The block begins with the color and ticket/issue ID, identifies the current `main` base and scope, gives observable acceptance criteria, constraints, tests, deliverables, and stop/escalation conditions.
+2. The message must contain this exact sentence: **“Do not coordinate or communicate directly with other Codex workers. Report dependencies, conflicts, and requests for other workers to your ChatGPT coordinator through the human.”**
+3. The human forwards the complete block to that worker's session. Until forwarded, the work is **proposed**, not **assigned** or **started**. The coordinator must not imply the worker received it.
+
+**Worker to coordinator (via human and GitHub):**
+4. The worker works only in its assigned scope and isolated branch. Questions, cross-worker dependencies, conflicts, or requests for scope changes go **back to the coordinator through the human**, never directly to another color.
+5. At completion, the worker opens a PR, writes a `messages/<ticket>_<color>_<topic>.txt` handoff committed to the repository, and links that file in the PR. The handoff names the branch/base/head, actual changes, tests run and results, browser/CLI/provider evidence, any costs, known limitations, and unmet/unverified criteria.
+6. The worker sends a concise **R4R** notice with ticket, PR link/number, head SHA, and message-file path. The human forwards the notice to the coordinator. **R4R means ready for independent review, not approved.**
+
+**Coordinator review and reply:**
+7. The coordinator reads the ticket and subsequent human decisions, the **current** PR diff/head, the message file, and available test evidence. It records substantive requirements as **MET / UNMET / UNVERIFIED** and identifies integration risks.
+8. If corrections are needed, the coordinator gives the human **one complete copyable message addressed to the original color**, with precise changes and retest expectations. The same worker updates the same PR, resolves conflicts against current `main`, updates its handoff, and reports **R4R again**. No worker self-merges.
+9. If review passes, the coordinator merges under its authority, verifies the resulting state, and tells the human the PR number, merge SHA, completed scope, and remaining unverified work. The coordinator arranges combined integration checks when multiple PRs interact. The human retains release signoff.
+
+**State and failure handling:** Use explicit states **PROPOSED → DISPATCHED → IMPLEMENTING → R4R → REVIEW → (CORRECTIONS → R4R)* → MERGED → INTEGRATION VERIFIED**. Distinguish `blocked`, `unverified`, and `not started` from `done`. If the human has not confirmed forwarding, or a worker has not returned evidence, do not assume progress. Never invent executed tests, paid calls, communication, or background activity. Any change in ownership or cross-domain coordination requires a new human-forwarded instruction.
+
 ## 5. Git and PR integration protocol
 
 - Each worker uses an isolated checkout/worktree and a ticket-specific branch targeting `main`.
