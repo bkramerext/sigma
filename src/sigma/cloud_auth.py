@@ -710,14 +710,28 @@ def mock_select(request: Request, identity: str):
     if identity not in (*_MOCK_IDENTITIES, "guest"):
         raise HTTPException(400, "Unknown mock identity")
     old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
+    previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     with _db(cfg) as db:
         if old:
             db.execute("DELETE FROM sessions WHERE token_hash=?", (_hash(old),))
+        if previous_denied:
+            db.execute("DELETE FROM denied_access WHERE token_hash=?", (_hash(previous_denied),))
         response = Response(status_code=204)
         _clear_cookie(response, cfg, SESSION_COOKIE)
+        _clear_cookie(response, cfg, DENIED_COOKIE)
         if identity != "guest":
             email, role = _MOCK_IDENTITIES[identity]
-            if role is not None:
+            if role is None:
+                denied_token = secrets.token_urlsafe(32)
+                db.execute(
+                    "INSERT INTO denied_access(token_hash,email,subject,expires_at) VALUES(?,?,?,?)",
+                    (_hash(denied_token), email, "mock:" + identity, _now() + DENIED_SECONDS),
+                )
+                response.set_cookie(
+                    _cookie_name(DENIED_COOKIE, cfg), denied_token,
+                    **_cookie_options(cfg, DENIED_COOKIE, max_age=DENIED_SECONDS),
+                )
+            else:
                 subject = "mock:" + identity
                 raw = secrets.token_urlsafe(32)
                 db.execute(
@@ -1155,7 +1169,8 @@ def request_invitation(request: Request):
             (now, subject),
         )
     try:
-        _deliver_invitation(identity["email"], requested_at)
+        if not (_mock_enabled(cfg) and str(identity["subject"]).startswith("mock:")):
+            _deliver_invitation(identity["email"], requested_at)
     except RuntimeError as exc:
         with _db(cfg) as db:
             db.execute(
