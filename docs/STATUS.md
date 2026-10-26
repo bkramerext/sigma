@@ -5102,7 +5102,6 @@ The existing production-path offline tests demonstrate durable context assembly,
 Added [issue #119 longitudinal design](evaluations/issue_119/longitudinal-design.md): a proposed six-task-family, three-session, branching-evidence 2×2 factorial separating role organization from history availability, with a full-history single-role comparator receiving equivalent persistent evidence and tools. It specifies continuity, evidence use, branching, negative-result retention, repetition, final-quality, calibration, cost, blinding, and integrity measures. At two repeats/task/condition and two calls/session, the draft would require up to 288 call attempts. This is a small exploratory design (`n=6` task clusters), not frozen or authorized. Tasks, keys, provider/model settings, caps, independent curation/grading, information-equivalence review, and approval remain open.
 
 This was a protocol/design review only: no actual project was exercised, so no project export or browser acceptance artifact applies. No Cloud changes, product changes, or provider calls occurred. `./sigma test` ran through all research continuity, continuation, and feedback scenarios, plus Ruff, formatting, Pyright (0 diagnostics), and frontend typecheck. It exited 1 on the same three T128 mount assertions in `tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`; the frontend production build was skipped after failures. The three focused commands also passed independently: `uv run --locked --no-sync python tests/epistemic_continuity.py`, `tests/continuations.py`, and `tests/research_feedback.py`. `git diff --check` passed. No browser path changed.
-<<<<<<< HEAD
 # T172 — Pre-deployment authentication and account-isolation gate (2026-10-26)
 
 **Readiness: BLOCKED for production launch.** Reviewed integrated T66/PR #169,
@@ -5180,7 +5179,6 @@ passed. The frontend production build was skipped after earlier failures. No
 real-browser check was run because no browser workflow changed; fixture and
 Chrome evidence remains the previously recorded T172 result, not this hosted
 configuration review. `git diff --check` is recorded in the handoff.
-=======
 
 ## T170 — pre-deployment research workflow acceptance (2026-10-26)
 
@@ -5221,4 +5219,3 @@ HTML reports, TeX, and a parsed PDF with hashes. OAuth and inference were
 skipped. No production instance was provided, and T137 remains blocked on
 hosted acceptance and coordinator/owner go-no-go. Work completed in about 24
 minutes, ahead of the 45-minute target.
->>>>>>> 747c7cd (Record T170 research workflow acceptance)
