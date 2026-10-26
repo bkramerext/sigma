@@ -1141,42 +1141,15 @@ def create_project(
     difficulty: str = "medium",
     show_advanced_outcome_details: bool = False,
 ) -> ProjectView:
-    """Reserve a unique project name beneath the configured root."""
-    title, name = _project_name(title)
-    problem = _text(problem, "Research problem", 20000)
-    mode = _research_mode(research_mode)
-    root = projects_root()
-    destination = root / name
-    alternate = destination.with_suffix(".json")
-    if os.path.lexists(alternate):
-        raise ProjectError(f"A project or file already exists at {alternate}; choose another name")
-    # Reject an existing destination before entering initialization. In particular,
-    # never treat a pre-existing file or symlink as an empty project directory.
-    if os.path.lexists(destination):
-        raise ProjectError(f"A project or file already exists at {destination}; choose another name")
-    with _title_registry_lock(root):
-        _require_available_title(title, root)
-        try:
-            view = initialize_project(
-                destination,
-                title,
-                problem,
-                mode,
-                ai_model,
-                reasoning_effort,
-                difficulty,
-                show_advanced_outcome_details,
-            )
-            from sigma.recents import record_access
+    """Create a single-file JSON project by default.
 
-            record_access(view)
-            return view
-        except FileExistsError as exc:
-            raise ProjectError(
-                f"A project or file already exists at {destination}; choose another name"
-            ) from exc
-        except OSError as exc:
-            raise ProjectError(f"Cannot create project: {exc}") from exc
+    Existing directory-backed projects remain readable and writable through
+    their paths; only newly created projects use the portable bundle format.
+    """
+    return create_json_project(
+        title, problem, research_mode, ai_model, reasoning_effort,
+        difficulty, show_advanced_outcome_details,
+    )
 
 
 def change_stage(value: str | Path, strategy_id: str, stage: str) -> ProjectView:
