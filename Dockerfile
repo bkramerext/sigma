@@ -8,6 +8,8 @@ RUN tar -xzf /tmp/tectonic.tar.gz -C /usr/local/bin tectonic \
     && chmod 0755 /usr/local/bin/tectonic \
     && rm /tmp/tectonic.tar.gz
 FROM python:3.12.8-slim@sha256:2199a62885a12290dc9c5be3ca0681d367576ab7bf037da120e564723292a2f0
+ARG SIGMA_RELEASE
+LABEL org.opencontainers.image.revision="${SIGMA_RELEASE}"
 
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_LINK_MODE=copy \
