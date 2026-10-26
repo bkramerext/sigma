@@ -2785,7 +2785,7 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills"><MockAuthSelector/>{cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
             {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
@@ -3576,6 +3576,37 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
   </main>;
 }
 
+
+function MockAuthSelector() {
+  const cloud = useCloudIdentity();
+  const [busy, setBusy] = useState(false);
+  if (!(cloud as any)?.mock_auth) return null;
+  async function select(identity: string) {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/cloud-auth/mock/select?identity=' + encodeURIComponent(identity), {
+        method: 'POST', credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error('Mock identity switch failed: ' + response.status);
+      window.localStorage.removeItem('sigma.currentProject');
+      window.location.assign('/');
+    } catch (error) {
+      window.alert(errorMessage(error));
+      setBusy(false);
+    }
+  }
+  return <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+    <strong>MOCK AUTH · LOCAL ONLY</strong>
+    <select aria-label="Mock authentication identity" disabled={busy} defaultValue="" onChange={event => void select(event.target.value)}>
+      <option value="" disabled>Switch identity…</option>
+      <option value="guest">Guest</option>
+      <option value="member-a">Member A</option>
+      <option value="member-b">Member B</option>
+      <option value="admin">Administrator</option>
+      <option value="uninvited">Uninvited</option>
+    </select>
+  </label>;
+}
 
 function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const cloud = useCloudIdentity();
