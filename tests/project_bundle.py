@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from sigma.project_bundle import BundleError, encode, migrate, read_file, restore, snapshot, write_file
+from sigma.project_bundle import BundleError, delete_file, encode, list_files, migrate, read_file, restore, snapshot, write_file
 
 
 def main() -> None:
@@ -44,6 +44,18 @@ def main() -> None:
         else:
             raise AssertionError("Unsafe member path accepted")
         assert not (root / "escape").exists()
+        assert "artifacts/evidence.bin" in list_files(migrated)
+        write_file(migrated, "artifacts/transient.bin", b"temporary")
+        assert "artifacts/transient.bin" in list_files(migrated)
+        delete_file(migrated, "artifacts/transient.bin")
+        assert "artifacts/transient.bin" not in list_files(migrated)
+        assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
+        try:
+            delete_file(migrated, "project.json")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Deleted mandatory project document")
 
         destination = root / "restored.sigma"
         restore(bundle, destination)
