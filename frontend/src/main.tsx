@@ -1995,7 +1995,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
     </div>
-    <small className="about-build-commit">Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
+    <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog>;
 }
 
