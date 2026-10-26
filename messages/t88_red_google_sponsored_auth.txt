@@ -3,8 +3,8 @@ T88 R4R handoff — Red
 Issue: https://github.com/bkramerext/sigma/issues/88
 Base: main at 2c409e6b4e045e75a84b369c12f545cb8a969e32
 Branch: red/t88-google-sponsored-auth
-PR: pending publication
-Commit: pending final commit
+PR: https://github.com/bkramerext/sigma/pull/214
+Commit: 0497aeec661d9e099cae039362aa84116cf3861a
 
 Implementation
 

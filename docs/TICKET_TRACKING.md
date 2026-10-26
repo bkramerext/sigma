@@ -53,7 +53,7 @@
 | T91.2 | Packaged real-PDF and disaster-recovery acceptance | R4R · [PR #113](https://github.com/bkramerext/sigma/pull/113) · [ticket](../tickets/t91.2.md) · [evidence](evaluations/t91.2/README.md) | Gray |
 | T99.1 | Pre-cloud sponsored inference API and spending acceptance | Implemented; R4R · [PR #110](https://github.com/bkramerext/sigma/pull/110) · [ticket](../tickets/t99.1.md) | Blue |
 | T22.2 | Google authentication and invited access | Merged to main at `24ca812` ([PR #37](https://github.com/bkramerext/sigma/pull/37)) | Red |
-| T88 | Google user sign-in with SIGMA-sponsored ChatGPT inference | Implemented; R4R · [ticket](../tickets/t88.md) · [handoff](../messages/t88_red_google_sponsored_auth.txt) | Red |
+| T88 | Google user sign-in with SIGMA-sponsored ChatGPT inference | Implemented; R4R · [PR #214](https://github.com/bkramerext/sigma/pull/214) · [ticket](../tickets/t88.md) · [handoff](../messages/t88_red_google_sponsored_auth.txt) | Red |
 | T23 | Project difficulty setting | Done | [PR #6](https://github.com/bkramerext/sigma/pull/6) |
 | T23.1 | Upper-right 2×2 model/Google sign-in and thinking/ChatGPT sign-in pills; cost signs | Original implementation merged in PR #12; local Google-pill acceptance follow-up in review | Blue |
 | T24 | Outcome metrics and provenance *data* (no presentation table) | Merged, engineering done | Green · ChatGPT authored ticket · [PR #13](https://github.com/bkramerext/sigma/pull/13) |
