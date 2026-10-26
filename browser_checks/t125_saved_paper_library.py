@@ -175,32 +175,24 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             page.get_by_role("button", name="LaTeX research paper").click()
             dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
             expect(dialog).to_be_visible()
-            row = dialog.locator(f'li[data-paper-id="{identifiers[0]}"]')
-            expect(row.get_by_role("button", name="Saved fixture 1")).to_be_visible()
-            expect(row).to_contain_text("Saved 10/25/2026")
-            expect(row.get_by_role("link", name="Download .txt")).to_be_visible()
-            expect(row.get_by_role("link", name="Download .pdf")).to_be_visible()
-            open_link = row.get_by_role("link", name="Open .pdf in browser")
+            row = dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
+            expect(row.get_by_role("button", name="Expand saved paper: Saved fixture 1")).to_be_visible()
+            expect(row).to_contain_text("Version 2")
+            expect(row.get_by_role("link", name="Download text file")).to_be_visible()
+            expect(row.get_by_role("link", name="Download PDF")).to_be_visible()
+            open_link = row.get_by_role("link", name="Open PDF in browser")
             expect(open_link).to_have_attribute("target", "_blank")
-            details = row.locator("details.ai-paper-html-details")
-            expect(details).not_to_have_attribute("open", "")
-            details.locator("summary").click()
-            expect(details.locator("article.ai-paper-document")).to_contain_text("Saved section")
-            expect(details.locator("article.ai-paper-document")).to_contain_text(
-                "<script>window.__paperXss = true</script>"
-            )
-            assert (
-                details.locator(
-                    "article.ai-paper-document script, article.ai-paper-document img"
-                ).count()
-                == 0
-            )
+            preview = row.locator(".ai-paper-preview")
+            expect(preview).to_be_hidden()
+            row.get_by_role("button", name="Expand saved paper: Saved fixture 1").click()
+            expect(preview).to_be_visible()
+            expect(preview).to_contain_text("Saved section")
+            expect(preview).to_contain_text("<script>window.__paperXss = true</script>")
+            assert preview.locator("script, img").count() == 0
             assert page.evaluate("window.__paperXss ?? false") is False
-            details.locator("summary").click()
-            expect(details.locator("article.ai-paper-document")).to_be_hidden()
 
             with page.expect_download() as download_info:
-                row.get_by_role("link", name="Download .txt").click()
+                row.get_by_role("link", name="Download text file").click()
             text_download = download_info.value
             text_content = Path(text_download.path()).read_text(encoding="utf-8")
             assert (
@@ -209,7 +201,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             )
 
             with page.expect_download() as download_info:
-                row.get_by_role("link", name="Download .pdf").click()
+                row.get_by_role("link", name="Download PDF").click()
             pdf_download = download_info.value
             assert Path(pdf_download.path()).read_bytes() == pdf_bytes
 
@@ -230,7 +222,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             confirmation = row.get_by_role("group", name="Confirm removal of Saved fixture 1")
             expect(confirmation).to_be_visible()
             expect(confirmation).to_contain_text(
-                "Other versions, project history and strategies will remain"
+                "Other versions and research history will remain"
             )
             confirmation.get_by_role("button", name="Cancel").click()
             expect(row).to_be_visible()
@@ -238,18 +230,18 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             row.get_by_role("group", name="Confirm removal of Saved fixture 1").get_by_role(
                 "button", name="Confirm remove"
             ).click()
-            expect(dialog.locator(f'li[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
-            expect(dialog.locator(f'li[data-paper-id="{identifiers[1]}"]')).to_have_count(1)
+            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
+            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')).to_have_count(1)
             assert not (project_path / "papers" / f"{identifiers[0]}.json").exists()
             assert not (project_path / "papers" / f"{identifiers[0]}.pdf").exists()
             assert (project_path / "papers" / f"{identifiers[1]}.json").exists()
             assert (project_path / "papers" / f"{identifiers[1]}.pdf").exists()
 
             page.set_viewport_size({"width": 390, "height": 844})
-            second_row = dialog.locator(f'li[data-paper-id="{identifiers[1]}"]')
-            expect(second_row.get_by_role("link", name="Download .txt")).to_be_visible()
-            expect(second_row.get_by_role("link", name="Open .pdf in browser")).to_be_visible()
-            expect(dialog.locator(f'li[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
+            second_row = dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')
+            expect(second_row.get_by_role("link", name="Download text file")).to_be_visible()
+            expect(second_row.get_by_role("link", name="Open PDF in browser")).to_be_visible()
+            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
             assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             page.screenshot(path="/tmp/sigma-t125-paper-library-mobile.png", full_page=True)
             assert not generation_posts, generation_posts
@@ -262,5 +254,5 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
         api.wait(timeout=10)
 
 print(
-    "T125 real Chrome saved-paper actions, PDF headers/payload, safe HTML, confirmation, removal, and mobile checks passed"
+    "T125 real Chrome saved-paper text/PDF downloads, escaped preview, confirmation, removal, and mobile checks passed"
 )
