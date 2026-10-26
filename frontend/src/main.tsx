@@ -3533,7 +3533,7 @@ function App() {
   </main><FloatingTooltip/></>;
 }
 
-type CloudStatus = { target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
+type CloudStatus = { mock_auth?: boolean; target?: 'local' | 'hosted'; enabled: boolean; ready: boolean; authenticated: boolean; user: { email: string; role: string } | null; account?: { identity: { email: string; verified: boolean }; access: { status: string; role: string }; workspace: { available: boolean; id: string | null }; model_access: { mode: string; connection: string }; sponsorship: { eligible: boolean } } | null; admin_contact_email: string | null; local_setup_missing?: string[] };
 type CloudGrant = { kind: string; value: string; role: string; active: number; allowance_usd: number | null; effective_allowance_usd: number | null };
 type CloudAccountSession = { email: string; role: string; authorized: boolean; status: string; expires_at: number | null; allowance_usd: number | null; spending?: { estimated_usage_usd: number; held_usd: number; reserved_and_estimated_usd: number; remaining_usd: number | null } };
 type CloudFunding = { target: 'local' | 'hosted'; authenticationEnabled: boolean; budget: CloudResearchBudget | null; loading: boolean; error: string | null; authorized: boolean; provider: { status: string; guidance: string } | null; providerLoading: boolean; providerError: string | null; retryProvider: () => Promise<void>; selectedConnection: 'personal' | 'sponsored'; selectConnection: (mode: 'personal' | 'sponsored') => Promise<void>; connectionError: string | null; selectingConnection: boolean };
@@ -3580,7 +3580,7 @@ function CloudDemoExperience({ deniedEmail, authenticated, user }: { deniedEmail
 function MockAuthSelector() {
   const cloud = useCloudIdentity();
   const [busy, setBusy] = useState(false);
-  if (!(cloud as any)?.mock_auth) return null;
+  if (!cloud?.mock_auth) return null;
   async function select(identity: string) {
     setBusy(true);
     try {
@@ -3589,7 +3589,7 @@ function MockAuthSelector() {
       });
       if (!response.ok) throw new Error('Mock identity switch failed: ' + response.status);
       window.localStorage.removeItem('sigma.currentProject');
-      window.location.assign('/');
+      window.location.assign(identity === 'uninvited' ? '/?access=denied' : '/');
     } catch (error) {
       window.alert(errorMessage(error));
       setBusy(false);
