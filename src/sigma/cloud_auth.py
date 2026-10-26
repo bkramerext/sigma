@@ -126,7 +126,7 @@ def config() -> Config:
     admin_contact = os.environ.get("SIGMA_CLOUD_ADMIN_CONTACT_EMAIL", "").strip()
     root = os.environ.get("SIGMA_CLOUD_AUTH_HOME", "").strip()
     error = "Cloud authentication secret configuration is invalid." if secret_error else None
-    if not client_id or not client_secret or not origin or not root or not admin_contact:
+    if not origin or not root or (not local and (not client_id or not client_secret or not admin_contact)):
         error = "Cloud authentication is enabled but required configuration is missing."
     parsed = urlsplit(origin or "")
     try:
@@ -155,7 +155,7 @@ def config() -> Config:
     database = None
     if not error:
         try:
-            admin_contact = _normalize_email(admin_contact)
+            admin_contact = _normalize_email(admin_contact) if admin_contact else None
             path = Path(root)
             if not path.is_absolute():
                 raise ValueError
@@ -473,6 +473,14 @@ def _sync_user_state_in_db(db: sqlite3.Connection, cfg: Config) -> None:
 
 def resolve_session(raw: str | None) -> Principal | None:
     cfg = config()
+    if (
+        cfg.enabled
+        and cfg.local
+        and not cfg.error
+        and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
+        and cfg.admin_contact_email
+    ):
+        return Principal("local-admin:" + cfg.admin_contact_email, cfg.admin_contact_email, "admin")
     if not cfg.enabled or cfg.error or not raw or len(raw) > 128:
         return None
     with _db(cfg) as db:
