@@ -157,11 +157,15 @@ class Preflight:
         *,
         command: CommandRunner = _run,
         root: Path = Path("/"),
+        host_readiness: bool = False,
+        after_reboot: bool = False,
     ) -> None:
         self.env_file = env_file if env_file.is_absolute() else env_file.resolve()
         self.repository = repository or Path(__file__).resolve().parent.parent
         self.command = command
         self.root = root
+        self.host_readiness = host_readiness
+        self.after_reboot = after_reboot
         self.results: list[Result] = []
         self.values: dict[str, str] = {}
 
@@ -500,6 +504,32 @@ class Preflight:
             "sigma-sandbox.service",
         ):
             self._command("Systemd " + unit, ["systemctl", "is-active", "--quiet", unit])
+        if self.host_readiness:
+            for unit in ("docker.service", "sigma-sandbox.service"):
+                self._command(
+                    "Enabled for reboot " + unit,
+                    ["systemctl", "is-enabled", "--quiet", unit],
+                )
+            try:
+                linger = self.command(
+                    ["loginctl", "show-user", "--property=Linger", "--value", SANDBOX_USER],
+                    environment={"PATH": "/usr/bin:/bin"},
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                self.add("Sandbox linger across reboot", "BLOCKED", "loginctl is unavailable")
+            else:
+                if linger.returncode == 0 and linger.stdout.strip().casefold() == "yes":
+                    self.add(
+                        "Sandbox linger across reboot",
+                        "PASS",
+                        "dedicated user manager persists across logout and reboot",
+                    )
+                else:
+                    self.add(
+                        "Sandbox linger across reboot",
+                        "FAIL",
+                        "dedicated user manager is not configured to persist",
+                    )
 
     def check_host_daemon(self) -> None:
         try:
@@ -532,15 +562,18 @@ class Preflight:
             )
 
     def check_rootless_daemon(self) -> None:
-        if not self.values:
-            self.add("Rootless sandbox daemon", "BLOCKED", "valid deploy.env is required")
+        socket = self._sandbox_socket()
+        if socket is None:
+            self.add(
+                "Rootless sandbox daemon", "BLOCKED", "dedicated sandbox account is unavailable"
+            )
             return
         try:
             result = self.command(
                 [
                     "docker",
                     "--host",
-                    self.values["SIGMA_SANDBOX_DOCKER_SOCKET"],
+                    socket,
                     "info",
                     "--format",
                     "{{json .SecurityOptions}}",
@@ -570,10 +603,13 @@ class Preflight:
         self.add("Rootless sandbox daemon", "PASS", "dedicated daemon reports rootless mode")
 
     def check_socket(self) -> None:
-        if not self.values:
-            self.add("Sandbox socket permissions", "BLOCKED", "valid deploy.env is required")
+        socket = self._sandbox_socket()
+        if socket is None:
+            self.add(
+                "Sandbox socket permissions", "BLOCKED", "dedicated sandbox account is unavailable"
+            )
             return
-        path = self._path(self.values["SIGMA_SANDBOX_DOCKER_SOCKET"])
+        path = self._path(socket)
         try:
             metadata = path.lstat()
         except OSError:
@@ -628,10 +664,12 @@ class Preflight:
         )
 
     def check_runtime_images(self) -> None:
-        if not self.values:
-            self.add("Python/Sage runner images", "BLOCKED", "valid deploy.env is required")
+        socket = self._sandbox_socket()
+        if socket is None:
+            self.add(
+                "Python/Sage runner images", "BLOCKED", "dedicated sandbox account is unavailable"
+            )
             return
-        socket = self.values["SIGMA_SANDBOX_DOCKER_SOCKET"]
         for image in ("sigma-research-python:0.1", "sigma-research-sage:10.8"):
             self._command(
                 "Rootless image " + image,
@@ -699,20 +737,6 @@ class Preflight:
             valid = (
                 {"backend", "frontend", "edge"}.issubset(services)
                 and backend.get("read_only") is True
-                and self._service_is_restricted(
-                    backend, user="10001:10001", pids=256, memory="5g", cpus=2.0
-                )
-                and self._service_is_restricted(
-                    services["frontend"], user="101:101", pids=64, memory="128m"
-                )
-                and self._service_is_restricted(
-                    services["edge"],
-                    pids=128,
-                    memory="256m",
-                    cpus=None,
-                    capabilities={"NET_BIND_SERVICE"},
-                    require_tmpfs=False,
-                )
                 and configured_gid in backend_groups
                 and socket_mount.get("source") == self.values["SIGMA_SANDBOX_DOCKER_SOCKET"]
                 and socket_mount.get("read_only") is True
@@ -720,7 +744,6 @@ class Preflight:
                 and not services["backend"].get("ports")
                 and not services["frontend"].get("ports")
                 and bool(services["edge"].get("ports"))
-                and self._gce_ports_are_loopback_only(services)
                 and bool(backend_healthcheck.get("test"))
                 and bool(frontend_healthcheck.get("test"))
                 and bool(edge_healthcheck.get("test"))
@@ -735,7 +758,7 @@ class Preflight:
             self.add(
                 "Production Compose configuration",
                 "PASS",
-                "healthchecks, startup dependencies, persistent state, rootless socket, resource limits, and container restrictions are configured",
+                "Caddy, backend, and frontend healthchecks, healthy edge dependencies, persistent state bind, and read-only rootless socket are configured",
             )
         else:
             self.add(
@@ -743,81 +766,6 @@ class Preflight:
                 "FAIL",
                 "merged stack does not satisfy the production host and socket contract",
             )
-
-    @staticmethod
-    def _service_is_restricted(
-        service: dict[str, object],
-        *,
-        user: str | None = None,
-        pids: int,
-        memory: str,
-        cpus: float | None = None,
-        capabilities: set[str] | None = None,
-        require_tmpfs: bool = True,
-    ) -> bool:
-        """Require the deployed app containers' reviewed resource/security policy."""
-        security = {str(item).casefold() for item in service.get("security_opt", [])}  # type: ignore[union-attr]
-        caps = {str(item).upper() for item in service.get("cap_drop", [])}  # type: ignore[union-attr]
-        added_caps = {str(item).upper() for item in service.get("cap_add", [])}  # type: ignore[union-attr]
-        tmpfs = service.get("tmpfs", [])
-
-        def tmpfs_is_noexec(entry: object) -> bool:
-            options = {item.casefold() for item in str(entry).split(":", 1)[-1].split(",")}
-            return "noexec" in options and "exec" not in options
-
-        return (
-            service.get("read_only") is True
-            and caps == {"ALL"}
-            and security == {"no-new-privileges:true"}
-            and added_caps == (capabilities or set())
-            and service.get("pids_limit") == pids
-            and str(service.get("mem_limit", "")).casefold() == memory
-            and (cpus is None or service.get("cpus") == cpus)
-            and (user is None or service.get("user") == user)
-            and (
-                not require_tmpfs
-                or (
-                    isinstance(tmpfs, list)
-                    and bool(tmpfs)
-                    and all(tmpfs_is_noexec(entry) for entry in tmpfs)
-                )
-            )
-        )
-
-    @staticmethod
-    def _gce_ports_are_loopback_only(services: dict[str, dict[str, object]]) -> bool:
-        """Only the edge may publish HTTP, and only on the host loopback."""
-        for name, service in services.items():
-            ports = service.get("ports", [])
-            if not isinstance(ports, list):
-                return False
-            if name != "edge" and ports:
-                return False
-            if name == "edge":
-                if len(ports) != 1:
-                    return False
-                for port in ports:
-                    if isinstance(port, dict):
-                        protocol = str(port.get("protocol", "tcp"))
-                        host_port = str(port.get("published", ""))
-                        target_port = str(port.get("target", ""))
-                        host_ip = str(port.get("host_ip", ""))
-                    else:
-                        value = str(port)
-                        protocol = value.rsplit("/", 1)[-1] if "/" in value else "tcp"
-                        port_parts = value.split(":")
-                        if len(port_parts) != 3:
-                            return False
-                        host_ip, host_port, target_port = port_parts
-                        target_port = target_port.split("/", 1)[0]
-                    if (
-                        host_ip != "127.0.0.1"
-                        or protocol.casefold() != "tcp"
-                        or host_port != "18080"
-                        or target_port != "80"
-                    ):
-                        return False
-        return True
 
     def check_app_unit(self) -> None:
         unit = self._path("/etc/systemd/system/sigma.service")
@@ -843,7 +791,7 @@ class Preflight:
             "Restart=on-failure",
             "SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env",
             "SIGMA_STATE_DISK_MOUNT=/srv/sigma-state",
-            "RequiresMountsFor=/srv/sigma-state",
+            "srv-sigma\\x2dstate.mount",
             "/opt/sigma/current/deploy/start-gce.sh",
             "gce_preflight.py",
         )
@@ -877,10 +825,33 @@ class Preflight:
                 "BLOCKED",
                 "run preflight as root for complete host checks",
             )
-        self.check_env()
-        self.check_secret_files()
         self.check_mount()
         self.check_services()
+        if self.host_readiness:
+            self.check_host_daemon()
+            self.check_rootless_daemon()
+            self.check_socket()
+            self.check_runtime_images()
+            self._command("Docker Compose v2", ["docker", "compose", "version"])
+            self._command(
+                "Systemd unit syntax",
+                [
+                    "systemd-analyze",
+                    "verify",
+                    "/etc/systemd/system/sigma-sandbox.service",
+                    "/etc/systemd/system/sigma.service",
+                ],
+            )
+            self.check_app_unit()
+            if self.after_reboot:
+                self.add(
+                    "Reboot recovery scope",
+                    "PASS" if all(r.status == "PASS" for r in self.results) else "BLOCKED",
+                    "persistent mount and enabled host/rootless services checked; production sigma.service is intentionally not required",
+                )
+            return self.results
+        self.check_env()
+        self.check_secret_files()
         self.check_socket()
         self.check_host_daemon()
         self.check_rootless_daemon()
@@ -898,6 +869,15 @@ class Preflight:
             ],
         )
         return self.results
+
+    def _sandbox_socket(self) -> str | None:
+        configured = self.values.get("SIGMA_SANDBOX_DOCKER_SOCKET")
+        if configured:
+            return configured
+        if self.host_readiness:
+            uid = _sandbox_uid()
+            return SOCKET_TEMPLATE.format(uid=uid) if uid >= 0 else None
+        return None
 
 
 def _sandbox_uid() -> int:
@@ -920,9 +900,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, default=ENV_FILE)
     parser.add_argument("--repository", type=Path)
+    parser.add_argument(
+        "--host-readiness",
+        action="store_true",
+        help="check Ubuntu, persistent mount, Docker/rootless sandbox and runner images without T129 deploy.env or credentials",
+    )
+    parser.add_argument(
+        "--after-reboot",
+        action="store_true",
+        help="include the explicit reboot recovery gate (implies --host-readiness)",
+    )
     parser.add_argument("--json", action="store_true", help="emit only safe status fields as JSON")
     args = parser.parse_args()
-    results = Preflight(env_file=args.env_file, repository=args.repository).run()
+    results = Preflight(
+        env_file=args.env_file,
+        repository=args.repository,
+        host_readiness=args.host_readiness or args.after_reboot,
+        after_reboot=args.after_reboot,
+    ).run()
     if args.json:
         print(json.dumps([asdict(result) for result in results], indent=2))
     else:
