@@ -2656,6 +2656,13 @@ def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     return limits
 
 
+def _worker_lock_path(path: str, session_id: str) -> Path:
+    project = project_path(path)
+    if project.suffix == ".json":
+        return project.with_name(f".{project.name}.{session_id}.worker.lock")
+    return _directory(path) / f"{session_id}.worker.lock"
+
+
 def _lock(directory: Path):
     fd = os.open(directory / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     return os.fdopen(fd, "r+")
@@ -3013,8 +3020,7 @@ def _recover(record: dict[str, Any]) -> dict[str, Any]:
     # replayed automatically; _recover below records them as interrupted.
     if record["status"] == "queued" and cloud_workspaces.enabled():
         return record
-    directory = _directory(record["project_path"])
-    lock_path = directory / f"{record['id']}.worker.lock"
+    lock_path = _worker_lock_path(record["project_path"], record["id"])
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         try:
@@ -8229,7 +8235,7 @@ async def _claim_cloud_job(session_id: str, path: str) -> bool:
 
 
 async def _worker(session_id: str, path: str) -> None:
-    worker_lock = _directory(path) / f"{session_id}.worker.lock"
+    worker_lock = _worker_lock_path(path, session_id)
     worker_fd = os.open(worker_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     role: str | None = None
     try:
