@@ -1,5 +1,40 @@
 # SIGMA status
 
+## T43.2 / issue #66 multi-account sign-in acceptance (2026-10-25)
+
+Reviewed the full issue and current Google OIDC and ChatGPT SIWC implementations.
+Added a deterministic ChatGPT regression with two distinct verified fixture
+subjects and email labels: connecting/selecting accounts, disconnecting the
+active account without clearing the other account's tokens, selecting the
+retained account, and reconnecting the first identity in place. Extended the
+isolated real-Chrome ChatGPT fixture flow to add a second identity, confirm its
+active label after reload, and switch back to the first identity. The fixture
+reports zero inference calls and scans browser output for credential-shaped
+strings. Existing T131 Chrome coverage separately verifies Google A→B fixture
+sign-in, reload, logout, rejected identity, and isolated project workspaces.
+
+Executed Chrome checks used simulated identities and provider callbacks. They
+are not real Google OAuth, real ChatGPT OAuth, or hosted acceptance. The full
+Google A/B × ChatGPT A/B identity cross-product, Google/ChatGPT sign-out
+interaction with distinct approved live identities, and hosted OAuth callback
+remain UNVERIFIED. Hosted personal ChatGPT authorization remains blocked by
+policy and must not be enabled. The hosted-mode API test continues to assert
+the 403 guard; local and hosted identity boundaries remain separate.
+
+`uv run --locked --no-sync python tests/chatgpt.py` passed. Real Chrome passed
+`browser_checks/chatgpt.py` against its isolated SIWC fixture and
+`browser_checks/t23_1_google_signin.py` against its self-started Google fixture.
+`./sigma test` ran on current main before edits and again with this change; both
+runs report the same three pre-existing failures in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
+they expect the previous `srv-sigma\\x2dstate.mount` dependency while current
+main's systemd unit uses `RequiresMountsFor=/srv/sigma-state`. No auth tests
+failed; Ruff, Pyright (0 diagnostics), and frontend typecheck passed. The suite
+skipped its frontend build after the deployment failures; `npm --prefix frontend
+run build` passed separately with the existing chunk-size advisory. See
+[T43.2 handoff](../messages/t43_2_gray_multi_account.txt) and
+[PR #PENDING](https://github.com/bkramerext/sigma/pulls).
+
 ## T146 Increment 22 authorized live comparison (2026-10-26)
 
 Executed the one owner-authorized OpenAI API comparison after a successful
