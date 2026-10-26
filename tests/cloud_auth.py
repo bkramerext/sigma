@@ -211,7 +211,7 @@ class CloudAuthTests(TestCase):
             self.assertEqual(self.client.post(
                 "/api/cloud-auth/mock/select", params={"identity": "member-a"},
                 headers=origin,
-            ).status_code, 200)
+            ).status_code, 204)
             created = self.client.post(
                 "/api/projects/create",
                 json={"title": "Research fixture", "problem": "Test mock research."},
@@ -473,12 +473,16 @@ class CloudAuthTests(TestCase):
                     headers={"Origin": "http://evil.example"},
                 ).status_code, 403,
             )
-            self.assertEqual(
-                self.client.post(
-                    "/api/cloud-auth/mock/select?identity=admin",
-                    headers={"Origin": "http://127.0.0.1:5173"},
-                ).status_code, 403,
-            )
+            # A remote ASGI peer must be rejected even with an allowed Origin.
+            from fastapi.testclient import TestClient
+            with TestClient(app, base_url="http://remote.example",
+                            client=("198.51.100.8", 12345)) as remote:
+                self.assertEqual(
+                    remote.post(
+                        "/api/cloud-auth/mock/select?identity=admin",
+                        headers={"Origin": "http://127.0.0.1:5173"},
+                    ).status_code, 403,
+                )
 
     def start_flow(self, client=None):
         client = client or self.client
@@ -1427,7 +1431,7 @@ class CloudAuthTests(TestCase):
         headers = {"Origin": ORIGIN, "Content-Type": "application/json"}
         with patch("sigma.api.cloud_research.snapshot", return_value={"remaining_usd": 1.25}):
             selected = self.client.post("/api/ai/mode", json={"mode": "sponsored"}, headers=headers)
-        self.assertEqual(selected.status_code, 204, selected.text)
+        self.assertEqual(selected.status_code, 200, selected.text)
         self.assertEqual(selected.json()["mode"], "api_key")
         self.assertEqual(
             self.client.get("/api/cloud-auth/status").json()["account"]["model_access"]["mode"],
