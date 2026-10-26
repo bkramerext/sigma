@@ -1,9 +1,10 @@
 GREEN — Issue #209 R4R
 
-Base: origin/main at 9fa49e6d8aca477890aaf115efaf586bc6a83cde
+Base: origin/main at 6bab28f39349ec4696c19cb782bbf24740f8a130 (Gray PR #212)
 Branch: green/issue-209-current-understanding-strategy
 Worktree: /Users/admin/sigma_issue209
 PR: https://github.com/bkramerext/sigma/pull/213
+Reconciled head: aa8416e6c315fa303f4534bab120c0d084aab487 (merge of current main)
 
 Implemented an explicitly requested, single-response strategy suggestion inside
 Current Understanding. The context includes the project question, the bounded
@@ -30,11 +31,14 @@ Requirement disposition:
   strategy input, no-new-strategy, nonmutation, and legacy proposal route 404.
 - MET by real Chrome with the strategy suggestion endpoint mocked: button
   interaction, collapsible Markdown content, copied clipboard text, no dialog,
-  and unchanged project strategy count. No real provider call was made.
+  unchanged project strategy count, copper heading, visible chevron,
+  default-expanded disclosure, and session-count placement. No real provider
+  call was made.
 - UNVERIFIED: full existing Current Understanding evidence-navigation/browser
-  check. It failed later at its artifact-focus assertion (line 280), after the
+  check. It failed later at its artifact-focus assertion (line 314), after the
   new suggestion assertions had passed. The saved project/API data and browser
-  export portion were not completed.
+  export portion were not completed. Gray's focused header-only Chrome mode
+  passed on the reconciled branch.
 - UNVERIFIED: real-provider suggestion quality; no provider calls or costs.
 
 Checks actually run:
@@ -43,16 +47,23 @@ Checks actually run:
   strategy inclusion, duplicate suppression, a null/no-new-strategy result,
   provider failures, and project nonmutation.
 - Focused Ruff check and format, Pyright (0 diagnostics), frontend typecheck,
-  and `npm --prefix frontend run build` — passed.
+  and `npm --prefix frontend run build` — passed after reconciling with Gray
+  PR #212. The build reports the existing >500 kB chunk-size advisory.
 - Final `./sigma test` run — all scenarios passed; command exited 1 at
   repository-wide Ruff checks on unchanged `browser_checks/model_availability.py`
-  (B023 loop closure and formatting). The runner skipped frontend build after
-  Ruff; `npm --prefix frontend run build` passed separately. One earlier full
-  run had a nonzero `tests/research_sessions.py`; standalone rerun and the
-  final full run passed.
+  (B023 loop closure and formatting). Pyright and frontend typecheck passed
+  within the run; it skipped frontend build after Ruff, and the separate
+  `npm --prefix frontend run build` passed. `tests/research_sessions.py` passed
+  in this full run. `browser_checks/model_availability.py` is identical to the
+  current main version.
 - `uv run --with playwright python browser_checks/current_understanding.py` —
   exercised the new Chrome interaction successfully, then exited 1 at the
   existing evidence-focus assertion described above.
+- `SIGMA_CURRENT_UNDERSTANDING_HEADER_ONLY=1 ... python
+  browser_checks/current_understanding.py` — focused Gray header/count/layout
+  and strategy interaction assertions passed in real Chrome (mock suggestion
+  endpoint; 1440/390/320px).
 
 No live OpenAI request, paid provider usage, credentials, or external project
-data were used. No PR conflicts or dependencies are known.
+data were used. The only integration conflict was resolved in the ticket branch;
+the PR is ready for review (R4R) and has not been merged.

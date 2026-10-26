@@ -440,6 +440,11 @@ assert all(
     )
 )
 (EXPORTS / "CURRENT_STATE_MANIFEST.json").write_text(json.dumps(export_manifest, indent=2))
-print(
-    "PASS real Chrome: current understanding heading, visible chevron, default-expanded native disclosure, no redundant session count, copy-only Markdown suggestion (provider endpoint mocked), exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
-)
+if header_only:
+    print(
+        "PASS real Chrome: current understanding heading, visible chevron, default-expanded native disclosure, no redundant session count, copy-only Markdown suggestion (provider endpoint mocked), 1440/390/320px layout, no real provider work"
+    )
+else:
+    print(
+        "PASS real Chrome: current understanding heading, visible chevron, default-expanded native disclosure, no redundant session count, copy-only Markdown suggestion (provider endpoint mocked), exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
+    )
