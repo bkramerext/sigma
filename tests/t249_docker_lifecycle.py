@@ -20,7 +20,11 @@ async def verify():
         original_root = projects.projects_root
         projects.projects_root = lambda: root
         try:
-            project = create_json_project("T249 Docker verification", "Validate durable sandbox execution")
+            from uuid import uuid4
+            project = create_json_project(
+                f"T249 Docker verification {uuid4().hex[:12]}",
+                "Validate durable sandbox execution",
+            )
             path = Path(project.path)
             source = "print('T249_DOCKER_EXECUTION_OK')"
             first = await execute_research_code(path, source)
