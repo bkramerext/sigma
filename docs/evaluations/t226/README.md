@@ -1,6 +1,6 @@
 # T226 rendered UI audit
 
-Audit performed on `gray/t226-ui-consistency`, based on `main` `c6a14de` and the draft `docs/UI_GUIDELINES.md`. Screens were inspected in the local browser using the stock Nonconsecutive Subset Sums sample and synthetic API failures only. No provider was called and no research content was generated or saved.
+Audit performed on `gray/t226-ui-consistency`, based on current `main` `90fab8c` and the draft `docs/UI_GUIDELINES.md`. Screens were inspected in the local browser using the stock Nonconsecutive Subset Sums sample and synthetic API failures only. No provider was called and no research content was generated or saved.
 
 ## Candidate dispositions
 
