@@ -3582,26 +3582,16 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const disclosure = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    const openFromGuestPrompt = () => { setError(''); setPosition(null); setOpen(true); };
+    const openFromGuestPrompt = () => { setError(''); setOpen(true); };
     window.addEventListener('sigma-open-google-signin', openFromGuestPrompt);
     return () => window.removeEventListener('sigma-open-google-signin', openFromGuestPrompt);
   }, []);
   useEffect(() => {
     if (!open) return;
-    const place = () => {
-      const rect = disclosure.current?.getBoundingClientRect();
-      if (!rect || !panel.current) return;
-      const panelRect = panel.current.getBoundingClientRect();
-      const below = rect.bottom + 8 + panelRect.height <= window.innerHeight - 8;
-      const right = Math.min(Math.max(8, window.innerWidth - rect.right), Math.max(8, window.innerWidth - panelRect.width - 8));
-      setPosition({ top: below ? rect.bottom + 8 : Math.max(8, rect.top - panelRect.height - 8), right });
-    };
     const frame = requestAnimationFrame(() => {
-      place();
-      panel.current?.querySelector<HTMLElement>('button:not(:disabled), a[href]')?.focus();
+      panel.current?.querySelector<HTMLElement>('a.cloud-auth-button, button:not(:disabled), a[href]')?.focus();
     });
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
@@ -3612,8 +3602,8 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
-    window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', escape);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', escape); };
+    document.addEventListener('keydown', escape);
+    return () => { cancelAnimationFrame(frame); document.removeEventListener('keydown', escape); };
   }, [open]);
   function close() { setOpen(false); requestAnimationFrame(() => disclosure.current?.focus()); }
   function dismissBackdrop(event: ReactPointerEvent<HTMLDivElement>) { if (event.target === event.currentTarget) close(); }
@@ -3629,12 +3619,12 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const setupMissing = cloud?.local_setup_missing ?? [];
   const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
-    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
+    <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setOpen(true); }}>
       <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google connected' : canSignIn ? 'Sign in with Google' : 'Google setup required'}</span>
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
-      <div ref={panel} className={`connection-details google-connection-details${cloud?.authenticated ? "" : " sigma-signin-dialog"}`} role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1} style={{ top: position?.top ?? 8, right: position?.right ?? 8 }}>
+      <div ref={panel} className={`connection-details google-connection-details${cloud?.authenticated ? "" : " sigma-signin-dialog"}`} role="dialog" aria-modal="true" aria-labelledby={cloud?.authenticated ? undefined : 'google-account-title'} aria-label={cloud?.authenticated ? 'Google account' : undefined} tabIndex={-1}>
       {!cloud ? <>
         <h2 id="google-account-title">Checking Google sign-in</h2>
         <p>SIGMA is checking the local Google authentication configuration.</p>
