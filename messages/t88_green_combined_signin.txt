@@ -108,5 +108,7 @@ Post-integration verification:
 - No OAuth, production, credential-transfer, or paid provider calls.
 
 The integrated branch uses current `main` at
-`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`; final tested implementation SHA
-and current PR head are reported in the R4R notice.
+`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`. The integrated implementation
+commit exercised by the final full and browser checks is
+`c25563a6a14ce5dad4a06a55e08c7aa57c8ef98e`; the current PR head, including
+this handoff update, is reported in the R4R notice.
