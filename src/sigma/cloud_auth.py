@@ -295,15 +295,16 @@ def _authorization(cfg: Config, subject: str, email: str) -> str | None:
 def _authorization_in_db(
     db: sqlite3.Connection, cfg: Config, subject: str, email: str
 ) -> str | None:
+    bootstrap_email = _bootstrap_admin_email(db, cfg)
     bound = db.execute(
-        "SELECT subject FROM bootstrap_subject WHERE email=?", (cfg.admin_contact_email,)
+        "SELECT subject FROM bootstrap_subject WHERE email=?", (bootstrap_email,)
     ).fetchone()
     if bound:
-        if bound["subject"] == subject and email == cfg.admin_contact_email:
+        if bound["subject"] == subject and email == bootstrap_email:
             return "admin"
-        if email == cfg.admin_contact_email:
+        if email == bootstrap_email:
             return None
-    elif email == cfg.admin_contact_email:
+    elif bootstrap_email and email == bootstrap_email:
         db.execute("INSERT INTO bootstrap_subject(email,subject) VALUES(?,?)", (email, subject))
         return "admin"
     explicit = db.execute(
@@ -316,6 +317,21 @@ def _authorization_in_db(
         "SELECT role,active FROM grants WHERE kind='domain' AND value=?", (domain,)
     ).fetchone()
     return allowed["role"] if allowed and allowed["active"] else None
+
+
+def _bootstrap_admin_email(db: sqlite3.Connection, cfg: Config) -> str | None:
+    """Keep an established bootstrap identity independent from contact metadata."""
+    bound = db.execute("SELECT email FROM bootstrap_subject").fetchall()
+    if len(bound) == 1:
+        return str(bound[0]["email"])
+    if bound:
+        return None
+    return cfg.admin_contact_email
+
+
+def _configured_bootstrap_admin_email(cfg: Config) -> str | None:
+    with _db(cfg) as db:
+        return _bootstrap_admin_email(db, cfg)
 
 
 def _persist_user_state(cfg: Config, principal: Principal) -> dict[str, Any]:
@@ -898,6 +914,7 @@ def _allowance_in_db(db: sqlite3.Connection, email: str, default: float | None) 
 def list_grants():
     cfg = config()
     with _db(cfg) as db:
+        bootstrap_admin = _bootstrap_admin_email(db, cfg)
         grants = [
             dict(row)
             for row in db.execute(
@@ -963,7 +980,7 @@ def list_grants():
             if grant["allowance_usd"] is not None
             else _configured_default_allowance()
         )
-    return {"grants": grants, "sessions": users, "bootstrap_admin": cfg.admin_contact_email}
+    return {"grants": grants, "sessions": users, "bootstrap_admin": bootstrap_admin}
 
 
 @router.post("/admin/grants")
@@ -1030,6 +1047,7 @@ def update_grant_allowance(kind: str, value: str, body: AllowanceRequest, reques
 def update_grants(body: GrantUpdatesRequest, request: Request):
     """Validate then atomically persist the administrator's changed grant rows."""
     cfg = config()
+    bootstrap_admin = _configured_bootstrap_admin_email(cfg)
     normalized_updates: list[tuple[str, str, str, float | None]] = []
     keys: set[tuple[str, str]] = set()
     for update in body.updates:
@@ -1043,7 +1061,7 @@ def update_grants(body: GrantUpdatesRequest, request: Request):
             raise HTTPException(422, str(exc)) from None
         if update.kind == "domain" and update.role == "admin":
             raise HTTPException(422, "Domains cannot grant administrator access.")
-        if update.kind == "email" and value == cfg.admin_contact_email and update.role != "admin":
+        if update.kind == "email" and value == bootstrap_admin and update.role != "admin":
             raise HTTPException(409, "The configured administrator role cannot be changed here.")
         key = (update.kind, value)
         if key in keys:
@@ -1074,13 +1092,14 @@ def update_grants(body: GrantUpdatesRequest, request: Request):
 @router.delete("/admin/grants/{kind}/{value:path}")
 def revoke_grant(kind: str, value: str, request: Request):
     cfg = config()
+    bootstrap_admin = _configured_bootstrap_admin_email(cfg)
     if kind not in {"email", "domain"}:
         raise HTTPException(422, "Invalid access rule.")
     try:
         normalized = _normalize_email(value) if kind == "email" else _normalize_domain(value)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
-    if kind == "email" and normalized == cfg.admin_contact_email:
+    if kind == "email" and normalized == bootstrap_admin:
         raise HTTPException(409, "The configured administrator cannot be revoked here.")
     actor: Principal = request.state.cloud_principal
     with _db(cfg) as db:

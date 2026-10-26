@@ -16,6 +16,40 @@ passed, including Ruff, Pyright, frontend typecheck, and production build. No
 provider calls or research projects were involved. See [PR #221](https://github.com/bkramerext/sigma/pull/221)
 and the [Blue handoff](../messages/blue_t215_r4r.md).
 
+## Issue #217 administrator contact (2026-10-26)
+
+Updated the public administrator contact example to
+`zetacontinuation@gmail.com`. The application already centralizes invitation
+requests through `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL`; the denied-access link
+continues to build a `mailto:` draft from the API's configured contact. The
+About dialog and privacy copy contain no administrator contact address, and
+there are no administrator-address email templates or static contact links to
+update. Generic example addresses in deterministic auth/deployment fixtures and
+the unrelated Caddy TLS operator contact remain unchanged.
+
+The current auth implementation had tied the public contact value to the
+non-revocable bootstrap identity. It now keeps an established administrator's
+email and Google subject binding from the auth database authoritative after a
+contact change. New installations still use the configured address to establish
+their first administrator. A regression test changes the contact after binding,
+confirms the original admin session/role and management identity remain intact,
+and confirms the new contact cannot claim admin. No OAuth settings, account
+grants, secrets, or stored identity data were changed.
+
+Verification: `tests/cloud_auth.py` passed (18 tests). Real Chrome confirmed the
+configured contact in the invitation `mailto:` link and no horizontal overflow
+at 1280px and 390px. `npm --prefix frontend run typecheck` and
+`npm --prefix frontend run build` passed (the build retains its existing large
+chunk advisory). The first `./sigma test` on the ticket's starting `main`
+reported the then-current unrelated Ruff B023/format findings in
+`browser_checks/model_availability.py`. After current `main` advanced and its
+Ruff repair was merged into this branch, `./sigma test` passed every scenario,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
+build. The broader `browser_checks/t22_access_denied.py` stops at its stale
+“Explore Demo” guest-link assertion; current guest Home says “Explore SIGMA”.
+The focused invitation Chrome check passes. No paid provider calls,
+production configuration changes, or live OAuth occurred.
+
 ## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
 
 Replaced the “Continue from Saved Evidence” control with an explicitly
@@ -5830,6 +5864,28 @@ blocked by Ruff findings in `browser_checks/model_availability.py` on `main`
 (B023 and formatting); this change did not modify that file. No provider calls
 were made. See [Gray issue #206 handoff](../messages/t206_gray_current_understanding.txt).
 
+## T43.2 / issue #66 independent release acceptance (2026-10-26)
+
+Integrated acceptance ran on a Gray branch containing T88 merge
+`e82152010c81c53a84753fdbcc323628e16dfeae`. Deterministic API tests passed for
+guest denial, invited/admin roles, grant revocation and expiry, owner-scoped
+workspaces and research artifacts, sponsored provider status, and user budget
+enforcement. A focused sponsored API assertion now confirms administrators
+receive the same $0.25 per-user allowance as members. The Google Chrome fixture
+passed guest/member/admin transitions, provider failure/recovery, sign-out,
+denial, remembered-project clearing, and desktop/mobile layouts. Separate
+two-user Chrome and ChatGPT SIWC fixture checks also passed.
+
+`./sigma test` passed all scenarios, Ruff, formatting, Pyright, frontend
+typecheck, and build. The first run encountered transient research-worker lock
+contention; the isolated scenario passed, followed by a complete passing run.
+The existing >500 kB chunk advisory remains. Actual Google OAuth, hosted
+callback/deployment/session behavior, live provider authorization, and
+distinct-live-account workspace isolation remain **UNVERIFIED**. No live GCP,
+OAuth/provider calls, paid inference, credentials, or private user data were
+used. Full requirement-by-requirement evidence is in
+[T43.2](../tickets/t43.2.md) and the
+[Gray handoff](../messages/t43_2_gray_multi_account.txt).
 ## Issue #209 — Copy-only strategy suggestions (reconciled 2026-10-26)
 
 PR #213 was reconciled with Gray PR #212 at `6bab28f`. The resulting interface

@@ -370,9 +370,10 @@ trial-signup, project-creation, or API-enablement command.
    `chgrp sigma-sandbox` and `chmod 0660` after every socket creation. Confirm
    socket ownership/group/mode, numeric group ID, rootless daemon mode, and that
    `sigma-sandbox` is in neither `docker` nor `sudo`. Do not grant world access.
-4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; set the admin contact
-   to the approved initial administrator's exact verified Google email. Use
-   this one address for both admin authorization and invitation contact. Use
+4. Copy `deploy/env.example` to `/etc/sigma/deploy.env`; set the administrator
+   contact to the public invitation address. On a fresh auth database, the
+   first verified sign-in matching that address establishes the initial
+   administrator. Use
    the exact 40-digit release SHA, production hostname/OAuth client ID, approved
    limits, socket path and actual numeric GID. The environment file contains
    only non-secret values and secret-file paths. Set `root:root` mode `0600`.
@@ -1145,24 +1146,23 @@ Set these deployment environment values to enable cloud authentication:
 | `SIGMA_CLOUD_PUBLIC_ORIGIN=https://sigma.example.org` | Exact public HTTPS origin, with no path or trailing slash. Used for callback and CSRF origin validation. |
 | `GOOGLE_OIDC_CLIENT_ID` | Google OAuth web client ID. |
 | `GOOGLE_OIDC_CLIENT_SECRET` | Google OAuth web client secret; keep server-side only. |
-| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | The designated administrator's exact verified Google email and the public contact used to prefill invitation requests. Its first verified Google subject is bound in the auth database. SIGMA opens a mail draft and never sends it. |
+| `SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` | Public contact used to prefill invitation requests. SIGMA opens a mail draft and never sends it. On a fresh auth database, the first verified sign-in matching this address establishes the initial administrator; after that, the stored email and Google subject binding remain the administrator identity even if this contact value changes. |
 | `SIGMA_CLOUD_AUTH_HOME=/var/lib/sigma-auth` | Absolute, service-owned private directory; mode 0700. The SQLite database is mode 0600. |
 | `SIGMA_CLOUD_DEMO_AUDIT=/opt/sigma/cloud-demo/handshake-demo-audit.json` | Absolute path to the curated, server-owned, read-only Project Audit v2 snapshot served to guests. It is separate from private project storage and required for the public Demo. |
 
-This setting serves both purposes. It must identify the exact Google account
-approved to receive the initial administrator role; it is not a separate
-support mailbox. Its first successful verified sign-in binds that email to the
-Google subject in the auth database. Later sign-ins must match both values.
+This setting supplies the public invitation contact. On a fresh auth database,
+the first verified sign-in matching the configured address establishes the
+initial administrator and binds its email to a Google subject. Once present,
+that database binding remains authoritative when the public contact changes;
+later administrator sign-ins must still match the original email and subject.
 
 When upgrading an existing deployment, remove the legacy
 `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` line from `/etc/sigma/deploy.env` and set
-`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to the same exact address previously used for
-the bootstrap account to preserve its stored subject binding. The preflight
-rejects the removed setting as unsupported. If intentionally designating a
-different account, its first verified sign-in creates a new binding; the old
-binding is not transferred, and the prior account keeps access only if it has
-an independent active grant. Do not edit or delete the auth database to perform
-this configuration change.
+`SIGMA_CLOUD_ADMIN_CONTACT_EMAIL` to the desired public contact. The existing
+auth database retains the prior bootstrap administrator email and subject, so
+this contact update does not migrate administrator access. The preflight
+rejects the removed setting as unsupported. Keep the existing auth state volume
+in place; do not edit or delete its database as part of a contact update.
 
 Create a Google OAuth client for a web application. Register the exact redirect
 URI `${SIGMA_CLOUD_PUBLIC_ORIGIN}/api/cloud-auth/callback`. SIGMA uses Google's
@@ -1172,15 +1172,15 @@ requires the Google issuer, exact client audience, unexpired token, matching
 nonce, stable subject, and `email_verified: true`. It rejects multi-audience
 tokens and mismatched authorized-party claims.
 
-After setup, the configured admin contact can sign in once to bind its stable
-Google subject as administrator. Administrators can add exact email entries or
-exact email domains in Access Management. Entries authorize accounts; no email
-is delivered. Domain rules compare the complete verified-email domain after
-case normalization, so suffix/lookalike domains do not match. An explicit
-revoked email rule takes precedence over a domain allow rule. Revocation is
-checked on every request and removes matching active sessions. Re-adding a
-revoked email reactivates that exact entry. The designated admin remains
-configuration-bound and cannot be revoked in the UI.
+On a fresh auth database, the first verified sign-in matching the configured
+contact binds its stable Google subject as administrator. Administrators can
+add exact email entries or exact email domains in Access Management. Entries
+authorize accounts; no email is delivered. Domain rules compare the complete
+verified-email domain after case normalization, so suffix/lookalike domains do
+not match. An explicit revoked email rule takes precedence over a domain allow
+rule. Revocation is checked on every request and removes matching active
+sessions. Re-adding a revoked email reactivates that exact entry. The
+designated admin remains non-revocable through ordinary Access Management.
 
 Sessions are random opaque values stored only as SHA-256 digests in SQLite.
 Cookies are `Secure`, `HttpOnly`, `SameSite=Lax`, host-only `__Host-` cookies,
