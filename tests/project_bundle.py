@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from sigma.project_bundle import BundleError, delete_file, encode, list_files, migrate, read_file, restore, snapshot, update_files, write_file
+from sigma.project_bundle import BundleError, delete_file, encode, list_files, migrate, read_file, restore, snapshot, transform_file, update_files, write_file
 
 
 def main() -> None:
@@ -59,6 +59,13 @@ def main() -> None:
         assert read_file(migrated, "research-sessions/second.json") == b'{"status":"complete"}'
         assert read_file(migrated, "artifacts/new-evidence.bin") == b"binary\\x00data"
         assert read_file(migrated, "project.json") == original_project
+        transformed = transform_file(
+            migrated, "research-sessions/second.json",
+            lambda previous: previous.replace(b"complete", b"reviewed"),
+        )
+        assert transformed == b'{"status":"reviewed"}'
+        assert read_file(migrated, "research-sessions/second.json") == transformed
+        assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
         try:
             delete_file(migrated, "project.json")
         except BundleError:
