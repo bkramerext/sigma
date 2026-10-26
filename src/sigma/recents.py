@@ -193,6 +193,11 @@ def _index():
 
 def record_access(view: ProjectView) -> None:
     """A secondary index failure must not turn a successful research write into a retry."""
+    from sigma import cloud_workspaces
+
+    workspace = cloud_workspaces.current()
+    if workspace is not None and workspace.guest:
+        return
     from sigma.samples import sample_project_ids
 
     try:
@@ -260,10 +265,12 @@ class RecentProject:
 
 
 def recent_projects() -> dict:
-    with _index() as index:
-        from sigma import cloud_workspaces
+    from sigma import cloud_workspaces
 
-        workspace = cloud_workspaces.current()
+    workspace = cloud_workspaces.current()
+    if workspace is not None and workspace.guest:
+        return {"projects": []}
+    with _index() as index:
         entries = []
         for entry in index["entries"]:
             copied = dict(entry)

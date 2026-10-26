@@ -314,7 +314,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             expect(page).to_have_url(ui_url + "/")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             status_pill = page.locator(".account-model-status > summary")
-            expect(status_pill).to_contain_text("Regular user")
+            expect(status_pill).to_contain_text("Member")
             expect(status_pill).to_contain_text("Personal ChatGPT · unavailable")
             status_pill.click()
             account = page.get_by_role("dialog", name="AI connection settings")
@@ -365,7 +365,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             )
             controls = page.locator(".project-art-header .header-controls")
             google = controls.locator(".account-model-status > summary")
-            expect(google).to_contain_text("Regular user")
+            expect(google).to_contain_text("Member")
             expect(google).to_contain_text("SIGMA-sponsored")
             model = controls.locator(".project-model-pill")
             thinking = controls.locator(".project-thinking-pill")
@@ -447,7 +447,7 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             assert login_attempts == ["A", "B"]
             page.reload(wait_until="networkidle")
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
-            expect(page.locator(".account-model-status > summary")).to_contain_text("Administrator")
+            expect(page.locator(".account-model-status > summary")).to_contain_text("Admin")
             assert api_request("GET", "/api/projects/recent", identity).json()["projects"] == []
             project_b = api_request(
                 "POST",

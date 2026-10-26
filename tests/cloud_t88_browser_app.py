@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 
 from cloud_workspace_test_app import app
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from sigma import cloud_auth, openai_connection
+from sigma import api, cloud_auth, cloud_workspaces, openai_connection
 
 _real_client = openai_connection.httpx.AsyncClient
 _provider_status = {"value": "connected"}
@@ -31,6 +32,53 @@ def _fixture_auth_config() -> cloud_auth.Config:
 
 
 cloud_auth.config = _fixture_auth_config
+
+_identity_only_middleware = api.cloud_auth.middleware
+
+
+async def _guest_aware_identity_middleware(request: Request, call_next):
+    """Use production's isolated, read-only guest workspace behavior in Chrome."""
+    principal = getattr(request.state, "cloud_principal", None)
+    path = request.url.path
+    if not isinstance(principal, cloud_auth.Principal) and path.startswith("/api/projects/"):
+        guest_token = request.cookies.get("sigma_guest")
+        workspace = cloud_workspaces.guest_workspace(guest_token) if guest_token else None
+        create_guest = (path == "/api/projects/samples" and request.method == "GET") or (
+            path == "/api/projects/samples/open" and request.method == "POST"
+        )
+        created = False
+        if workspace is None and create_guest:
+            guest_token = secrets.token_hex(32)
+            workspace = cloud_workspaces.guest_workspace(guest_token, create=True)
+            created = True
+        if workspace is not None:
+            if (
+                request.method not in {"GET", "HEAD", "OPTIONS"}
+                and path != "/api/projects/samples/open"
+            ):
+                return JSONResponse({"error": "Guest projects are read-only."}, status_code=403)
+            if path in {
+                "/api/projects/research-sessions/start",
+                "/api/projects/proposals",
+                "/api/projects/proposals/agentic",
+                "/api/projects/strategy-suggestions",
+                "/api/projects/text/convert",
+                "/api/projects/papers",
+                "/api/projects/papers/restart",
+                "/api/projects/research-executions",
+            }:
+                return JSONResponse({"error": "Guest projects are read-only."}, status_code=403)
+            request.state.cloud_guest_workspace = workspace
+            response = await call_next(request)
+            if created and guest_token:
+                response.set_cookie(
+                    "sigma_guest", guest_token, path="/", httponly=True, samesite="lax"
+                )
+            return response
+    return await _identity_only_middleware(request, call_next)
+
+
+api.cloud_auth.middleware = _guest_aware_identity_middleware
 
 
 def _provider_response(request):

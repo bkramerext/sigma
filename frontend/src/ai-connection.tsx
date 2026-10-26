@@ -69,7 +69,7 @@ export async function aiPost<T>(route: string, body: object = {}, signal?: Abort
   const response = await fetch(`/api/ai/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   const data = await response.json(); if (!response.ok) throw new Error(data.error ?? 'AI account change failed'); return data;
 }
-export function AIProvider({ children, active = true }: { children: ReactNode; active?: boolean }) {
+export function AIProvider({ children, unavailable = false }: { children: ReactNode; unavailable?: boolean }) {
   const [info, setInfo] = useState<ConnectionInfo | null>(null);
   const [checking, setChecking] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -89,6 +89,11 @@ export function AIProvider({ children, active = true }: { children: ReactNode; a
   const mounted = useRef(true);
   const transitioningRef = useRef(false);
   const refresh = useCallback((source: 'initial' | 'background' | 'manual' = 'manual'): Promise<ConnectionInfo> => {
+    if (unavailable) {
+      const guestInfo: ConnectionInfo = { mode: 'unknown', status: 'unconfigured', label: 'Unavailable in Guest mode', guidance: 'Sign in to connect a model.', checked_at: null, ttl_seconds: 0, accounts: [] };
+      setInfo(guestInfo); setChecking(false); setInitialLoading(false); setHealthError(false);
+      return Promise.resolve(guestInfo);
+    }
     if (check.current?.generation === generation.current) return check.current.promise;
     const requestGeneration = generation.current;
     const controller = new AbortController();
@@ -125,17 +130,16 @@ export function AIProvider({ children, active = true }: { children: ReactNode; a
     request.promise = promise;
     check.current = request;
     return promise;
-  }, []);
+  }, [unavailable]);
   useEffect(() => {
     mounted.current = true;
-    if (!active) {
-      setChecking(false);
-      setInitialLoading(false);
+    if (unavailable) {
+      void refresh('initial');
       return () => { mounted.current = false; };
     }
     void refresh('initial').catch(() => {});
     return () => { mounted.current = false; check.current?.controller.abort(); pending.current?.controller.abort(); };
-  }, [active, refresh]);
+  }, [refresh, unavailable]);
   useEffect(() => {
     let timer = 0;
     const clear = () => { window.clearTimeout(timer); timer = 0; };
@@ -286,7 +290,7 @@ export function ConnectionStatus({ disabled = false, projectHeader = false, clou
   const interactionDisabled = disabled || localGoogleRequired;
   const dotActive = !projectHeader && status === 'connected' && providerActive;
   const visibleLabel = projectHeader ? projectHeaderLabel : label;
-  const roleLabel = googleAccount?.role === 'admin' ? 'Administrator' : 'Regular user';
+  const roleLabel = googleAccount?.role === 'admin' ? 'Admin' : 'Member';
   const modelLine = serviceFunded
     ? cloudFunding?.selectedConnection === 'personal' ? 'Personal ChatGPT · unavailable'
       : cloudFunding?.budget?.remaining_usd === 0 ? 'SIGMA-sponsored · allowance exhausted'

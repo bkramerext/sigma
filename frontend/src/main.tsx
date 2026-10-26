@@ -1190,7 +1190,7 @@ function ProjectExportDialog({ path, title, onCancel, open = true, demo = false 
 type PaperSummary = { paper_id: string; title: string; created_at: string; snapshot_sha256: string; validation_warnings: string[]; author_review_warnings?: string[]; pdf_available?: boolean; generation: { mode: string; model: string; reasoning_effort: string; call_limit: number; provider_calls_attempted?: number; provider_calls_prior_runs?: number; provider_calls_lifetime_total?: number; long_form?: boolean; evidence_batch_count?: number; evidence_fields_omitted?: number; omitted_evidence?: { field_ref: string; source_ref: string; field: string; reason: string }[]; evidence_note_compaction_events?: number; reduction_source_refs_omitted?: string[]; evidence_conflict_note_count?: number; evidence_conflicts?: { statement: string; evidence_refs: string[] }[] } };
 type PaperRecord = PaperSummary & { draft: { title: string; abstract: string; abstract_claim_ids: string[]; problem_framing: string[]; problem_framing_claim_ids: string[]; methods: string[]; methods_claim_ids: string[]; claims: { id: string; statement: string; status: string; evidence_refs: string[]; reasoning: string }[]; sections: { heading: string; paragraphs: string[]; claim_ids: string[] }[]; limitations: string[]; open_obligations: string[]; conclusions: string[]; conclusion_claim_ids: string[] }; obligation_reconciliation?: { text: string; source_refs: string[]; status: string }[]; snapshot: { sources: { id: string; kind: string }[] } };
 
-function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId: string; onCancel: () => void }) {
+function AIPaperDialog({ path, projectId, onCancel, guest = false }: { path: string; projectId: string; onCancel: () => void; guest?: boolean }) {
   const ai = useAI();
   const dialog = useRef<HTMLDialogElement>(null);
   const request = useRef<AbortController | null>(null);
@@ -1208,7 +1208,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   const [loading, setLoading] = useState(true);
   const [expandedPaperId, setExpandedPaperId] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState('');
-  useEffect(() => { dialog.current?.showModal(); void refresh(); return () => request.current?.abort(); }, []);
+  useEffect(() => { dialog.current?.showModal(); if (guest) setLoading(false); else void refresh(); return () => request.current?.abort(); }, [guest]);
   async function refresh(keepId?: string) {
     setLoading(true);
     try {
@@ -1363,6 +1363,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
   return <dialog ref={dialog} className="project-settings-dialog ai-paper-dialog" aria-labelledby="ai-paper-heading" onCancel={event => { event.preventDefault(); if (!busy) onCancel(); }}>
     <header className="settings-header"><h2 id="ai-paper-heading">Academic paper using LaTeX</h2><div className="settings-actions"><button type="button" className="settings-cancel" disabled={busy} onClick={onCancel}>Close</button></div></header>
     <div className="settings-body ai-paper-body">
+      {guest ? <p className="settings-hint" role="status">Sign in to export your research as TeX.</p> : <>
       <p className="settings-hint">Create a LaTeX paper from this project’s saved research, including supporting evidence, unsuccessful approaches, contradictions, and unanswered questions.</p>
       <p className="settings-hint">The paper is AI-generated and has not been independently verified. Generation uses your selected provider and may consume allowance or incur charges. It does not start a research session.</p>
       <p className="settings-hint ai-paper-model">Selected model: <strong>{model || 'Loading…'}</strong></p>
@@ -1409,6 +1410,7 @@ function AIPaperDialog({ path, projectId, onCancel }: { path: string; projectId:
         {!selected.pdf_available && <p role="status">The paper record is saved, but its compiled PDF is unavailable. Regenerate to create a new version with a PDF.</p>}
       </article>}</div>
       </article>)}</section>}
+      </>}
     </div>
   </dialog>;
 }
@@ -2041,7 +2043,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <div id="about-architecture-details" className="about-disclosure-content"><AboutArchitecture/></div>
       </details>
       {cloud?.enabled && cloud.ready && <FeedbackForm/>}
-      <p className="about-privacy-link"><a href="/privacy">Privacy</a></p>
+      <p className="about-privacy-link"><a className="cloud-secondary-button" href="/privacy">Privacy Policy</a></p>
     </div>
     <small className="about-build-commit">Version <code>{__SIGMA_VERSION__}</code> · Build <code>{__SIGMA_BUILD_COMMIT__}</code></small>
   </dialog></div>;
@@ -2064,7 +2066,7 @@ function Header({ goHome, close, projectTitle, projectType, projectDifficulty, p
     {!close && <span className="local">● Local workspace</span>}
     {close && projectView && onProjectUpdated ? <>
       <ProjectHeaderControls view={projectView} onSaved={onProjectUpdated} disabled={connectionDisabled || close.busy}/>
-      {cloud?.enabled ? <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill compact/><ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}
+      {cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill compact/> : <><GoogleIdentityPill compact/><ConnectionStatus disabled={connectionDisabled} projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}
     </> : <ConnectionStatus disabled={connectionDisabled}/>}
     <button type="button" className="about-action" aria-label="About SIGMA" title="About SIGMA" data-tooltip="About SIGMA" onClick={() => window.dispatchEvent(new Event('sigma-open-about'))}>About</button>
     </div>
@@ -2156,6 +2158,7 @@ const settingsOf = (view: ProjectView): Settings => ({ title: view.project.title
 
 function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView; onSaved: (view: ProjectView) => void; disabled: boolean }) {
   const ai = useAI();
+  const cloud = useCloudIdentity();
   const [models, setModels] = useState<CatalogChoice[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -2207,6 +2210,10 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
   useEffect(() => {
     const controller = new AbortController();
     setCatalogReady(false);
+    if (cloud?.enabled && !cloud.authenticated) {
+      setModels([]); setMessage('Model availability is unavailable in Guest mode.'); setCatalogReady(true);
+      return () => controller.abort();
+    }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => {
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) throw new Error('Model availability requires an authorized session. Sign in again or contact the SIGMA administrator. Saved settings are unchanged.');
@@ -2219,7 +2226,7 @@ function ProjectHeaderControls({ view, onSaved, disabled }: { view: ProjectView;
       if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Model availability could not be verified. Saved settings are unchanged.');
     }).finally(() => { if (!controller.signal.aborted) setCatalogReady(true); });
     return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status]);
+  }, [ai.info?.mode, ai.info?.active_account, ai.info?.status, cloud?.enabled, cloud?.authenticated]);
 
   const current = models.find(model => model.id === view.project.ai_model);
   const costOrder: Record<CatalogChoice['relative_cost'], number> = { '$': 1, '$$': 2, '$$$': 3 };
@@ -2410,12 +2417,16 @@ function ProjectSettingsDialog({ initial, onSaved, onCancel }: { initial?: Proje
   }, [initial?.path]);
   useEffect(() => {
     const controller = new AbortController();
+    if (cloud?.enabled && !cloud.authenticated) {
+      setCatalog([]); setCatalogMessage('Model availability is unavailable in Guest mode.');
+      return () => controller.abort();
+    }
     fetch('/api/ai/models', { signal: controller.signal }).then(async response => { if (!response.ok) throw new Error('Model catalog unavailable. Check the local server; existing settings are retained.'); return response.json(); }).then(data => {
       setCatalog(data.models); setCatalogMessage(data.message);
       if (!initial) setValues(previous => previous.ai_model ? previous : { ...previous, ai_model: data.default_model, reasoning_effort: data.default_effort });
     }).catch(error => { if (!controller.signal.aborted) setCatalogMessage(errorMessage(error)); });
     return () => controller.abort();
-  }, [ai.info?.mode, ai.info?.active_account]);
+  }, [ai.info?.mode, ai.info?.active_account, cloud?.enabled, cloud?.authenticated]);
   useEffect(() => {
     if (initial) return;
     const controller = new AbortController(); setPreviewBusy(true); setDestination(null); setLocationError('');
@@ -2595,7 +2606,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }, []).sort((a, b) => researchTypeLabel(a.type).localeCompare(researchTypeLabel(b.type)));
   return <div className="empty home-empty home-recents">
     {loading ? <p role="status">Loading recent projects…</p> : !projects.length && <p>No recent projects yet. Open a project or begin a new project.</p>}
-    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'} open={group.projects.some(entry => entry.path === window.localStorage.getItem('sigma.currentProject'))}>
+    {recentGroups.map(group => <details className="recent-type-group" key={group.type ?? 'other'}>
       <summary>{group.type && group.type in researchTypeLabels && <ResearchTypeIcon type={group.type as ResearchMode}/>}<span>{researchTypeLabel(group.type)}</span><small>{group.projects.length} {group.projects.length === 1 ? 'project' : 'projects'}</small></summary>
       <ul>{group.projects.map((entry, index) => <li key={entry.id}>
         <div className="recent-entry">
@@ -2613,7 +2624,7 @@ function RecentProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+function SampleProjects({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
   const [projects, setProjects] = useState<SampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2635,8 +2646,8 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     if (pending.current) return; pending.current = true; setOpening(sample.id); setError('');
     try {
       const copy = await post<ProjectView>('samples/open', { sample_id: sample.id });
-      // A Sample opens as a saved working copy, which now belongs in Recent.
-      window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
+      // Guest copies live only in the temporary guest workspace.
+      if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', 'recent');
       onOpen(copy);
     }
     catch (error) { setError(errorMessage(error)); }
@@ -2650,7 +2661,7 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   }, []);
   return <div className="empty home-empty home-samples">
     {loading ? <p role="status">Loading sample projects…</p> : !projects.length && !error && <p>No sample projects are available.</p>}
-    {groups.map(group => <details className="sample-type-group" key={group.type} open>
+    {groups.map(group => <details className="sample-type-group" key={group.type}>
       <summary><ResearchTypeIcon type={group.type}/><span>{researchTypeLabel(group.type)}</span><small>{group.samples.length} {group.samples.length === 1 ? 'sample' : 'samples'}</small></summary>
       <ul>{group.samples.map(sample => <li key={sample.id}><button className="sample-open" disabled={!!opening} onClick={() => void open(sample)} aria-label={`Open ${sample.title}`}><strong>{sample.title}</strong><small><span>{strategyCount(sample.strategy_count)} · {difficultyDescription(sample.difficulty)}</span></small></button></li>)}</ul>
     </details>)}
@@ -2658,14 +2669,14 @@ function SampleProjects({ onOpen }: { onOpen: (view: ProjectView) => void }) {
   </div>;
 }
 
-function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
+function HomeCatalog({ onOpen, guest = false }: { onOpen: (view: ProjectView) => void; guest?: boolean }) {
   const [tab, setTab] = useState<'recent' | 'samples'>(() =>
-    window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
-  useEffect(() => { window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [tab]);
+    guest ? 'samples' : window.localStorage.getItem('sigma.homeCatalogTab') === 'recent' ? 'recent' : 'samples');
   const recent = useRef<HTMLButtonElement>(null);
   const samples = useRef<HTMLButtonElement>(null);
   const recentPanel = useRef<HTMLDivElement>(null);
   const samplesPanel = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!guest) window.localStorage.setItem('sigma.homeCatalogTab', tab); }, [guest, tab]);
   function switchTab(next: 'recent' | 'samples') {
     if (next === tab) {
       const panel = next === 'samples' ? samplesPanel.current : recentPanel.current;
@@ -2685,10 +2696,10 @@ function HomeCatalog({ onOpen }: { onOpen: (view: ProjectView) => void }) {
     if (event.key === 'End') { event.preventDefault(); switchTab('recent'); }
   }}>
     <button ref={samples} id="samples-tab" role="tab" aria-controls="samples-panel" aria-selected={tab === 'samples'} tabIndex={tab === 'samples' ? 0 : -1} data-tooltip="Show sample projects. Click again to collapse or expand all." onClick={() => switchTab('samples')}>Samples</button>
-    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip="Show recent projects. Click again to collapse or expand all." onClick={() => switchTab('recent')}>Recent</button>
+    <button ref={recent} id="recent-tab" role="tab" aria-controls="recent-panel" aria-selected={tab === 'recent'} tabIndex={tab === 'recent' ? 0 : -1} data-tooltip={guest ? 'Sign in to save your projects.' : 'Show recent projects. Click again to collapse or expand all.'} onClick={() => switchTab('recent')}>Recent</button>
   </div>
-    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}><RecentProjects onOpen={onOpen}/></div>
-    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen}/></div>
+    <div ref={recentPanel} id="recent-panel" role="tabpanel" aria-labelledby="recent-tab" hidden={tab !== 'recent'}>{guest ? <p className="guest-recent-message"><span>Sign in to create and</span><span>save your own projects.</span></p> : <RecentProjects onOpen={onOpen}/>}</div>
+    <div ref={samplesPanel} id="samples-panel" role="tabpanel" aria-labelledby="samples-tab" hidden={tab !== 'samples'}><SampleProjects onOpen={onOpen} guest={guest}/></div>
   </div>;
 }
 
@@ -2773,19 +2784,21 @@ function Home({ initialPath, onOpen }: {
     <svg className="home-effect-definitions" aria-hidden="true" width="0" height="0" focusable="false"><defs><filter id="home-rubber-sheet-filter" x="-12%" y="-12%" width="124%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.004 0.008" numOctaves="2" seed="4" result="rubber-wave"><animate ref={turbulenceAnimation} attributeName="baseFrequency" values="0.004 0.008;0.014 0.024;0.006 0.012" dur="900ms" begin="indefinite" fill="freeze"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="rubber-wave" scale="0" xChannelSelector="R" yChannelSelector="G"><animate ref={displacementAnimation} attributeName="scale" values="0;26;13;0" keyTimes="0;0.2;0.62;1" dur="900ms" begin="indefinite" fill="freeze"/></feDisplacementMap></filter></defs></svg>
     <div className="home-atmosphere" aria-hidden="true"/>
     <div className="home-content">
-      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? <ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
+      <div className="home-topline"><div className="home-auth-pills">{cloud?.enabled ? cloud.authenticated ? <ConnectionStatus disabled={!cloud.authenticated} projectHeader cloudFunding={cloudFundingFor(cloud)} googleAccount={cloud.user} onGoogleSignOut={async () => { const response = await fetch('/api/cloud-auth/logout', { method: 'POST', credentials: 'same-origin' }); if (!response.ok) throw new Error('Google sign-out could not be completed.'); window.localStorage.removeItem('sigma.currentProject'); window.location.assign('/'); }}/> : <GoogleIdentityPill/> : <><GoogleIdentityPill/><ConnectionStatus projectHeader cloudFunding={cloudFundingFor(cloud)}/></>}</div><div className="home-header-actions"><button type="button" ref={aboutButton} className="home-about-button" aria-haspopup="dialog" aria-expanded={aboutOpen} onClick={() => setAboutOpen(true)}>About</button>{cloud?.user?.role === 'admin' && <a href="#administrator-settings" className="administrator-settings-link" aria-label="Administrator settings" onClick={event => { event.preventDefault(); cloud.openAccessManagement(); }}>Admin</a>}</div></div>
       {cloud?.enabled && !cloud.authenticated && cloud.deniedEmail && <AccessNotGranted email={cloud.deniedEmail}/>}
       {cloud?.enabled && !cloud.authenticated && !cloud.deniedEmail && <section className="home-cloud-prompt"><h1>Welcome to SIGMA</h1><p>SIGMA is invitation-only for private projects. Explore published research as a guest.</p><div className="cloud-denied-actions cloud-entry-actions">{cloud.ready ? <><a className="cloud-auth-button" href="/api/cloud-auth/login">Continue with Google</a><a className="cloud-secondary-button" href="/api/cloud-auth/login?invite=1">Invite Me</a></> : <p role="status">Google sign-in is not configured yet.</p>}<a className="cloud-text-button" href="/demo">Continue as Guest</a></div><p><a href="/privacy">Privacy notice</a></p></section>}
-      {(!cloud?.enabled || cloud.authenticated) && <section className="home-projects" aria-labelledby="home-projects-heading">
+      {(!cloud?.enabled || cloud.authenticated || !cloud.deniedEmail) && <section className="home-projects" aria-labelledby="home-projects-heading">
         <div className="home-projects-heading">
           <h1 id="home-projects-heading" ref={heading} tabIndex={-1}>Projects</h1>
-          <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
-          <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
+          {(!cloud?.enabled || cloud.authenticated) && <>
+            <button type="button" ref={newButton} className="home-project-action" data-tooltip="Create a project" onClick={() => setEntry('new')}>New</button>
+            <button type="button" ref={openButton} className="home-project-action" data-tooltip="Open an existing project" onClick={() => setEntry('open')}>Open</button>
+          </>}
         </div>
-        <HomeCatalog onOpen={onOpen}/>
+        <HomeCatalog onOpen={onOpen} guest={!!cloud?.enabled && !cloud.authenticated}/>
       </section>}
       <img className="home-slogan" src="/sigma-slogan-copper-approved.png" alt="Strategy · Investigation · Generation · Measurement · Assessment"/>
-      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer &amp;</span><span>OpenAI Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
+      <footer className="home-art-credit" aria-label="Artwork credit" onPointerEnter={event => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) launchCreditStreak(); }} onClick={launchCreditPlunk}><span>Brian Kramer</span><span>&amp; GPT Models</span>{creditStreaks.map(({ id, line }) => <span key={id} className={`home-credit-streak home-credit-streak--${line}`} aria-hidden="true" onAnimationEnd={() => removeCreditStreak(id)}/>)}{creditPlunk !== null && <span key={creditPlunk} className="home-credit-plunk" aria-hidden="true" onAnimationEnd={() => finishCreditPlunk(creditPlunk)}/>}</footer>
       {entry === 'open' && <ProjectEntryDialog initialPath={initialPath} onOpen={onOpen} onCancel={cancel}/>}
       {entry === 'new' && <ProjectSettingsDialog onSaved={onOpen} onCancel={cancel}/>}
       {aboutOpen && <AboutDialog onClose={closeAbout}/>}
@@ -2906,13 +2919,13 @@ function StrategyCreationActions({ buttonRef, disabled, hideNew = false, onManua
   </div>;
 }
 
-function ProcessControlsView({ controls, disabled }: { controls: ProcessControls; disabled: boolean }) {
+function ProcessControlsView({ controls, disabled, guest = false, onGuestPlay, playButtonRef }: { controls: ProcessControls; disabled: boolean; guest?: boolean; onGuestPlay?: () => void; playButtonRef?: React.RefObject<HTMLButtonElement | null> }) {
   return <span className="strategy-process-controls" aria-label="Research process controls">
       {controls.confirming ? <>
         <button type="button" className="text-view-link session-start-link" title={`Confirm start new Session ${controls.nextSessionNumber}`} disabled={disabled} onClick={controls.start}>Start new session #{controls.nextSessionNumber}</button>
         <button type="button" className="text-view-link session-start-link" title="Cancel starting a research session" disabled={disabled} onClick={controls.cancel}>Cancel</button>
       </> : <>
-      <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={controls.playDisabled || disabled} onClick={controls.play}>
+      <button ref={playButtonRef} type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label={controls.playLabel} title={controls.playLabel} data-tooltip={controls.playLabel} disabled={disabled || (!guest && controls.playDisabled)} onClick={guest ? onGuestPlay : controls.play}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3.8v12.4L16 10 6 3.8Z"/></svg>
       </button>
       <button type="button" className="text-view-link text-view-icon workspace-icon-button process-control" aria-label="Stop research session" title="Stop research session" data-tooltip="Stop research session" disabled={controls.stopDisabled || disabled} onClick={controls.stop}>
@@ -2920,6 +2933,34 @@ function ProcessControlsView({ controls, disabled }: { controls: ProcessControls
       </button>
       </>}
   </span>;
+}
+
+function GuestPlayDialog({ onClose, onSignIn, playButtonRef }: { onClose: () => void; onSignIn: () => void; playButtonRef: React.RefObject<HTMLButtonElement | null> }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const signIn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    signIn.current?.focus();
+  }, []);
+  function dismiss() {
+    if (dialog.current?.open) dialog.current.close();
+    onClose();
+    requestAnimationFrame(() => playButtonRef.current?.focus());
+  }
+  function startSignIn() {
+    if (dialog.current?.open) dialog.current.close();
+    onSignIn();
+  }
+  return <dialog ref={dialog} className="project-settings-dialog guest-research-dialog" aria-labelledby="guest-research-heading" aria-describedby="guest-research-message" onCancel={event => { event.preventDefault(); dismiss(); }}>
+    <header className="settings-header"><h2 id="guest-research-heading">Ready to investigate?</h2></header>
+    <div className="settings-body">
+      <p id="guest-research-message">Sign in to run a research session. You can explore sample projects as a guest.</p>
+      <div className="settings-actions session-remove-confirm-actions">
+        <button ref={signIn} type="button" className="text-view-link guest-play-signin" onClick={startSignIn}>Sign in now</button>
+        <button type="button" className="text-view-link" onClick={dismiss}>Cancel</button>
+      </div>
+    </div>
+  </dialog>;
 }
 
 type ProposalResult = { draft: { title: string; summary: string; approach: string; first_tests: string; assumptions: string; failure_modes: string }; provenance: { provider: string; model: string; reasoning_effort?: string | null }; receipt: string };
@@ -3096,6 +3137,8 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   path: string; initialView?: ProjectView; onClose: () => void;
   goHome: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
+  const cloud = useCloudIdentity();
+  const guest = !!cloud?.enabled && !cloud.authenticated;
   const [view, setView] = useState<ProjectView | null>(initialView ?? null);
   const [error, setError] = useState('');
   const [closing, setClosing] = useState(false);
@@ -3122,6 +3165,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const [dragId, setDragId] = useState<string | null>(null);
   const drag = useRef<{ id: string; order: string[]; pointer: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [guestAiNotice, setGuestAiNotice] = useState('');
   const [focusStrategy, setFocusStrategy] = useState('');
   const [strategiesExpanded, setStrategiesExpanded] = useState(() => window.localStorage.getItem(`sigma.strategiesPane:${path}`) !== 'false');
   const [collapsedStrategies, setCollapsedStrategies] = useState<Set<string>>(() => new Set());
@@ -3131,8 +3175,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
   const updateCombinedTextDraft = (key: string, draft: string) => setCombinedTextDrafts(current => ({ ...current, [key]: draft }));
   const [projectExpanded, setProjectExpanded] = useState(() => window.localStorage.getItem(`sigma.projectPane:${path}`) !== 'false');
   const [processControls, setProcessControls] = useState<ProcessControls>({ play: () => {}, stop: () => {}, playDisabled: true, stopDisabled: true, playLabel: 'Start a new research session' });
+  const [guestPlayOpen, setGuestPlayOpen] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const newButton = useRef<HTMLButtonElement>(null);
+  const playButton = useRef<HTMLButtonElement>(null);
   const introPane = useRef<HTMLDivElement>(null);
   const resizeStart = useRef<{ pointer: number; y: number; height: number } | null>(null);
   const [introHeight, setIntroHeight] = useState<number | null>(null);
@@ -3346,11 +3392,12 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <header className="pool-heading workspace-pane-heading strategies-pane-heading">
         <h2 id="pool-heading" tabIndex={-1}><button type="button" className="workspace-section-disclosure" title={`${strategiesExpanded ? 'Collapse' : 'Expand'} Strategies section`} aria-expanded={strategiesExpanded} aria-controls="strategies-pane-content" onClick={toggleStrategiesPane}><DisclosureChevron expanded={strategiesExpanded}/>Strategies</button></h2>
         <div className="strategies-heading-right">
-          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={startGeneration}/>
+          <StrategyCreationActions buttonRef={newButton} hideNew={generating} disabled={activeMode !== null || generating || closing || ordering || !!dragId || !!processControls.confirming} onManual={startNewStrategy} onAI={() => { if (guest) setGuestAiNotice('AI features require a signed-in account. Your guest project remains available.'); else startGeneration(); }}/>
           <p className="section-count">{strategies.length} strateg{strategies.length === 1 ? 'y' : 'ies'}</p>
-          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId}/>
+          <ProcessControlsView controls={processControls} disabled={activeMode !== null || closing || ordering || !!dragId} guest={guest} onGuestPlay={() => setGuestPlayOpen(true)} playButtonRef={playButton}/>
         </div>
       </header>
+      {guestAiNotice && <p className="hint guest-ai-notice" role="status">{guestAiNotice}</p>}
       <div id="strategies-pane-content" hidden={!strategiesExpanded}>
       <p className="sr-only" role="status">{announcement}</p>
       <div id="strategy-composer">{editing && <NewStrategy initialDraft={manualDraft} path={view.path} onCancel={cancel} onSaved={next => {
@@ -3409,6 +3456,10 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       <p id="reorder-help" className="sr-only">Drag only the corner grip to reorder. Keyboard: Space picks up, arrows move, Enter drops, Escape cancels. Changes save on drop.</p>
       </div>
     </section>
+    {guestPlayOpen && <GuestPlayDialog onClose={() => setGuestPlayOpen(false)} onSignIn={() => {
+      setGuestPlayOpen(false);
+      requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new Event('sigma-open-google-signin'))));
+    }} playButtonRef={playButton}/>}
     <ResearchWorkspace path={view.path} projectId={project.id} strategies={strategies} advancedOutcomeDetails={view.project.show_advanced_outcome_details} onEnableAdvancedOutcome={async () => {
       const current = settingsOf(view);
       if (current.show_advanced_outcome_details) return;
@@ -3420,7 +3471,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
     {paperOpen && (
-      <AIPaperDialog path={view.path} projectId={project.id} onCancel={() => {
+      <AIPaperDialog path={view.path} projectId={project.id} guest={guest} onCancel={() => {
         setPaperOpen(false);
         requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-latex-button')?.focus());
       }} />
@@ -3534,6 +3585,11 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
+    const openFromGuestPrompt = () => { setError(''); setPosition(null); setOpen(true); };
+    window.addEventListener('sigma-open-google-signin', openFromGuestPrompt);
+    return () => window.removeEventListener('sigma-open-google-signin', openFromGuestPrompt);
+  }, []);
+  useEffect(() => {
     if (!open) return;
     const place = () => {
       const rect = disclosure.current?.getBoundingClientRect();
@@ -3574,7 +3630,7 @@ function GoogleIdentityPill({ compact = false }: { compact?: boolean }) {
   const description = cloud?.authenticated ? 'Google account connected; open account settings' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required';
   return <>
     <button ref={disclosure} type="button" className={`project-google-signin${compact ? ' compact' : ''}`} aria-haspopup="dialog" aria-expanded={open} aria-label={description} data-tooltip-disabled="" onClick={() => { setError(''); setPosition(null); setOpen(true); }}>
-      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google account connected' : canSignIn ? 'Sign in with Google' : 'Google sign-in setup required'}</span>
+      <span className={`connection-dot${cloud?.authenticated ? ' connection-connected' : ' connection-disconnected'}`} aria-hidden="true"/><span>{cloud?.authenticated ? 'Google connected' : canSignIn ? 'Sign in with Google' : 'Google setup required'}</span>
     </button>
     {open && createPortal(<>
       <div className="connection-backdrop" onPointerDown={dismissBackdrop}/>
@@ -3958,12 +4014,13 @@ function CloudAuthGate() {
   if (!status.enabled) return <CloudIdentityContext.Provider value={context}><AIProvider><App/></AIProvider></CloudIdentityContext.Provider>;
   if (window.location.pathname === '/demo') return <CloudDemoExperience deniedEmail={deniedEmail} authenticated={status.authenticated} user={status.user}/>;
   if (!status.authenticated && window.location.pathname === '/project') window.history.replaceState(null, '', '/');
-  return <CloudIdentityContext.Provider value={context}><AIProvider active={status.authenticated}><App/></AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
+  return <CloudIdentityContext.Provider value={context}><AIProvider unavailable={!status.authenticated}><App/></AIProvider>{accessOpen && status.authenticated && status.user?.role === 'admin' && <AccessManagementDialog bootstrapAdmin={bootstrapAdmin} grants={grants} sessions={accountSessions} invitationRequests={invitationRequests} feedbackRequests={feedbackRequests} error={failure} busy={busy} onClose={() => setAccessOpen(false)} onAdd={addGrant} onSave={saveGrants} onRevoke={revokeGrant} onUpdateInvitation={updateInvitation} onUpdateFeedback={updateFeedback}/>}</CloudIdentityContext.Provider>;
 }
 
 function PrivacyNoticePage() {
   useEffect(() => { document.title = 'Privacy notice · SIGMA'; }, []);
   return <main className="cloud-auth-shell"><article className="cloud-auth-card privacy-notice-card">
+    <a className="cloud-secondary-button privacy-return-button" href="/">Return to SIGMA</a>
     <a className="cloud-demo-brand" href="/">SIGMA</a>
     <p className="cloud-auth-kicker">Version 1 · proposed draft</p>
     <h1>SIGMA Privacy Notice</h1>
@@ -3987,7 +4044,6 @@ function PrivacyNoticePage() {
     <p>A privacy contact and process for access, correction, or deletion requests have not yet been approved. No response time or deletion guarantee is established here. Please do not treat the invitation email address as a confirmed privacy-request contact until the owner approves it.</p>
     <h2>Owner review required before public use</h2>
     <p>This draft must be reviewed and approved before it is published as the operative notice. Open questions include: the privacy contact and request-handling process; applicable jurisdiction and entity identity; the production hosting region and operator log settings; whether backups are active and how long they are retained; the intended retention and deletion rules for feedback, invitations, account/audit, usage, and workspace data; and the exact applicable Google, OpenAI, and SMTP provider privacy terms.</p>
-    <p><a className="cloud-text-button" href="/">Return to SIGMA</a></p>
   </article></main>;
 }
 

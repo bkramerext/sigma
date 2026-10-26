@@ -71,3 +71,42 @@ was made.
   merging current `main`; merge had no conflicts.
 
 No self-merge or deployment performed.
+
+## PR #246 integration update
+
+Integrated current `main` after PR #246 merged at
+`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`. Resolved overlap in
+`frontend/src/ai-connection.tsx`, `frontend/src/main.tsx`, and
+`src/sigma/cloud_workspaces.py`, retaining both the T88 verified-subject
+binding/connection selection and PR #246's guest state, guest sample catalog,
+Guest Play dialog, and authentication presentation. The merged `AIProvider`
+Guest-unavailable state remains in place; it does not call hosted AI endpoints.
+The T88 browser fixture now exercises the real guest read-only workspace path
+for samples, with only the Google/provider boundaries deterministic.
+
+Chrome checks found and fixed the overlapping Home card/catalog layout: at
+desktop widths the entry card sits beside the sample catalog; at narrower
+widths the entry and catalog flow vertically. This keeps both entry actions
+and sample navigation operable. The denied-account and invited-account
+behaviors, guest project, Guest Play dialog, and unauthenticated inference
+protection remain covered.
+
+Post-integration verification:
+
+- Focused: `tests/cloud_personal.py` (3), `tests/cloud_auth.py` (31),
+  `tests/cloud_workspaces.py`, `tests/cloud_sponsor.py` (8),
+  `tests/cloud_research.py`, `tests/cloud_research_api.py`,
+  `tests/cloud_research_sponsored_api.py`, and `tests/chatgpt.py` — PASS.
+- `uv run --locked --no-sync --with playwright python
+  browser_checks/t23_1_google_signin.py` — PASS in real Chrome.
+- `uv run --locked --no-sync --with playwright python
+  browser_checks/guest_samples.py` — PASS in real Chrome, including sample
+  browsing, read-only Guest Play dialog, and sign-in messaging.
+- `./sigma test` — PASS all repository scenarios, Ruff, Pyright, frontend
+  typecheck/build, and deployment checks. Existing Vite advisory remains for a
+  JS chunk over 500 kB.
+- No OAuth, production, credential-transfer, or paid provider calls.
+
+The integrated branch uses current `main` at
+`bea2108ae08d7f33f9132f5e2d3e06713ee52b44`; final tested implementation SHA
+and current PR head are reported in the R4R notice.

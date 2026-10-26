@@ -12,6 +12,7 @@ from playwright.sync_api import expect, sync_playwright
 
 UI = os.environ.get("SIGMA_RECENTS_UI_ORIGIN", "http://127.0.0.1:5173").rstrip("/")
 API = os.environ.get("SIGMA_RECENTS_API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
+REQUEST_ORIGIN = os.environ.get("SIGMA_BROWSER_REQUEST_ORIGIN", UI)
 running: set[str] = set()
 
 with sync_playwright() as playwright:
@@ -27,7 +28,9 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
 
     def forward(route):
-        response = route.fetch(url=route.request.url.replace(UI, API))
+        headers = dict(route.request.headers)
+        headers["origin"] = REQUEST_ORIGIN
+        response = route.fetch(url=route.request.url.replace(UI, API), headers=headers)
         if route.request.url.split("?", 1)[0] == f"{UI}/api/projects/recent":
             data = response.json()
             for entry in data["projects"]:
@@ -39,7 +42,13 @@ with sync_playwright() as playwright:
     page.route("**/api/**", forward)
     page.goto(UI)
     samples = page.get_by_role("tabpanel", name="Samples")
-    samples.get_by_role("button", name="Open Nonconsecutive Subset Sums Modulo 3").click()
+    sample_group = samples.locator("details.sample-type-group").filter(has_text="Mathematics")
+    if not sample_group.evaluate("group => group.open"):
+        sample_group.locator("summary").click()
+    sample = samples.get_by_role(
+        "button", name="Open Nonconsecutive Subset Sums Modulo 3", exact=True
+    )
+    sample.click()
     expect(
         page.get_by_role("heading", name="Nonconsecutive Subset Sums Modulo 3 v1")
     ).to_be_visible()
@@ -47,6 +56,9 @@ with sync_playwright() as playwright:
     project_id = json.loads(Path(project_path, "project.json").read_text())["id"]
     page.get_by_role("button", name="Back to home", exact=True).click()
     recent = page.get_by_role("tabpanel", name="Recent")
+    recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
+    if not recent_group.evaluate("group => group.open"):
+        recent_group.locator("summary").click()
     entry = recent.get_by_role("button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True)
     expect(entry).to_be_visible()
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
@@ -64,6 +76,9 @@ with sync_playwright() as playwright:
 
     page.reload()
     recent = page.get_by_role("tabpanel", name="Recent")
+    recent_group = recent.locator("details.recent-type-group").filter(has_text="Mathematics")
+    if not recent_group.evaluate("group => group.open"):
+        recent_group.locator("summary").click()
     entry = recent.get_by_role("button", name="Nonconsecutive Subset Sums Modulo 3 v1", exact=True)
     metadata = entry.locator("xpath=../..").locator(".recent-meta-row > small > span")
     expect(metadata).to_contain_text(" · Running · ", timeout=10000)
