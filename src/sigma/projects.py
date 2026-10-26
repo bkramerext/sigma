@@ -235,8 +235,8 @@ def project_path(value: str | Path) -> Path:
             cloud_workspaces.assert_project_path(value, path)
         except ValueError as exc:
             raise WorkspaceAccessError("Project not found or access denied.") from exc
-        if path.suffix != ".sigma":
-            raise ProjectError("Project path must end in .sigma")
+        if path.suffix not in (".sigma", ".json"):
+            raise ProjectError("Project path must end in .sigma or .json")
         return path
     except WorkspaceAccessError:
         raise
@@ -632,6 +632,11 @@ def inspect_project(value: str | Path) -> ProjectView:
     path = project_path(value)
     state = path / STATE
     try:
+        if path.suffix == ".json":
+            from sigma.project_bundle import read_file
+
+            project = _decode(json.loads(read_file(path, STATE)))
+            return ProjectView(str(path), project)
         if state.is_symlink() or not state.is_file():
             raise ProjectError("Project has no regular project.json; initialize it explicitly")
         project = _decode(json.loads(state.read_text(encoding="utf-8")))
