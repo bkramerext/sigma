@@ -675,19 +675,26 @@ async def middleware(request: Request, call_next):
             {"error": "AI provider authorization is unavailable in cloud mode."}, status_code=403
         )
     if _mock_enabled(cfg) and principal.subject.startswith("mock:"):
-        # Mock mode must never reach any provider-backed execution endpoint.
-        # Read-only project browsing remains available; local project creation
-        # and research mutations are blocked until a fully simulated executor exists.
-        if path.startswith("/api/ai/") or (
-            path.startswith("/api/projects/")
-            and request.method not in {"GET", "HEAD", "OPTIONS"}
+        # Keep normal project CRUD available for UI acceptance testing.
+        # Fail closed for AI and research execution until the deterministic
+        # mock executor is implemented. These checks are server-side.
+        segments = set(path.lower().split("/"))
+        execution_segments = {
+            "ai", "research", "research-sessions", "sessions",
+            "runs", "execute", "execution", "generate", "explore",
+            "challenge", "decide", "resume", "fork-run",
+        }
+        if (
+            path.startswith("/api/ai/")
+            or (request.method not in {"GET", "HEAD", "OPTIONS"}
+                and bool(segments & execution_segments))
         ):
             scenario = _mock_allowance(cfg, principal.subject)
             mode = model_access_for_subject(principal.subject)
             message = (
                 "Simulated sponsorship allowance exhausted."
                 if mode == "sponsored" and scenario["scenario"] == "exhausted"
-                else "Mock walkthrough: execution is disabled to prevent real provider charges."
+                else "Mock walkthrough: research execution is disabled to prevent real provider charges."
             )
             return JSONResponse({"error": message, "simulated": True}, status_code=403)
     request.state.cloud_principal = principal
