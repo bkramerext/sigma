@@ -7,6 +7,8 @@ COPY assets ./assets
 RUN npm --prefix frontend run build
 
 FROM nginx:1.27.4-alpine@sha256:a71e0884a7f1192ecf5decf062b67d46b54ad63f0cc1b8aa7e705f739a97c2fc
+ARG SIGMA_RELEASE
+LABEL org.opencontainers.image.revision="${SIGMA_RELEASE}"
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /workspace/frontend/dist /usr/share/nginx/html
 EXPOSE 8080
