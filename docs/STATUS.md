@@ -5219,3 +5219,40 @@ HTML reports, TeX, and a parsed PDF with hashes. OAuth and inference were
 skipped. No production instance was provided, and T137 remains blocked on
 hosted acceptance and coordinator/owner go-no-go. Work completed in about 24
 minutes, ahead of the 45-minute target.
+
+## T170 / T173 current-main acceptance follow-up (2026-10-26)
+
+Reviewed T170 and T173 on current `main` `8e8d979` alongside the T129/T130/T135/T136
+release controls, T132/T133 workflow evidence, T137 launch gate, T171 host audit,
+T172 auth gate and T131 OAuth checklist. No paid calls or cloud changes were
+performed. The application is not deployed; public HTTPS currently serves the
+temporary readiness page as supplied in the assignment.
+
+Corrected the three stale deterministic systemd assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and `tests/host_monitor.py`:
+current `deploy/systemd/sigma.service` declares `RequiresMountsFor=/srv/sigma-state`
+with Docker/sandbox requirements and ordering, rather than spelling the
+escaped mount-unit dependency directly. This changes tests only. `./sigma test`
+now passes end to end, including Ruff, format, Pyright (0 diagnostics), frontend
+typecheck and production build.
+
+Current acceptance evidence is recorded in [T170](evaluations/t170/README.md)
+and [T173](evaluations/t173/README.md). Real Chrome against disposable packaged
+Compose passed project/strategy editing and reopen, saved sessions/Outcome,
+audit/text/HTML exports, fixture TeX/PDF compilation and download, backend
+restart, container recreation, fresh-volume restore, report/paper/session hash
+continuity, and simulated second-user isolation. Python and SageMath runtime
+probes passed in local Colima containers (UID 65532; host secret/state, network,
+and Docker socket blocked), but daemon rootless status was false. A disposable
+Linux fixture ran the real rollback helper's failed-health and healthy branches;
+the failed branch restored the old SHA, and both branches preserved a state
+sentinel. No failed image-build injection was run.
+
+**Readiness remains BLOCKED** for production. The failed-build path and actual
+GCE/systemd rollback, target-host rootless isolation, persistent-disk backup and
+restore, reboot, hosted HTTPS/API app checks, production OAuth/admin/member/
+rejected identities, workspace isolation, and any provider-backed session need
+owner-authorized live acceptance. The runbook requires a verified recovery point
+and schema-compatibility assertion before code rollback; restore and code
+rollback are separate. No application was deployed and no T137 go/no-go was
+made.

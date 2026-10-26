@@ -78,3 +78,23 @@ real authorized identities, target-host rootless sandbox proof, separately
 authorized provider limits for any live generation, and coordinator/owner T137
 review. See [T132](../../../tickets/t132.md), [T133](../../../tickets/t133.md),
 and [T137](../../../tickets/t137.md).
+
+## Current-main follow-up (2026-10-26)
+
+On current `main` `8e8d979`, the earlier three full-suite failures were traced
+to stale test expectations for the removed explicit
+`srv-sigma\\x2dstate.mount` dependency. The service unit uses
+`RequiresMountsFor=/srv/sigma-state`, which supplies the mount dependency and
+ordering. Updated only those deterministic assertions in
+`tests/deployment_package.py`, `tests/gce_host.py`, and
+`tests/host_monitor.py`; no deployment unit or runtime behavior changed.
+`./sigma test` then passed all scenarios, Ruff, formatting, Pyright (0
+diagnostics), frontend typecheck and production build.
+
+Re-ran `uv run --locked --no-sync python -m sigma.cloud_runtime_check
+--allow-nonrootless-dev`: Python and SageMath both passed in local Colima
+containers as UID 65532 with host secret/state, network and Docker socket
+blocked; evidence artifacts persisted. The daemon again reported
+`daemon_rootless: false`. This confirms local isolated execution only, not the
+production rootless host requirement. Real Chrome packaged Compose acceptance
+also passed again; see [T173 smoke and rollback assessment](../t173/README.md).
