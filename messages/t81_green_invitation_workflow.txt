@@ -2,24 +2,27 @@ T81 — Green handoff
 
 Branch: green/t81-invitation-workflow
 Base: origin/main at 084e23b (merged into branch after PR creation when main advanced)
-Tested source head: 3f46aca (T81 implementation plus current main merge); the
-current branch head adds only ticket/tracker/handoff metadata.
+Tested source head: 0446842 (T81 implementation, concurrent notification claim,
+and current main merge); the current branch head adds only handoff metadata.
 
 Changes: replaced the hosted denied-access mailto action with a backend POST
 using the short-lived server verified Google subject; persisted requests in the
 auth SQLite database; added per-email daily rate limiting, duplicate handling,
-admin-only request review and status updates; added authenticated STARTTLS SMTP
+admin-only request review and status updates; added a persisted concurrent
+delivery claim; added authenticated STARTTLS SMTP
 delivery to zetacontinuation@gmail.com with the authenticated mailbox as sender;
 updated deployment secret mount/fetch/preflight/docs; refreshed the real Chrome
 access-denied acceptance check.
 
-Verification on the merged current-main head: `./sigma test` passed. Ruff
+Verification on the merged current-main head, including the persisted
+concurrent-delivery claim: `./sigma test` passed. Ruff
 check/format, Pyright, frontend typecheck/build, cloud_auth tests (22),
 gce_host tests, deployment_package check, Python compilation, and
 `git diff --check` passed. The
 real Chrome browser check passed the denied screen submission, exact success
 message, responsive layouts, demo/account-switch navigation, and admin review
-list. One earlier full-suite attempt saw a transient failure in the concurrent
+list. `tests/cloud_auth.py` passed 23 cases, including concurrent duplicate
+suppression. One earlier full-suite attempt saw a transient failure in the concurrent
 research-session scenario; the focused scenario passed on retry and the next
 full suite passed.
 
