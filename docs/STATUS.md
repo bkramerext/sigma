@@ -34,7 +34,7 @@ scenarios passed, then exited 1 on unchanged `browser_checks/model_availability.
 full-suite run both passed. The full command skipped its frontend build after
 the Ruff failure; `npm --prefix frontend run build` was run separately and
 passed. This is R4R with that baseline Ruff defect and the unrelated browser
-evidence-focus failure recorded for review.
+evidence-focus failure recorded for review, in [PR #213](https://github.com/bkramerext/sigma/pull/213).
 
 ## T129 initial GCE preview deployment (2026-10-26)
 

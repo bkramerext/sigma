@@ -4,7 +4,7 @@
 
 | Issue | Owner | Status | Branch / handoff |
 |---|---|---|---|
-| #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |
+| #209 — Current Understanding AI strategy suggestion, copy-only | Green | Implemented; R4R · [PR #213](https://github.com/bkramerext/sigma/pull/213) | `green/issue-209-current-understanding-strategy` · [ticket](../tickets/t209.md) · [handoff](../messages/issue_209_green.txt) |
 
 **Snapshot:** October 23, 2026 (Days 0–3; updated during PR #11 integration review)
 **Scope:** Cumulative ticket and minor-work tracker. A status of `Done` indicates reported/verified implementation, not proof of research effectiveness. `Proposed` does not mean a Codex worker has started.

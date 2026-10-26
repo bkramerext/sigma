@@ -3,7 +3,7 @@ GREEN — Issue #209 R4R
 Base: origin/main at 9fa49e6d8aca477890aaf115efaf586bc6a83cde
 Branch: green/issue-209-current-understanding-strategy
 Worktree: /Users/admin/sigma_issue209
-PR: pending
+PR: https://github.com/bkramerext/sigma/pull/213
 
 Implemented an explicitly requested, single-response strategy suggestion inside
 Current Understanding. The context includes the project question, the bounded
