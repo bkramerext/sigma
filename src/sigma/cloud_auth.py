@@ -514,6 +514,7 @@ def resolve_session(raw: str | None) -> Principal | None:
         cfg.enabled
         and cfg.local
         and not cfg.error
+        and not _mock_enabled(cfg)
         and os.environ.get("SIGMA_LOCAL_AUTO_ADMIN") == "true"
         and cfg.admin_contact_email
     ):
