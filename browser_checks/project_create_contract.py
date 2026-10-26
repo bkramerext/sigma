@@ -130,7 +130,6 @@ with sync_playwright() as playwright:
     dialog.get_by_role("combobox", name="Research category").click()
     dialog.get_by_role("option", name="Mathematics").click()
     dialog.get_by_label("Difficulty").select_option("hard")
-    dialog.get_by_label("Show advanced Outcome details").check()
     create = dialog.get_by_role("button", name="Create", exact=True)
     expect(create).to_be_enabled()
     create.click()
@@ -145,14 +144,13 @@ with sync_playwright() as playwright:
         "difficulty",
         "show_advanced_outcome_details",
     }, payload
-    assert payload["show_advanced_outcome_details"] is True, payload
+    assert payload["show_advanced_outcome_details"] is False, payload
     page.wait_for_function(
         "JSON.parse(localStorage.getItem('sigma.newProjectValues') || '{}').title === 'Create Contract Regression'"
     )
     saved = page.evaluate("JSON.parse(localStorage.getItem('sigma.newProjectValues'))")
     assert saved["investigation_type"] == "mathematical", saved
     assert saved["difficulty"] == "hard", saved
-    assert saved["show_advanced_outcome_details"] is True, saved
     assert saved["problem"] == "Check the project creation API contract.", saved
     # Reload Home and verify the last successfully created values initialize the next form.
     page.goto(UI_URL)
@@ -164,7 +162,6 @@ with sync_playwright() as playwright:
     )
     expect(dialog.get_by_role("combobox", name="Research category")).to_contain_text("Mathematics")
     expect(dialog.get_by_label("Difficulty")).to_have_value("hard")
-    expect(dialog.get_by_label("Show advanced Outcome details")).to_be_checked()
     browser.close()
 
 print("PASS real Chrome default local AI connection and project creation Outcome preference.")

@@ -23,15 +23,53 @@ with sync_playwright() as p:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on(
         "console",
-        lambda message: render_loop_errors.append(message.text)
-        if message.type == "error" and "Maximum update depth exceeded" in message.text
-        else None,
+        lambda message: (
+            render_loop_errors.append(message.text)
+            if message.type == "error" and "Maximum update depth exceeded" in message.text
+            else None
+        ),
     )
 
     def forward(route):
         route.fulfill(response=route.fetch(url=route.request.url.replace(base, fixture)))
 
     page.route("**/api/**", forward)
+    # Exercise project/session controls without a real account or provider call.
+    page.route(
+        "**/api/ai/connection*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "mode": "chatgpt",
+                    "status": "connected",
+                    "label": "ChatGPT connected (browser fixture)",
+                    "accounts": [],
+                    "active_account": None,
+                }
+            ),
+        ),
+    )
+    page.route(
+        "**/api/projects/proposals/config*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "available": True,
+                    "provider": "openai",
+                    "mode": "chatgpt",
+                    "binding": "chatgpt:browser-fixture",
+                    "project_id": "browser-fixture-project",
+                    "model": "gpt-6.1-sol",
+                    "reasoning_effort": "high",
+                    "message": "Browser fixture; no provider call is made.",
+                }
+            ),
+        ),
+    )
     page.goto(base)
     project = page.evaluate(
         """async () => {
