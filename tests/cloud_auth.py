@@ -475,7 +475,7 @@ class CloudAuthTests(TestCase):
             )
             # A remote ASGI peer must be rejected even with an allowed Origin.
             from fastapi.testclient import TestClient
-            with TestClient(app, base_url="http://remote.example",
+            with TestClient(app, base_url="http://127.0.0.1",
                             client=("198.51.100.8", 12345)) as remote:
                 self.assertEqual(
                     remote.post(
@@ -1443,7 +1443,7 @@ class CloudAuthTests(TestCase):
             )
         self.assertEqual(exhausted.status_code, 409, exhausted.text)
         switched = self.client.post("/api/ai/mode", json={"mode": "personal"}, headers=headers)
-        self.assertEqual(switched.status_code, 204, switched.text)
+        self.assertEqual(switched.status_code, 200, switched.text)
         self.assertEqual(switched.json()["status"], "unavailable")
         refreshed = self.client.get("/api/cloud-auth/status").json()
         self.assertEqual(refreshed["account"]["model_access"]["mode"], "personal")
