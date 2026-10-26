@@ -130,6 +130,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True, help="JSON evidence report path")
     args = parser.parse_args(argv)
     if args.finalize:
+        if args.expected_ip:
+            parser.error("--expected-ip is only valid while creating a report, not finalizing it")
         try:
             report = json.loads(args.finalize.read_text(encoding="utf-8"))
             known = {identifier for identifier, _, _ in CHECKS}
