@@ -1099,7 +1099,10 @@ def _occupied_titles(root: Path, exclude_id: str | None = None) -> set[str]:
         if item["available"] and item["id"] != exclude_id:
             names.add(_title_key(item["title"]))
     for directory in root.iterdir():
-        if directory.suffix != ".sigma" or directory.is_symlink() or not directory.is_dir():
+        if directory.is_symlink() or not (
+            (directory.suffix == ".sigma" and directory.is_dir())
+            or (directory.suffix == ".json" and directory.is_file())
+        ):
             continue
         try:
             view = inspect_project(directory)
