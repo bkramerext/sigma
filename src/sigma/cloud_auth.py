@@ -710,6 +710,9 @@ def mock_select(request: Request, identity: str):
         raise HTTPException(404, "Not found")
     if identity not in (*_MOCK_IDENTITIES, "guest"):
         raise HTTPException(400, "Unknown mock identity")
+    # Do not allow a cross-origin page to switch the active local identity.
+    if request.headers.get("origin") != cfg.origin:
+        raise HTTPException(403, "Request origin is not authorized.")
     old = request.cookies.get(_cookie_name(SESSION_COOKIE, cfg))
     previous_denied = request.cookies.get(_cookie_name(DENIED_COOKIE, cfg))
     with _db(cfg) as db:
