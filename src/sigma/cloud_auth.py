@@ -266,8 +266,9 @@ def _initialize(path: Path) -> None:
                 subject TEXT PRIMARY KEY,
                 email TEXT NOT NULL,
                 requested_at INTEGER NOT NULL,
-                status TEXT NOT NULL CHECK(status IN ('pending','notified','reviewed','declined')),
-                notification_error TEXT
+                status TEXT NOT NULL CHECK(status IN ('pending','sending','notified','reviewed','declined')),
+                notification_error TEXT,
+                notification_started_at INTEGER
             );
             CREATE TABLE IF NOT EXISTS audit (
                 id INTEGER PRIMARY KEY,
@@ -284,6 +285,11 @@ def _initialize(path: Path) -> None:
         denied_columns = {row["name"] for row in db.execute("PRAGMA table_info(denied_access)")}
         if "subject" not in denied_columns:
             db.execute("ALTER TABLE denied_access ADD COLUMN subject TEXT")
+        request_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(invitation_requests)")
+        }
+        if "notification_started_at" not in request_columns:
+            db.execute("ALTER TABLE invitation_requests ADD COLUMN notification_started_at INTEGER")
     if not existed:
         path.chmod(0o600)
 
@@ -883,10 +889,25 @@ def request_invitation(request: Request):
         # Bind to the verified Google subject without relying on browser-supplied identity.
         subject = identity["subject"] or f"legacy-denied:{_hash(denied_cookie)}"
         existing = db.execute(
-            "SELECT status,requested_at FROM invitation_requests WHERE subject=?", (subject,)
+            "SELECT status,requested_at,notification_started_at FROM invitation_requests WHERE subject=?",
+            (subject,),
         ).fetchone()
         if existing and existing["status"] != "pending":
-            return {"status": existing["status"], "duplicate": True}
+            if existing["status"] == "sending":
+                if (
+                    existing["notification_started_at"]
+                    and existing["notification_started_at"] > now - 60
+                ):
+                    raise HTTPException(
+                        409, "Your request is already being sent. Please wait and retry."
+                    )
+                db.execute(
+                    "UPDATE invitation_requests SET status='pending',notification_started_at=NULL WHERE subject=?",
+                    (subject,),
+                )
+                existing = {"status": "pending", "requested_at": existing["requested_at"]}
+            else:
+                return {"status": existing["status"], "duplicate": True}
         recent = db.execute(
             "SELECT COUNT(*) AS n FROM invitation_requests WHERE email=? AND requested_at>?",
             (identity["email"], now - 86400),
@@ -899,18 +920,22 @@ def request_invitation(request: Request):
                 "INSERT INTO invitation_requests(subject,email,requested_at,status) VALUES(?,?,?,'pending')",
                 (subject, identity["email"], requested_at),
             )
+        db.execute(
+            "UPDATE invitation_requests SET status='sending',notification_started_at=?,notification_error=NULL WHERE subject=?",
+            (now, subject),
+        )
     try:
         _deliver_invitation(identity["email"], requested_at)
     except RuntimeError as exc:
         with _db(cfg) as db:
             db.execute(
-                "UPDATE invitation_requests SET notification_error=? WHERE subject=?",
+                "UPDATE invitation_requests SET status='pending',notification_started_at=NULL,notification_error=? WHERE subject=?",
                 ("delivery failed", subject),
             )
         raise HTTPException(503, "Your request could not be sent. Please try again later.") from exc
     with _db(cfg) as db:
         db.execute(
-            "UPDATE invitation_requests SET status='notified',notification_error=NULL WHERE subject=?",
+            "UPDATE invitation_requests SET status='notified',notification_started_at=NULL,notification_error=NULL WHERE subject=?",
             (subject,),
         )
     return {"status": "notified", "duplicate": bool(existing)}

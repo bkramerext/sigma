@@ -392,6 +392,26 @@ class CloudAuthTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 429 if index == 3 else 200)
 
+    def test_simultaneous_invitation_submission_does_not_send_duplicate_mail(self):
+        denied = self.finish(email="visitor@example.org", subject="request-concurrent")
+        raw_cookie = denied.cookies[cloud_auth.DENIED_COOKIE]
+        self.client.cookies.set(cloud_auth.DENIED_COOKIE, raw_cookie)
+        with cloud_auth._db(cloud_auth.config()) as db:
+            subject = db.execute(
+                "SELECT subject FROM denied_access WHERE token_hash=?",
+                (cloud_auth._hash(raw_cookie),),
+            ).fetchone()["subject"]
+            db.execute(
+                "INSERT INTO invitation_requests(subject,email,requested_at,status,notification_started_at) VALUES(?,?,?,'sending',?)",
+                (subject, "visitor@example.org", int(time.time()), int(time.time())),
+            )
+        with patch.object(cloud_auth, "_deliver_invitation") as deliver:
+            response = self.client.post(
+                "/api/cloud-auth/invitation-request", headers={"Origin": ORIGIN}
+            )
+        self.assertEqual(response.status_code, 409)
+        deliver.assert_not_called()
+
     def test_changing_contact_preserves_bound_admin_and_does_not_authorize_new_contact(self):
         response = self.finish(email="admin@example.org", subject="preserved-admin-subject")
         self.assertIn(cloud_auth.SESSION_COOKIE, response.cookies)

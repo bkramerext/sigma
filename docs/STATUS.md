@@ -5897,7 +5897,8 @@ backend. The request is keyed to the Google subject from the server's
 short-lived verified-denial record; a caller-supplied email is ignored. The
 durable auth database stores Google subject, verified email, request timestamp,
 notification status, and a non-sensitive delivery-failure marker. Repeated
-requests for one Google subject are idempotent; a verified email is limited to
+requests for one Google subject are idempotent, including concurrent
+submissions through a persisted delivery claim; a verified email is limited to
 three new requests per 24 hours. Non-admin users cannot read or update the
 administrator request list. Admins can mark requests reviewed or declined in
 Administrator Settings.
@@ -5909,9 +5910,9 @@ mailbox account, and fixed recipient `zetacontinuation@gmail.com`. Deployment
 composition and Secret Manager fetch/preflight handling now include the
 protected SMTP credential.
 
-`tests/cloud_auth.py` passed (22 cases), including spoofed-body identity,
+`tests/cloud_auth.py` passed (23 cases), including spoofed-body identity,
 unauthorized admin access, idempotency, per-email rate limiting, retryable
-delivery failure, admin review, and SMTP authentication/sender/recipient
+delivery failure, concurrent duplicate suppression, admin review, and SMTP authentication/sender/recipient
 checks. Real Chrome accepted the denied-screen POST, exact static success
 message, desktop/mobile layouts, and administrator review list. `./sigma test`,
 Ruff, formatting, Pyright, frontend typecheck/build, `tests/gce_host.py`,
