@@ -389,6 +389,20 @@ def main() -> None:
             assert imported_session["project_path"] == str(imported_session_path.resolve())
             assert imported_session["project_id"] == created.project.id
             assert read_session_snapshot(str(imported_session_path))[1] == 0
+            # Reject a bundle whose session filename and embedded ID disagree.
+            malformed_bundle = json.loads(export_complete_project(created.path))
+            bad_session = dict(record, id=str(uuid4()))
+            malformed_bundle["files"][f"research-sessions/{session_id}.json"] = (
+                base64.b64encode(json.dumps(bad_session).encode()).decode("ascii")
+            )
+            rejected_path = root / "rejected-session.json"
+            try:
+                import_bundle(malformed_bundle, rejected_path)
+            except BundleError:
+                pass
+            else:
+                raise AssertionError("Import accepted mismatched research session identity")
+            assert not rejected_path.exists()
             # An unrelated foreign record must never influence session allocation.
             from sigma.project_bundle import write_file
             foreign_id = str(uuid4())
