@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from sigma.project_bundle import BundleError, encode, migrate, restore, snapshot
+from sigma.project_bundle import BundleError, encode, migrate, read_file, restore, snapshot, write_file
 
 
 def main() -> None:
@@ -30,6 +30,20 @@ def main() -> None:
         else:
             raise AssertionError("Migration replaced an existing JSON file")
         assert json.loads(migrated.read_text()) == bundle
+        original_project = read_file(migrated, "project.json")
+        original_evidence = read_file(migrated, "artifacts/evidence.bin")
+        write_file(migrated, "research-sessions/session.json", b'{"status":"revised"}')
+        assert read_file(migrated, "research-sessions/session.json") == b'{"status":"revised"}'
+        assert read_file(migrated, "project.json") == original_project
+        assert read_file(migrated, "artifacts/evidence.bin") == original_evidence
+        assert (source / "research-sessions" / "session.json").read_bytes() == b'{"status":"complete"}'
+        try:
+            write_file(migrated, "../escape", b"unsafe")
+        except BundleError:
+            pass
+        else:
+            raise AssertionError("Unsafe member path accepted")
+        assert not (root / "escape").exists()
 
         destination = root / "restored.sigma"
         restore(bundle, destination)
