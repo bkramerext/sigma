@@ -5663,6 +5663,8 @@ overflow recovery, and sponsored-budget tests passed. Real Chrome model-control
 acceptance passed at desktop and mobile sizes with injected 401, 403, and 503
 catalog failures; settings remained unchanged, model/thinking stayed disabled,
 and no inference was made. No paid provider calls or production changes were
-performed. #201–#202 integration PR is pending review/merge; hosted model
-availability diagnosis for #200 remains open pending authenticated hosted
-request and server evidence.
+performed. PR #207 and PR #208 are merged. Issues #201–#202 remain open pending
+hosted workflow acceptance against the supplied persisted project; #202 also
+requires explicit authorization before any paid hosted generation. Issue #200
+remains open pending an authenticated hosted availability request and server
+evidence to identify the underlying failure.
