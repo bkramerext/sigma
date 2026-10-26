@@ -3379,6 +3379,12 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
             raise ProjectError(
                 "Session work is still active; refresh its status before removing it"
             )
+        if project_path(path).suffix == ".json":
+            from sigma.project_bundle import delete_file
+
+            delete_file(path, f"research-sessions/{session_id}.json")
+            return {"removed": True, "id": session_id,
+                    "session_number": record["session_number"]}
         target = _directory(path) / f"{session_id}.json"
         if target.is_symlink() or not target.is_file():
             raise ProjectError("Research session not found")
