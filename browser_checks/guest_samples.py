@@ -186,7 +186,9 @@ def exercise(ui_url: str, root: Path) -> None:
         page.get_by_role("tab", name="Samples").click()
         page.get_by_role("button", name="Sign in with Google").click()
         expect(page.get_by_role("dialog")).to_contain_text("Connect your Google account")
-        sign_in = page.get_by_role("link", name="Sign in with Google")
+        expect(page.get_by_role("dialog").get_by_role("link", name="Invite Me")).to_be_visible()
+        expect(page.get_by_role("dialog").get_by_role("button", name="Continue as Guest")).to_be_visible()
+        sign_in = page.get_by_role("link", name="Continue with Google")
         expect(sign_in).to_have_attribute("href", "/api/cloud-auth/login")
         page.keyboard.press("Escape")
         sample_group = page.locator("details.sample-type-group").filter(
@@ -241,7 +243,7 @@ def exercise(ui_url: str, root: Path) -> None:
         expect(play_dialog).to_have_count(0)
         google_dialog = page.get_by_role("dialog", name="Connect your Google account")
         expect(google_dialog).to_be_visible()
-        expect(google_dialog.get_by_role("link", name="Sign in with Google")).to_have_attribute(
+        expect(google_dialog.get_by_role("link", name="Continue with Google")).to_have_attribute(
             "href", "/api/cloud-auth/login"
         )
         assert len(mutation_requests) == mutations_before_play, mutation_requests
