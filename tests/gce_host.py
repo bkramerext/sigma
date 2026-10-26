@@ -450,8 +450,9 @@ class GceHostToolingTests(unittest.TestCase):
             encoding="utf-8"
         )
         for expected in (
-            "Requires=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount",
-            "After=docker.service sigma-sandbox.service srv-sigma\\x2dstate.mount",
+            "Requires=docker.service sigma-sandbox.service",
+            "After=docker.service sigma-sandbox.service",
+            "RequiresMountsFor=/srv/sigma-state",
             "Restart=on-failure",
             "SIGMA_DEPLOY_ENV_FILE=/etc/sigma/deploy.env",
             "SIGMA_STATE_DISK_MOUNT=/srv/sigma-state",

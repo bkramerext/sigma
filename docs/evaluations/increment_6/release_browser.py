@@ -211,6 +211,7 @@ observations = {
     "new_sessions": 0,
     "projects": [],
     "viewports": [],
+    "conclusion_markdown": [],
     "page_errors": [],
     "request_toasts": 0,
     "direct_artifact_focus": None,
@@ -313,8 +314,34 @@ try:
             expect(advanced).to_be_visible()
             conclusion = row.locator(".outcome-conclusion")
             expect(conclusion).to_be_visible()
-            conclusion.get_by_role("button", name="Render Conclusion as Markdown").click()
-            expect(conclusion.locator(".outcome-markdown h3").first).to_be_visible()
+            conclusion_toggle = conclusion.locator("button.sigma-render-toggle")
+            toggle_label = conclusion_toggle.get_attribute("aria-label")
+            if toggle_label in {"Show saved Conclusion", "Render Conclusion as Markdown"}:
+                if toggle_label == "Show saved Conclusion":
+                    conclusion_toggle.click()
+                    expect(conclusion_toggle).to_have_attribute("aria-pressed", "false")
+                    expect(conclusion_toggle).to_have_attribute(
+                        "aria-label", "Render Conclusion as Markdown"
+                    )
+                conclusion_toggle.click()
+                expect(conclusion_toggle).to_have_attribute("aria-pressed", "true")
+                expect(conclusion.locator(".outcome-markdown h3").first).to_be_visible()
+                observations["conclusion_markdown"].append(
+                    {
+                        "project": copy["slug"],
+                        "result": "PASS saved mathematical Conclusion rendered and source toggle retained",
+                    }
+                )
+            else:
+                # A non-mathematical saved conclusion offers provider-backed
+                # formatting. Do not invoke it in this offline acceptance.
+                assert toggle_label == "Format Conclusion with AI", toggle_label
+                observations["conclusion_markdown"].append(
+                    {
+                        "project": copy["slug"],
+                        "result": "BLOCKED provider-backed conversion intentionally not called",
+                    }
+                )
             saved = api_json("export", copy["path"])
             session = next(
                 item
