@@ -127,7 +127,7 @@ def migrate(directory: str | Path, destination: str | Path) -> Path:
             raise BundleError("Migration destination already exists")
         before = _files(source)
         contents = (json.dumps({"format": FORMAT, "version": VERSION, "files": before},
-                               sort_keys=True, indent=2) + "\\n").encode("utf-8")
+                               sort_keys=True, indent=2) + "\n").encode("utf-8")
         fd, name = tempfile.mkstemp(prefix=".sigma-migrate-", dir=target.parent)
         staged = Path(name)
         try:
