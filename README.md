@@ -70,6 +70,26 @@ The ordinary local launch is single-user and does not require an administrator a
 
 For hosted setup, see [Cloud Deployment](docs/CLOUD_DEPLOYMENT.md). Hosted deployments require their own OAuth and administrator configuration; do not reuse the local loopback OAuth settings.
 
+### JSON project regression and integration tests
+
+The human-readable JSON bundle simulation runs without Docker:
+
+```sh
+PYTHONPATH=src python3 tests/project_bundle.py
+```
+
+To additionally verify real Docker-backed execution, binary artifacts,
+export/import integrity, and interruption recovery, first build the sandbox
+images described below, then run:
+
+```sh
+python3 scripts/test_t249_integration.py
+```
+
+The integration runner does not modify Git history or push reports. Docker
+integration is an explicit opt-in because it requires a running local Docker
+daemon and the configured sandbox image.
+
 ### Optional scientific Python sandbox
 
 Research sessions can use a local Docker-compatible runtime for isolated Python experiments. Build the pinned image once:
