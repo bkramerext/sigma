@@ -283,3 +283,80 @@ xychart-beta
 | Oct 25 | 79 | 70 | 9 |
 
 **Interpretation:** 70 of 79 tracked items were closed (**89%**), with nine remaining open. The backlog stayed near ten despite a sharp increase in ticket creation, indicating strong completion throughput relative to intake. This is encouraging delivery momentum, not by itself evidence of software quality or research validity. In the chart, the first line represents **opened** and the second **closed**.
+
+
+## Day 5 — October 25, 2026 (deployment continued into October 26 UTC)
+
+**Theme: converge the parallel development branches, complete real host readiness, and bring SIGMA onto the public internet.**
+
+Day 5 crossed the boundary from an extensively tested local research application to a running GCE-hosted preview. The critical progress was not a new feature: it was closing integration work, proving the isolation and deployment gates on the actual VM, recovering from a few misleading checks, and routing real HTTPS traffic to the application. The evening ended with the owner successfully opening the live site. Formal hosted acceptance, particularly research execution and sponsored inference, remained for the next day.
+
+### Integration and release discipline
+
+- Consolidated the remaining worker contributions and merged reviewed work promptly rather than leaving ready PRs in limbo. **PR #195** corrected inherited Docker environment handling in preflight. **Gray's PR #196** recorded release-integrity review and deterministic backup/rollback test evidence; it was documentation-only and merged. **Green's PR #197** recorded real-Chrome acceptance of paused sessions, saved-paper text/TeX/PDF downloads, inline PDF, Recent Projects polling, and a five-Outcome report export. It also fixed a saved-paper disclosure button's dynamic accessible name. Green's full local test/build suite passed.
+- The proposed shared Codex launcher **PR #198** was closed without merge. It was coordination tooling, not a requirement for the preview. The owner explicitly chose to stop designing coordination infrastructure and concentrate on deployment. Workers continued through ordinary reports and targeted assignments.
+- **Red's PR #199** corrected a second, distinct rootless Docker preflight defect: the checker invoked Docker as root with a bare socket path. It now runs the read-only Docker checks as `sigma-sandbox` and passes an explicit `unix:///run/user/1001/docker.sock` endpoint with inherited contexts cleared. The regression tests and full local suite passed. PR #199 was reviewed and merged at **`e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3`**, the release SHA selected for deployment.
+- A separate PR search found #198 and #199 still open after the earlier integration sweep. #198 was explicitly closed and #199 integrated. The lesson is to check PR collections directly rather than mistake an issue-only search for proof of a clean PR queue.
+
+### Live GCE preflight and access
+
+Red authenticated to the actual `sigma-gce-01` VM using the available Google Cloud operator context and IAP SSH. This established that live host checks were possible, though it did **not** prove that every separate Codex worker inherited the same credentials. The active identity had broad project Owner and OS Admin Login permissions; least-privilege worker identity remains future hardening work.
+
+The installed checker initially failed rootless daemon and image inspection even though direct inspection as the sandbox user worked. Red ran the corrected preflight temporarily and read-only on the VM, obtaining **all PASS** host-readiness results. Evidence included rootless Docker and Python/Sage images, active Docker/sandbox units, sandbox denial of access to `/srv/sigma-state`, mount protections, firewall exposure limited to public 80/443 and IAP SSH, valid DNS/TLS, and a Caddy readiness page. At that stage the application itself was still stopped. The production gate also identified the retired `SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL` key in protected `/etc/sigma/deploy.env`. Red deliberately left both the installed checker and protected environment unchanged for the deployer.
+
+The actual state disk was 30 GiB and the VM was `e2-standard-2`, smaller than an earlier 200 GiB/`e2-standard-4` planning estimate. This discrepancy needs reconciliation before sustained hosted research; it did not itself establish a failure of the preview.
+
+### First production deployment
+
+Gray took the deployment assignment, authenticated successfully, and inspected the installed VM release. Before changes, Gray found no existing recovery snapshot, so checked disk identity using the authenticated operator's GCE permissions and prepared a non-destructive recovery point. The VM runtime service account lacked disk-metadata read permissions; that fact did not prevent the operator from validating the attached disk. Gray installed the corrected preflight and pinned application checkout and addressed the retired environment setting under the deployment runbook.
+
+An older release pin, **`e91a3bc5`**, was present in the remote environment. The owner challenged it. Gray clarified that the deployment helper was selecting the explicitly requested **`e1ef8db8`** commit, not the stale prior pin. The release helper subsequently reported that exact SHA started with healthy containers and verified state mount.
+
+A manual post-start preflight appeared to fail Compose validation, prompting Gray to stop `sigma.service` rather than ignore a production gate. Investigation found the manual invocation had omitted **`--repository /opt/sigma/current`**; the systemd unit already passed this argument correctly. The direct Compose contract passed, and the corrected production preflight passed **all 23 rows**. All three application containers were healthy.
+
+The public endpoint probe then exposed a genuine routing gap. Caddy still served the temporary 25-byte readiness page instead of forwarding to the healthy loopback application edge. Gray backed up the Caddyfile, replaced only SIGMA's hostname block with the documented **`reverse_proxy 127.0.0.1:18080`**, validated the configuration, and reloaded Caddy. The subsequent public probe passed DNS, private-port closure, HTTP-to-HTTPS redirect, trusted TLS, SPA deep-link routing, and hosted API readiness. Gray reported that a local Chrome smoke check remained constrained by missing browser tooling; the owner independently opened the public site and confirmed it worked.
+
+**Public preview URL:** `https://sigma-research.duckdns.org/`. This was the first verified owner-visible hosted SIGMA interface. It is a deployment milestone, **not** certification that live research, OAuth edge cases, multi-account isolation, paid inference, recovery rehearsal, or every browser path passed production acceptance.
+
+### First hosted exploration: defects found immediately
+
+The first real browsing session produced actionable findings rather than a declaration of completion.
+
+- **Issue #200: model-availability and pill-state confusion.** The page showed Google account connected, ChatGPT/SIGMA service with an amber indicator, dimmed model/thinking pills, and `Model availability could not be verified. Saved settings are unchanged.` The underlying availability request and actual inference status remain to be investigated; a warning is not proof that model execution is impossible.
+- **Issue #201: Nonconsecutive Subset Summaries research stops immediately.** Pressing Play yielded a paused session with `Prior-session unresolved obligations exceeded the frozen context bound`, explicitly **no provider call**, and no saved result or Python/Sage computation. Two other strategies showed conservative cost-reserve stops. The displayed conclusion correctly identified an unresolved investigation rather than manufacturing a mathematical answer. The ticket asks whether this is intended protective behavior, stale persisted state, incorrect context accounting, or an unusable resume path.
+- **Issue #202: LaTeX paper generation rejects a changed snapshot.** The same project's Academic paper dialog returned `Research changed after paper preflight` and warned that a provider call might have consumed allowance. Investigation must distinguish a real concurrent change from a false conflict, preserve saved research and paper versions, and establish whether any provider call actually occurred.
+- **Sponsored inference budget UX.** Settings exposed `Maximum estimated session cost (USD)`, default **$0.25**, although the hosted service sponsors inference. A user-set API-key dollar cap and centrally enforced hosted spending quota are different concerns. The setting may be related to conservative cost-reserve pauses, but causation was not established.
+
+Blue was assigned to investigate #200–#202 together with the cost-setting mismatch, trace shared versus independent causes, implement only evidence-backed corrections, and provide separate reviewable PRs. The assignment explicitly prohibited paid calls without authorization, production changes, weakening safeguards, and benchmark-specific hacks.
+
+### What was verified, and what was not
+
+**Verified:** merged release identity; local suites reported passing for #196/#197/#199; live host-readiness checks; corrected **23-row production preflight**; healthy backend/frontend/edge containers; protected state mount; public DNS/TLS/redirect/routing/API probe; and owner access to the live web UI.
+
+**Not yet verified:** full real-browser hosted smoke suite, two-account sign-in and private-workspace isolation, sustained sponsored model execution, successful fresh research session, successful LaTeX generation, paid-call accounting, complete backup/restore exercise, or research quality against a matched-budget single-role baseline. The first hosted session showed concrete functional blockers in core research workflows.
+
+### Day 5 retrospective
+
+The day ended with SIGMA genuinely accessible on the public internet and with the development team cleared from the initial deployment effort. The most important operational lesson was to distinguish **repository main**, **the pinned release**, **the installed VM checkout**, **the preflight invocation context**, and **the public reverse-proxy route**. Each boundary produced a plausible but different failure mode. Stopping on ambiguous gates, preserving recovery options, and checking the exact deployed SHA prevented premature acceptance.
+
+The immediate next priority is to resolve #200–#202 and sponsored-budget semantics, then perform formal hosted acceptance. The machine is live; whether it can reliably conduct substantive research on the hosted service is still an open test.
+
+### Ticket throughput (snapshot: October 26, 2026 UTC)
+
+The previous Day 4 graph remains a historical snapshot. The following updated cumulative counts include **both GitHub issues and pull requests**, queried independently by type and summed through October 26 UTC. GitHub reports **37 issues and 165 PRs created**, and **25 issues and 144 PRs closed**: **202 created, 169 closed, 33 open**. This is a repository-wide snapshot, not a count of just Day 5 work. It includes recently filed hosted-acceptance issues and other unresolved backlog.
+
+```mermaid
+xychart-beta
+    title "SIGMA tracked items: cumulative snapshots"
+    x-axis ["Oct 25 prior snapshot", "Oct 26 current"]
+    y-axis "Issues + PRs" 0 --> 220
+    line [79, 202]
+    line [70, 169]
+```
+
+| UTC snapshot | Created (cumulative) | Closed (cumulative) | Open backlog |
+| --- | ---: | ---: | ---: |
+| Oct 25, prior recorded snapshot | 79 | 70 | 9 |
+| Oct 26, current query | 202 | 169 | 33 |
+
+The first line is **created**, the second **closed**. Because the first point was recorded earlier in a period of unusually intense integration, this is a **snapshot comparison**, not a normalized daily throughput measure. A rising backlog after launch is consistent with newly exposed acceptance defects; throughput alone does not establish product correctness.
