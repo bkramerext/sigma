@@ -1,4 +1,4 @@
-import { copyFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 
@@ -7,6 +7,17 @@ function buildCommit(): string {
   if (supplied) return supplied.slice(0, 7);
   try { return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' }).trim(); }
   catch { return 'unknown'; }
+}
+
+// Python project metadata is the canonical product version.
+function productVersion(): string {
+  const metadata = readFileSync(new URL('../pyproject.toml', import.meta.url), 'utf8');
+  const section = metadata.split(/^\\[project\\]\\s*$/m)[1]?.split(/^\\[/m)[0];
+  const version = section?.match(/^version\\s*=\\s*"([^"]+)"/m)?.[1];
+  if (!version) throw new Error('Missing [project].version in pyproject.toml');
+  const frontendVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+  if (frontendVersion !== version) throw new Error('Frontend and Python product versions differ');
+  return version;
 }
 
 // Copy before Vite scans publicDir. buildStart is too late on a clean dev launch.
@@ -20,6 +31,6 @@ for (const name of [
 }
 
 export default defineConfig({
-  define: { __SIGMA_BUILD_COMMIT__: JSON.stringify(buildCommit()) },
+  define: { __SIGMA_BUILD_COMMIT__: JSON.stringify(buildCommit()), __SIGMA_VERSION__: JSON.stringify(productVersion()) },
   server: { proxy: { '/api': process.env.SIGMA_API_TARGET ?? 'http://127.0.0.1:8000' } },
 });
