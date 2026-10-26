@@ -2822,18 +2822,20 @@ def read_session_snapshot(path: str) -> tuple[list[dict[str, Any]], int]:
     view = inspect_project(path)
     directory = Path(view.path) / "research-sessions"
     if Path(view.path).suffix == ".json":
-        from sigma.project_bundle import list_files, read_file
+        from sigma.project_bundle import read_bundle
+        import base64
 
         records: list[dict[str, Any]] = []
         unavailable = 0
-        for name in list_files(view.path):
+        members = read_bundle(view.path)["files"]
+        for name, encoded in members.items():
             if not name.startswith("research-sessions/") or not name.endswith(".json"):
                 continue
             stem = name.removeprefix("research-sessions/").removesuffix(".json")
             if stem in {"limits", "sequence"} or "/" in stem:
                 continue
             try:
-                data = read_file(view.path, name)
+                data = base64.b64decode(encoded, validate=True)
                 if len(data) > MAX_RECORD:
                     raise ValueError("Session record exceeds limit")
                 raw = json.loads(data)
