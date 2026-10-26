@@ -19,12 +19,15 @@ from urllib.request import urlopen
 from playwright.sync_api import expect, sync_playwright
 
 REPO = Path(__file__).resolve().parents[1]
+header_only = os.environ.get("SIGMA_CURRENT_UNDERSTANDING_HEADER_ONLY") == "1"
 PROJECTS = Path(
     os.environ.get("SIGMA_STATE_CHECK_PROJECTS", "/tmp/sigma-research-experience-blue/projects")
 ).resolve()
-OUTPUT = REPO / "docs/evaluations/increment_2"
+OUTPUT = Path(
+    os.environ.get("SIGMA_CURRENT_UNDERSTANDING_OUTPUT", REPO / "docs/evaluations/increment_2")
+).resolve()
 EXPORTS = OUTPUT / "exports"
-OUTPUT.mkdir(parents=True, exist_ok=True)
+EXPORTS.mkdir(parents=True, exist_ok=True)
 
 
 def free_port():
@@ -47,6 +50,8 @@ def ready(url, process):
 
 
 slugs = ["maximum-regions-archived", "nonconsecutive-subset-sums", "maximum-regions-by-lines"]
+if header_only:
+    slugs = slugs[:1]
 for slug in slugs:
     if not (PROJECTS / (slug + ".sigma") / "project.json").is_file():
         raise RuntimeError(
@@ -206,6 +211,32 @@ from sigma.api import app
                 dialog.get_by_role("button", name="Open Project", exact=True).click()
                 summary = page.locator(".current-understanding")
                 summary.wait_for()
+                header = summary.locator(":scope > summary")
+                chevron = header.locator(".disclosure-chevron")
+                assert summary.get_attribute("open") == ""
+                assert header.inner_text().strip() == "Current understanding"
+                assert "saved session" not in header.inner_text().lower()
+                assert chevron.count() == 1
+                assert (
+                    float(
+                        header.evaluate("element => parseFloat(getComputedStyle(element).fontSize)")
+                    )
+                    >= 18
+                )
+                session_rows = page.locator(".session-list > li").count()
+                expect(page.locator(".sessions-pane-heading .section-count")).to_contain_text(
+                    f"{session_rows} session"
+                )
+                header.click()
+                assert summary.get_attribute("open") is None
+                page.wait_for_function(
+                    "getComputedStyle(document.querySelector('.current-understanding > summary .disclosure-chevron')).transform === 'none'"
+                )
+                header.click()
+                assert summary.get_attribute("open") == ""
+                page.wait_for_function(
+                    "getComputedStyle(document.querySelector('.current-understanding > summary .disclosure-chevron')).transform !== 'none'"
+                )
                 expect(summary).to_contain_text("Current findings")
                 expect(summary).to_contain_text("What changed / superseded")
                 expect(summary).to_contain_text("Open or not yet reconciled")
@@ -216,6 +247,8 @@ from sigma.api import app
                 state = response.json()
                 (EXPORTS / (slug + ".current-understanding.json")).write_bytes(response.body())
                 assert state["project_status"] == "not_determined"
+                if header_only:
+                    assert summary.locator("button[aria-label^='Inspect']").count() > 0
                 if slug == "maximum-regions-archived":
                     expect(summary).to_contain_text("1+n(n+1)/2")
                     assert not state["next_investigations"]
@@ -263,39 +296,42 @@ from sigma.api import app
                         and suggestion_requests[0]["expected_project_id"] == active_project_id
                     )
                 navigation = []
-                for name in ("Inspect finding:", "Inspect earlier evidence:"):
-                    buttons = summary.get_by_role("button").filter(has_text="Session")
-                    target = next(
-                        (
-                            b
-                            for b in buttons.all()
-                            if (b.get_attribute("aria-label") or "").startswith(name)
-                        ),
-                        None,
-                    )
-                    if target:
-                        target.click()
-                        # The exact artifact receives focus, with its parent
-                        # session and evidence disclosure expanded.
-                        page.wait_for_function(
-                            "document.activeElement?.id.startsWith('research-artifact-')"
+                if not header_only:
+                    for name in ("Inspect finding:", "Inspect earlier evidence:"):
+                        buttons = summary.get_by_role("button").filter(has_text="Session")
+                        target = next(
+                            (
+                                b
+                                for b in buttons.all()
+                                if (b.get_attribute("aria-label") or "").startswith(name)
+                            ),
+                            None,
                         )
-                        focused = page.evaluate("document.activeElement.id")
-                        artifact = page.locator('[id="' + focused + '"]')
-                        expect(artifact.locator(":scope > details")).to_have_attribute("open", "")
-                        assert (
-                            artifact.locator("xpath=ancestor::li[@data-session-id]")
-                            .locator(".session-row-disclosure")
-                            .get_attribute("aria-expanded")
-                            == "true"
-                        )
-                        assert (
-                            artifact.locator(
-                                "xpath=ancestor::details[contains(@class,'outcome-evidence-subsection')]"
-                            ).get_attribute("open")
-                            is not None
-                        )
-                        navigation.append({"control": name, "focused_artifact": focused})
+                        if target:
+                            target.click()
+                            # The exact artifact receives focus, with its parent
+                            # session and evidence disclosure expanded.
+                            page.wait_for_function(
+                                "document.activeElement?.id.startsWith('research-artifact-')"
+                            )
+                            focused = page.evaluate("document.activeElement.id")
+                            artifact = page.locator('[id="' + focused + '"]')
+                            expect(artifact.locator(":scope > details")).to_have_attribute(
+                                "open", ""
+                            )
+                            assert (
+                                artifact.locator("xpath=ancestor::li[@data-session-id]")
+                                .locator(".session-row-disclosure")
+                                .get_attribute("aria-expanded")
+                                == "true"
+                            )
+                            assert (
+                                artifact.locator(
+                                    "xpath=ancestor::details[contains(@class,'outcome-evidence-subsection')]"
+                                ).get_attribute("open")
+                                is not None
+                            )
+                            navigation.append({"control": name, "focused_artifact": focused})
                 dimensions = []
                 for width, height in [(1440, 1000), (390, 844), (320, 700)]:
                     page.set_viewport_size({"width": width, "height": height})
@@ -304,7 +340,7 @@ from sigma.api import app
                     )
                     assert dims["scrollWidth"] <= width, dims
                     dimensions.append(dims)
-                    if width in (1440, 390):
+                    if width in (1440, 390) and not header_only:
                         summary.locator(":scope > summary").scroll_into_view_if_needed()
                         page.screenshot(path=str(OUTPUT / f"{slug}-{width}.png"))
                 page.set_viewport_size({"width": 1440, "height": 1000})
@@ -319,16 +355,23 @@ from sigma.api import app
                 downloaded = scratch / (slug + ".audit.json")
                 download.value.save_as(str(downloaded))
                 original = EXPORTS / (slug + ".audit.json")
-                assert json.loads(downloaded.read_bytes()) == json.loads(original.read_bytes()), (
-                    "Current state must not alter audit content"
-                )
+                if not header_only:
+                    assert json.loads(downloaded.read_bytes()) == json.loads(
+                        original.read_bytes()
+                    ), "Current state must not alter audit content"
                 # Browser downloads pretty-print the same actual export; keep
                 # those bytes too rather than substituting the earlier response.
                 browser_export = EXPORTS / (slug + ".browser.audit.json")
                 browser_export.write_bytes(downloaded.read_bytes())
                 ids = state["current_finding_ids"]
                 page.reload()
-                page.locator(".current-understanding").wait_for()
+                reloaded_summary = page.locator(".current-understanding")
+                reloaded_summary.wait_for()
+                assert reloaded_summary.get_attribute("open") == ""
+                assert (
+                    reloaded_summary.locator(":scope > summary").inner_text().strip()
+                    == "Current understanding"
+                )
                 reread = page.request.get(
                     ui_url + "/api/projects/current-understanding?path=" + quote(path, safe="")
                 ).json()
@@ -398,5 +441,5 @@ assert all(
 )
 (EXPORTS / "CURRENT_STATE_MANIFEST.json").write_text(json.dumps(export_manifest, indent=2))
 print(
-    "PASS real Chrome: current understanding and copy-only Markdown suggestion (provider endpoint mocked), exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
+    "PASS real Chrome: current understanding heading, visible chevron, default-expanded native disclosure, no redundant session count, copy-only Markdown suggestion (provider endpoint mocked), exact evidence navigation, original archives, empty sample, stable reload/IDs, desktop/390/320px, actual audit exports unchanged, no real provider work"
 )
