@@ -6312,3 +6312,15 @@ including repository Ruff, formatting, Pyright, frontend typecheck, and build.
 Local acceptance used temporary ports because standard ports were occupied;
 GitHub Actions retains the workflow's standard ports. PR #246 is updated and
 open for review, not merged. See the [Blue handoff](../messages/blue_guest_play_signin_r4r.md).
+
+## PR #246 — latest-main integration and review refresh (2026-10-26)
+
+Integrated current `main` at `6f6a910a64efd29268b5898b2e8f3e8c8791934a` in
+merge commit `d527bef94f7bf0ddae562dce0b299de80e66082c`. The single conflict in
+`frontend/src/main.tsx` was resolved by retaining the requested Privacy Policy
+action while preserving main's new `/tos` route. Updated the T81 legal-page
+browser check for that approved label. T92 Recent Projects, T200 Model
+Availability, Guest samples/Play, and T81 legal-page browser checks passed in
+real Chrome. Ruff check/format and `./sigma test` passed, including Pyright,
+typecheck, and production build. PR #246 is updated and open for review, not
+merged. See the [Blue R4R handoff](../messages/blue_guest_play_signin_r4r.md).

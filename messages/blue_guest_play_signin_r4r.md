@@ -78,6 +78,27 @@ local fixture. GitHub Actions use their existing default ports. PR #246 is
 updated and open for review at the correction commit plus this handoff update;
 not merged.
 
+## Latest-main integration (2026-10-26)
+
+`main` advanced again to `6f6a910a64efd29268b5898b2e8f3e8c8791934a` while the
+CI correction was being validated. Integrated it in merge commit
+`d527bef94f7bf0ddae562dce0b299de80e66082c`. This merge had one conflict in
+`frontend/src/main.tsx`: kept the requested Privacy Policy action and retained
+main's new `/tos` page and route. Updated `browser_checks/t81_public_legal_pages.py`
+to assert the approved “Privacy Policy” label.
+
+Post-merge verification:
+
+- T92 Recent Projects, T200 Model Availability, Guest samples/Play, and T81
+  public legal pages — PASS in real Chrome.
+- Ruff check and format for the changed browser acceptance checks — PASS.
+- `./sigma test` — PASS, including all scenarios, Ruff, formatting, Pyright
+  (0 diagnostics), frontend typecheck, and production build.
+
+The PR now includes current main through `6f6a910`. Both integration conflicts
+and their resolutions are recorded above; Guest Play and the Google sign-in
+handoff remain verified. PR #246 remains open and unmerged.
+
 This change is on the active Guest branch as requested for the overlapping
 implementation. No provider calls or budget reservations were made. No research
 data or authentication logic changed.
