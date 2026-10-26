@@ -240,6 +240,7 @@ def main() -> None:
                 dict(record, id="../not-a-uuid"),
                 dict(record, session_number=0),
                 dict(record, session_number=True),
+                dict(record, status=None),
             ):
                 try:
                     _save(created.path, invalid)
@@ -258,6 +259,16 @@ def main() -> None:
                 raise AssertionError("Session identity was overwritten")
             assert _all(created.path) == [record]
             assert read_session_snapshot(created.path) == ([record], 0)
+            # An unrelated foreign record must never influence session allocation.
+            from sigma.project_bundle import write_file
+            foreign_id = str(uuid4())
+            write_file(created.path, f"research-sessions/{foreign_id}.json",
+                       json.dumps(dict(record, id=foreign_id,
+                                       project_id=str(uuid4()),
+                                       session_number=100000)).encode())
+            assert read_session_snapshot(created.path)[1] == 1
+            from sigma.project_bundle import delete_file
+            delete_file(created.path, f"research-sessions/{foreign_id}.json")
             from sigma.research_sessions import _worker_lock_path
             assert _worker_lock_path(created.path, session_id).parent == Path(created.path).parent
             assert not (Path(created.path) / "research-sessions").exists()
