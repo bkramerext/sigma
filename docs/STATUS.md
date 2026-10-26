@@ -6008,3 +6008,25 @@ Production OAuth/account switching, hosted mount permissions, revocation, and
 runtime sandbox isolation still need live production verification; they were
 not tested under this assignment's constraints. See [T192](../tickets/t192.md).
 Implementation and regression tests are in [PR #223](https://github.com/bkramerext/sigma/pull/223), open against `main` and not merged.
+
+## Issue #200: hosted model checks and explicit ChatGPT sponsor
+
+Authenticated production testing identified the blanket hosted `/api/ai/` 403
+while Google admin authentication succeeded. Read-only authenticated model and
+connection checks now reach the provider; hosted account-changing/OAuth routes
+remain blocked. An explicit ChatGPT sponsor mode uses a dedicated persistent
+credential store pinned to the verified sponsor email. Protected import retains
+the VM host ID, imports only the selected registration, and preserves prior
+state on rejection. Existing serialized refresh and cloud admission guards
+remain in use. ChatGPT mode never falls back to local accounts or API billing.
+
+Focused checks passed: sponsor (7), cloud auth (24), GCE host (21), and sponsored
+API workflow. Ruff/format, Pyright (0 diagnostics), and frontend build passed.
+The full suite is limited by AF_UNIX socket creation denied in this environment;
+`instance_ownership.py` and `ui_registry.py` reproduce that failure on unchanged
+main `e62d808`. Chrome installation download failed, so this branch has no local
+real-browser acceptance. No production change, credential transfer, or inference
+was performed. See [handoff](../messages/issue_200_sponsor_fix.txt) and
+[provisioning procedure](T200_SPONSOR_CONNECTION.md). Live sponsor provisioning,
+deployment, catalog verification and #201/#202 original-project retests remain
+UNVERIFIED; issue #200 remains open.

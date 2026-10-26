@@ -1,0 +1,44 @@
+Issue #200: hosted model discovery and explicit ChatGPT sponsor
+
+Owner: this ChatGPT/Codex session, directly assigned by Brian.
+Branch: fix/200-hosted-chatgpt-sponsor
+Base: main e62d808c78573dc2e6289fcbf4b461a2ad739c28
+
+Authenticated production evidence: Google admin access succeeded as the approved
+zetacontinuation account; Home returned HTTP 403 "AI provider authorization is
+unavailable in cloud mode." The source confirms middleware blanket-blocked
+/api/ai/ even though the UI requests model discovery there.
+
+Changes:
+- Allow only authenticated GET connection/model checks through that guard.
+  Hosted OAuth, account selection, disconnect and mutations remain denied.
+- Explicit ChatGPT sponsor configuration, isolated persistent credential store,
+  pinned verified email, protected VM importer, existing serialized refresh.
+  No personal/local credential reuse and no API-key fallback in ChatGPT mode.
+- Non-sensitive status guidance and precise provisioning/deployment notes.
+- Existing cloud budget/concurrency/token guards preserved.
+
+Verification:
+- tests/cloud_sponsor.py: 7 passed. Private import/atomic rejection, selected
+  registration only, VM host ID retention, verified email/scope checks,
+  sponsor-token catalog discovery, no identity/token in public response,
+  rotating-token refresh and terminal-revocation/no-fallback paths.
+- tests/cloud_auth.py: 24 passed, including authenticated catalog access,
+  unauthenticated denial and blocked hosted auth mutations.
+- tests/cloud_research_sponsored_api.py: passed, including no personal key,
+  durable budgets, failure holds, idempotency and cross-workspace isolation.
+- tests/gce_host.py: 21 passed, including explicit provider/email validation.
+- Ruff check and format passed; Pyright 0 diagnostics; frontend build passed.
+- Full ./sigma test attempted with proxy variables removed for localhost tests.
+  Two AF_UNIX tests cannot create sockets in this environment. Both failures
+  reproduced on unchanged main e62d808 (instance_ownership.py, ui_registry.py).
+- Real Chrome for this branch: UNVERIFIED. Browser installation download failed.
+  The authenticated production observation above is pre-fix browser evidence.
+
+No production deployment, existing credential access/transfer, paid calls,
+plan-consuming inference, emails, or safety/budget bypasses occurred.
+
+UNVERIFIED: protected sponsor authorization/provisioning on GCE, deployed
+catalog success, actual ChatGPT plan inference, #201/#202 original-project
+acceptance. The new SIGMA account has no Recent projects. Keep #200 open until
+hosted acceptance; this PR must not auto-close #201/#202.

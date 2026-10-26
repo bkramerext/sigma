@@ -258,6 +258,25 @@ class CloudAuthTests(TestCase):
             self.client.post("/api/ai/disconnect", headers={"Origin": ORIGIN}).status_code, 403
         )
 
+    def test_hosted_read_only_model_checks_keep_auth_mutations_blocked(self):
+        signed_in = self.finish()
+        self.client.cookies.set(
+            cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
+        )
+        with patch("sigma.api.models", return_value={"connection": {"status": "unconfigured"}}):
+            response = self.client.get("/api/ai/models")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["connection"]["status"], "unconfigured")
+            self.assertEqual(response.headers["cache-control"], "no-store")
+        with patch("sigma.api.connection", return_value={"status": "unconfigured"}):
+            self.assertEqual(self.client.get("/api/ai/connection").status_code, 200)
+        for path in ("/api/ai/auth/begin", "/api/ai/mode", "/api/ai/disconnect"):
+            self.assertEqual(
+                self.client.post(path, headers={"Origin": ORIGIN}, json={}).status_code, 403
+            )
+        self.assertEqual(self.client.get("/api/ai/auth/open/guessed").status_code, 403)
+        self.assertEqual(TestClient(app).get("/api/ai/models").status_code, 401)
+
     def test_session_persists_across_client_restart_and_logout_revokes_it(self):
         signed_in = self.finish()
         raw = signed_in.cookies[cloud_auth.SESSION_COOKIE]
@@ -547,7 +566,7 @@ class CloudAuthTests(TestCase):
         self.client.cookies.set(
             cloud_auth.SESSION_COOKIE, signed_in.cookies[cloud_auth.SESSION_COOKIE]
         )
-        response = self.client.get("/api/ai/connection")
+        response = self.client.post("/api/ai/auth/begin", headers={"Origin": ORIGIN}, json={})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(
             response.json()["error"],

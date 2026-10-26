@@ -171,14 +171,30 @@ async def _check(key: str, mode: str = "api_key") -> dict[str, Any]:
 
 async def auth_context() -> AuthContext:
     # Google OIDC identifies a cloud workspace; it does not grant use of the
-    # local operator's account or API key. Cloud inference uses only the
-    # explicitly provisioned service credential and is bounded by the durable
+    # local operator's account or API key. Cloud inference uses only an
+    # explicitly provisioned sponsor session or service key, bounded by the durable
     # cloud research ledger. Local mode retains its existing account selection.
     from sigma import cloud_workspaces
 
     if cloud_workspaces.enabled():
         from sigma.config_secrets import SecretConfigurationError, secret_value
 
+        provider = os.environ.get("SIGMA_CLOUD_INFERENCE_PROVIDER", "api_key").strip()
+        if provider == "chatgpt":
+            from sigma.cloud_sponsor import sponsor_session
+
+            selected = await sponsor_session()
+            account = selected.get("account") or {}
+            return AuthContext(
+                token=account.get("access_token", ""),
+                mode="chatgpt",
+                status=selected["status"],
+                identity="cloud_sponsor:" + str(selected.get("account_id", "")),
+            )
+        if provider != "api_key":
+            return AuthContext(
+                token="", mode="chatgpt", status="unavailable", identity="cloud_invalid"
+            )
         try:
             token = secret_value("SIGMA_CLOUD_OPENAI_API_KEY") or ""
         except SecretConfigurationError:
@@ -260,7 +276,7 @@ async def connection(
 
         prefs = (
             {
-                "mode": "api_key",
+                "mode": context["mode"],
                 "active_account": None,
                 "accounts": [],
                 "welcome_pending": False,
@@ -298,6 +314,14 @@ async def connection(
             await asyncio.shield(_pending)
         state = dict(_cached or _result("unavailable", None))
     label, guidance = (PLAN_MESSAGES if mode == "chatgpt" else MESSAGES)[state["status"]]
+    if cloud_workspaces.enabled() and mode == "chatgpt":
+        label = "SIGMA-sponsored ChatGPT · " + str(state["status"]).replace("_", " ")
+        if state["status"] != "connected":
+            guidance = (
+                "The administrator must provision or renew the configured ChatGPT sponsor session "
+                "on the server. Google sign-in does not authorize ChatGPT plan use. "
+                "No API-key fallback was selected; saved research is unchanged."
+            )
     return {
         **state,
         **prefs,

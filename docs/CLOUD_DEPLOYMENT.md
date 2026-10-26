@@ -1736,3 +1736,14 @@ The central requirement is simple: **a handful of visitors should be able to use
 ## T128 host-readiness gate (coordinator integration)
 
 Before T129's first application start, run the read-only host checks documented in [T128_HOST_READINESS.md](T128_HOST_READINESS.md). This gate does not require production `deploy.env`, OAuth, or provider secrets. Run `--host-readiness` before initial deployment and `--after-reboot` after an authorized reboot. Capture sanitized output and distinguish PASS, FAIL, and BLOCKED. Live disk identity/mount options, rootless Docker, installed systemd configuration, effective GCE firewall exposure, and runtime isolation must be observed on the target VM; source-level tests do not substitute for those checks. The latest operator access limitation is recorded in [T128_LIVE_READINESS.md](T128_LIVE_READINESS.md).
+
+## Explicit ChatGPT sponsor provisioning (#200)
+
+Hosted model discovery permits authenticated read-only checks; hosted personal
+OAuth and account mutation routes remain blocked. To use the designated sponsor
+`zetacontinuation@gmail.com`, explicitly configure ChatGPT mode and provision its
+protected SIWC session on the VM. Google sign-in alone cannot create that grant.
+See [Sponsor connection and provisioning](T200_SPONSOR_CONNECTION.md) for the
+settings, private import procedure, refresh ownership, and acceptance boundary.
+API-key mode remains the compatibility default; ChatGPT mode never falls back
+to it. Existing user/global admission and budget guards apply in both modes.
