@@ -12,16 +12,18 @@ This runbook and [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md#cloud-resource-invent
 | --- | --- | --- |
 | Google OAuth project | `SIGMA Auth`; ID `sigma-auth-512601`; number `665111821572` | Operator read from Cloud Console, 2026-10-25 |
 | Infrastructure project | `SIGMA Production`; ID `sigma-research-prod`; number `224387813390` | Operator-reported created in Cloud Console, 2026-10-25; billing/permissions pending verification |
-| DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | Registered; A record target not yet confirmed |
-| Zone and VM | `us-west1-b`; planned `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-4` | Provisioning pending |
-| Disk | `sigma-state` 30 GB `pd-balanced`, zonal `us-west1-b`, blank, Google-managed encryption, no backups; boot disk planned 100 GiB `pd-standard` | Operator reports created 2026-10-25; verify table and retained attachment later |
-| Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | VPC/subnet and reserved IP operator-verified, Oct 25; IP attachment pending |
-| VM identity and access | Planned `sigma-runtime` service account, secret-scoped access; IAP SSH with OS Login | Creation and live IAM verification pending |
+| DNS hostname | `sigma-research.duckdns.org` (DuckDNS) | A resolves to `136.66.128.82`; public HTTPS/API probe passed 2026-10-26 |
+| Zone and VM | `us-west1-b`; `sigma-gce-01`, Ubuntu 24.04 amd64, `e2-standard-2` | RUNNING; IAP/OS Login verified 2026-10-26 |
+| Disk | `sigma-state` 30 GB `pd-balanced`, zonal `us-west1-b`; boot disk 100 GiB `pd-standard` | Attached, mounted with approved UUID/options; one-off recovery snapshot READY 2026-10-26 |
+| Network | `sigma-vpc`, subnet `sigma-us-west1` in `us-west1`, primary IPv4 `10.42.0.0/24`; static external IPv4 `sigma-web-ip` = **`136.66.128.82`** (Premium, regional) | Attached to VM; public DNS and HTTPS routing verified 2026-10-26 |
+| VM identity and access | `sigma-runtime` service account; IAP SSH with OS Login | VM identity and IAP access verified 2026-10-26; worker IAM remains broader than least privilege |
 | Billing account | `My Billing Account`; ID `015C1D-E6B877-9913D6`; Direct, Active; last 30 days spend $0 | Operator screenshot, 2026-10-25; production project association unverified |
 | Billing / alert | Trial/billing link and $300 project budget | Not yet verified |
-| Production release | Exact Git SHA and live host evidence | Not deployed |
+| Production release | `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` | Deployed and endpoint-verified 2026-10-26; formal acceptance pending |
 
 **Change log**
+
+- 2026-10-26: Initial preview deployed from exact SHA `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3`. T128 host readiness and all 23 production preflight checks passed; systemd service and three containers are healthy. Removed the retired bootstrap-admin setting while preserving the prior administrator/contact identity and backing up `/etc/sigma/deploy.env`. Created READY recovery snapshot `sigma-state-preview-20261026-063909`. Installed the documented host-Caddy reverse proxy after public probing showed the static readiness page was still active. DNS, HTTPS/TLS, private-port closure, SPA deep link, hosted API readiness, and local headless Chrome smoke passed. No paid inference or IAM/network changes. Formal OAuth, two-identity, research-runtime, reboot-recovery, and restore acceptance remain pending; recurring backup scheduler is not configured.
 
 - 2026-10-25: Operator screenshot showed active Direct billing account `My Billing Account` (`015C1D-E6B877-9913D6`) and $0 spend over 30 days. Project linkage and free trial remain unverified.
 
@@ -128,7 +130,8 @@ Use read-only commands on host:
 sudo systemctl status sigma.service --no-pager
 sudo systemctl status 'srv-sigma\x2dstate.mount' --no-pager
 findmnt /srv/sigma-state
-sudo /usr/local/libexec/sigma/gce_preflight.py --json
+sudo /usr/local/libexec/sigma/gce_preflight.py --json \
+  --repository /opt/sigma/current --env-file /etc/sigma/deploy.env
 sudo journalctl -u sigma.service -n 100 --no-pager
 ```
 
@@ -138,6 +141,11 @@ Verify public DNS, HTTPS, `/api` routing and application health with the read-on
 cd /opt/sigma/current
 python3 deploy/verify_public_endpoint.py --expected-ip OWNER_VERIFIED_STATIC_IPV4
 ```
+
+When running the probe from a source checkout that is not installed as a
+package, set `PYTHONPATH=src` (or run it through the project environment), for
+example `PYTHONPATH=src python3 deploy/verify_public_endpoint.py
+--expected-ip 136.66.128.82`.
 
 The GCP ingress contract allows only public TCP 80/443 after launch approval;
 TCP 22 remains IAP-only. Do not add public TCP 8000, 5173, 2375 or 2376.
