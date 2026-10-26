@@ -265,6 +265,20 @@ def main() -> None:
             })
             assert read_file(created.path, "artifacts/proof.bin") == bytes(range(256))
             assert read_file(created.path, "evidence/notes.txt") == b"independent evidence"
+            from sigma.projects import save_project_artifacts, read_project_artifact
+
+            save_project_artifacts(created.path, {
+                "artifacts/report.html": b"<html>report</html>",
+                "evidence/raw.bin": bytes(range(256)),
+            })
+            assert read_project_artifact(created.path, "artifacts/report.html") == b"<html>report</html>"
+            assert read_project_artifact(created.path, "evidence/raw.bin") == bytes(range(256))
+            try:
+                save_project_artifacts(created.path, {"project.json": b"tamper"})
+            except ProjectError:
+                pass
+            else:
+                raise AssertionError("Artifact API allowed project overwrite")
             try:
                 transform_members(created.path, lambda members: {
                     "artifacts/should-not-exist.bin": b"bad",
@@ -289,6 +303,7 @@ def main() -> None:
             assert set(list_files(created.path)) == {
                 "project.json", f"research-sessions/{session_id}.json", "research-sessions/one.json",
                 "artifacts/proof.bin", "evidence/notes.txt",
+                "artifacts/report.html", "evidence/raw.bin",
                 "artifacts/trace.bin", "evidence/source.txt",
             }
             exported = json.loads(export_complete_project(created.path))
