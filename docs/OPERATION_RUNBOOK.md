@@ -141,10 +141,13 @@ python3 deploy/verify_public_endpoint.py --expected-ip OWNER_VERIFIED_STATIC_IPV
 
 The GCP ingress contract allows only public TCP 80/443 after launch approval;
 TCP 22 remains IAP-only. Do not add public TCP 8000, 5173, 2375 or 2376.
-Compose publishes only TCP 80/443 on the edge. Caddy owns HTTP to HTTPS
-redirects, sends `/api` and `/api/*` to FastAPI, and sends other paths to the
-SPA frontend. A successful DNS/TLS probe is endpoint evidence, not proof of
-OAuth identity isolation or persistent-state recovery.
+Host Caddy owns public HTTPS and redirects HTTP to HTTPS. The GCE Compose edge
+publishes only `127.0.0.1:18080` and serves HTTP behind host Caddy. Configure
+the existing host Caddy with the site block in `deploy/host-caddy.Caddyfile`;
+it forwards requests to that loopback listener. The Compose Caddy routes `/api`
+and `/api/*` to FastAPI and other paths to the SPA frontend. A successful
+DNS/TLS probe is endpoint evidence, not proof of OAuth identity isolation or
+persistent-state recovery.
 
 After starting or restarting the service, verify all three container healthchecks
 and the public app/API paths. Run on the host from the reviewed release

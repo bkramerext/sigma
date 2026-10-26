@@ -21,6 +21,22 @@ import prepare_state_disk  # pyright: ignore[reportMissingImports]
 
 
 class GceHostToolingTests(unittest.TestCase):
+    def test_gce_caddy_contract_is_loopback_only_and_local_ports_stay_unchanged(self) -> None:
+        local_compose = (ROOT / "deploy/compose.yaml").read_text(encoding="utf-8")
+        gce_compose = (ROOT / "deploy/compose.gce.yaml").read_text(encoding="utf-8")
+        host_caddy = (ROOT / "deploy/host-caddy.Caddyfile").read_text(encoding="utf-8")
+
+        self.assertIn('"${SIGMA_HTTP_BIND:-0.0.0.0}:${SIGMA_HTTP_PORT:-80}:80/tcp"', local_compose)
+        self.assertIn(
+            '"${SIGMA_HTTPS_BIND:-0.0.0.0}:${SIGMA_HTTPS_PORT:-443}:443/tcp"', local_compose
+        )
+        self.assertIn("ports: !override", gce_compose)
+        self.assertIn('"127.0.0.1:18080:80/tcp"', gce_compose)
+        self.assertIn("SIGMA_CADDY_SCHEME: http", gce_compose)
+        self.assertIn("SIGMA_CADDY_UPSTREAM_SCHEME: https", gce_compose)
+        self.assertIn("sigma-research.duckdns.org", host_caddy)
+        self.assertIn("reverse_proxy 127.0.0.1:18080", host_caddy)
+
     def test_preflight_requires_all_healthchecks_and_healthy_startup_dependencies(self) -> None:
         services = {
             "backend": {
@@ -60,8 +76,12 @@ class GceHostToolingTests(unittest.TestCase):
                 "pids_limit": 128,
                 "mem_limit": "256m",
                 "ports": [
-                    {"target": 80, "published": "80", "protocol": "tcp"},
-                    {"target": 443, "published": "443", "protocol": "tcp"},
+                    {
+                        "host_ip": "127.0.0.1",
+                        "target": 80,
+                        "published": "18080",
+                        "protocol": "tcp",
+                    },
                 ],
                 "healthcheck": {"test": ["CMD-SHELL", "wget localhost:2019"]},
                 "depends_on": {
@@ -121,8 +141,12 @@ class GceHostToolingTests(unittest.TestCase):
                 "pids_limit": 128,
                 "mem_limit": "256m",
                 "ports": [
-                    {"target": 80, "published": "80", "protocol": "tcp"},
-                    {"target": 443, "published": "443", "protocol": "tcp"},
+                    {
+                        "host_ip": "127.0.0.1",
+                        "target": 80,
+                        "published": "18080",
+                        "protocol": "tcp",
+                    },
                 ],
             },
         }
@@ -144,7 +168,7 @@ class GceHostToolingTests(unittest.TestCase):
                 )
             )
         )
-        self.assertTrue(gce_preflight.Preflight._public_ports_are_restricted(services))
+        self.assertTrue(gce_preflight.Preflight._gce_ports_are_loopback_only(services))
         services["backend"]["pids_limit"] = 0
         self.assertFalse(
             gce_preflight.Preflight._service_is_restricted(
@@ -166,10 +190,18 @@ class GceHostToolingTests(unittest.TestCase):
             )
         )
         services["backend"]["security_opt"].pop()
-        services["edge"]["ports"].append({"target": 8000, "published": "8000", "protocol": "tcp"})
-        self.assertFalse(gce_preflight.Preflight._public_ports_are_restricted(services))
-        services["edge"]["ports"] = [{"target": 8000, "published": "80", "protocol": "tcp"}]
-        self.assertFalse(gce_preflight.Preflight._public_ports_are_restricted(services))
+        services["edge"]["ports"].append(
+            {"host_ip": "127.0.0.1", "target": 8000, "published": "8000", "protocol": "tcp"}
+        )
+        self.assertFalse(gce_preflight.Preflight._gce_ports_are_loopback_only(services))
+        services["edge"]["ports"] = [
+            {"host_ip": "0.0.0.0", "target": 80, "published": "18080", "protocol": "tcp"}
+        ]
+        self.assertFalse(gce_preflight.Preflight._gce_ports_are_loopback_only(services))
+        services["edge"]["ports"] = [
+            {"host_ip": "127.0.0.1", "target": 80, "published": "80", "protocol": "tcp"}
+        ]
+        self.assertFalse(gce_preflight.Preflight._gce_ports_are_loopback_only(services))
 
     def test_installer_guard_accepts_ubuntu_os_release_spellings(self) -> None:
         guard = DEPLOY / "gce_host_guard.sh"

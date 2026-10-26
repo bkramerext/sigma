@@ -19,6 +19,7 @@ def main() -> None:
     frontend = (ROOT / "deploy/frontend.Dockerfile").read_text(encoding="utf-8")
     compose = (ROOT / "deploy/compose.yaml").read_text(encoding="utf-8")
     caddy = (ROOT / "deploy/Caddyfile").read_text(encoding="utf-8")
+    host_caddy = (ROOT / "deploy/host-caddy.Caddyfile").read_text(encoding="utf-8")
     gce_compose = (ROOT / "deploy/compose.gce.yaml").read_text(encoding="utf-8")
     startup = (ROOT / "deploy/start-gce.sh").read_text(encoding="utf-8")
     release = (ROOT / "deploy/release_image.py").read_text(encoding="utf-8")
@@ -40,6 +41,10 @@ def main() -> None:
     )
     assert "SIGMA_STORAGE_BACKEND: persistent_disk" in gce_compose
     assert "SIGMA_STORAGE_ROOT: /var/lib/sigma-auth" in gce_compose
+    assert "ports: !override" in gce_compose
+    assert '"127.0.0.1:18080:80/tcp"' in gce_compose
+    assert "SIGMA_CADDY_SCHEME: http" in gce_compose
+    assert "SIGMA_CADDY_UPSTREAM_SCHEME: https" in gce_compose
     assert "SIGMA_CLOUD_WORKSPACES_ROOT: /var/lib/sigma-auth/workspaces" in gce_compose
     assert "SIGMA_PROJECTS_ROOT" not in compose + gce_compose
     assert "SIGMA_CLOUD_OPENAI_API_KEY_FILE" in compose
@@ -64,6 +69,9 @@ def main() -> None:
     assert '"8000:8000"' not in compose and '"5173:5173"' not in compose
     assert "reverse_proxy backend:8000" in caddy
     assert "reverse_proxy frontend:8080" in caddy
+    assert "header_up X-Forwarded-Proto {$SIGMA_CADDY_UPSTREAM_SCHEME}" in caddy
+    assert "sigma-research.duckdns.org" in host_caddy
+    assert "reverse_proxy 127.0.0.1:18080" in host_caddy
     assert 'CMD ["python", "-m", "sigma.deployment_health"]' in backend
     assert "wget -q -O /dev/null http://127.0.0.1:8080/" in frontend
     assert "wget -q -O /dev/null http://127.0.0.1:2019/config/" in compose

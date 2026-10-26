@@ -7,6 +7,12 @@ volumes:
       device: ${SIGMA_STATE_DISK_MOUNT:?set mounted persistent state disk}/auth
 
 services:
+  edge:
+    environment:
+      SIGMA_CADDY_SCHEME: http
+      SIGMA_CADDY_UPSTREAM_SCHEME: https
+    ports: !override
+      - "127.0.0.1:18080:80/tcp"
   backend:
     environment:
       SIGMA_STORAGE_BACKEND: persistent_disk
