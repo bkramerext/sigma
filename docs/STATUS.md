@@ -1,5 +1,45 @@
 # SIGMA status
 
+## Issue #98 integrated local browser acceptance (2026-10-25)
+
+Accepted the current integrated local browser workflows against `origin/main`
+`dd23fec` using installed Google Chrome and isolated fixture-backed API data.
+T95 `browser_checks/t95_paused_session.py` passed pause explanation, reopen,
+guarded resume error, and 1440/390px layout. T125
+`browser_checks/t125_saved_paper_library.py` passed fixture-backed saved-paper
+text and PDF downloads, inline PDF, escaped preview, version-scoped removal,
+and mobile layout. `browser_checks/saved_paper_library.py` also passed TeX/PDF
+headers and payloads, inline PDF, disclosure, deletion, and responsive layout.
+PR #194's text download behavior is present and passed.
+
+T92 `browser_checks/t92_recent_running.py` passed Recent's idle/running/stopped
+polling and reload behavior at 1280/390/320px. The sample Outcome and report
+workflow passed `browser_checks/nonconsecutive_sample.py`: all five saved
+Outcomes were inspectable, Report Export returned 50,057 characters, mobile
+widths had no overflow, and Chrome reported no page errors. The guarded resume
+failure in T95 provided a real-browser error-state check. `tests/project_reports.py`
+and the lifecycle/API scenarios also passed in `./sigma test`.
+
+Acceptance found one narrow accessibility defect: saved-paper disclosure
+buttons exposed their changing Expand/Collapse instruction only through the
+tooltip, not their accessible name. Added a matching dynamic `aria-label` in
+`frontend/src/main.tsx`; T125's existing accessible-name assertion now passes.
+No other production-critical browser defect was found in the exercised flows.
+
+Verification: after `npm ci --prefix frontend`, T95, T125, T92, Home Recent's
+live-update check (`browser_checks/home_running_status.py`), and the sample
+Outcome/report check passed in real Chrome. The combined
+`env -u SIGMA_CLOUD_BOOTSTRAP_ADMIN_EMAIL ./sigma test` passed all scenarios,
+Ruff check/format, Pyright (0 diagnostics), frontend typecheck, and production
+build (existing large-chunk advisory). One initial full-suite run reported
+`tests/storage.py` sample-open failure; the isolated storage rerun passed, and
+the subsequent complete suite passed. Legacy `browser_checks/recents.py`
+still asserts an obsolete manually injected Running shape, and
+`browser_checks/t17_8_saved_session.py` expects an older authored-claim Outcome
+projection; their current equivalents above passed. No live OAuth, paid model
+calls, hosted identity, or deployment infrastructure was used. Pull request
+link: pending.
+
 ## Issue #186 single administrator/contact setting follow-up (2026-10-26)
 
 Follow-up to [PR #187](https://github.com/bkramerext/sigma/pull/187) per the
