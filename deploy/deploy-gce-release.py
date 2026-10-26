@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Deploy one reviewed SIGMA commit on the prepared GCE host.
 
 Checks and image builds happen before the release pin or service changes. This
