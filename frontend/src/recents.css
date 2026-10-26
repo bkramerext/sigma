@@ -212,6 +212,9 @@ button.project-google-signin[aria-busy="true"] { cursor: progress; }
 .admin-usage-table { min-width: 840px; margin-top: 8px; }
 .admin-grants-table th, .admin-grants-table td, .admin-usage-table th, .admin-usage-table td { padding: 8px 9px; border-bottom: 1px solid #a9654844; vertical-align: middle; }
 .admin-grants-table thead th, .admin-usage-table thead th { color: #e0b387; font-size: 10px; font-weight: 600; letter-spacing: .04em; }
+.admin-grants-table .admin-allowance-heading, .admin-grants-table .admin-allowance-cell { text-align: center; }
+.admin-grants-table .admin-allowance-cell .admin-allowance-input { justify-content: center; }
+.admin-grants-table .admin-allowance-cell small { text-align: center; }
 .admin-grants-table tbody th, .admin-usage-table tbody th { color: #f0eee8; font-weight: 500; }
 .admin-grants-table tbody th small, .admin-grants-table td small { display: block; margin-top: 4px; color: #aeb9c4; font-size: 10px; }
 .admin-grants-table .admin-entry-value { overflow-wrap: anywhere; }

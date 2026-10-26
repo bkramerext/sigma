@@ -1,0 +1,28 @@
+GRAY R4R handoff — GitHub issue #228
+
+PR: pending creation after branch push; do not merge.
+Branch: gray/admin-sponsorship-allowance
+Base: main at e62d808c78573dc2e6289fcbf4b461a2ad739c28
+Head: pending commit
+
+Changed the Authorized users heading to the exact text “Sponsorship Allowance.”
+Centered the heading, the `$`/input control, and the effective allowance text
+within the existing allowance column. Preserved the column widths, four-column
+table structure, existing copper/navy palette, and narrow-screen horizontal
+scroll. No allowance semantics or backend behavior changed.
+
+Verification:
+- `uv run --with playwright python browser_checks/issue228_sponsorship_allowance.py`
+  — PASS in real Chrome at 1440px and 390px. Verified exact heading, no old
+  heading, centered alignment of heading/input/effective amount, contained
+  table scroll at desktop, horizontal table scroll at 390px, and no page-level
+  horizontal overflow. Screenshots: `/tmp/sigma-issue228-admin-1440.png` and
+  `/tmp/sigma-issue228-admin-390.png`.
+- `./sigma test` — PASS, including Ruff, format check, Pyright (0 diagnostics),
+  frontend typecheck, and production build. Build has the existing >500 kB
+  chunk advisory.
+- `git diff --check` and Ruff check/format for changed files — PASS.
+
+The browser UI and API data were deterministic local fixtures. No provider
+calls or costs occurred. No known dependencies, conflicts, unverified ticket
+requirements, or unrelated UI/behavior changes.
