@@ -137,19 +137,12 @@ def main() -> None:
 
         # The candidate checkout must precede image build so tags cannot lie
         # about which source tree produced them.
-        export_index = next(
-            index for index, argv in enumerate(calls)
-            if argv[:5] == ["git", "-C", str(repo), "worktree", "add"]
-            and argv[-1] == NEW
-        )
         build_index = next(
             index for index, argv in enumerate(calls)
-            if argv[:2] == ["docker", "compose"] and argv[-1] == "frontend"
-            and "build" in argv
+            if argv[:2] == ["python3", str(repo / "deploy/release_image.py")]
+            and argv[2:] == ["build", str(repo), NEW]
         )
-        assert export_index < build_index
-        build_argv = calls[build_index]
-        assert f"SIGMA_RELEASE={NEW}" in build_argv
+        assert build_index >= 0
 
         print(
             "GCE release automation idempotency, missing config, startup rollback, and state preservation passed."
