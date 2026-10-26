@@ -70,12 +70,18 @@ def stats():
 
 class Control(BaseModel):
     state: str
+    subject: str | None = None
+    email: str | None = None
 
 
 @app.post("/__fixture__/state")
 async def control(body: Control):
     global forced_status
     forced_status = {"offline": 503, "limited": 429}.get(body.state)
+    if body.subject is not None:
+        fixture.subject = body.subject
+    if body.email is not None:
+        fixture.email = body.email
     fixture.claims_override = (
         {"nonce": "invalid-fixture-nonce"} if body.state == "invalid_id" else {}
     )
