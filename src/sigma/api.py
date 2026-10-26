@@ -26,9 +26,7 @@ from sigma import (
 )
 from sigma.agentic import agentic_events
 from sigma.agentic_evidence import get_run, list_runs
-from sigma.continuations import Approval, approved_packets
-from sigma.continuations import approve as approve_continuation
-from sigma.continuations import proposal as continuation_proposal
+from sigma.continuations import approved_packets
 from sigma.openai_connection import auth_context, connection, models
 from sigma.projects import (
     ProjectError,
@@ -216,24 +214,6 @@ async def workspace_access_error(request: Request, exc: WorkspaceAccessError):
 
 class OpenRequest(BaseModel):
     path: str
-
-
-class ContinuationApprovalRequest(Approval):
-    path: str
-
-
-@app.get("/api/projects/continuations/proposal")
-def continuation_proposal_view(
-    path: str, parent_strategy_id: str, obligation_id: str | None = None
-):
-    return continuation_proposal(path, parent_strategy_id, obligation_id)
-
-
-@app.post("/api/projects/continuations/approve")
-def continuation_approve_view(body: ContinuationApprovalRequest):
-    return asdict(
-        approve_continuation(body.path, Approval.model_validate(body.model_dump(exclude={"path"})))
-    )
 
 
 class ResearchStartRequest(OpenRequest):
@@ -748,6 +728,19 @@ class ProposalRequest(OpenRequest):
     expected_binding: str | None = None
     expected_project_id: str | None = None
     request_id: UUID | None = None
+
+
+@app.post("/api/projects/strategy-suggestions")
+async def strategy_suggestion_view(body: ProposalRequest):
+    await require_cloud_inference_binding(
+        body.expected_binding, body.expected_project_id, body.path
+    )
+    return await generate_proposal(
+        body.path,
+        expected_binding=body.expected_binding,
+        expected_project_id=body.expected_project_id,
+        suggestion_only=True,
+    )
 
 
 class ProposalCancelRequest(BaseModel):

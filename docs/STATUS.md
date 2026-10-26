@@ -1,5 +1,41 @@
 # SIGMA status
 
+## Issue #209 — Current Understanding strategy suggestion (2026-10-26)
+
+Replaced the “Continue from Saved Evidence” control with an explicitly
+requested **Suggest a Strategy** action nested after the Current Understanding
+synthesis. The new provider request uses the selected project/account binding,
+existing billing and cloud usage accounting, an enforced 48,000-character
+context bound, the cross-session Current Understanding projection, bounded
+relevance-selected session evidence, and all saved strategies including
+disabled/removed ones. It returns at most one copy-only Markdown suggestion or
+a no-additional-strategy result. Suggestions use the safe existing Markdown
+renderer and standard copy-control styling; no project strategy or session
+record is changed. Removed the continuation proposal/approval API routes while
+retaining read-only compatibility for historical continuation packets and
+session dispatch.
+
+Verification: `tests/proposals.py` passed against a deterministic mock
+Responses transport, including strategy-context input, one Markdown result, a
+null/no-new-strategy result, no project.json mutation, and the removed legacy
+proposal route returning 404. Existing continuation/history tests passed in
+the full suite. Focused Ruff check/format, Pyright (0 diagnostics), frontend
+typecheck, and frontend production build passed. Real Chrome exercised the
+suggestion button, rendered block, collapse, clipboard contents, no dialog,
+and unchanged strategy count using a mocked API response; the broader
+`browser_checks/current_understanding.py` then failed in its pre-existing
+evidence-focus assertion before completing the full navigation/export pass.
+No real provider call was made.
+
+The final `./sigma test` run reached repository-wide Ruff checks after all
+scenarios passed, then exited 1 on unchanged `browser_checks/model_availability.py`
+(B023 loop closure and existing formatting). A preceding run also reported
+`tests/research_sessions.py` nonzero; its standalone rerun and the subsequent
+full-suite run both passed. The full command skipped its frontend build after
+the Ruff failure; `npm --prefix frontend run build` was run separately and
+passed. This is R4R with that baseline Ruff defect and the unrelated browser
+evidence-focus failure recorded for review, in [PR #213](https://github.com/bkramerext/sigma/pull/213).
+
 ## T129 initial GCE preview deployment (2026-10-26)
 
 Deployed release `e1ef8db8ea6c15bcb79ad9c8d06e8e5f6f4527f3` to
@@ -5683,3 +5719,23 @@ same failure occurs on unmodified `main` (`2c409e6`). `./sigma test` remains
 blocked by Ruff findings in `browser_checks/model_availability.py` on `main`
 (B023 and formatting); this change did not modify that file. No provider calls
 were made. See [Gray issue #206 handoff](../messages/t206_gray_current_understanding.txt).
+
+## Issue #209 — Copy-only strategy suggestions (reconciled 2026-10-26)
+
+PR #213 was reconciled with Gray PR #212 at `6bab28f`. The resulting interface
+preserves the copper Current Understanding heading, visible chevron,
+default-expanded disclosure, and session count placement, with Suggest a
+Strategy nested after the synthesis. Suggestions remain ephemeral, safe
+collapsible Markdown copied through SIGMA's shared clipboard control. Historical
+continuation data remains readable; research-session lifecycle, evidence
+navigation implementation, strategy editing, provider authorization, cost
+limits, and bounded context safeguards were retained.
+
+Focused proposal tests, Ruff for changed files, Pyright, frontend typecheck and
+build passed. Real Chrome's focused header/suggestion check passed at 1440, 390,
+and 320 pixels. The broader Chrome check passed the disclosure and suggestion
+flows, then failed at the existing linked-artifact focus assertion; evidence
+navigation/export portion did not complete. `./sigma test` ran all scenarios,
+then exited 1 at repository Ruff B023/formatting findings in unchanged
+`browser_checks/model_availability.py` (same file as current main). The separate
+frontend build passed. See [Issue #209 handoff](../messages/issue_209_green.txt).

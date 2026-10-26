@@ -699,7 +699,39 @@ function ResearchSessionContents({ path, session, expanded, busy, advancedOutcom
   </div>;
 }
 
-function CurrentUnderstandingView({ state, onEvidence, onSession }: { state: CurrentUnderstanding; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
+function CurrentUnderstandingView({ state, path, projectId, onEvidence, onSession }: { state: CurrentUnderstanding; path: string; projectId: string; onEvidence: (source: EvidencePointer) => void; onSession: (id: string) => void }) {
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [hasSuggestedResult, setHasSuggestedResult] = useState(false);
+  const [suggestionBusy, setSuggestionBusy] = useState(false);
+  const [suggestionError, setSuggestionError] = useState('');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setSuggestion(null); setHasSuggestedResult(false); setSuggestionError(''); }, [path]);
+  async function suggestStrategy() {
+    if (suggestionBusy) return;
+    setSuggestionBusy(true); setSuggestionError(''); setCopied(false); setSuggestion(null); setHasSuggestedResult(false);
+    let finishProviderRequest = () => {};
+    try {
+      const configResponse = await fetch(`/api/projects/proposals/config?${new URLSearchParams({ path })}`, { cache: 'no-store' });
+      const config = await configResponse.json();
+      if (!configResponse.ok) throw new Error(config.error ?? 'Could not read AI settings.');
+      if (config.project_id !== projectId) throw new Error('Project identity changed. Reopen it before suggesting a strategy.');
+      if (!config.available) throw new Error(config.message ?? 'Connect the selected AI account before requesting a suggestion.');
+      finishProviderRequest = beginProviderRequest('strategy-suggestion');
+      const result = await post<{ markdown: string | null }>('strategy-suggestions', {
+        path, expected_binding: config.binding, expected_project_id: projectId,
+      });
+      setSuggestion(result.markdown?.trim() || null);
+      setHasSuggestedResult(true);
+    } catch (cause) {
+      const message = errorMessage(cause);
+      setSuggestionError(message); reportRequestFailure(message);
+    } finally { finishProviderRequest(); setSuggestionBusy(false); }
+  }
+  async function copySuggestion() {
+    if (!suggestion) return;
+    try { await navigator.clipboard.writeText(suggestion); setCopied(true); }
+    catch { setSuggestionError('Clipboard access failed. Select and copy the Markdown text.'); }
+  }
   const sourceButton = (source: EvidencePointer, context: string) => <button type="button" className="text-view-link" disabled={!source.available} aria-label={`${context}: Session ${source.session_number}, Artifact ${source.artifact_sequence || 'unnumbered'}`} onClick={() => onEvidence(source)}>Session #{source.session_number} · {source.artifact_sequence ? `Artifact ${source.artifact_sequence}` : 'Saved evidence'}</button>;
   const excerpt = (text: string) => text.length > 360 ? `${text.slice(0, 360)}… (saved text continues)` : text;
   const findings = state.current_finding_ids.map(id => state.findings.find(row => row.id === id)).filter((row): row is CurrentFinding => !!row);
@@ -723,54 +755,22 @@ function CurrentUnderstandingView({ state, onEvidence, onSession }: { state: Cur
       </section>
     </div>
     <details className="current-understanding-limits"><summary>Scope, uncertainty and earlier findings</summary><ul>{state.limitations.map(note => <li key={note}>{note}</li>)}</ul><p>All {state.findings.length} saved findings remain available in the session history below. No relationship or resolution is inferred from a change of wording.</p><ol>{state.findings.filter(row => !state.current_finding_ids.includes(row.id)).map(findingRow)}</ol></details>
+    <div className="strategy-suggestion-action">
+      <button type="button" className="text-view-link" disabled={suggestionBusy} aria-busy={suggestionBusy} onClick={() => void suggestStrategy()}>{suggestionBusy ? 'Suggesting…' : hasSuggestedResult ? 'Suggest another strategy' : 'Suggest a Strategy'}</button>
+      <small>One copy-only Markdown suggestion based on Current Understanding and saved evidence. Nothing is saved to your strategies.</small>
+      {suggestionBusy && <p role="status">Reviewing Current Understanding and relevant session evidence…</p>}
+      {suggestionError && <p className="error" role="alert">{suggestionError}</p>}
+      {hasSuggestedResult && !suggestion && !suggestionError && <p role="status">No additional strategy is warranted by the available evidence.</p>}
+      {suggestion && <details className="strategy-suggestion-result">
+        <summary>Suggested strategy</summary>
+        <div className="strategy-suggestion-heading"><span>AI-authored Markdown · ephemeral suggestion</span><CopyToClipboardButton name="suggested strategy" copied={copied} onCopy={() => void copySuggestion()}/></div>
+        <div className="outcome-markdown"><Suspense fallback={<p role="status">Preparing formatted suggestion…</p>}><RenderedMarkdown body={suggestion}/></Suspense></div>
+      </details>}
+    </div>
   </details>;
 }
 
-type ContinuationProposal = { preview_digest: string; question: string; caution: string; obligation: { id: string } | null; sources: { artifact_id: string; source: EvidencePointer; strategy_title: string; claim: string; status: string; verification: string; mandatory: boolean; artifact: Record<string, unknown> }[] };
-function ContinuationApproval({ path, strategies, state, onEvidence, onSaved, onInvestigate }: { path: string; strategies: Strategy[]; state: CurrentUnderstanding; onEvidence: (source: EvidencePointer) => void; onSaved: (view: ProjectView) => void; onInvestigate: (ids: string[]) => void }) {
-  const [open, setOpen] = useState(false);
-  const [parent, setParent] = useState(strategies[0]?.id || '');
-  const [obligation, setObligation] = useState('');
-  const [preview, setPreview] = useState<ContinuationProposal | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [rejections, setRejections] = useState<Record<string, string>>({});
-  const [title, setTitle] = useState('Bounded continuation');
-  const [question, setQuestion] = useState('');
-  const [savedId, setSavedId] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  async function inspect() {
-    setBusy(true); setError(''); setSavedId('');
-    try {
-      const response = await fetch(`/api/projects/continuations/proposal?${new URLSearchParams({ path, parent_strategy_id: parent, ...(obligation ? { obligation_id: obligation } : {}) })}`);
-      const data = await response.json(); if (!response.ok) throw new Error(data.error);
-      setPreview(data); setQuestion(data.question); setSelected(data.sources.filter((row: { mandatory: boolean }) => row.mandatory).map((row: { artifact_id: string }) => row.artifact_id)); setRejections({});
-    } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
-  }
-  async function approve() {
-    if (!preview) return;
-    setBusy(true); setError('');
-    try {
-      const next = await post<ProjectView>('continuations/approve', { path, parent_strategy_id: parent, title, question, obligation_id: preview.obligation?.id || null, preview_digest: preview.preview_digest, source_artifact_ids: selected, rejected_sources: Object.entries(rejections).filter(([id, reason]) => !selected.includes(id) && reason.trim()).map(([artifact_id, rationale]) => ({ artifact_id, rationale })) });
-      const id = next.project.strategies.at(-1)!.id;
-      setSavedId(id); setPreview(null); onSaved(next);
-    } catch (cause) { setError(errorMessage(cause)); } finally { setBusy(false); }
-  }
-  return <details className="outcome-subsection continuation-approval" open={open} onToggle={event => setOpen(event.currentTarget.open)}><summary>Continue from saved evidence</summary>
-    <p>Inspect sources, narrow a question, then explicitly approve a new strategy. Original strategies and history remain saved. Approval does not start a session.</p>
-    <label>Parent strategy<select aria-label="Parent strategy" value={parent} onChange={event => { setParent(event.target.value); setObligation(''); setPreview(null); }}>{strategies.filter(row => !row.removed_at).map(row => <option key={row.id} value={row.id}>{row.title}</option>)}</select></label>
-    <label>Open obligation<select aria-label="Open obligation" value={obligation} onChange={event => { setObligation(event.target.value); setPreview(null); }}><option value="">Write a bounded follow-up</option>{state.obligations.filter(row => row.actionable && row.sources.some(source => source.strategy_id === parent)).map(row => <option key={row.id} value={row.id}>{row.text}</option>)}</select></label>
-    <button type="button" className="text-view-link" disabled={busy || !parent} onClick={() => void inspect()}>Inspect continuation proposal</button>
-    {preview && <div><p className="hint">{preview.caution}</p><label>Continuation title<input value={title} maxLength={200} onChange={event => setTitle(event.target.value)}/></label><label>Approved next question<textarea aria-label="Approved next question" value={question} maxLength={1000} onChange={event => setQuestion(event.target.value)}/></label>
-      <ol>{preview.sources.map(row => <li key={row.artifact_id}><label><input type="checkbox" checked={selected.includes(row.artifact_id)} disabled={row.mandatory} onChange={event => setSelected(ids => event.target.checked ? [...ids, row.artifact_id] : ids.filter(id => id !== row.artifact_id))}/>{row.strategy_title}{row.mandatory ? ' · required local evidence' : ''}</label><p>{row.claim}</p><p className="hint">{row.status} · {row.verification}</p><p><button type="button" className="text-view-link" onClick={() => onEvidence(row.source)}>Inspect source Session #{row.source.session_number}</button> <code>{row.artifact_id}</code></p><details><summary>Frozen source evidence</summary><pre>{JSON.stringify(row.artifact, null, 2)}</pre></details>{!selected.includes(row.artifact_id) && <label>Reason to reject transfer (optional)<input value={rejections[row.artifact_id] || ''} maxLength={600} onChange={event => setRejections(current => ({ ...current, [row.artifact_id]: event.target.value }))}/></label>}</li>)}</ol>
-      <button type="button" className="text-view-link" disabled={busy || question.trim().length < 10 || !selected.length} onClick={() => void approve()}>Approve continuation fork</button>
-    </div>}
-    {savedId && <p role="status">Continuation saved with frozen source evidence. <button type="button" className="text-view-link" onClick={() => onInvestigate([savedId])}>Investigate approved continuation</button></p>}
-    {error && <p role="alert">{error}</p>}
-  </details>;
-}
-
-function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onContinuationSaved, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onContinuationSaved: (view: ProjectView) => void; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
+function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails, onEnableAdvancedOutcome, onViewStrategy, onForkFromFindings, onControlsChange }: { path: string; projectId: string; strategies: Strategy[]; advancedOutcomeDetails: boolean; onEnableAdvancedOutcome: () => Promise<void>; onViewStrategy: (id: string) => void; onForkFromFindings: (session: ResearchSession) => void; onControlsChange: (controls: ProcessControls) => void }) {
   const eligible = useMemo(() => strategies.filter(strategy => !strategy.removed_at && strategy.enabled), [strategies]);
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [currentUnderstanding, setCurrentUnderstanding] = useState<CurrentUnderstanding | null>(null);
@@ -996,7 +996,7 @@ function ResearchWorkspace({ path, projectId, strategies, advancedOutcomeDetails
     </header>
 
     <div id="sessions-pane-content" hidden={!expanded}>
-    {currentUnderstanding && <><CurrentUnderstandingView state={currentUnderstanding} onEvidence={revealEvidence} onSession={revealSession}/><ContinuationApproval path={path} strategies={strategies} state={currentUnderstanding} onEvidence={revealEvidence} onSaved={onContinuationSaved} onInvestigate={ids => void begin(ids)}/></>}
+    {currentUnderstanding && <CurrentUnderstandingView state={currentUnderstanding} path={path} projectId={projectId} onEvidence={revealEvidence} onSession={revealSession}/>}
     <div className="session-table">
       {sessions.length ? <ol className="session-list" aria-label="Research sessions">
         {orderedSessions.map(item => {
@@ -1046,6 +1046,9 @@ async function post<T>(route: string, body: object = {}, signal?: AbortSignal): 
   return data;
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+function CopyToClipboardButton({ name, copied, disabled = false, onCopy }: { name: string; copied: boolean; disabled?: boolean; onCopy: () => void }) {
+  return <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={disabled} onClick={onCopy}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="m8 12 3 3 10-10"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
+}
 async function sha256Text(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
@@ -1683,7 +1686,7 @@ function TextViews({ path, scope, strategyId, source, projectTitle, contentClass
     {markdownToggle}
     {rendering && <span className="text-view-format-status" role="status">Formatting with AI…</span>}
   </span>;
-  const copyControl = <button type="button" className="text-view-link text-view-icon workspace-icon-button text-copy-button" aria-label={copied ? `Copied ${name} to clipboard` : `Copy ${name}`} title={copied ? 'Copied' : `Copy ${name}`} data-tooltip={copied ? 'Copied' : `Copy ${name}`} disabled={!current || editing || busy || combinedEditMode} onClick={() => void copyText()}>{copied ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="m8 12 3 3 10-10"/></svg> : <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>}</button>;
+  const copyControl = <CopyToClipboardButton name={name} copied={copied} disabled={!current || editing || busy || combinedEditMode} onCopy={() => void copyText()}/>;
   const viewActions = <>
     {!markdownSlotId && markdownControl}
 
@@ -3375,7 +3378,7 @@ function ProjectScreen({ path, initialView, onClose, goHome }: {
       const next = await post<ProjectView>('update', { path: view.path, ...current, show_advanced_outcome_details: true, expected: current });
       setView(next);
       setAnnouncement('Advanced Outcome enabled.');
-    }} onContinuationSaved={setView} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
+    }} onViewStrategy={showStrategy} onForkFromFindings={forkFromFindings} onControlsChange={setProcessControls}/>
     {projectEditing && <ProjectSettingsDialog initial={view} onCancel={() => { setProjectEditing(false); exitMode('project-settings'); requestAnimationFrame(() => editProjectButton.current?.focus()); }} onSaved={next => { setView(next); setProjectEditing(false); exitMode('project-settings'); setAnnouncement('Project settings saved.'); requestAnimationFrame(() => editProjectButton.current?.focus()); }}/>}
     <ProjectExportDialog open={exportOpen} path={view.path} title={project.title} onCancel={() => { setExportOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.project-pane-actions [aria-label="Export project"]')?.focus()); }}/>
     {aboutOpen && <AboutDialog onClose={closeAbout}/>}
