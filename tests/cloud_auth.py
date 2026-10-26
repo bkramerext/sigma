@@ -121,6 +121,41 @@ class CloudAuthTests(TestCase):
         self.client = self.context.__enter__()
         self.addCleanup(self.context.__exit__, None, None, None)
 
+    def test_mock_auth_disabled_for_hosted_and_nonlocal_configurations(self):
+        with patch.dict(os.environ, {"SIGMA_MOCK_AUTH": "1"}):
+            self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+            response = self.client.post(
+                "/api/cloud-auth/mock/select?identity=admin",
+                headers={"Origin": ORIGIN},
+            )
+            self.assertEqual(response.status_code, 404)
+        with patch.dict(os.environ, {
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": ORIGIN,
+        }):
+            self.assertFalse(cloud_auth._mock_enabled(cloud_auth.config()))
+
+    def test_mock_auth_rejects_cross_origin_and_remote_clients(self):
+        with patch.dict(os.environ, {
+            "SIGMA_MOCK_AUTH": "1",
+            "SIGMA_CLOUD_AUTH_LOCAL": "true",
+            "SIGMA_CLOUD_PUBLIC_ORIGIN": "http://127.0.0.1:5173",
+        }):
+            self.assertTrue(cloud_auth._mock_enabled(cloud_auth.config()))
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select?identity=admin",
+                    headers={"Origin": "http://evil.example"},
+                ).status_code, 403,
+            )
+            self.assertEqual(
+                self.client.post(
+                    "/api/cloud-auth/mock/select?identity=admin",
+                    headers={"Origin": "http://127.0.0.1:5173"},
+                ).status_code, 403,
+            )
+
     def start_flow(self, client=None):
         client = client or self.client
         response = client.get("/api/cloud-auth/login", follow_redirects=False)
