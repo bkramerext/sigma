@@ -230,6 +230,13 @@ def exercise(ui_url: str, root: Path) -> None:
         )
         assert len(mutation_requests) == mutations_before_play, mutation_requests
         assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        page.keyboard.press("Escape")
+        expect(play_dialog).to_have_count(0)
+        expect(play).to_be_focused()
+        assert len(mutation_requests) == mutations_before_play, mutation_requests
+        assert len(research_dispatch_requests) == dispatches_before_play, research_dispatch_requests
+        play.click()
+        expect(play_dialog).to_be_visible()
         play_dialog.get_by_role("button", name="Not Now").click()
         expect(play_dialog).to_have_count(0)
         expect(play).to_be_focused()
