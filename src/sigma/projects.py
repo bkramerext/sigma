@@ -1087,6 +1087,10 @@ def create_project(
     mode = _research_mode(research_mode)
     root = projects_root()
     destination = root / name
+    # Reject an existing destination before entering initialization. In particular,
+    # never treat a pre-existing file or symlink as an empty project directory.
+    if os.path.lexists(destination):
+        raise ProjectError(f"A project or file already exists at {destination}; choose another name")
     with _title_registry_lock(root):
         _require_available_title(title, root)
         try:
