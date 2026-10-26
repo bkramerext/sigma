@@ -55,8 +55,8 @@ def send_invitation(email: str, requested_at: int, *, recipient: str) -> None:
         message["To"] = recipient
         message["Subject"] = "SIGMA invitation request"
         message.set_content(
-            "A verified Google account requested SIGMA access.\\n\\n"
-            f"Account: {email}\\nRequested at (UTC epoch): {requested_at}\\n"
+            "A verified Google account requested SIGMA access.\n\n"
+            f"Account: {email}\nRequested at (UTC epoch): {requested_at}\n"
         )
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
         request = Request(
