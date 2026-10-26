@@ -440,11 +440,12 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             ).to_be_visible()
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
             expect(page).to_have_url(ui_url + "/")
-            expect(page.get_by_role("link", name="Continue with Google")).to_be_visible()
+            expect(page.get_by_role("button", name="Sign in with Google")).to_be_visible()
             assert page.evaluate("window.localStorage.getItem('sigma.currentProject')") is None
             assert api_request("GET", "/api/projects/recent").status_code == 401
 
-            page.get_by_role("link", name="Continue with Google").click()
+            page.get_by_role("button", name="Sign in with Google").click()
+            page.get_by_role("dialog", name="Connect your Google account").get_by_role("link", name="Continue with Google").click()
             expect(page.get_by_role("heading", name="Projects")).to_be_visible()
             assert login_attempts == ["A", "B"]
             page.reload(wait_until="networkidle")
@@ -479,7 +480,8 @@ def exercise_browser(api_url: str, ui_url: str) -> None:
             page.locator(".account-model-status > summary").click()
             account = page.get_by_role("dialog", name="AI connection settings")
             account.get_by_role("button", name="Sign out of Google", exact=True).click()
-            page.get_by_role("link", name="Continue with Google").click()
+            page.get_by_role("button", name="Sign in with Google").click()
+            page.get_by_role("dialog", name="Connect your Google account").get_by_role("link", name="Continue with Google").click()
             expect(
                 page.get_by_text("Your Google account is not yet invited to SIGMA.")
             ).to_be_visible()
