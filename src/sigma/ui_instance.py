@@ -150,7 +150,7 @@ class Instance:
                 or not process["start"]
             ):
                 raise RuntimeError(
-                    "Startup lock has an unverified holder; no process was signalled."
+                    f"Startup lock has an unverified holder (PID {pid}); no process was signalled."
                 )
             owners.append((pid, process))
         return owners
