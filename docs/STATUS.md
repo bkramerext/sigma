@@ -1,5 +1,64 @@
 # SIGMA status
 
+## T128 GCE host reproducibility and durability (2026-10-25)
+
+Added a read-only `gce_preflight.py --host-readiness` mode that verifies Ubuntu,
+the UUID-backed hardened state mount, active host and rootless Docker services,
+rootless socket ownership/mode and privilege separation, runner image presence,
+systemd unit validity and the host/app unit contract without requiring or
+parsing T129 `/etc/sigma/deploy.env` or secret files. `--after-reboot` implies
+host readiness and additionally requires Docker and `sigma-sandbox` to be
+enabled and active plus `loginctl` lingering for `sigma-sandbox`; it deliberately
+does not require production `sigma.service` to be enabled or active.
+
+The installer now atomically replaces its Docker signing key and refuses to
+follow a symlink, chmod a mounted state filesystem, or hide data at an unmounted
+state path. The audit confirmed that backend uv and `uv sync --locked`, pinned
+Python runner dependencies, checksum-verified Tectonic, Sage base digest, and
+rootless-only runner image builds are already encoded in the image recipes and
+build script. No duplicate host Python/uv/Tectonic installation was added.
+Operator procedures distinguish host readiness and actual reboot recovery from
+T129 production configuration. The T129 app/service/Compose deployment files
+were not changed.
+
+Validation: `uv run python tests/gce_host.py` passed 20 tests. Final
+`./sigma test` passed all scenarios, Ruff check/format, Pyright, frontend
+typecheck and production build. `./sigma setup` was required in the fresh
+worktree to install declared frontend dependencies. No GCE commands, live VM
+access, secret reads, OAuth, or provider calls occurred. Existing operator
+reports for `sigma-gce-01` (Oct 25: Ubuntu 24.04 amd64, persistent ext4 mount,
+UID 1001 rootless daemon and both runner images, integrated runtime check PASS,
+`sigma.service` disabled/inactive, and production configuration absent) are
+context only. This change does **not** verify the new host-readiness command on
+that VM or claim hosted acceptance. The operator still needs to run the host
+gate and `--after-reboot` after an actual reboot; T129 remains blocked on
+protected production configuration and credentials. See
+[T128 host readiness](T128_HOST_READINESS.md) and the repository handoff in
+[`messages/t128_red_host_reproducibility.txt`](../messages/t128_red_host_reproducibility.txt).
+Implementation is open for review in [PR #159](https://github.com/bkramerext/sigma/pull/159).
+
+## T99 / T137 consolidated Cloud acceptance preparation (2026-10-26)
+
+Added [the consolidated acceptance procedure](CLOUD_ACCEPTANCE.md), a
+read-only runner (`python -m sigma.cloud_acceptance`), automated report-contract
+tests, and an illustrative [JSON sample](evaluations/t137/sample-evidence.json).
+The runner reuses the existing DNS/TLS/redirect/SPA/API validator and can
+initialize/finalize the T137 matrix. Ten areas begin as `NOT RUN`; only the
+public probe can be automatically marked PASS/FAIL. Hosted browser,
+provider-authorized, owner-authorized, and operator checks remain evidence
+gates. T137 remains pending coordinator/owner go/no-go.
+
+`./sigma test` passed all scenarios, Ruff check/format, Pyright (0 diagnostics),
+frontend typecheck, and production build. The first run caught one unused
+import/format issue in the new module; after correction the full rerun passed.
+The new contract tests passed within the full run. No real-browser workflow,
+public endpoint, Google identity, provider, GCE VM, or production configuration
+was accessed. The sample is explicitly illustrative: no hosted evidence, no
+release SHA, and all ten checks `NOT RUN`. Hosted T131/T134/T133 flows and
+operator T135/T136 restore/recovery steps remain to be performed and reviewed.
+Focused implementation elapsed approximately 10 minutes; hosted acceptance is
+unfinished by design and remains with the authorized owner/coordinator.
+
 ## T132 Red hosted research and Python/Sage execution audit (2026-10-25)
 
 Started from current `main` at `803a62d` on `red/t132-hosted-research-execution`.
