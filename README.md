@@ -45,7 +45,7 @@ SIGMA opens **http://127.0.0.1:5173** in your browser. If it does not, open that
 
 Manual project and strategy work does not require an AI account. To use AI, select **Connect AI** and continue with ChatGPT; eligible usage depends on your account and plan limits. You may instead choose API-key billing, which uses separately billed API usage. Put `OPENAI_API_KEY` in the repository-root `.env` file or the server environment, then restart SIGMA. Keep secrets out of frontend configuration and project files.
 
-### Optional local Google administrator login
+### Optional local Google administrator login and required sign-in testing
 
 The ordinary local launch is single-user and does not require an administrator account. To exercise local Google sign-in and access management, configure a Google OAuth web client and bootstrap the first administrator:
 
@@ -61,8 +61,10 @@ The ordinary local launch is single-user and does not require an administrator a
 
    ```sh
    export SIGMA_CLOUD_ADMIN_CONTACT_EMAIL="you@gmail.com"
-   ./sigma start --navigate
+   ./sigma start --navigate --signin
    ```
+
+   `--signin` requires real Google sign-in and access authorization on localhost. It is useful for acceptance testing the Invite Me workflow with an unapproved Google account. The flag fails closed if OAuth client credentials or the administrator contact are missing. Without the flag, existing behavior remains unchanged, including automatic local Google auth when the administrator contact is configured. Use a separate browser profile to avoid reusing an administrator session.
 
    If you keep this setting in a shell startup file, load that file in the launching shell first. On a fresh local auth database, the first successful verified Google sign-in matching this address binds that account as administrator. Later changes to the contact address update invitation requests and preserve the existing administrator email and Google subject binding. Local auth data is stored under `~/.sigma/local-cloud-auth`; other users need an explicit access grant. This local setup does not administer a hosted SIGMA deployment.
 
