@@ -49,6 +49,35 @@ entry were retained. No code conflicts occurred. Guest Play and its Google pill
 handoff passed real-Chrome acceptance after integration. The branch is pushed;
 PR #246 is open against `main` and returned for review, not merged.
 
+## Final CI correction (2026-10-26)
+
+Correction commit: `56cdbdf65a56d025d15b1192dd19b0a4aa65be3d`. Updated
+`browser_checks/t92_recent_running.py` and
+`browser_checks/model_availability.py` to expand the Mathematics sample group
+before locating the sample's Open button. T92 also expands the Mathematics
+Recent group after returning Home and after reload, before locating the recent
+project entry. No UI defaults changed; sample groups remain collapsed initially.
+
+Verification on the correction tree:
+
+- `uv run --with playwright python browser_checks/t92_recent_running.py` — PASS
+  real Chrome: idle/running status, polling, reload, clear, and responsive widths.
+- `uv run --with playwright python browser_checks/model_availability.py` — PASS
+  real Chrome: 401/403/503 handling, saved-setting integrity, desktop/mobile,
+  and no inference calls.
+- `uv run --with playwright python browser_checks/guest_samples.py` — PASS
+  real Chrome: guest samples, Guest Play no-dispatch behavior, and Google pill
+  handoff.
+- Ruff check and format for both changed browser checks — PASS.
+- `./sigma test` — PASS, including repository Ruff, formatting, Pyright,
+  frontend typecheck, and production build.
+
+The local browser runs used temporary UI and fixture ports because the default
+ports were occupied; the tests forwarded the browser origin expected by the
+local fixture. GitHub Actions use their existing default ports. PR #246 is
+updated and open for review at the correction commit plus this handoff update;
+not merged.
+
 This change is on the active Guest branch as requested for the overlapping
 implementation. No provider calls or budget reservations were made. No research
 data or authentication logic changed.

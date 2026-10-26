@@ -6222,3 +6222,19 @@ and build. Main's T200 integration also resolves the four earlier repository
 baseline failures. Existing >500 kB frontend chunk advisory remains. PR #246 is
 returned open for review; it has not been merged. See the [updated Blue
 handoff](../messages/blue_guest_play_signin_r4r.md).
+
+## PR #246 — browser acceptance for collapsed sample groups (2026-10-26)
+
+Updated T92 Recent Projects and T200 Model Availability browser checks to
+expand the Mathematics sample group before locating/clicking its sample. T92
+also expands the Recent Mathematics group before locating the opened project,
+including after reload. Product UI defaults are unchanged; sample groups still
+start collapsed. Correction commit:
+`56cdbdf65a56d025d15b1192dd19b0a4aa65be3d`.
+
+Both requested workflows and `browser_checks/guest_samples.py` passed in real
+Chrome. Changed-file Ruff check/format passed. `./sigma test` passed every step,
+including repository Ruff, formatting, Pyright, frontend typecheck, and build.
+Local acceptance used temporary ports because standard ports were occupied;
+GitHub Actions retains the workflow's standard ports. PR #246 is updated and
+open for review, not merged. See the [Blue handoff](../messages/blue_guest_play_signin_r4r.md).
