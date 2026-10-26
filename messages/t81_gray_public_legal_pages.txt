@@ -113,5 +113,13 @@ Verification on this tree:
   navigation/refresh at `/privacy` and `/tos`, draft labels, About Privacy,
   and no `/tos` app link.
 
-The updated PR head and CI status are recorded in PR #242. The R4R designation
-is pending completion of GitHub CI. No deployment, self-merge, or issue closure.
+Validated implementation head: `9bdc3132a7604060e8edf377fe7c18ec086e6a68`.
+GitHub Actions on that head all passed:
+- SIGMA verification run #801: success, including full `./sigma test`.
+- T92 Recent Projects browser acceptance run #89: success.
+- Research Outcome browser acceptance run #158: success.
+
+The exact final PR head, including this handoff update, is recorded in PR #242's
+description because a commit cannot contain its own object ID. R4R criteria
+have been met on the validated code head. No deployment, self-merge, or issue
+closure.
