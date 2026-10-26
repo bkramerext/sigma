@@ -31,6 +31,8 @@ def _files(directory: Path) -> dict[str, str]:
     for root, dirs, files in os.walk(directory, followlinks=False):
         dirs.sort()
         files.sort()
+        if any(name in files for name in dirs):
+            raise BundleError("Project contains conflicting file and directory names")
         for name in dirs:
             child = Path(root) / name
             if child.is_symlink():
