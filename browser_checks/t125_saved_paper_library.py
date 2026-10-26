@@ -176,9 +176,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             dialog = page.get_by_role("dialog", name="Academic paper using LaTeX")
             expect(dialog).to_be_visible()
             row = dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
-            expect(
-                row.get_by_role("button", name="Saved fixture 1")
-            ).to_be_visible()
+            expect(row.get_by_role("button", name="Saved fixture 1")).to_be_visible()
             expect(row).to_contain_text("Version 2")
             expect(row.get_by_role("link", name="Download text file")).to_be_visible()
             expect(row.get_by_role("link", name="Download PDF")).to_be_visible()
@@ -230,9 +228,7 @@ with tempfile.TemporaryDirectory(prefix="sigma-t125-browser-") as temporary:
             row.get_by_role("group", name="Confirm removal of Saved fixture 1").get_by_role(
                 "button", name="Confirm remove"
             ).click()
-            expect(
-                dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')
-            ).to_have_count(0)
+            expect(dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[0]}"]')).to_have_count(0)
             expect(
                 dialog.locator(f'article.saved-paper-card[data-paper-id="{identifiers[1]}"]')
             ).to_have_count(1)
