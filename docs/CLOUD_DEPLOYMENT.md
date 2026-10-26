@@ -1705,3 +1705,7 @@ These are planning ranges, not commitments. They do not include building autonom
 7. Stop when the showcase is convincing. Do not add portability, production operations or autonomous orchestration by inertia.
 
 The central requirement is simple: **a handful of visitors should be able to use SIGMA as a real research tool, enjoy the experience, and trust that their work won't disappear.**
+
+## T128 host-readiness gate (coordinator integration)
+
+Before T129's first application start, run the read-only host checks documented in [T128_HOST_READINESS.md](T128_HOST_READINESS.md). This gate does not require production `deploy.env`, OAuth, or provider secrets. Run `--host-readiness` before initial deployment and `--after-reboot` after an authorized reboot. Capture sanitized output and distinguish PASS, FAIL, and BLOCKED. Live disk identity/mount options, rootless Docker, installed systemd configuration, effective GCE firewall exposure, and runtime isolation must be observed on the target VM; source-level tests do not substitute for those checks. The latest operator access limitation is recorded in [T128_LIVE_READINESS.md](T128_LIVE_READINESS.md).
