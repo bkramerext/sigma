@@ -2652,14 +2652,18 @@ def _reserve_cost(record: dict[str, Any], context: dict[str, Any], role: str) ->
 
 def save_limits(path: str, raw: dict[str, Any]) -> dict[str, Any]:
     if project_path(path).suffix == ".json":
-        from sigma.project_bundle import write_file
+        from sigma.project_bundle import transform_members
 
         limits = _validate_limits(raw)
         if cloud_workspaces.enabled():
             limits = cloud_research.evaluation_session_limits(limits)
-        with _project_manager_lock(path):
-            write_file(path, "research-sessions/limits.json",
-                       (json.dumps(limits, sort_keys=True) + "\n").encode())
+        encoded = (json.dumps(limits, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        try:
+            transform_members(path, lambda members: {
+                "research-sessions/limits.json": encoded,
+            })
+        except (OSError, ValueError) as exc:
+            raise ProjectError(f"Cannot save research limits: {exc}") from exc
         return limits
     limits = _validate_limits(raw)
     if cloud_workspaces.enabled():
