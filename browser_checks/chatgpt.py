@@ -35,7 +35,7 @@ with sync_playwright() as playwright:
             route.fulfill(
                 status=200,
                 content_type="application/json",
-                body='{"target":"local","enabled":true,"ready":true,"authenticated":true,"user":{"email":"google-a@example.test","role":"member"},"admin_contact_email":null,"local_setup_missing":[]}',
+                body='{"target":"local","enabled":false,"ready":true,"authenticated":false,"user":null,"admin_contact_email":null,"local_setup_missing":[]}',
             )
             return
         headers = None

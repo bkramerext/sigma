@@ -72,3 +72,65 @@ working tree is clean; PR #166 is open and GitHub reports it mergeable. No merge
 was performed.
 
 Elapsed time: approximately 40 minutes at handoff.
+
+# Independent release acceptance preparation (2026-10-26)
+
+**Owner:** Gray
+**Branch:** `gray/t43.2-release-acceptance`
+**Base:** `origin/main` at `58b360e`
+**Dependency:** T88 / PR #214, open against `main`; integrated acceptance must be rerun after merge.
+
+## Preparation completed
+
+- Read the complete GitHub issue #66 through the GitHub API, current `docs/SOFTWARE_FACTORY.md`, `docs/GETTING_STARTED.md`, `docs/STATUS.md`, prior T43.2 evidence, and the authentication, workspace, sponsored inference, and browser fixture implementations.
+- Inspected PR #214 read-only through its fetched pull ref. It is still open. No Red branch was checked out or changed.
+- Created [the T43.2 acceptance plan](../tickets/t43.2.md), mapping each requested acceptance criterion to existing deterministic API, browser, and local ChatGPT checks and identifying the post-merge work and live gates.
+- Existing test infrastructure appears sufficient for most deterministic API criteria: `tests/cloud_auth.py`, `tests/cloud_workspaces.py`, `tests/cloud_research_sponsored_api.py`, `tests/chatgpt.py`, and `tests/chatgpt_restart.py`. T88 adds the deterministic sponsored account/provider browser fixture and extends the Google browser check. I am not adding duplicate behavior coverage before the integrated branch is available.
+
+## Initial status
+
+- **UNVERIFIED:** All T88-dependent acceptance on integrated `main`; PR #214 has not merged.
+- **UNVERIFIED:** Live Google OAuth, hosted callback/deployment behavior, live provider authorization, and distinct live two-account isolation. Existing fixture evidence cannot satisfy these gates.
+- **Not executed this turn:** No acceptance tests or browser runs; this turn prepared the plan and checked existing coverage only.
+
+No live GCP changes, external OAuth/provider calls, paid inference, or credentials were used. No tokens or private user data were copied into the handoff. A focused PR is deferred unless integrated execution reveals a concrete code/test gap; documentation preparation is in the Gray branch for review.
+
+## Request for coordinator via human
+
+Please notify Gray through the human when PR #214 merges, with its merge SHA and confirmation that integrated acceptance should proceed. I will then fast-forward this branch from `main`, execute the matrix, and update the ticket, status, and handoff with MET/UNMET/UNVERIFIED results. Do not ask Red to duplicate or modify any acceptance work.
+
+# Integrated T43.2 release acceptance — 2026-10-26
+
+**Integrated base:** T88 / PR #214 merged to `main` at `e82152010c81c53a84753fdbcc323628e16dfeae`.
+**Acceptance branch:** `gray/t43.2-release-acceptance` (contains the merge SHA and this ticket's earlier preparation commits).
+**Disposition:** R4R in [PR #222](https://github.com/bkramerext/sigma/pull/222); deterministic local acceptance passed; live hosted gates remain UNVERIFIED. No self-merge.
+
+## Results
+
+- **MET — Anonymous:** public Demo/Explore is available; private projects and inference endpoints reject anonymous requests. Chrome observed no protected AI request from guest Explore.
+- **MET — Invited member:** fixture Google A is identified as a regular member, receives a private subject workspace and sponsored status; budget API enforces the per-user allowance and prevents dispatch after exhaustion.
+- **MET — Administrator:** fixture Google B shows Administrator, administration endpoints are covered by auth API tests, and the sponsored API now asserts the same `$0.25` user allowance as a regular member.
+- **MET — Uninvited/revoked:** auth API tests cover denied identities, revocation, expired sessions and subsequent protected-request denial; Chrome covers the denied identity path.
+- **MET — Fixture workspace/account switching:** API isolation covers projects, strategies, sessions/research data, reports/papers, execution artifacts and owner-relative paths. Chrome covers A→logout→B, separate Recent lists, cross-project denial, and clearing `sigma.currentProject` at logout.
+- **MET — Logout, reload, expiration, restart:** auth API tests exercise logout, account replacement, expiry and revocation; ChatGPT refresh is tested across process restart; workspace persistence/restart/restore is covered.
+- **MET — Sponsored connection failure/recovery:** Chrome keeps the Google fixture identity while the provider fixture moves connected → unavailable → unauthorized → connected. No inference is run by this status check.
+- **MET — Desktop/mobile UI:** Chrome verified hosted account/status controls and no horizontal overflow at 1280, 390 and 320px; separate two-user Chrome verified 1280/390px; local ChatGPT fixture passed at desktop.
+- **MET — Local ChatGPT account flow:** deterministic API/Chrome fixtures covered two identities, decline, reconnect, reload/switch, outage, permission and expiry states; generated inference count remained zero.
+- **UNMET:** No deterministic product defect was observed.
+- **UNVERIFIED — Live Google identities and hosted acceptance:** no real Google OAuth, hosted callback/deployment, live session refresh/revocation, or distinct live two-account workspace access was exercised. Simulated identities do not count as live isolation.
+- **UNVERIFIED — Live model authorization:** no production provider connectivity/authentication or hosted rendering was checked. No live GCP configuration was read or changed.
+
+## Commands and results
+
+- `./sigma test` — PASS on the final code/test changes: all scenarios, Ruff check/format, Pyright (0 diagnostics), frontend typecheck and production build. One earlier attempt hit transient “Another research worker is active” contention in `tests/research_sessions.py`; that test passed standalone, followed by complete passing suite runs. Build emits the existing >500 kB chunk advisory.
+- `uv run --locked --no-sync python tests/cloud_auth.py` — PASS (17); covers signed fixture OIDC, roles/admin boundaries, denied/revoked/expired sessions, logout, account replacement and local/hosted auth separation.
+- `uv run --locked --no-sync python tests/cloud_workspaces.py` — PASS; cross-owner project/strategy/session/report/paper/execution/artifact denial and restart/restore.
+- `uv run --locked --no-sync python tests/cloud_research_api.py` — PASS.
+- `uv run --locked --no-sync python tests/cloud_research_sponsored_api.py` — PASS, including admin/member equal allowance, exhaustion before provider dispatch, uncertain-failure holds, idempotency and cross-workspace isolation.
+- `uv run --locked --no-sync python tests/chatgpt.py` and `tests/chatgpt_restart.py` — PASS.
+- `uv run --locked --with playwright python browser_checks/t23_1_google_signin.py` — PASS in installed Google Chrome; deterministic identities/provider.
+- `uv run --locked --with playwright python browser_checks/t22_private_workspaces.py` — PASS in installed Google Chrome; deterministic subjects.
+- `SIGMA_BROWSER_BASE_URL=http://127.0.0.1:5200 SIGMA_BROWSER_FIXTURE_URL=http://127.0.0.1:8040 SIGMA_BROWSER_FORWARD_ORIGIN=http://127.0.0.1:5173 uv run --locked --with playwright python browser_checks/chatgpt.py` — PASS in installed Chrome against local SIWC fixture; zero inference generations. Its test auth status fixture was corrected to represent standalone local auth after the merged account/model UI superseded its old authenticated-Google setup.
+- Changed-file Ruff check/format and `git diff --check` — PASS.
+
+No live provider calls, paid calls, GCP changes, credentials, or private user data were used. Detailed criterion mapping is in [tickets/t43.2.md](../tickets/t43.2.md). The only remaining release blockers are the owner-authorized live hosted gates above.
