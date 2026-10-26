@@ -1,8 +1,10 @@
 # T43.2 / GitHub issue #66 — multi-account sign-in acceptance
 
 Branch: `gray/t43.2-multi-account`
-Base: current `main` at `13a63c4` (T129 branch not used)
-PR: pending
+Started from current `main` at `13a63c4` (T129 branch not used)
+Synchronized with current `main` at `537c198` before handoff.
+PR: [#166](https://github.com/bkramerext/sigma/pull/166), targeting `main`
+Head: `42c0626a5b8e6b8adbbd0c186394532677fb853a`
 
 ## Findings and implementation
 
@@ -57,5 +59,9 @@ not exercised. No tokens or callback secrets were logged. No paid calls or
 external identity/provider requests were made. Hosted personal ChatGPT auth
 remains prohibited by the current security boundary. This is deterministic
 local fixture evidence, not live or hosted acceptance.
+
+The PR branch was synchronized with `main` after it advanced to T147. The
+working tree is clean; PR #166 is open and GitHub reports it mergeable. No merge
+was performed.
 
 Elapsed time: approximately 40 minutes at handoff.

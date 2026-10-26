@@ -33,7 +33,7 @@ failed; Ruff, Pyright (0 diagnostics), and frontend typecheck passed. The suite
 skipped its frontend build after the deployment failures; `npm --prefix frontend
 run build` passed separately with the existing chunk-size advisory. See
 [T43.2 handoff](../messages/t43_2_gray_multi_account.txt) and
-[PR #PENDING](https://github.com/bkramerext/sigma/pulls).
+[PR #166](https://github.com/bkramerext/sigma/pull/166).
 
 ## T146 Increment 22 authorized live comparison (2026-10-26)
 
