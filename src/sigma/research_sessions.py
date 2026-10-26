@@ -3372,6 +3372,10 @@ def remove_session(path: str, session_id: str, expected_updated_at: str) -> dict
 
 def _snapshot(path: str) -> tuple[Any, str]:
     view = inspect_project(path)
+    if Path(view.path).suffix == ".json":
+        from sigma.project_bundle import read_file
+
+        return view, _digest(read_file(view.path, "project.json"))
     state = Path(view.path) / "project.json"
     return view, _digest(state.read_bytes())
 
